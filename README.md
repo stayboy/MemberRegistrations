@@ -209,6 +209,11 @@ explicit IANA `timezone` to decide what "today" means for that series. Clients c
 | `npm run test:coverage` | Coverage report                           |
 | `npm run lint`          | ESLint 10 flat config                     |
 | `npm run format`        | Prettier write                            |
+| `npm run format:check`  | Prettier check                            |
+| `npm run verify:fast`   | format:check + lint + typecheck + test    |
+| `npm run verify`        | `verify:fast` + build (the required gate) |
+| `npm run smoke`         | Build + exercise the compiled server      |
+| `npm run hooks:install` | Install the pre-commit hook               |
 
 ## Architecture
 
