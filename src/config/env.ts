@@ -3,8 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
-  STORE_DRIVER: z.enum(['local', 'blob']).default('local'),
-  MEMBER_STORE_ROOT: z.string().min(1).default('./data/members'),
+  DATABASE_URL: z.string().url().optional(),
   API_BEARER_TOKEN: z.string().min(8).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
@@ -21,8 +20,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   const env = parsed.data;
-  if (env.NODE_ENV === 'production' && !env.API_BEARER_TOKEN) {
-    throw new Error('API_BEARER_TOKEN is required when NODE_ENV=production');
+  if (env.NODE_ENV === 'production') {
+    if (!env.API_BEARER_TOKEN)
+      throw new Error('API_BEARER_TOKEN is required when NODE_ENV=production');
+    if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required when NODE_ENV=production');
   }
 
   return env;

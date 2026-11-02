@@ -1,9 +1,9 @@
-export type DomainErrorCode = 'validation_error' | 'not_found' | 'conflict';
+/** Typed domain failures. The HTTP layer maps them to problem+json. */
 
 export class DomainError extends Error {
   constructor(
     message: string,
-    readonly code: DomainErrorCode,
+    readonly code: string,
   ) {
     super(message);
     this.name = new.target.name;
@@ -25,5 +25,12 @@ export class NotFoundError extends DomainError {
 export class ConflictError extends DomainError {
   constructor(message: string) {
     super(message, 'conflict');
+  }
+}
+
+/** A whole-file import failure: nothing was applied. */
+export class ImportError extends DomainError {
+  constructor(message: string) {
+    super(message, 'import_failed');
   }
 }

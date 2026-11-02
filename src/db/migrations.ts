@@ -1,0 +1,224 @@
+/**
+ * Migrations are embedded rather than read from disk so the compiled function
+ * bundle cannot miss a .sql file. Each entry is applied once, in order, inside
+ * a transaction, and recorded in `schema_migrations`.
+ */
+export interface Migration {
+  version: string;
+  sql: string;
+}
+
+export const MIGRATIONS: Migration[] = [
+  {
+    version: '0001_init',
+    sql: `
+create table ministries (
+  id uuid primary key default gen_random_uuid(),
+  code text not null,
+  name text not null,
+  description text,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index ministries_code_ci on ministries (lower(code));
+
+create table members (
+  id uuid primary key default gen_random_uuid(),
+  member_no text not null,
+  first_name text,
+  last_name text,
+  other_names text,
+  maiden_name text,
+  alias text,
+  dob date,
+  gender text not null default 'undisclosed'
+    check (gender in ('male', 'female', 'other', 'undisclosed')),
+  place_of_residence text,
+  address_line text,
+  joined_on date,
+  archived_at timestamptz,
+  purged_at timestamptz,
+  version integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by text not null,
+  updated_by text not null
+);
+create unique index members_member_no_ci on members (lower(member_no));
+create index members_joined_on on members (joined_on);
+
+create table member_contacts (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  kind text not null check (kind in ('phone', 'email', 'whatsapp')),
+  value text not null,
+  normalized_value text not null,
+  display_order integer not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index member_contacts_value on member_contacts (normalized_value);
+create unique index member_contacts_order on member_contacts (member_id, display_order);
+create index member_contacts_member on member_contacts (member_id);
+
+-- A dependent "having" the guardian's number links to it instead of copying it.
+create table member_contact_links (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  contact_id uuid not null references member_contacts(id) on delete cascade,
+  display_order integer not null,
+  created_at timestamptz not null default now(),
+  unique (member_id, contact_id)
+);
+
+create table subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('life_insurance', 'credit_union')),
+  policyholder_member_id uuid not null references members(id),
+  scope text not null check (scope in ('individual', 'household')),
+  status text not null default 'active' check (status in ('active', 'ended')),
+  reference text,
+  started_on date not null,
+  ended_on date,
+  created_at timestamptz not null default now(),
+  created_by text not null
+);
+create index subscriptions_policyholder on subscriptions (policyholder_member_id);
+
+create table subscription_coverage (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid not null references subscriptions(id) on delete cascade,
+  member_id uuid not null references members(id) on delete cascade,
+  added_on date not null,
+  removed_on date,
+  created_at timestamptz not null default now()
+);
+create unique index subscription_coverage_active
+  on subscription_coverage (subscription_id, member_id)
+  where removed_on is null;
+create index subscription_coverage_member on subscription_coverage (member_id);
+
+create table member_ministries (
+  member_id uuid not null references members(id) on delete cascade,
+  ministry_id uuid not null references ministries(id),
+  assigned_on date not null default current_date,
+  primary key (member_id, ministry_id)
+);
+
+create table member_relationships (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  related_member_id uuid not null references members(id) on delete cascade,
+  type text not null check (type in ('spouse', 'parent', 'child', 'guardian', 'other')),
+  is_dependent boolean not null default false,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  check (member_id <> related_member_id)
+);
+-- One edge per pair, regardless of which side declared it.
+create unique index member_relationships_pair
+  on member_relationships (least(member_id, related_member_id), greatest(member_id, related_member_id), type);
+-- At most one spouse edge per member, on either side.
+create unique index member_relationships_spouse_left
+  on member_relationships (member_id) where type = 'spouse';
+create unique index member_relationships_spouse_right
+  on member_relationships (related_member_id) where type = 'spouse';
+
+create table import_batches (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('events', 'attendance')),
+  actor text not null,
+  row_count integer not null,
+  checksum text not null,
+  created_at timestamptz not null default now()
+);
+
+create table event_series (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  ministry_id uuid references ministries(id),
+  timezone text not null default 'Africa/Lagos',
+  description text,
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by text not null,
+  updated_by text not null
+);
+create unique index event_series_name_ministry
+  on event_series (lower(name), coalesce(ministry_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  where archived_at is null;
+
+create table series_schedules (
+  id uuid primary key default gen_random_uuid(),
+  series_id uuid not null references event_series(id) on delete cascade,
+  effective_from date not null,
+  rrule text not null,
+  ends_on date,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  unique (series_id, effective_from),
+  check (ends_on is null or ends_on >= effective_from)
+);
+create index series_schedules_series on series_schedules (series_id, effective_from);
+
+create table series_exceptions (
+  series_id uuid not null references event_series(id) on delete cascade,
+  occurs_on date not null,
+  kind text not null check (kind in ('cancelled', 'extra')),
+  note text,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  primary key (series_id, occurs_on)
+);
+
+create table event_occurrences (
+  series_id uuid not null references event_series(id) on delete cascade,
+  occurs_on date not null,
+  event_no text,
+  ministry_name text,
+  import_batch_id uuid references import_batches(id),
+  created_at timestamptz not null default now(),
+  primary key (series_id, occurs_on)
+);
+create unique index event_occurrences_event_no
+  on event_occurrences (event_no) where event_no is not null;
+
+create table attendance (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  series_id uuid not null references event_series(id),
+  occurs_on date not null,
+  source text not null check (source in ('import', 'manual')),
+  import_batch_id uuid references import_batches(id),
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  unique (member_id, series_id, occurs_on)
+);
+create index attendance_member on attendance (member_id, series_id);
+create index attendance_series on attendance (series_id, occurs_on);
+
+-- Deleting an imported row must survive the next import of the same file.
+create table attendance_suppressions (
+  member_id uuid not null references members(id) on delete cascade,
+  series_id uuid not null references event_series(id) on delete cascade,
+  occurs_on date not null,
+  suppressed_at timestamptz not null default now(),
+  suppressed_by text not null,
+  primary key (member_id, series_id, occurs_on)
+);
+`,
+  },
+  {
+    version: '0002_seed_ministries',
+    sql: `
+insert into ministries (code, name, description) values
+  ('PEMEM',  'PEMEM',            'Pentecost Men''s Ministry'),
+  ('WOMEN',  'Women''s Ministry', 'Women''s Ministry'),
+  ('CHOIR',  'Choir',            'Choir'),
+  ('PRAYER', 'Prayer',           'Prayer Ministry')
+on conflict do nothing;
+`,
+  },
+];

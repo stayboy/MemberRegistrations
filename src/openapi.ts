@@ -1,26 +1,38 @@
 import { z } from 'zod';
+import { healthResponseSchema, problemSchema } from './schemas/common.js';
 import {
-  attendanceEntrySchema,
-  attendanceResponseSchema,
+  attendanceEntryResponseSchema,
+  attendanceInputSchema,
+  attendanceListSchema,
   contactInputSchema,
+  contactResponseSchema,
   createMemberSchema,
-  memberResponseSchema,
+  memberDetailSchema,
+  memberListSchema,
+  memberSummarySchema,
+  purgeSchema,
+  relationshipInputSchema,
+  relationshipResponseSchema,
+  subscriptionInputSchema,
+  subscriptionResponseSchema,
   updateMemberSchema,
-} from './schemas/member.js';
+} from './schemas/members.js';
 import {
-  healthResponseSchema,
-  ministryRequestSchema,
-  memberListResponseSchema,
-  problemSchema,
-  subscriptionRequestSchema,
-} from './schemas/api.js';
+  createSeriesSchema,
+  ministryInputSchema,
+  ministrySchema,
+  ministryUpdateSchema,
+  occurrenceListSchema,
+  scheduleInputSchema,
+  scheduleSchema,
+  seriesExceptionInputSchema,
+  seriesSchema,
+  updateSeriesSchema,
+} from './schemas/reference.js';
+import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
 
 type JsonSchema = Record<string, unknown>;
 
-/**
- * Zod is the single source of truth for the contract: request/response schemas
- * are converted to JSON Schema (OpenAPI 3.1 dialect) rather than hand-written.
- */
 function toSchema(schema: z.ZodType, io: 'input' | 'output'): JsonSchema {
   const json = z.toJSONSchema(schema, { target: 'draft-2020-12', io }) as JsonSchema;
   delete json.$schema;
@@ -29,17 +41,22 @@ function toSchema(schema: z.ZodType, io: 'input' | 'output'): JsonSchema {
 
 const ref = (name: string): JsonSchema => ({ $ref: `#/components/schemas/${name}` });
 
-const problemResponse = (description: string) => ({
+const problem = (description: string) => ({
   description,
   content: { 'application/problem+json': { schema: ref('Problem') } },
 });
 
-const jsonResponse = (description: string, name: string) => ({
+const json = (description: string, name: string) => ({
   description,
   content: { 'application/json': { schema: ref(name) } },
 });
 
-const memberNotFound = problemResponse('Member not found.');
+const noContent = (description: string) => ({ description });
+
+const unauthorized = problem('Missing or invalid bearer token.');
+const validation = problem('Invalid request body or query parameters.');
+const notFound = problem('The requested record was not found.');
+const conflict = problem('The request conflicts with the current state.');
 
 const memberNoParam = {
   name: 'memberNo',
@@ -48,10 +65,24 @@ const memberNoParam = {
   schema: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$' },
 };
 
-const contactIdParam = {
-  name: 'contactId',
+const idParam = (name: string) => ({
+  name,
   in: 'path',
   required: true,
+  schema: { type: 'string' },
+});
+
+const actorHeader = {
+  name: 'X-Actor-Id',
+  in: 'header',
+  required: true,
+  schema: { type: 'string' },
+};
+
+const ifMatchHeader = {
+  name: 'If-Match',
+  in: 'header',
+  required: false,
   schema: { type: 'string' },
 };
 
@@ -60,9 +91,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: 'MemberRegistrations API',
-      version: '1.0.0',
+      version: '2.0.0',
       description:
-        'Member registration lookup, CRUD, and derived attendance for the school register.',
+        'Member registrations, ministries, event series and derived attendance. Attendance counts are computed from series schedules, imported occurrence lists and attendance registries.',
     },
     servers: [{ url: '/', description: 'Current deployment' }],
     security: [{ bearerAuth: [] }],
@@ -71,209 +102,687 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         bearerAuth: { type: 'http', scheme: 'bearer' },
       },
       schemas: {
-        Member: toSchema(memberResponseSchema, 'output'),
-        CreateMemberRequest: toSchema(createMemberSchema, 'input'),
-        UpdateMemberRequest: toSchema(updateMemberSchema, 'input'),
-        ContactInput: toSchema(contactInputSchema, 'input'),
-        AttendanceEntry: toSchema(attendanceEntrySchema, 'output'),
-        Attendance: toSchema(attendanceResponseSchema, 'output'),
-        MemberList: toSchema(memberListResponseSchema, 'output'),
-        SubscriptionRequest: toSchema(subscriptionRequestSchema, 'input'),
-        MinistryRequest: toSchema(ministryRequestSchema, 'input'),
-        Health: toSchema(healthResponseSchema, 'output'),
         Problem: toSchema(problemSchema, 'output'),
+        Health: toSchema(healthResponseSchema, 'output'),
+        MemberSummary: toSchema(memberSummarySchema, 'output'),
+        MemberDetail: toSchema(memberDetailSchema, 'output'),
+        MemberList: toSchema(memberListSchema, 'output'),
+        CreateMember: toSchema(createMemberSchema, 'input'),
+        UpdateMember: toSchema(updateMemberSchema, 'input'),
+        PurgeMember: toSchema(purgeSchema, 'input'),
+        Contact: toSchema(contactResponseSchema, 'output'),
+        ContactInput: toSchema(contactInputSchema, 'input'),
+        Subscription: toSchema(subscriptionResponseSchema, 'output'),
+        SubscriptionInput: toSchema(subscriptionInputSchema, 'input'),
+        Relationship: toSchema(relationshipResponseSchema, 'output'),
+        RelationshipInput: toSchema(relationshipInputSchema, 'input'),
+        AttendanceEntry: toSchema(attendanceEntryResponseSchema, 'output'),
+        AttendanceInput: toSchema(attendanceInputSchema, 'input'),
+        AttendanceList: toSchema(attendanceListSchema, 'output'),
+        Ministry: toSchema(ministrySchema, 'output'),
+        MinistryInput: toSchema(ministryInputSchema, 'input'),
+        MinistryUpdate: toSchema(ministryUpdateSchema, 'input'),
+        Series: toSchema(seriesSchema, 'output'),
+        CreateSeries: toSchema(createSeriesSchema, 'input'),
+        UpdateSeries: toSchema(updateSeriesSchema, 'input'),
+        Schedule: toSchema(scheduleSchema, 'output'),
+        ScheduleInput: toSchema(scheduleInputSchema, 'input'),
+        SeriesExceptionInput: toSchema(seriesExceptionInputSchema, 'input'),
+        OccurrenceList: toSchema(occurrenceListSchema, 'output'),
+        ImportBatch: toSchema(importBatchSchema, 'output'),
+        EventImport: toSchema(eventImportSchema, 'input'),
+        AttendanceImport: toSchema(attendanceImportSchema, 'input'),
       },
     },
     paths: {
       '/health': {
         get: {
-          summary: 'Liveness probe',
+          summary: 'Liveness and database reachability',
           security: [],
-          responses: { 200: jsonResponse('Service is alive.', 'Health') },
+          responses: {
+            200: json('Service is ready.', 'Health'),
+            503: problem('The database is unreachable.'),
+          },
         },
       },
-      '/members': {
+
+      '/v1/members': {
         get: {
           summary: 'List member registrations',
           parameters: [
+            { name: 'q', in: 'query', schema: { type: 'string' } },
+            { name: 'contact', in: 'query', schema: { type: 'string' } },
+            { name: 'includeArchived', in: 'query', schema: { type: 'boolean' } },
             { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
             { name: 'cursor', in: 'query', schema: { type: 'string' } },
-            { name: 'q', in: 'query', schema: { type: 'string' } },
           ],
           responses: {
-            200: jsonResponse('A page of members.', 'MemberList'),
-            401: problemResponse('Missing or invalid bearer token.'),
-            422: problemResponse('Invalid query parameters.'),
+            200: json('A page of member summaries.', 'MemberList'),
+            401: unauthorized,
+            422: validation,
           },
         },
         post: {
           summary: 'Create a member registration',
+          parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('CreateMemberRequest') } },
+            content: { 'application/json': { schema: ref('CreateMember') } },
           },
           responses: {
-            201: jsonResponse('Member created.', 'Member'),
-            409: problemResponse('A member with this member number already exists.'),
-            422: problemResponse('Invalid request body.'),
+            201: json('Member created.', 'MemberDetail'),
+            401: unauthorized,
+            409: conflict,
+            422: validation,
           },
         },
       },
-      '/members/{memberNo}': {
+
+      '/v1/members/{memberNo}': {
         parameters: [memberNoParam],
         get: {
           summary: 'Look up a member registration',
+          parameters: [{ name: 'includeArchived', in: 'query', schema: { type: 'boolean' } }],
           responses: {
-            200: jsonResponse('The member registration.', 'Member'),
-            404: memberNotFound,
+            200: json('The full registration, including attendance counts.', 'MemberDetail'),
+            401: unauthorized,
+            404: notFound,
           },
         },
         put: {
-          summary: 'Replace the mutable parts of a member registration',
-          parameters: [
-            {
-              name: 'If-Match',
-              in: 'header',
-              required: false,
-              schema: { type: 'string' },
-            },
-          ],
+          summary: 'Update demographics',
+          parameters: [actorHeader, ifMatchHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('UpdateMemberRequest') } },
+            content: { 'application/json': { schema: ref('UpdateMember') } },
           },
           responses: {
-            200: jsonResponse('Member updated.', 'Member'),
-            404: memberNotFound,
-            409: problemResponse('The member was modified since the supplied ETag.'),
-            422: problemResponse('Invalid request body.'),
+            200: json('Member updated.', 'MemberDetail'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
           },
         },
         delete: {
-          summary: 'Delete a member registration',
+          summary: 'Archive a member (soft delete)',
+          parameters: [actorHeader],
           responses: {
-            204: { description: 'Member deleted.' },
-            404: memberNotFound,
+            204: noContent('Member archived.'),
+            401: unauthorized,
+            404: notFound,
           },
         },
       },
-      '/members/{memberNo}/attendance': {
+
+      '/v1/members/{memberNo}/restore': {
         parameters: [memberNoParam],
-        get: {
-          summary: 'Read derived attendance for a member',
+        post: {
+          summary: 'Restore an archived member',
+          parameters: [actorHeader],
           responses: {
-            200: jsonResponse('Attendance entries and per-event summary.', 'Attendance'),
-            404: memberNotFound,
+            200: json('Member restored.', 'MemberDetail'),
+            401: unauthorized,
+            409: conflict,
           },
         },
+      },
+
+      '/v1/members/{memberNo}/purge': {
+        parameters: [memberNoParam],
         post: {
-          summary: 'Record an attendance entry for a member',
+          summary: 'Permanently erase personal data, keeping a tombstone',
+          parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('AttendanceEntry') } },
+            content: { 'application/json': { schema: ref('PurgeMember') } },
           },
           responses: {
-            201: jsonResponse('Attendance recorded.', 'AttendanceEntry'),
-            404: memberNotFound,
-            409: problemResponse('Attendance for this event and date already exists.'),
-            422: problemResponse('Invalid request body.'),
+            204: noContent('Personal data erased.'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
           },
         },
       },
-      '/members/{memberNo}/contacts': {
+
+      '/v1/members/{memberNo}/attendance': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'Attendance per series: attended, expected, remaining',
+          responses: {
+            200: json('Attendance counts and entries.', 'AttendanceList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Record a manual attendance entry',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('AttendanceInput') } },
+          },
+          responses: {
+            201: json('Attendance recorded.', 'AttendanceEntry'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/attendance/{attendanceId}': {
+        parameters: [memberNoParam, idParam('attendanceId')],
+        delete: {
+          summary:
+            'Remove an attendance entry; imported entries are suppressed from future imports',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Attendance removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/contacts': {
         parameters: [memberNoParam],
         post: {
-          summary: 'Add a contact to a member',
+          summary: 'Add an owned contact',
+          parameters: [actorHeader],
           requestBody: {
             required: true,
             content: { 'application/json': { schema: ref('ContactInput') } },
           },
           responses: {
-            201: { description: 'Contact added.' },
-            404: memberNotFound,
-            409: problemResponse('Duplicate contact.'),
-            422: problemResponse('Invalid request body.'),
+            201: json('Contact added.', 'Contact'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
           },
         },
       },
-      '/members/{memberNo}/contacts/{contactId}': {
-        parameters: [memberNoParam, contactIdParam],
-        delete: {
-          summary: 'Remove a contact from a member',
-          responses: {
-            204: { description: 'Contact removed.' },
-            404: problemResponse('Member or contact not found.'),
-          },
-        },
-      },
-      '/members/{memberNo}/subscriptions': {
-        parameters: [memberNoParam],
-        post: {
-          summary: 'Activate a service subscription',
+
+      '/v1/members/{memberNo}/contacts/{contactId}': {
+        parameters: [memberNoParam, idParam('contactId')],
+        put: {
+          summary: 'Update an owned contact',
+          parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('SubscriptionRequest') } },
+            content: { 'application/json': { schema: ref('ContactInput') } },
           },
           responses: {
-            201: { description: 'Subscription activated.' },
-            404: memberNotFound,
-            409: problemResponse('The subscription is already active.'),
-            422: problemResponse('Invalid request body.'),
+            200: json('Contact updated.', 'Contact'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
           },
         },
-      },
-      '/members/{memberNo}/subscriptions/{kind}': {
-        parameters: [
-          memberNoParam,
-          {
-            name: 'kind',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', enum: ['life-insurance', 'credit-union'] },
-          },
-        ],
         delete: {
-          summary: 'Deactivate a service subscription',
+          summary: 'Remove an owned contact',
+          parameters: [actorHeader],
           responses: {
-            204: { description: 'Subscription deactivated.' },
-            404: problemResponse('Member or active subscription not found.'),
+            204: noContent('Contact removed.'),
+            401: unauthorized,
+            404: notFound,
           },
         },
       },
-      '/members/{memberNo}/ministries': {
+
+      '/v1/members/{memberNo}/contacts/link': {
         parameters: [memberNoParam],
         post: {
-          summary: 'Assign a ministry',
+          summary: 'Link a contact owned by another member (dependent sharing)',
+          parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('MinistryRequest') } },
-          },
-          responses: {
-            201: { description: 'Ministry assigned.' },
-            404: memberNotFound,
-            409: problemResponse('The member already serves in this ministry.'),
-            422: problemResponse('Invalid request body.'),
-          },
-        },
-      },
-      '/members/{memberNo}/ministries/{ministry}': {
-        parameters: [
-          memberNoParam,
-          {
-            name: 'ministry',
-            in: 'path',
-            required: true,
-            schema: {
-              type: 'string',
-              enum: ['pemem', 'women-ministry', 'choir', 'prayer'],
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['contactId'],
+                  properties: { contactId: { type: 'string', format: 'uuid' } },
+                },
+              },
             },
           },
-        ],
+          responses: {
+            201: json('Contact linked.', 'Contact'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/contacts/link/{contactId}': {
+        parameters: [memberNoParam, idParam('contactId')],
+        delete: {
+          summary: 'Remove a linked contact',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Contact unlinked.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/subscriptions': {
+        parameters: [memberNoParam],
+        post: {
+          summary: 'Create a subscription; household scope takes explicit coverage',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SubscriptionInput') } },
+          },
+          responses: {
+            201: json('Subscription created.', 'Subscription'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/subscriptions/{subscriptionId}': {
+        parameters: [memberNoParam, idParam('subscriptionId')],
+        delete: {
+          summary: 'End a subscription',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Subscription ended.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/coverage': {
+        parameters: [idParam('subscriptionId')],
+        post: {
+          summary: 'Add a covered member to a household subscription',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['memberNo'],
+                  properties: { memberNo: { type: 'string' } },
+                },
+              },
+            },
+          },
+          responses: {
+            204: noContent('Coverage added.'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/coverage/{memberNo}': {
+        parameters: [idParam('subscriptionId'), memberNoParam],
+        delete: {
+          summary: 'Remove a covered member from a household subscription',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Coverage removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/ministries': {
+        parameters: [memberNoParam],
+        post: {
+          summary: 'Assign a ministry by code',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['code'],
+                  properties: { code: { type: 'string' } },
+                },
+              },
+            },
+          },
+          responses: {
+            201: json('Ministry assigned.', 'Ministry'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/ministries/{code}': {
+        parameters: [memberNoParam, idParam('code')],
         delete: {
           summary: 'Remove a ministry assignment',
+          parameters: [actorHeader],
           responses: {
-            204: { description: 'Ministry assignment removed.' },
-            404: problemResponse('Member or ministry assignment not found.'),
+            204: noContent('Ministry assignment removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/relationships': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'List spouse, dependents and guardians',
+          responses: {
+            200: {
+              description: 'Relationships from both directions.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      items: { type: 'array', items: ref('Relationship') },
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Link a spouse, dependent or guardian',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RelationshipInput') } },
+          },
+          responses: {
+            201: json('Relationship created.', 'Relationship'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/relationships/{relationshipId}': {
+        parameters: [memberNoParam, idParam('relationshipId')],
+        delete: {
+          summary: 'Remove a relationship',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Relationship removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/ministries': {
+        get: {
+          summary: 'List ministries',
+          responses: {
+            200: {
+              description: 'All ministries.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: { items: { type: 'array', items: ref('Ministry') } },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+        post: {
+          summary: 'Create a ministry',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('MinistryInput') } },
+          },
+          responses: {
+            201: json('Ministry created.', 'Ministry'),
+            401: unauthorized,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/ministries/{code}': {
+        parameters: [idParam('code')],
+        get: {
+          summary: 'Read a ministry',
+          responses: {
+            200: json('The ministry.', 'Ministry'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Rename or deactivate a ministry (code is immutable)',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('MinistryUpdate') } },
+          },
+          responses: {
+            200: json('Ministry updated.', 'Ministry'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        delete: {
+          summary: 'Delete an unreferenced ministry',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Ministry deleted.'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+          },
+        },
+      },
+
+      '/v1/series': {
+        get: {
+          summary: 'List event series',
+          parameters: [{ name: 'includeArchived', in: 'query', schema: { type: 'boolean' } }],
+          responses: {
+            200: {
+              description: 'Event series with schedules and exceptions.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: { items: { type: 'array', items: ref('Series') } },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+        post: {
+          summary: 'Create a series with its first schedule version',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CreateSeries') } },
+          },
+          responses: {
+            201: json('Series created.', 'Series'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Read a series',
+          responses: {
+            200: json('The series.', 'Series'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Update or archive a series',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('UpdateSeries') } },
+          },
+          responses: {
+            200: json('Series updated.', 'Series'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}/schedule': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Add a schedule version (effective from a date)',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ScheduleInput') } },
+          },
+          responses: {
+            201: json('Schedule version added.', 'Series'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}/exceptions': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Cancel or add a date',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SeriesExceptionInput') } },
+          },
+          responses: {
+            201: json('Exception saved.', 'Series'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}/exceptions/{date}': {
+        parameters: [idParam('id'), idParam('date')],
+        delete: {
+          summary: 'Remove an exception',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Exception removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/series/{id}/occurrences': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Resolve the dates a series actually met',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('Resolved occurrences.', 'OccurrenceList'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/imports/events': {
+        post: {
+          summary: 'Import an event list (all-or-nothing)',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventImport') } },
+          },
+          responses: {
+            201: json('Import applied.', 'ImportBatch'),
+            401: unauthorized,
+            422: problem('The import was rejected; nothing was applied.'),
+          },
+        },
+      },
+
+      '/v1/imports/attendance': {
+        post: {
+          summary: 'Import an attendance registry (all-or-nothing)',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('AttendanceImport') } },
+          },
+          responses: {
+            201: json('Import applied.', 'ImportBatch'),
+            401: unauthorized,
+            422: problem('The import was rejected; nothing was applied.'),
+          },
+        },
+      },
+
+      '/v1/imports/{batchId}': {
+        parameters: [idParam('batchId')],
+        get: {
+          summary: 'Read an import batch',
+          responses: {
+            200: json('The batch record.', 'ImportBatch'),
+            401: unauthorized,
+            404: notFound,
           },
         },
       },

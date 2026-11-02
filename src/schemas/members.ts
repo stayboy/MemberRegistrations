@@ -1,0 +1,171 @@
+import { z } from 'zod';
+import { CONTACT_KINDS } from '../domain/contacts.js';
+import { GENDERS, RELATIONSHIP_TYPES, SUBSCRIPTION_KINDS, type Gender } from '../repos/members.js';
+import { dateStringSchema, memberNoParamSchema } from './common.js';
+
+export const contactInputSchema = z.object({
+  kind: z.enum(CONTACT_KINDS),
+  value: z.string().min(1).max(256),
+  displayOrder: z.number().int().min(1).max(999).optional(),
+});
+
+export const createMemberSchema = z.object({
+  memberNo: memberNoParamSchema,
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  otherNames: z.string().max(200).nullable().optional(),
+  maidenName: z.string().max(100).nullable().optional(),
+  alias: z.string().max(100).nullable().optional(),
+  dob: dateStringSchema.nullable().optional(),
+  gender: z.enum(GENDERS).optional(),
+  placeOfResidence: z.string().max(200).nullable().optional(),
+  addressLine: z.string().max(300).nullable().optional(),
+  joinedOn: dateStringSchema.nullable().optional(),
+  contacts: z.array(contactInputSchema).max(20).optional(),
+  ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
+});
+
+export const updateMemberSchema = z.object({
+  firstName: z.string().min(1).max(100).optional(),
+  lastName: z.string().min(1).max(100).optional(),
+  otherNames: z.string().max(200).nullable().optional(),
+  maidenName: z.string().max(100).nullable().optional(),
+  alias: z.string().max(100).nullable().optional(),
+  dob: dateStringSchema.nullable().optional(),
+  gender: z.enum(GENDERS).optional(),
+  placeOfResidence: z.string().max(200).nullable().optional(),
+  addressLine: z.string().max(300).nullable().optional(),
+  joinedOn: dateStringSchema.nullable().optional(),
+});
+
+export const relationshipInputSchema = z.object({
+  relatedMemberNo: memberNoParamSchema,
+  type: z.enum(RELATIONSHIP_TYPES),
+  isDependent: z.boolean().optional(),
+});
+
+export const subscriptionInputSchema = z.object({
+  kind: z.enum(SUBSCRIPTION_KINDS),
+  scope: z.enum(['individual', 'household']),
+  reference: z.string().max(100).nullable().optional(),
+  startedOn: dateStringSchema.optional(),
+  coveredMemberNos: z.array(memberNoParamSchema).max(50).optional(),
+});
+
+export const attendanceInputSchema = z.object({
+  seriesId: z.string().uuid(),
+  date: dateStringSchema,
+});
+
+export const listQuerySchema = z.object({
+  q: z.string().min(1).max(100).optional(),
+  contact: z.string().min(3).max(256).optional(),
+  includeArchived: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().min(1).max(64).optional(),
+});
+
+export const purgeSchema = z.object({
+  confirm: z.string().min(1),
+});
+
+const contactSchema = z.object({
+  id: z.string(),
+  kind: z.enum(CONTACT_KINDS),
+  value: z.string(),
+  displayOrder: z.number().int(),
+  ownerMemberNo: z.string(),
+  linked: z.boolean(),
+});
+
+const ministrySchema = z.object({
+  code: z.string(),
+  name: z.string(),
+});
+
+const subscriptionSchema = z.object({
+  id: z.string(),
+  kind: z.enum(SUBSCRIPTION_KINDS),
+  scope: z.enum(['individual', 'household']),
+  status: z.enum(['active', 'ended']),
+  reference: z.string().nullable(),
+  startedOn: z.string(),
+  endedOn: z.string().nullable(),
+  role: z.enum(['policyholder', 'covered']),
+  policyholderMemberNo: z.string(),
+  coveredMemberNos: z.array(z.string()),
+});
+
+const relationshipSchema = z.object({
+  id: z.string(),
+  type: z.enum(RELATIONSHIP_TYPES),
+  isDependent: z.boolean(),
+  memberNo: z.string(),
+  name: z.string(),
+  archived: z.boolean(),
+});
+
+const attendanceEntrySchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  source: z.enum(['import', 'manual']),
+});
+
+const attendanceSeriesSchema = z.object({
+  seriesId: z.string(),
+  seriesName: z.string(),
+  ministry: z.string().nullable(),
+  attended: z.number().int(),
+  expected: z.number().int(),
+  remaining: z.number().int(),
+  status: z.enum(['ongoing', 'completed', 'in_progress']),
+  entries: z.array(attendanceEntrySchema),
+});
+
+export const memberSummarySchema = z.object({
+  memberNo: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  otherNames: z.string().nullable(),
+  gender: z.enum(GENDERS),
+  placeOfResidence: z.string().nullable(),
+  joinedOn: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  contacts: z.array(contactSchema),
+  ministries: z.array(ministrySchema),
+});
+
+export const memberDetailSchema = memberSummarySchema.extend({
+  id: z.string(),
+  maidenName: z.string().nullable(),
+  alias: z.string().nullable(),
+  dob: z.string().nullable(),
+  addressLine: z.string().nullable(),
+  purgedAt: z.string().nullable(),
+  version: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  subscriptions: z.array(subscriptionSchema),
+  relationships: z.array(relationshipSchema),
+  attendance: z.array(attendanceSeriesSchema),
+});
+
+export const memberListSchema = z.object({
+  items: z.array(memberSummarySchema),
+  nextCursor: z.string().optional(),
+});
+
+export const attendanceListSchema = z.object({
+  memberNo: z.string(),
+  series: z.array(attendanceSeriesSchema),
+});
+
+export const contactResponseSchema = contactSchema;
+export const subscriptionResponseSchema = subscriptionSchema;
+export const relationshipResponseSchema = relationshipSchema;
+export const attendanceEntryResponseSchema = attendanceEntrySchema;
+
+export type GenderInput = Gender;

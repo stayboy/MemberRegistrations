@@ -1,7 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
-import { StoreConflictError, StoreNotFoundError } from '../store/member-store.js';
-import { ConflictError, NotFoundError, ValidationError } from './domain-errors.js';
+import { ConflictError, ImportError, NotFoundError, ValidationError } from './domain-errors.js';
 
 export interface ProblemBody {
   type: string;
@@ -71,18 +70,39 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     return;
   }
 
+  if (error instanceof ImportError) {
+    sendProblem(res, 422, 'Import rejected', error.message, 'import_failed');
+    return;
+  }
+
   if (error instanceof ValidationError) {
     sendProblem(res, 422, 'Validation failed', error.message, error.code);
     return;
   }
 
-  if (error instanceof NotFoundError || error instanceof StoreNotFoundError) {
+  if (error instanceof NotFoundError) {
     sendProblem(res, 404, 'Not Found', error.message, 'not_found');
     return;
   }
 
-  if (error instanceof ConflictError || error instanceof StoreConflictError) {
+  if (error instanceof ConflictError) {
     sendProblem(res, 409, 'Conflict', error.message, 'conflict');
+    return;
+  }
+
+  const pgCode = (error as { code?: string }).code;
+  if (pgCode === '23503') {
+    sendProblem(res, 409, 'Conflict', 'A referenced record does not exist.', 'conflict');
+    return;
+  }
+  if (pgCode === '23514') {
+    sendProblem(
+      res,
+      422,
+      'Validation failed',
+      'A database constraint rejected the value.',
+      'validation_error',
+    );
     return;
   }
 

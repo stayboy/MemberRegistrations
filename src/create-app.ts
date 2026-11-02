@@ -2,13 +2,21 @@ import express, { type Express, type RequestHandler } from 'express';
 import helmet from 'helmet';
 import pino, { type Logger } from 'pino';
 import { bearerAuth } from './auth.js';
-import { errorHandler, notFoundHandler } from './errors/problem.js';
+import { errorHandler, notFoundHandler, sendProblem } from './errors/problem.js';
 import { buildOpenApiDocument } from './openapi.js';
+import { ImportRepository } from './repos/imports.js';
+import { MemberRepository } from './repos/members.js';
+import { MinistryRepository } from './repos/ministries.js';
+import { SeriesRepository } from './repos/series.js';
+import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
-import type { MemberStore } from './store/member-store.js';
+import { ministriesRouter } from './routes/ministries.js';
+import { seriesRouter } from './routes/series.js';
+import { subscriptionsRouter } from './routes/subscriptions.js';
+import type { Db } from './db/sql.js';
 
 export interface AppOptions {
-  store: MemberStore;
+  db: Db;
   bearerToken?: string;
   logger?: Logger;
   logLevel?: string;
@@ -21,6 +29,11 @@ export interface AppOptions {
 export function createApp(options: AppOptions): Express {
   const logger = options.logger ?? pino({ level: options.logLevel ?? 'info' });
   const app = express();
+
+  const members = new MemberRepository(options.db);
+  const ministries = new MinistryRepository(options.db);
+  const series = new SeriesRepository(options.db);
+  const imports = new ImportRepository(options.db);
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
@@ -43,8 +56,19 @@ export function createApp(options: AppOptions): Express {
     next();
   });
 
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', uptimeSeconds: Number(process.uptime().toFixed(3)) });
+  app.get('/health', async (_req, res) => {
+    try {
+      await options.db.query('select 1');
+      res.json({ status: 'ok', uptimeSeconds: Number(process.uptime().toFixed(3)) });
+    } catch {
+      sendProblem(
+        res,
+        503,
+        'Service Unavailable',
+        'The database is unreachable.',
+        'database_unavailable',
+      );
+    }
   });
 
   app.get('/openapi.json', (_req, res) => {
@@ -55,7 +79,11 @@ export function createApp(options: AppOptions): Express {
     ? bearerAuth(options.bearerToken)
     : (_req, _res, next) => next();
 
-  app.use('/members', gate, membersRouter(options.store));
+  app.use('/v1/members', gate, membersRouter(members));
+  app.use('/v1/subscriptions', gate, subscriptionsRouter(members));
+  app.use('/v1/ministries', gate, ministriesRouter(ministries));
+  app.use('/v1/series', gate, seriesRouter(series));
+  app.use('/v1/imports', gate, importsRouter(imports));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

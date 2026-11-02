@@ -1,215 +1,187 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
+import { actorOf } from '../actor.js';
+import { memberNoParamSchema } from '../schemas/common.js';
 import {
-  Member,
-  MINISTRIES,
-  type Ministry,
-  SUBSCRIPTION_KINDS,
-  type SubscriptionKind,
-} from '../domain/member.js';
-import { NotFoundError, ValidationError } from '../errors/domain-errors.js';
-import {
-  attendanceEntrySchema,
+  attendanceInputSchema,
   contactInputSchema,
   createMemberSchema,
-  updateMemberSchema,
-} from '../schemas/member.js';
-import {
   listQuerySchema,
-  ministryRequestSchema,
-  subscriptionRequestSchema,
-} from '../schemas/api.js';
-import type { MemberStore, StoredMember } from '../store/member-store.js';
+  purgeSchema,
+  relationshipInputSchema,
+  subscriptionInputSchema,
+  updateMemberSchema,
+} from '../schemas/members.js';
+import type { MemberDetail, MemberRepository } from '../repos/members.js';
 
-const MEMBER_NO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
-
-function assertMemberNo(value: string): string {
-  if (!MEMBER_NO_PATTERN.test(value)) {
-    throw new ValidationError(
-      'memberNo must be 1-32 characters and contain only letters, digits, hyphens or underscores',
-    );
-  }
-  return value;
+function memberNo(req: Request): string {
+  return memberNoParamSchema.parse(req.params.memberNo);
 }
 
-/** ETags travel quoted on the wire; the stores hold the raw value. */
-function toEtag(raw: string): string {
-  return `"${raw.replace(/"/g, '')}"`;
+/** Wire ETags are quoted; the stored value is the row version. */
+function etag(version: number): string {
+  return `"v${version}"`;
 }
 
-function fromIfMatch(header: string | undefined): string | undefined {
-  if (!header) return undefined;
-  // `If-Match: *` means "only if it exists"; the store already loaded it.
-  if (header.trim() === '*') return undefined;
-  const normalized = header.replace(/^W\//, '').replace(/"/g, '').trim();
-  return normalized || undefined;
+function expectedVersion(req: Request): number | undefined {
+  const header = req.header('if-match');
+  if (!header || header.trim() === '*') return undefined;
+  const match = /^"?v?(\d+)"?$/.exec(header.trim());
+  return match ? Number(match[1]) : undefined;
 }
 
-async function requireMember(store: MemberStore, memberNo: string): Promise<StoredMember> {
-  const stored = await store.get(memberNo);
-  if (!stored) throw new NotFoundError(`Member ${memberNo} was not found`);
-  return stored;
-}
-
-function sendMember(res: Response, stored: StoredMember, status = 200): void {
-  res.setHeader('ETag', toEtag(stored.etag));
+function sendMember(res: Response, member: MemberDetail, status = 200): void {
+  res.setHeader('ETag', etag(member.version));
   res.setHeader('Cache-Control', 'no-store');
-  res.status(status).json(stored.member.toJSON());
+  res.status(status).json(member);
 }
 
-/**
- * Thin HTTP layer: parse input, delegate the decision to the aggregate, persist
- * the result. Domain errors bubble to the problem+json error middleware.
- */
-export function membersRouter(store: MemberStore): Router {
+export function membersRouter(repo: MemberRepository): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
     const query = listQuerySchema.parse(req.query);
-    const page = await store.list(query);
-
+    const page = await repo.list(query);
     res.setHeader('Cache-Control', 'no-store');
-    res.json({
-      items: page.items.map((item) => item.member.toJSON()),
-      ...(page.cursor ? { nextCursor: page.cursor } : {}),
-    });
+    res.json(page);
   });
 
   router.post('/', async (req, res) => {
     const input = createMemberSchema.parse(req.body);
-    const member = Member.create(input);
-    const stored = await store.insert(member);
-
-    res.setHeader('Location', `/members/${encodeURIComponent(member.memberNo)}`);
-    sendMember(res, stored, 201);
+    const member = await repo.create(input, actorOf(req));
+    res.setHeader('Location', `/v1/members/${encodeURIComponent(member.memberNo)}`);
+    sendMember(res, member, 201);
   });
 
   router.get('/:memberNo', async (req, res) => {
-    const stored = await requireMember(store, assertMemberNo(req.params.memberNo));
-    sendMember(res, stored);
+    const includeArchived = req.query.includeArchived === 'true';
+    const member = await repo.get(memberNo(req), includeArchived);
+    if (!member) {
+      res
+        .status(404)
+        .type('application/problem+json')
+        .json({
+          type: 'about:blank',
+          title: 'Not Found',
+          status: 404,
+          detail: `Member ${req.params.memberNo} was not found`,
+          code: 'not_found',
+        });
+      return;
+    }
+    sendMember(res, member);
   });
 
   router.put('/:memberNo', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
     const input = updateMemberSchema.parse(req.body);
-    const current = await requireMember(store, memberNo);
-
-    current.member.update(input);
-    const stored = await store.replace(
-      current.member,
-      fromIfMatch(req.header('if-match')) ?? current.etag,
-    );
-    sendMember(res, stored);
+    const member = await repo.update(memberNo(req), input, actorOf(req), expectedVersion(req));
+    sendMember(res, member);
   });
 
   router.delete('/:memberNo', async (req, res) => {
-    const deleted = await store.delete(assertMemberNo(req.params.memberNo));
-    if (!deleted) throw new NotFoundError(`Member ${req.params.memberNo} was not found`);
+    await repo.archive(memberNo(req), actorOf(req));
+    res.status(204).end();
+  });
+
+  router.post('/:memberNo/restore', async (req, res) => {
+    const member = await repo.restore(memberNo(req), actorOf(req));
+    sendMember(res, member);
+  });
+
+  router.post('/:memberNo/purge', async (req, res) => {
+    const { confirm } = purgeSchema.parse(req.body);
+    await repo.purge(memberNo(req), confirm, actorOf(req));
     res.status(204).end();
   });
 
   router.get('/:memberNo/attendance', async (req, res) => {
-    const stored = await requireMember(store, assertMemberNo(req.params.memberNo));
-
+    const series = await repo.getAttendance(memberNo(req));
     res.setHeader('Cache-Control', 'no-store');
-    res.json({
-      memberNo: stored.member.memberNo,
-      entries: stored.member.attendance,
-      summary: stored.member.attendanceSummary(),
-    });
+    res.json({ memberNo: req.params.memberNo, series });
   });
 
   router.post('/:memberNo/attendance', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const entry = attendanceEntrySchema.parse(req.body);
-    const current = await requireMember(store, memberNo);
-
-    current.member.recordAttendance(entry);
-    const stored = await store.replace(current.member, current.etag);
-
-    res.setHeader('ETag', toEtag(stored.etag));
+    const input = attendanceInputSchema.parse(req.body);
+    const entry = await repo.recordAttendance(memberNo(req), input, actorOf(req));
     res.status(201).json(entry);
   });
 
+  router.delete('/:memberNo/attendance/:attendanceId', async (req, res) => {
+    await repo.deleteAttendance(memberNo(req), req.params.attendanceId, actorOf(req));
+    res.status(204).end();
+  });
+
   router.post('/:memberNo/contacts', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
     const input = contactInputSchema.parse(req.body);
-    const current = await requireMember(store, memberNo);
-
-    const contact = current.member.addContact(input);
-    const stored = await store.replace(current.member, current.etag);
-
-    res.setHeader('ETag', toEtag(stored.etag));
+    const contact = await repo.addContact(memberNo(req), input, actorOf(req));
     res.status(201).json(contact);
   });
 
-  router.delete('/:memberNo/contacts/:contactId', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const current = await requireMember(store, memberNo);
+  router.put('/:memberNo/contacts/:contactId', async (req, res) => {
+    const input = contactInputSchema.partial().parse(req.body);
+    const contact = await repo.updateContact(
+      memberNo(req),
+      req.params.contactId,
+      input,
+      actorOf(req),
+    );
+    res.json(contact);
+  });
 
-    current.member.removeContact(req.params.contactId);
-    await store.replace(current.member, current.etag);
+  router.delete('/:memberNo/contacts/:contactId', async (req, res) => {
+    await repo.removeContact(memberNo(req), req.params.contactId, actorOf(req));
+    res.status(204).end();
+  });
+
+  router.post('/:memberNo/contacts/link', async (req, res) => {
+    const { contactId } = z.object({ contactId: z.string().uuid() }).parse(req.body);
+    const contact = await repo.linkContact(memberNo(req), contactId, actorOf(req));
+    res.status(201).json(contact);
+  });
+
+  router.delete('/:memberNo/contacts/link/:contactId', async (req, res) => {
+    await repo.unlinkContact(memberNo(req), req.params.contactId, actorOf(req));
     res.status(204).end();
   });
 
   router.post('/:memberNo/subscriptions', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const { kind } = subscriptionRequestSchema.parse(req.body);
-    const current = await requireMember(store, memberNo);
-
-    current.member.subscribe(kind);
-    const stored = await store.replace(current.member, current.etag);
-
-    res.setHeader('ETag', toEtag(stored.etag));
-    res.status(201).json({ kind, status: 'active' });
+    const input = subscriptionInputSchema.parse(req.body);
+    const subscription = await repo.addSubscription(memberNo(req), input, actorOf(req));
+    res.status(201).json(subscription);
   });
 
-  router.delete('/:memberNo/subscriptions/:kind', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const kind = parseSubscriptionKind(req.params.kind);
-    const current = await requireMember(store, memberNo);
-
-    current.member.unsubscribe(kind);
-    await store.replace(current.member, current.etag);
+  router.delete('/:memberNo/subscriptions/:subscriptionId', async (req, res) => {
+    await repo.endSubscription(memberNo(req), req.params.subscriptionId, actorOf(req));
     res.status(204).end();
   });
 
   router.post('/:memberNo/ministries', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const { ministry } = ministryRequestSchema.parse(req.body);
-    const current = await requireMember(store, memberNo);
-
-    current.member.assignMinistry(ministry);
-    const stored = await store.replace(current.member, current.etag);
-
-    res.setHeader('ETag', toEtag(stored.etag));
-    res.status(201).json({ ministry });
+    const { code } = z.object({ code: z.string().min(2).max(16) }).parse(req.body);
+    const ministry = await repo.assignMinistry(memberNo(req), code, actorOf(req));
+    res.status(201).json(ministry);
   });
 
-  router.delete('/:memberNo/ministries/:ministry', async (req, res) => {
-    const memberNo = assertMemberNo(req.params.memberNo);
-    const ministry = parseMinistry(req.params.ministry);
-    const current = await requireMember(store, memberNo);
+  router.delete('/:memberNo/ministries/:code', async (req, res) => {
+    await repo.removeMinistry(memberNo(req), req.params.code, actorOf(req));
+    res.status(204).end();
+  });
 
-    current.member.removeMinistry(ministry);
-    await store.replace(current.member, current.etag);
+  router.get('/:memberNo/relationships', async (req, res) => {
+    const member = await repo.get(memberNo(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ items: member?.relationships ?? [] });
+  });
+
+  router.post('/:memberNo/relationships', async (req, res) => {
+    const input = relationshipInputSchema.parse(req.body);
+    const relationship = await repo.addRelationship(memberNo(req), input, actorOf(req));
+    res.status(201).json(relationship);
+  });
+
+  router.delete('/:memberNo/relationships/:relationshipId', async (req, res) => {
+    await repo.removeRelationship(memberNo(req), req.params.relationshipId, actorOf(req));
     res.status(204).end();
   });
 
   return router;
-}
-
-function parseSubscriptionKind(value: string): SubscriptionKind {
-  const parsed = subscriptionRequestSchema.shape.kind.safeParse(value);
-  if (!parsed.success) {
-    throw new ValidationError(`kind must be one of: ${SUBSCRIPTION_KINDS.join(', ')}`);
-  }
-  return parsed.data;
-}
-
-function parseMinistry(value: string): Ministry {
-  const parsed = ministryRequestSchema.shape.ministry.safeParse(value);
-  if (!parsed.success) {
-    throw new ValidationError(`ministry must be one of: ${MINISTRIES.join(', ')}`);
-  }
-  return parsed.data;
 }

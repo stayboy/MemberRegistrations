@@ -1,0 +1,1179 @@
+import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
+import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
+import { seriesStart, todayIn } from '../domain/series.js';
+import type { Db, DbClient, Row } from '../db/sql.js';
+import { loadCalendar, resolveSeriesOccurrences } from './occurrences.js';
+
+export const GENDERS = ['male', 'female', 'other', 'undisclosed'] as const;
+export type Gender = (typeof GENDERS)[number];
+
+export const RELATIONSHIP_TYPES = ['spouse', 'parent', 'child', 'guardian', 'other'] as const;
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+export const SUBSCRIPTION_KINDS = ['life_insurance', 'credit_union'] as const;
+export type SubscriptionKind = (typeof SUBSCRIPTION_KINDS)[number];
+
+export interface ContactDto {
+  id: string;
+  kind: ContactKind;
+  value: string;
+  displayOrder: number;
+  ownerMemberNo: string;
+  linked: boolean;
+}
+
+export interface SubscriptionDto {
+  id: string;
+  kind: SubscriptionKind;
+  scope: 'individual' | 'household';
+  status: 'active' | 'ended';
+  reference: string | null;
+  startedOn: string;
+  endedOn: string | null;
+  role: 'policyholder' | 'covered';
+  policyholderMemberNo: string;
+  coveredMemberNos: string[];
+}
+
+export interface MinistryDto {
+  code: string;
+  name: string;
+}
+
+export interface RelationshipDto {
+  id: string;
+  type: RelationshipType;
+  isDependent: boolean;
+  memberNo: string;
+  name: string;
+  archived: boolean;
+}
+
+export interface AttendanceEntryDto {
+  id: string;
+  date: string;
+  source: 'import' | 'manual';
+}
+
+export interface AttendanceSeriesDto extends AttendanceCounts {
+  seriesId: string;
+  seriesName: string;
+  ministry: string | null;
+  entries: AttendanceEntryDto[];
+}
+
+export interface MemberSummary {
+  memberNo: string;
+  firstName: string;
+  lastName: string;
+  otherNames: string | null;
+  gender: Gender;
+  placeOfResidence: string | null;
+  joinedOn: string | null;
+  archivedAt: string | null;
+  contacts: ContactDto[];
+  ministries: MinistryDto[];
+}
+
+export interface MemberDetail extends MemberSummary {
+  id: string;
+  maidenName: string | null;
+  alias: string | null;
+  dob: string | null;
+  addressLine: string | null;
+  purgedAt: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  subscriptions: SubscriptionDto[];
+  relationships: RelationshipDto[];
+  attendance: AttendanceSeriesDto[];
+}
+
+export interface ContactInput {
+  kind: ContactKind;
+  value: string;
+  displayOrder?: number;
+}
+
+export interface CreateMemberInput {
+  memberNo: string;
+  firstName: string;
+  lastName: string;
+  otherNames?: string | null;
+  maidenName?: string | null;
+  alias?: string | null;
+  dob?: string | null;
+  gender?: Gender;
+  placeOfResidence?: string | null;
+  addressLine?: string | null;
+  joinedOn?: string | null;
+  contacts?: ContactInput[];
+  ministries?: string[];
+}
+
+export type UpdateMemberInput = Partial<
+  Omit<CreateMemberInput, 'memberNo' | 'contacts' | 'ministries'>
+>;
+
+export interface ListQuery {
+  q?: string;
+  contact?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface SubscriptionInput {
+  kind: SubscriptionKind;
+  scope: 'individual' | 'household';
+  reference?: string | null;
+  startedOn?: string;
+  coveredMemberNos?: string[];
+}
+
+interface MemberRow extends Row {
+  id: string;
+  member_no: string;
+  first_name: string | null;
+  last_name: string | null;
+  other_names: string | null;
+  maiden_name: string | null;
+  alias: string | null;
+  dob: string | null;
+  gender: Gender;
+  place_of_residence: string | null;
+  address_line: string | null;
+  joined_on: string | null;
+  archived_at: Date | string | null;
+  purged_at: Date | string | null;
+  version: number;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+const MEMBER_NO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string }).code === '23505';
+}
+
+function isoDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value);
+}
+
+function isoTimestamp(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function requiredText(value: string | null | undefined, field: string): string {
+  const trimmed = value?.trim();
+  if (!trimmed) throw new ValidationError(`${field} is required`);
+  return trimmed;
+}
+
+function optionalText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function assertMemberNo(value: string): string {
+  if (!MEMBER_NO_PATTERN.test(value)) {
+    throw new ValidationError(
+      'memberNo must be 1-32 characters and contain only letters, digits, hyphens or underscores',
+    );
+  }
+  return value;
+}
+
+/** Bumps the optimistic-concurrency version after any change to the aggregate. */
+async function touch(client: DbClient, memberId: string, actor: string): Promise<void> {
+  await client.query(
+    'update members set version = version + 1, updated_at = now(), updated_by = $2 where id = $1',
+    [memberId, actor],
+  );
+}
+
+export class MemberRepository {
+  constructor(private readonly db: Db) {}
+
+  async list(query: ListQuery): Promise<{ items: MemberSummary[]; nextCursor?: string }> {
+    const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
+    const params: unknown[] = [];
+    const where: string[] = [];
+
+    if (!query.includeArchived) {
+      where.push('m.archived_at is null and m.purged_at is null');
+    }
+
+    if (query.q) {
+      params.push(`%${query.q}%`);
+      const p = `$${params.length}`;
+      where.push(`(
+        m.member_no ilike ${p} or m.first_name ilike ${p} or m.last_name ilike ${p}
+        or m.other_names ilike ${p} or m.alias ilike ${p} or m.maiden_name ilike ${p}
+        or exists (select 1 from member_contacts c where c.member_id = m.id and c.value ilike ${p})
+        or exists (
+          select 1 from member_contact_links l join member_contacts c on c.id = l.contact_id
+          where l.member_id = m.id and c.value ilike ${p}
+        )
+      )`);
+    }
+
+    if (query.contact) {
+      const normalized = new Set<string>();
+      for (const kind of ['phone', 'whatsapp', 'email'] as const) {
+        try {
+          normalized.add(normalizeContactValue(kind, query.contact));
+        } catch {
+          // Not a valid value for this channel; try the next one.
+        }
+      }
+      if (normalized.size === 0) {
+        throw new ValidationError('contact must be a phone number or email address');
+      }
+
+      params.push([...normalized]);
+      const p = `$${params.length}`;
+      where.push(`(
+        exists (select 1 from member_contacts c where c.member_id = m.id and c.normalized_value = any(${p}::text[]))
+        or exists (
+          select 1 from member_contact_links l join member_contacts c on c.id = l.contact_id
+          where l.member_id = m.id and c.normalized_value = any(${p}::text[])
+        )
+      )`);
+    }
+
+    if (query.cursor) {
+      params.push(query.cursor);
+      where.push(`lower(m.member_no) > lower($${params.length})`);
+    }
+
+    params.push(limit + 1);
+    const rows = await this.db.query<MemberRow>(
+      `select m.* from members m
+       ${where.length ? `where ${where.join(' and ')}` : ''}
+       order by lower(m.member_no) asc
+       limit $${params.length}`,
+      params,
+    );
+
+    const page = rows.slice(0, limit);
+    const items = await this.toSummaries(page);
+
+    return {
+      items,
+      ...(rows.length > limit ? { nextCursor: page[page.length - 1]?.member_no } : {}),
+    };
+  }
+
+  async get(memberNo: string, includeArchived = false): Promise<MemberDetail | null> {
+    const row = await this.findRow(memberNo, includeArchived);
+    return row ? this.toDetail(row) : null;
+  }
+
+  async create(input: CreateMemberInput, actor: string): Promise<MemberDetail> {
+    const memberNo = assertMemberNo(requiredText(input.memberNo, 'memberNo'));
+    const gender = input.gender ?? 'undisclosed';
+    if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
+    const joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
+    const dob = input.dob ? assertDate(input.dob, 'dob') : null;
+
+    try {
+      const id = await this.db.transaction(async (tx) => {
+        const [row] = await tx.query<{ id: string }>(
+          `insert into members (
+             member_no, first_name, last_name, other_names, maiden_name, alias, dob, gender,
+             place_of_residence, address_line, joined_on, created_by, updated_by
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, coalesce($11::date, current_date), $12, $12)
+           returning id`,
+          [
+            memberNo,
+            requiredText(input.firstName, 'firstName'),
+            requiredText(input.lastName, 'lastName'),
+            optionalText(input.otherNames),
+            optionalText(input.maidenName),
+            optionalText(input.alias),
+            dob,
+            gender,
+            optionalText(input.placeOfResidence),
+            optionalText(input.addressLine),
+            joinedOn,
+            actor,
+          ],
+        );
+
+        for (const [index, contact] of (input.contacts ?? []).entries()) {
+          await this.insertContact(tx, row!.id, contact, index);
+        }
+        for (const code of input.ministries ?? []) {
+          await this.assignMinistryTx(tx, row!.id, code);
+        }
+        return row!.id;
+      });
+
+      const detail = await this.findById(id);
+      return detail!;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`A member with number ${memberNo} already exists`);
+      }
+      throw error;
+    }
+  }
+
+  async update(
+    memberNo: string,
+    input: UpdateMemberInput,
+    actor: string,
+    expectedVersion?: number,
+  ): Promise<MemberDetail> {
+    const row = await this.requireRow(memberNo);
+    const sets: string[] = [];
+    const params: unknown[] = [];
+
+    const columns: Array<[keyof UpdateMemberInput, string]> = [
+      ['firstName', 'first_name'],
+      ['lastName', 'last_name'],
+      ['otherNames', 'other_names'],
+      ['maidenName', 'maiden_name'],
+      ['alias', 'alias'],
+      ['dob', 'dob'],
+      ['gender', 'gender'],
+      ['placeOfResidence', 'place_of_residence'],
+      ['addressLine', 'address_line'],
+      ['joinedOn', 'joined_on'],
+    ];
+
+    for (const [field, column] of columns) {
+      if (input[field] === undefined) continue;
+      let value = input[field] as string | null;
+      if (field === 'firstName' || field === 'lastName') value = requiredText(value, field);
+      if (field === 'dob' || field === 'joinedOn') value = value ? assertDate(value, field) : null;
+      if (field === 'gender' && !GENDERS.includes(value as Gender)) {
+        throw new ValidationError('gender is not recognised');
+      }
+      params.push(value);
+      sets.push(`${column} = $${params.length}`);
+    }
+
+    if (sets.length === 0) throw new ValidationError('No fields to update');
+
+    const idIndex = params.length + 1;
+    const actorIndex = params.length + 2;
+    const versionIndex = params.length + 3;
+    params.push(row.id, actor, expectedVersion ?? row.version);
+
+    const updated = await this.db.query<{ id: string }>(
+      `update members
+       set ${sets.join(', ')}, version = version + 1, updated_at = now(), updated_by = $${actorIndex}
+       where id = $${idIndex} and version = $${versionIndex}
+       returning id`,
+      params,
+    );
+
+    if (updated.length === 0) {
+      throw new ConflictError('The member was modified since the supplied ETag');
+    }
+
+    const detail = await this.findById(row.id);
+    return detail!;
+  }
+
+  async archive(memberNo: string, actor: string): Promise<void> {
+    const rows = await this.db.query<{ id: string }>(
+      `update members set archived_at = now(), version = version + 1, updated_at = now(), updated_by = $2
+       where lower(member_no) = lower($1) and archived_at is null and purged_at is null
+       returning id`,
+      [memberNo, actor],
+    );
+    if (rows.length === 0) throw new NotFoundError(`Member ${memberNo} was not found`);
+  }
+
+  async restore(memberNo: string, actor: string): Promise<MemberDetail> {
+    const rows = await this.db.query<{ id: string }>(
+      `update members set archived_at = null, version = version + 1, updated_at = now(), updated_by = $2
+       where lower(member_no) = lower($1) and archived_at is not null and purged_at is null
+       returning id`,
+      [memberNo, actor],
+    );
+    if (rows.length === 0) {
+      throw new ConflictError(`Member ${memberNo} is not archived, or does not exist`);
+    }
+    const detail = await this.findById(rows[0]!.id);
+    return detail!;
+  }
+
+  async purge(memberNo: string, confirmation: string, actor: string): Promise<void> {
+    if (confirmation !== memberNo) {
+      throw new ValidationError('confirmation must repeat the member number exactly');
+    }
+    const row = await this.findAnyRow(memberNo);
+    if (!row) throw new NotFoundError(`Member ${memberNo} was not found`);
+    if (row.purged_at) throw new ConflictError(`Member ${memberNo} has already been purged`);
+
+    await this.db.transaction(async (tx) => {
+      await tx.query('delete from member_contact_links where member_id = $1', [row.id]);
+      await tx.query('delete from member_contacts where member_id = $1', [row.id]);
+      await tx.query('delete from subscription_coverage where member_id = $1', [row.id]);
+      await tx.query('delete from subscriptions where policyholder_member_id = $1', [row.id]);
+      await tx.query(
+        'delete from member_relationships where member_id = $1 or related_member_id = $1',
+        [row.id],
+      );
+      await tx.query('delete from member_ministries where member_id = $1', [row.id]);
+      await tx.query('delete from attendance_suppressions where member_id = $1', [row.id]);
+      await tx.query('delete from attendance where member_id = $1', [row.id]);
+      await tx.query(
+        `update members set
+           first_name = null, last_name = null, other_names = null, maiden_name = null,
+           alias = null, dob = null, place_of_residence = null, address_line = null,
+           gender = 'undisclosed', archived_at = now(), purged_at = now(),
+           version = version + 1, updated_at = now(), updated_by = $2
+         where id = $1`,
+        [row.id, actor],
+      );
+    });
+  }
+
+  // -- contacts ------------------------------------------------------------
+
+  async addContact(memberNo: string, input: ContactInput, actor: string): Promise<ContactDto> {
+    const row = await this.requireRow(memberNo);
+    const id = await this.db.transaction(async (tx) => {
+      const contact = await this.insertContact(tx, row.id, input);
+      await touch(tx, row.id, actor);
+      return contact.id;
+    });
+    const contacts = await this.contactsFor(row.id);
+    return contacts.find((contact) => contact.id === id)!;
+  }
+
+  async updateContact(
+    memberNo: string,
+    contactId: string,
+    input: Partial<ContactInput>,
+    actor: string,
+  ): Promise<ContactDto> {
+    const row = await this.requireRow(memberNo);
+    const [existing] = await this.db.query<{
+      kind: ContactKind;
+      value: string;
+      display_order: number;
+    }>('select kind, value, display_order from member_contacts where id = $1 and member_id = $2', [
+      contactId,
+      row.id,
+    ]);
+    if (!existing) throw new NotFoundError(`Contact ${contactId} was not found`);
+
+    const kind = input.kind ?? existing.kind;
+    const value = input.value ?? existing.value;
+    const normalized = normalizeContactValue(kind, value);
+
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx.query(
+          `update member_contacts set kind = $2, value = $3, normalized_value = $4,
+             display_order = $5, updated_at = now() where id = $1`,
+          [contactId, kind, value.trim(), normalized, input.displayOrder ?? existing.display_order],
+        );
+        await touch(tx, row.id, actor);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`Contact value "${value}" already belongs to a member`);
+      }
+      throw error;
+    }
+
+    const contacts = await this.contactsFor(row.id);
+    return contacts.find((contact) => contact.id === contactId)!;
+  }
+
+  async removeContact(memberNo: string, contactId: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const deleted = await tx.query(
+        'delete from member_contacts where id = $1 and member_id = $2 returning id',
+        [contactId, row.id],
+      );
+      if (deleted.length === 0) {
+        throw new NotFoundError(`Contact ${contactId} was not found on member ${memberNo}`);
+      }
+      await touch(tx, row.id, actor);
+    });
+  }
+
+  async linkContact(memberNo: string, contactId: string, actor: string): Promise<ContactDto> {
+    const row = await this.requireRow(memberNo);
+    const [contact] = await this.db.query<{ member_id: string }>(
+      'select member_id from member_contacts where id = $1',
+      [contactId],
+    );
+    if (!contact) throw new NotFoundError(`Contact ${contactId} was not found`);
+    if (contact.member_id === row.id) {
+      throw new ConflictError('A member already owns this contact');
+    }
+
+    try {
+      await this.db.transaction(async (tx) => {
+        const [next] = await tx.query<{ next: number }>(
+          'select coalesce(max(display_order), 0) + 1 as next from member_contact_links where member_id = $1',
+          [row.id],
+        );
+        await tx.query(
+          'insert into member_contact_links (member_id, contact_id, display_order) values ($1,$2,$3)',
+          [row.id, contactId, next!.next],
+        );
+        await touch(tx, row.id, actor);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError('This contact is already linked to the member');
+      }
+      throw error;
+    }
+
+    const contacts = await this.contactsFor(row.id);
+    return contacts.find((item) => item.id === contactId)!;
+  }
+
+  async unlinkContact(memberNo: string, contactId: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const deleted = await tx.query(
+        'delete from member_contact_links where member_id = $1 and contact_id = $2 returning id',
+        [row.id, contactId],
+      );
+      if (deleted.length === 0) throw new NotFoundError('This contact is not linked to the member');
+      await touch(tx, row.id, actor);
+    });
+  }
+
+  // -- subscriptions -------------------------------------------------------
+
+  async addSubscription(
+    memberNo: string,
+    input: SubscriptionInput,
+    actor: string,
+  ): Promise<SubscriptionDto> {
+    const row = await this.requireRow(memberNo);
+    const startedOn = input.startedOn
+      ? assertDate(input.startedOn, 'startedOn')
+      : todayIn('Africa/Lagos');
+
+    const subscriptionId = await this.db.transaction(async (tx) => {
+      const [created] = await tx.query<{ id: string }>(
+        `insert into subscriptions (kind, policyholder_member_id, scope, reference, started_on, created_by)
+         values ($1,$2,$3,$4,$5,$6) returning id`,
+        [input.kind, row.id, input.scope, optionalText(input.reference), startedOn, actor],
+      );
+
+      const covered = input.scope === 'household' ? (input.coveredMemberNos ?? []) : [];
+      for (const memberNoToCover of covered) {
+        const [coveredRow] = await tx.query<{ id: string }>(
+          'select id from members where lower(member_no) = lower($1) and purged_at is null',
+          [memberNoToCover],
+        );
+        if (!coveredRow) throw new NotFoundError(`Member ${memberNoToCover} was not found`);
+        await this.insertCoverage(tx, created!.id, coveredRow.id, startedOn);
+      }
+
+      await touch(tx, row.id, actor);
+      return created!.id;
+    });
+
+    const subscriptions = await this.subscriptionsFor(row.id);
+    return subscriptions.find((item) => item.id === subscriptionId)!;
+  }
+
+  async endSubscription(memberNo: string, subscriptionId: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const updated = await tx.query(
+        `update subscriptions set status = 'ended', ended_on = coalesce(ended_on, current_date)
+         where id = $1 and policyholder_member_id = $2 and status = 'active' returning id`,
+        [subscriptionId, row.id],
+      );
+      if (updated.length === 0) throw new NotFoundError('Active subscription was not found');
+      await touch(tx, row.id, actor);
+    });
+  }
+
+  async addCoverage(subscriptionId: string, memberNo: string, actor: string): Promise<void> {
+    const [subscription] = await this.db.query<{ policyholder_member_id: string; scope: string }>(
+      'select policyholder_member_id, scope from subscriptions where id = $1 and status = $2',
+      [subscriptionId, 'active'],
+    );
+    if (!subscription) throw new NotFoundError(`Subscription ${subscriptionId} was not found`);
+    if (subscription.scope !== 'household') {
+      throw new ValidationError('Coverage can only be added to a household subscription');
+    }
+
+    const covered = await this.requireRow(memberNo);
+    try {
+      await this.db.transaction(async (tx) => {
+        await this.insertCoverage(tx, subscriptionId, covered.id, todayIn('Africa/Lagos'));
+        await touch(tx, subscription.policyholder_member_id, actor);
+        await touch(tx, covered.id, actor);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new ConflictError('Member is already covered');
+      throw error;
+    }
+  }
+
+  async removeCoverage(subscriptionId: string, memberNo: string, actor: string): Promise<void> {
+    const covered = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const updated = await tx.query(
+        `update subscription_coverage set removed_on = current_date
+         where subscription_id = $1 and member_id = $2 and removed_on is null returning id`,
+        [subscriptionId, covered.id],
+      );
+      if (updated.length === 0) throw new NotFoundError('Coverage was not found');
+      await touch(tx, covered.id, actor);
+    });
+  }
+
+  // -- ministries ----------------------------------------------------------
+
+  async assignMinistry(memberNo: string, code: string, actor: string): Promise<MinistryDto> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      await this.assignMinistryTx(tx, row.id, code);
+      await touch(tx, row.id, actor);
+    });
+    const ministries = await this.ministriesFor(row.id);
+    return ministries.find((ministry) => ministry.code === code.toUpperCase())!;
+  }
+
+  async removeMinistry(memberNo: string, code: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const deleted = await tx.query(
+        `delete from member_ministries mm using ministries mi
+         where mm.ministry_id = mi.id and mm.member_id = $1 and lower(mi.code) = lower($2)
+         returning mm.ministry_id`,
+        [row.id, code],
+      );
+      if (deleted.length === 0) throw new NotFoundError(`Member does not serve in ${code}`);
+      await touch(tx, row.id, actor);
+    });
+  }
+
+  // -- relationships -------------------------------------------------------
+
+  async addRelationship(
+    memberNo: string,
+    input: { relatedMemberNo: string; type: RelationshipType; isDependent?: boolean },
+    actor: string,
+  ): Promise<RelationshipDto> {
+    const row = await this.requireRow(memberNo);
+    if (!RELATIONSHIP_TYPES.includes(input.type)) {
+      throw new ValidationError('relationship type is not recognised');
+    }
+    const related = await this.requireRow(input.relatedMemberNo);
+    if (related.id === row.id) throw new ValidationError('A member cannot be related to itself');
+
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx.query(
+          `insert into member_relationships (member_id, related_member_id, type, is_dependent, created_by)
+           values ($1,$2,$3,$4,$5)`,
+          [row.id, related.id, input.type, input.isDependent ?? false, actor],
+        );
+        await touch(tx, row.id, actor);
+        await touch(tx, related.id, actor);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(
+          'This relationship already exists, or the member already has a spouse',
+        );
+      }
+      throw error;
+    }
+
+    const relationships = await this.relationshipsFor(row.id);
+    return relationships.find((item) => item.memberNo === related.member_no)!;
+  }
+
+  async removeRelationship(memberNo: string, relationshipId: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const deleted = await tx.query<{ member_id: string; related_member_id: string }>(
+        `delete from member_relationships
+         where id = $1 and (member_id = $2 or related_member_id = $2)
+         returning member_id, related_member_id`,
+        [relationshipId, row.id],
+      );
+      if (deleted.length === 0) throw new NotFoundError('Relationship was not found');
+      await touch(tx, deleted[0]!.member_id, actor);
+      await touch(tx, deleted[0]!.related_member_id, actor);
+    });
+  }
+
+  // -- attendance ----------------------------------------------------------
+
+  async getAttendance(memberNo: string): Promise<AttendanceSeriesDto[]> {
+    const row = await this.requireRow(memberNo);
+    return this.attendanceFor(row);
+  }
+
+  async recordAttendance(
+    memberNo: string,
+    input: { seriesId: string; date: string },
+    actor: string,
+  ): Promise<AttendanceEntryDto> {
+    const row = await this.requireRow(memberNo);
+    const date = assertDate(input.date);
+
+    const [series] = await this.db.query<{ name: string; timezone: string }>(
+      'select name, timezone from event_series where id = $1 and archived_at is null',
+      [input.seriesId],
+    );
+    if (!series) throw new NotFoundError(`Series ${input.seriesId} was not found`);
+
+    const occurrences = await resolveSeriesOccurrences(this.db, input.seriesId, date, date);
+    if (!occurrences.includes(date)) {
+      throw new ValidationError(`${date} was not a held occurrence of ${series.name}`);
+    }
+
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx.query(
+          `insert into attendance (member_id, series_id, occurs_on, source, created_by)
+           values ($1,$2,$3,'manual',$4)`,
+          [row.id, input.seriesId, date, actor],
+        );
+        await tx.query(
+          'delete from attendance_suppressions where member_id = $1 and series_id = $2 and occurs_on = $3',
+          [row.id, input.seriesId, date],
+        );
+        await touch(tx, row.id, actor);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`Attendance for ${date} is already recorded`);
+      }
+      throw error;
+    }
+
+    const [entry] = await this.db.query<{
+      id: string;
+      occurs_on: string;
+      source: 'import' | 'manual';
+    }>(
+      'select id, occurs_on, source from attendance where member_id = $1 and series_id = $2 and occurs_on = $3',
+      [row.id, input.seriesId, date],
+    );
+
+    return { id: entry!.id, date: isoDate(entry!.occurs_on)!, source: entry!.source };
+  }
+
+  async deleteAttendance(memberNo: string, attendanceId: string, actor: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.transaction(async (tx) => {
+      const [entry] = await tx.query<{
+        series_id: string;
+        occurs_on: string;
+        source: 'import' | 'manual';
+      }>('select series_id, occurs_on, source from attendance where id = $1 and member_id = $2', [
+        attendanceId,
+        row.id,
+      ]);
+      if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
+
+      await tx.query('delete from attendance where id = $1', [attendanceId]);
+
+      if (entry.source === 'import') {
+        await tx.query(
+          `insert into attendance_suppressions (member_id, series_id, occurs_on, suppressed_by)
+           values ($1,$2,$3,$4) on conflict do nothing`,
+          [row.id, entry.series_id, entry.occurs_on, actor],
+        );
+      }
+
+      await touch(tx, row.id, actor);
+    });
+  }
+
+  // -- internals -----------------------------------------------------------
+
+  async findRow(memberNo: string, includeArchived: boolean): Promise<MemberRow | null> {
+    const [row] = await this.db.query<MemberRow>(
+      `select * from members
+       where lower(member_no) = lower($1)
+         and purged_at is null
+         and (archived_at is null or $2::boolean)`,
+      [memberNo, includeArchived],
+    );
+    return row ?? null;
+  }
+
+  /** Purge has to see its own tombstone to answer "already purged". */
+  private async findAnyRow(memberNo: string): Promise<MemberRow | null> {
+    const [row] = await this.db.query<MemberRow>(
+      'select * from members where lower(member_no) = lower($1)',
+      [memberNo],
+    );
+    return row ?? null;
+  }
+
+  async requireRow(memberNo: string): Promise<MemberRow> {
+    const row = await this.findRow(memberNo, false);
+    if (!row) throw new NotFoundError(`Member ${memberNo} was not found`);
+    return row;
+  }
+
+  private async findById(id: string): Promise<MemberDetail | null> {
+    const [row] = await this.db.query<MemberRow>('select * from members where id = $1', [id]);
+    return row ? this.toDetail(row) : null;
+  }
+
+  private async toSummaries(rows: MemberRow[]): Promise<MemberSummary[]> {
+    if (rows.length === 0) return [];
+    const ids = rows.map((row) => row.id);
+    const contacts = await this.contactsForMany(ids);
+    const ministries = await this.ministriesForMany(ids);
+    return rows.map((row) =>
+      this.toSummary(row, contacts.get(row.id) ?? [], ministries.get(row.id) ?? []),
+    );
+  }
+
+  private toSummary(
+    row: MemberRow,
+    contacts: ContactDto[],
+    ministries: MinistryDto[],
+  ): MemberSummary {
+    return {
+      memberNo: row.member_no,
+      firstName: row.first_name ?? '',
+      lastName: row.last_name ?? '',
+      otherNames: row.other_names,
+      gender: row.gender,
+      placeOfResidence: row.place_of_residence,
+      joinedOn: isoDate(row.joined_on),
+      archivedAt: isoTimestamp(row.archived_at),
+      contacts,
+      ministries,
+    };
+  }
+
+  private async toDetail(row: MemberRow): Promise<MemberDetail> {
+    const [contacts, subscriptions, ministries, relationships, attendance] = await Promise.all([
+      this.contactsFor(row.id),
+      this.subscriptionsFor(row.id),
+      this.ministriesFor(row.id),
+      this.relationshipsFor(row.id),
+      this.attendanceFor(row),
+    ]);
+
+    return {
+      ...this.toSummary(row, contacts, ministries),
+      id: row.id,
+      maidenName: row.maiden_name,
+      alias: row.alias,
+      dob: isoDate(row.dob),
+      addressLine: row.address_line,
+      purgedAt: isoTimestamp(row.purged_at),
+      version: row.version,
+      createdAt: isoTimestamp(row.created_at)!,
+      updatedAt: isoTimestamp(row.updated_at)!,
+      subscriptions,
+      relationships,
+      attendance,
+    };
+  }
+
+  private async contactsFor(memberId: string): Promise<ContactDto[]> {
+    return (await this.contactsForMany([memberId])).get(memberId) ?? [];
+  }
+
+  private async contactsForMany(memberIds: string[]): Promise<Map<string, ContactDto[]>> {
+    const rows = await this.db.query<{
+      member_id: string;
+      id: string;
+      kind: ContactKind;
+      value: string;
+      display_order: number;
+      owner_member_no: string;
+      linked: boolean;
+    }>(
+      `select c.member_id, c.id, c.kind, c.value, c.display_order,
+              owner.member_no as owner_member_no, false as linked
+       from member_contacts c
+       join members owner on owner.id = c.member_id
+       where c.member_id = any($1::uuid[])
+       union all
+       select l.member_id, c.id, c.kind, c.value, l.display_order,
+              owner.member_no as owner_member_no, true as linked
+       from member_contact_links l
+       join member_contacts c on c.id = l.contact_id
+       join members owner on owner.id = c.member_id
+       where l.member_id = any($1::uuid[])
+       order by display_order, id`,
+      [memberIds],
+    );
+
+    const map = new Map<string, ContactDto[]>();
+    for (const row of rows) {
+      const list = map.get(row.member_id) ?? [];
+      list.push({
+        id: row.id,
+        kind: row.kind,
+        value: row.value,
+        displayOrder: row.display_order,
+        ownerMemberNo: row.owner_member_no,
+        linked: row.linked,
+      });
+      map.set(row.member_id, list);
+    }
+    return map;
+  }
+
+  private async ministriesFor(memberId: string): Promise<MinistryDto[]> {
+    return (await this.ministriesForMany([memberId])).get(memberId) ?? [];
+  }
+
+  private async ministriesForMany(memberIds: string[]): Promise<Map<string, MinistryDto[]>> {
+    const rows = await this.db.query<{
+      member_id: string;
+      code: string;
+      name: string;
+    }>(
+      `select mm.member_id, mi.code, mi.name
+       from member_ministries mm
+       join ministries mi on mi.id = mm.ministry_id
+       where mm.member_id = any($1::uuid[])
+       order by mi.code`,
+      [memberIds],
+    );
+
+    const map = new Map<string, MinistryDto[]>();
+    for (const row of rows) {
+      const list = map.get(row.member_id) ?? [];
+      list.push({ code: row.code, name: row.name });
+      map.set(row.member_id, list);
+    }
+    return map;
+  }
+
+  private async subscriptionsFor(memberId: string): Promise<SubscriptionDto[]> {
+    const rows = await this.db.query<{
+      id: string;
+      kind: SubscriptionKind;
+      scope: 'individual' | 'household';
+      status: 'active' | 'ended';
+      reference: string | null;
+      started_on: string;
+      ended_on: string | null;
+      policyholder_member_id: string;
+      policyholder_member_no: string;
+      covered: string[];
+    }>(
+      `select s.id, s.kind, s.scope, s.status, s.reference, s.started_on, s.ended_on,
+              s.policyholder_member_id, holder.member_no as policyholder_member_no,
+              coalesce((
+                select array_agg(covered.member_no order by covered.member_no)
+                from subscription_coverage sc
+                join members covered on covered.id = sc.member_id
+                where sc.subscription_id = s.id and sc.removed_on is null
+              ), '{}') as covered
+       from subscriptions s
+       join members holder on holder.id = s.policyholder_member_id
+       where s.policyholder_member_id = $1
+          or exists (
+            select 1 from subscription_coverage sc
+            where sc.subscription_id = s.id and sc.member_id = $1 and sc.removed_on is null
+          )
+       order by s.kind, s.started_on`,
+      [memberId],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      scope: row.scope,
+      status: row.status,
+      reference: row.reference,
+      startedOn: isoDate(row.started_on)!,
+      endedOn: isoDate(row.ended_on),
+      role: row.policyholder_member_id === memberId ? 'policyholder' : 'covered',
+      policyholderMemberNo: row.policyholder_member_no,
+      coveredMemberNos: row.covered,
+    }));
+  }
+
+  private async relationshipsFor(memberId: string): Promise<RelationshipDto[]> {
+    const rows = await this.db.query<{
+      id: string;
+      type: RelationshipType;
+      is_dependent: boolean;
+      other_member_no: string;
+      first_name: string | null;
+      last_name: string | null;
+      archived_at: Date | string | null;
+    }>(
+      `select r.id, r.type, r.is_dependent, other.member_no as other_member_no,
+              other.first_name, other.last_name, other.archived_at
+       from member_relationships r
+       join members other
+         on other.id = case when r.member_id = $1 then r.related_member_id else r.member_id end
+       where r.member_id = $1 or r.related_member_id = $1
+       order by r.created_at`,
+      [memberId],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      isDependent: row.is_dependent,
+      memberNo: row.other_member_no,
+      name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      archived: row.archived_at !== null,
+    }));
+  }
+
+  private async attendanceFor(row: MemberRow): Promise<AttendanceSeriesDto[]> {
+    const series = await this.db.query<{
+      id: string;
+      name: string;
+      timezone: string;
+      ministry: string | null;
+    }>(
+      `select distinct s.id, s.name, s.timezone, mi.name as ministry
+       from event_series s
+       left join ministries mi on mi.id = s.ministry_id
+       where s.archived_at is null
+         and (
+           exists (select 1 from attendance a where a.series_id = s.id and a.member_id = $1)
+           or exists (
+             select 1 from member_ministries mm
+             where mm.member_id = $1 and mm.ministry_id = s.ministry_id
+           )
+         )
+       order by s.name`,
+      [row.id],
+    );
+
+    const attended = await this.db.query<{
+      id: string;
+      series_id: string;
+      occurs_on: string;
+      source: 'import' | 'manual';
+    }>('select id, series_id, occurs_on, source from attendance where member_id = $1', [row.id]);
+
+    const bySeries = new Map<string, AttendanceEntryDto[]>();
+    for (const entry of attended) {
+      const list = bySeries.get(entry.series_id) ?? [];
+      list.push({ id: entry.id, date: isoDate(entry.occurs_on)!, source: entry.source });
+      bySeries.set(entry.series_id, list);
+    }
+
+    const result: AttendanceSeriesDto[] = [];
+    for (const item of series) {
+      const calendar = await loadCalendar(this.db, item.id);
+      const start = seriesStart(calendar.schedules);
+      if (!start) continue;
+
+      const endsOn = calendar.schedules[calendar.schedules.length - 1]?.endsOn ?? null;
+      const today = todayIn(item.timezone);
+      const joinedOn = isoDate(row.joined_on);
+      const windowStart = joinedOn && joinedOn > start ? joinedOn : start;
+      const windowEnd = endsOn && endsOn < today ? endsOn : today;
+      if (windowStart > windowEnd) continue;
+
+      const occurrences = await resolveSeriesOccurrences(this.db, item.id, windowStart, windowEnd);
+      const entries = (bySeries.get(item.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+      const counts = summariseAttendance({
+        occurrences,
+        attendedDates: entries
+          .map((entry) => entry.date)
+          .filter((date) => date >= windowStart && date <= windowEnd),
+        endsOn,
+        today,
+      });
+
+      result.push({
+        seriesId: item.id,
+        seriesName: item.name,
+        ministry: item.ministry,
+        ...counts,
+        entries,
+      });
+    }
+
+    return result;
+  }
+
+  private async insertContact(
+    tx: DbClient,
+    memberId: string,
+    input: ContactInput,
+    fallbackOrder?: number,
+  ): Promise<{ id: string }> {
+    const normalized = normalizeContactValue(input.kind, input.value);
+    const order =
+      input.displayOrder ??
+      fallbackOrder ??
+      (
+        await tx.query<{ next: number }>(
+          'select coalesce(max(display_order), 0) + 1 as next from member_contacts where member_id = $1',
+          [memberId],
+        )
+      )[0]!.next;
+
+    try {
+      const [row] = await tx.query<{ id: string }>(
+        `insert into member_contacts (member_id, kind, value, normalized_value, display_order)
+         values ($1,$2,$3,$4,$5) returning id`,
+        [memberId, input.kind, input.value.trim(), normalized, order],
+      );
+      return row!;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`Contact value "${input.value}" already belongs to a member`);
+      }
+      throw error;
+    }
+  }
+
+  private async assignMinistryTx(tx: DbClient, memberId: string, code: string): Promise<void> {
+    const [ministry] = await tx.query<{ id: string }>(
+      'select id from ministries where lower(code) = lower($1) and active',
+      [code],
+    );
+    if (!ministry) throw new NotFoundError(`Ministry ${code} was not found or is inactive`);
+
+    try {
+      await tx.query('insert into member_ministries (member_id, ministry_id) values ($1,$2)', [
+        memberId,
+        ministry.id,
+      ]);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictError(`Member already serves in ${code}`);
+      }
+      throw error;
+    }
+  }
+
+  private async insertCoverage(
+    tx: DbClient,
+    subscriptionId: string,
+    memberId: string,
+    addedOn: string,
+  ): Promise<void> {
+    await tx.query(
+      'insert into subscription_coverage (subscription_id, member_id, added_on) values ($1,$2,$3)',
+      [subscriptionId, memberId, addedOn],
+    );
+  }
+}
