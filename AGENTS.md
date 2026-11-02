@@ -75,7 +75,8 @@ do not guess. Tier 3 and the UI tester are deferred until V2.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for
-  the `verify` check, then squash merge and delete the branch.
+  the `verify` check, then squash merge and delete the branch. `.githooks/pre-push` blocks direct
+  pushes to `main` locally; `--no-verify` is a deliberate bypass, not a workflow.
 - Never push directly to `main`, force-push, or merge with a red/required check. Fix forward through
   a PR.
 - Full policy: `.github/merge-policy.md`.

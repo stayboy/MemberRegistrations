@@ -46,6 +46,7 @@ hand if the branch survived.
 
 ## Local guard
 
-`.githooks/pre-commit` runs `npm run verify:fast` and blocks the commit on failure. Install with
-`npm run hooks:install`. It is a tripwire, not a security boundary: `--no-verify` bypasses it, and
-this policy remains the primary control.
+`.githooks/pre-commit` runs `npm run verify:fast` and blocks the commit on failure.
+`.githooks/pre-push` blocks direct pushes to `main`; feature-branch pushes are allowed. Install both
+with `npm run hooks:install`. They are tripwires, not a security boundary: `--no-verify` bypasses
+them, and this policy remains the primary control.

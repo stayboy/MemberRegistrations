@@ -258,6 +258,16 @@ Design rules:
 - **The repo rules live in [`AGENTS.md`](AGENTS.md).** Spec first, grill and get explicit sign-off,
   UTC dates, append-only history, and the verification commands.
 
+## Live deployment
+
+- **API:** <https://member-registrations-mind-logs.vercel.app>
+- **Project:** `mind-logs/member-registrations` — Node 24, functions in `fra1`
+- **Git:** `stayboy/MemberRegistrations`; pushes to `main` deploy production, PRs deploy previews
+- **Protection:** Vercel Authentication is **preview-only**; production is public and uses the API
+  bearer token
+- **Operations:** migrations, token rotation and troubleshooting:
+  [`documents/runbooks/vercel-deploy.md`](documents/runbooks/vercel-deploy.md)
+
 ## Deploying to Vercel
 
 1. Push the repository to Git and import it in Vercel, or run `vercel link` then `vercel`.
@@ -272,6 +282,10 @@ Design rules:
 
 Notes:
 
-- Express runs as **one Vercel Function** with Fluid compute.
+- Express runs as **one Vercel Function** with Fluid compute. `vercel.json` builds `src/index.ts`
+  with `@vercel/node`; the Express preset alone rejects this entrypoint because `express` is imported
+  by `create-app.ts`, not by `index.ts`.
+- Vercel Authentication must stay **preview-only**; production is reached by API clients that cannot
+  complete Vercel SSO.
 - Vercel's request body limit is **4.5 MB**; the app caps JSON at 1 MB, so imports are chunked.
 - No cron imports in v1: imports are explicit API calls.
