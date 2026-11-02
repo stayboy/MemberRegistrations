@@ -3,6 +3,7 @@ import { summariseAttendance, type AttendanceCounts } from '../domain/attendance
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
+import { loadContacts, type ContactDto } from './contacts.js';
 import { loadCalendar, resolveSeriesOccurrences } from './occurrences.js';
 
 export const GENDERS = ['male', 'female', 'other', 'undisclosed'] as const;
@@ -13,15 +14,6 @@ export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
 
 export const SUBSCRIPTION_KINDS = ['life_insurance', 'credit_union'] as const;
 export type SubscriptionKind = (typeof SUBSCRIPTION_KINDS)[number];
-
-export interface ContactDto {
-  id: string;
-  kind: ContactKind;
-  value: string;
-  displayOrder: number;
-  ownerMemberNo: string;
-  linked: boolean;
-}
 
 export interface SubscriptionDto {
   id: string;
@@ -71,6 +63,7 @@ export interface MemberSummary {
   gender: Gender;
   placeOfResidence: string | null;
   joinedOn: string | null;
+  isPresbyter: boolean;
   archivedAt: string | null;
   contacts: ContactDto[];
   ministries: MinistryDto[];
@@ -109,6 +102,7 @@ export interface CreateMemberInput {
   placeOfResidence?: string | null;
   addressLine?: string | null;
   joinedOn?: string | null;
+  isPresbyter?: boolean;
   contacts?: ContactInput[];
   ministries?: string[];
 }
@@ -146,6 +140,7 @@ interface MemberRow extends Row {
   place_of_residence: string | null;
   address_line: string | null;
   joined_on: string | null;
+  is_presbyter: boolean;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
   version: number;
@@ -281,7 +276,7 @@ export class MemberRepository {
     const memberNo = assertMemberNo(requiredText(input.memberNo, 'memberNo'));
     const gender = input.gender ?? 'undisclosed';
     if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
-    const joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
+    const joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : todayIn('UTC');
     const dob = input.dob ? assertDate(input.dob, 'dob') : null;
 
     try {
@@ -289,8 +284,8 @@ export class MemberRepository {
         const [row] = await tx.query<{ id: string }>(
           `insert into members (
              member_no, first_name, last_name, other_names, maiden_name, alias, dob, gender,
-             place_of_residence, address_line, joined_on, created_by, updated_by
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, coalesce($11::date, current_date), $12, $12)
+             place_of_residence, address_line, joined_on, is_presbyter, created_by, updated_by
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
            returning id`,
           [
             memberNo,
@@ -304,6 +299,7 @@ export class MemberRepository {
             optionalText(input.placeOfResidence),
             optionalText(input.addressLine),
             joinedOn,
+            input.isPresbyter ?? false,
             actor,
           ],
         );
@@ -334,6 +330,20 @@ export class MemberRepository {
     expectedVersion?: number,
   ): Promise<MemberDetail> {
     const row = await this.requireRow(memberNo);
+
+    if (input.isPresbyter === false && row.is_presbyter) {
+      const [active] = await this.db.query<{ count: number }>(
+        `select count(*)::int as count from shepherding_assignments
+         where officer_member_id = $1 and ended_on is null`,
+        [row.id],
+      );
+      if ((active?.count ?? 0) > 0) {
+        throw new ConflictError(
+          `Member ${memberNo} still shepherds ${active!.count} member(s); reassign them before clearing the presbyter flag`,
+        );
+      }
+    }
+
     const sets: string[] = [];
     const params: unknown[] = [];
 
@@ -348,13 +358,18 @@ export class MemberRepository {
       ['placeOfResidence', 'place_of_residence'],
       ['addressLine', 'address_line'],
       ['joinedOn', 'joined_on'],
+      ['isPresbyter', 'is_presbyter'],
     ];
 
     for (const [field, column] of columns) {
       if (input[field] === undefined) continue;
-      let value = input[field] as string | null;
-      if (field === 'firstName' || field === 'lastName') value = requiredText(value, field);
-      if (field === 'dob' || field === 'joinedOn') value = value ? assertDate(value, field) : null;
+      let value: unknown = input[field];
+      if (field === 'firstName' || field === 'lastName') {
+        value = requiredText(value as string | null, field);
+      }
+      if (field === 'dob' || field === 'joinedOn') {
+        value = value ? assertDate(String(value), field) : null;
+      }
       if (field === 'gender' && !GENDERS.includes(value as Gender)) {
         throw new ValidationError('gender is not recognised');
       }
@@ -386,13 +401,34 @@ export class MemberRepository {
   }
 
   async archive(memberNo: string, actor: string): Promise<void> {
-    const rows = await this.db.query<{ id: string }>(
-      `update members set archived_at = now(), version = version + 1, updated_at = now(), updated_by = $2
-       where lower(member_no) = lower($1) and archived_at is null and purged_at is null
-       returning id`,
-      [memberNo, actor],
+    const row = await this.requireRow(memberNo);
+
+    const [active] = await this.db.query<{ count: number }>(
+      `select count(*)::int as count from shepherding_assignments
+       where officer_member_id = $1 and ended_on is null`,
+      [row.id],
     );
-    if (rows.length === 0) throw new NotFoundError(`Member ${memberNo} was not found`);
+    if ((active?.count ?? 0) > 0) {
+      throw new ConflictError(
+        `Member ${memberNo} still shepherds ${active!.count} member(s); reassign them before archiving`,
+      );
+    }
+
+    await this.db.transaction(async (tx) => {
+      // Archiving the sheep ends their assignment; history stays readable.
+      await tx.query(
+        `update shepherding_assignments
+         set ended_on = $2, ended_by = $3, ended_reason = 'member archived'
+         where member_id = $1 and ended_on is null`,
+        [row.id, todayIn('UTC'), actor],
+      );
+      await tx.query(
+        `update members
+         set archived_at = now(), version = version + 1, updated_at = now(), updated_by = $2
+         where id = $1`,
+        [row.id, actor],
+      );
+    });
   }
 
   async restore(memberNo: string, actor: string): Promise<MemberDetail> {
@@ -427,13 +463,19 @@ export class MemberRepository {
         [row.id],
       );
       await tx.query('delete from member_ministries where member_id = $1', [row.id]);
+      // Assignments are never deleted normally; purge is PII erasure, and the
+      // cascade removes their calls too.
+      await tx.query(
+        'delete from shepherding_assignments where officer_member_id = $1 or member_id = $1',
+        [row.id],
+      );
       await tx.query('delete from attendance_suppressions where member_id = $1', [row.id]);
       await tx.query('delete from attendance where member_id = $1', [row.id]);
       await tx.query(
         `update members set
            first_name = null, last_name = null, other_names = null, maiden_name = null,
            alias = null, dob = null, place_of_residence = null, address_line = null,
-           gender = 'undisclosed', archived_at = now(), purged_at = now(),
+           gender = 'undisclosed', is_presbyter = false, archived_at = now(), purged_at = now(),
            version = version + 1, updated_at = now(), updated_by = $2
          where id = $1`,
         [row.id, actor],
@@ -563,9 +605,7 @@ export class MemberRepository {
     actor: string,
   ): Promise<SubscriptionDto> {
     const row = await this.requireRow(memberNo);
-    const startedOn = input.startedOn
-      ? assertDate(input.startedOn, 'startedOn')
-      : todayIn('Africa/Lagos');
+    const startedOn = input.startedOn ? assertDate(input.startedOn, 'startedOn') : todayIn('UTC');
 
     const subscriptionId = await this.db.transaction(async (tx) => {
       const [created] = await tx.query<{ id: string }>(
@@ -596,9 +636,9 @@ export class MemberRepository {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
       const updated = await tx.query(
-        `update subscriptions set status = 'ended', ended_on = coalesce(ended_on, current_date)
+        `update subscriptions set status = 'ended', ended_on = coalesce(ended_on, $3::date)
          where id = $1 and policyholder_member_id = $2 and status = 'active' returning id`,
-        [subscriptionId, row.id],
+        [subscriptionId, row.id, todayIn('UTC')],
       );
       if (updated.length === 0) throw new NotFoundError('Active subscription was not found');
       await touch(tx, row.id, actor);
@@ -618,7 +658,7 @@ export class MemberRepository {
     const covered = await this.requireRow(memberNo);
     try {
       await this.db.transaction(async (tx) => {
-        await this.insertCoverage(tx, subscriptionId, covered.id, todayIn('Africa/Lagos'));
+        await this.insertCoverage(tx, subscriptionId, covered.id, todayIn('UTC'));
         await touch(tx, subscription.policyholder_member_id, actor);
         await touch(tx, covered.id, actor);
       });
@@ -632,9 +672,9 @@ export class MemberRepository {
     const covered = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
       const updated = await tx.query(
-        `update subscription_coverage set removed_on = current_date
+        `update subscription_coverage set removed_on = $3::date
          where subscription_id = $1 and member_id = $2 and removed_on is null returning id`,
-        [subscriptionId, covered.id],
+        [subscriptionId, covered.id, todayIn('UTC')],
       );
       if (updated.length === 0) throw new NotFoundError('Coverage was not found');
       await touch(tx, covered.id, actor);
@@ -860,6 +900,7 @@ export class MemberRepository {
       gender: row.gender,
       placeOfResidence: row.place_of_residence,
       joinedOn: isoDate(row.joined_on),
+      isPresbyter: row.is_presbyter,
       archivedAt: isoTimestamp(row.archived_at),
       contacts,
       ministries,
@@ -897,45 +938,7 @@ export class MemberRepository {
   }
 
   private async contactsForMany(memberIds: string[]): Promise<Map<string, ContactDto[]>> {
-    const rows = await this.db.query<{
-      member_id: string;
-      id: string;
-      kind: ContactKind;
-      value: string;
-      display_order: number;
-      owner_member_no: string;
-      linked: boolean;
-    }>(
-      `select c.member_id, c.id, c.kind, c.value, c.display_order,
-              owner.member_no as owner_member_no, false as linked
-       from member_contacts c
-       join members owner on owner.id = c.member_id
-       where c.member_id = any($1::uuid[])
-       union all
-       select l.member_id, c.id, c.kind, c.value, l.display_order,
-              owner.member_no as owner_member_no, true as linked
-       from member_contact_links l
-       join member_contacts c on c.id = l.contact_id
-       join members owner on owner.id = c.member_id
-       where l.member_id = any($1::uuid[])
-       order by display_order, id`,
-      [memberIds],
-    );
-
-    const map = new Map<string, ContactDto[]>();
-    for (const row of rows) {
-      const list = map.get(row.member_id) ?? [];
-      list.push({
-        id: row.id,
-        kind: row.kind,
-        value: row.value,
-        displayOrder: row.display_order,
-        ownerMemberNo: row.owner_member_no,
-        linked: row.linked,
-      });
-      map.set(row.member_id, list);
-    }
-    return map;
+    return loadContacts(this.db, memberIds);
   }
 
   private async ministriesFor(memberId: string): Promise<MinistryDto[]> {
@@ -1153,10 +1156,10 @@ export class MemberRepository {
     if (!ministry) throw new NotFoundError(`Ministry ${code} was not found or is inactive`);
 
     try {
-      await tx.query('insert into member_ministries (member_id, ministry_id) values ($1,$2)', [
-        memberId,
-        ministry.id,
-      ]);
+      await tx.query(
+        'insert into member_ministries (member_id, ministry_id, assigned_on) values ($1,$2,$3)',
+        [memberId, ministry.id, todayIn('UTC')],
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictError(`Member already serves in ${code}`);

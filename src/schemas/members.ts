@@ -21,6 +21,7 @@ export const createMemberSchema = z.object({
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
+  isPresbyter: z.boolean().optional(),
   contacts: z.array(contactInputSchema).max(20).optional(),
   ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
 });
@@ -36,6 +37,7 @@ export const updateMemberSchema = z.object({
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
+  isPresbyter: z.boolean().optional(),
 });
 
 export const relationshipInputSchema = z.object({
@@ -133,6 +135,7 @@ export const memberSummarySchema = z.object({
   gender: z.enum(GENDERS),
   placeOfResidence: z.string().nullable(),
   joinedOn: z.string().nullable(),
+  isPresbyter: z.boolean(),
   archivedAt: z.string().nullable(),
   contacts: z.array(contactSchema),
   ministries: z.array(ministrySchema),

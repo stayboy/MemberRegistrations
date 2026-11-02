@@ -30,6 +30,19 @@ import {
   updateSeriesSchema,
 } from './schemas/reference.js';
 import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
+import {
+  assignmentInputSchema,
+  assignmentSchema,
+  callInputSchema,
+  callListSchema,
+  callSchema,
+  memberShepherdingSchema,
+  officerListSchema,
+  officerSchema,
+  reportSchema,
+  rosterEntrySchema,
+  rosterSchema,
+} from './schemas/shepherding.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -91,9 +104,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: 'MemberRegistrations API',
-      version: '2.0.0',
+      version: '2.1.0',
       description:
-        'Member registrations, ministries, event series and derived attendance. Attendance counts are computed from series schedules, imported occurrence lists and attendance registries.',
+        'Member registrations, ministries, event series, derived attendance, and shepherding. Attendance counts are computed from series schedules, imported occurrence lists and attendance registries; shepherding calls are append-only.',
     },
     servers: [{ url: '/', description: 'Current deployment' }],
     security: [{ bearerAuth: [] }],
@@ -132,6 +145,17 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         ImportBatch: toSchema(importBatchSchema, 'output'),
         EventImport: toSchema(eventImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
+        Assignment: toSchema(assignmentSchema, 'output'),
+        AssignmentInput: toSchema(assignmentInputSchema, 'input'),
+        Call: toSchema(callSchema, 'output'),
+        CallInput: toSchema(callInputSchema, 'input'),
+        CallList: toSchema(callListSchema, 'output'),
+        RosterEntry: toSchema(rosterEntrySchema, 'output'),
+        Roster: toSchema(rosterSchema, 'output'),
+        Officer: toSchema(officerSchema, 'output'),
+        OfficerList: toSchema(officerListSchema, 'output'),
+        MemberShepherding: toSchema(memberShepherdingSchema, 'output'),
+        ShepherdingReport: toSchema(reportSchema, 'output'),
       },
     },
     paths: {
@@ -781,6 +805,128 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: 'Read an import batch',
           responses: {
             200: json('The batch record.', 'ImportBatch'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/shepherding/assignments': {
+        post: {
+          summary: 'Assign a member to a presbyter',
+          description:
+            'When the member already has an active shepherd, the request must carry replaceAssignmentId and a reason. Otherwise the API returns 409 with a currentAssignment extension so the client can ask for consent.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('AssignmentInput') } },
+          },
+          responses: {
+            201: json('Assignment created.', 'Assignment'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The member already has a shepherd, or the replacement id is stale.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/shepherding/assignments/{assignmentId}': {
+        parameters: [idParam('assignmentId')],
+        delete: {
+          summary: 'End an assignment (history is kept)',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Assignment ended.'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+          },
+        },
+      },
+
+      '/v1/shepherding/assignments/{assignmentId}/calls': {
+        parameters: [idParam('assignmentId')],
+        post: {
+          summary: 'Log one call attempt',
+          description:
+            'Calls are append-only: there is no update and no delete. A correction is another call. stillInChurch is required when outcome is reached.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CallInput') } },
+          },
+          responses: {
+            201: json('Call recorded.', 'Call'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+        get: {
+          summary: 'List every call for an assignment',
+          responses: {
+            200: json('Calls, newest first.', 'CallList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/shepherding/officers': {
+        get: {
+          summary: 'List presbyters with list size and call totals',
+          parameters: [
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('Officers and their totals.', 'OfficerList'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/shepherding/officers/{memberNo}/members': {
+        parameters: [memberNoParam],
+        get: {
+          summary: "An officer's shepherding roster",
+          parameters: [
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('Roster with contacts, counts and latest reports.', 'Roster'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/shepherding/report': {
+        get: {
+          summary: 'Church-wide shepherding coverage and call totals',
+          parameters: [
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('Totals plus one row per officer.', 'ShepherdingReport'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/shepherding': {
+        parameters: [memberNoParam],
+        get: {
+          summary: "A member's shepherd, assignment history and calls",
+          responses: {
+            200: json('Current shepherd, history, counts and recent calls.', 'MemberShepherding'),
             401: unauthorized,
             404: notFound,
           },

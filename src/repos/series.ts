@@ -91,7 +91,7 @@ export class SeriesRepository {
   async create(input: CreateSeriesInput, actor: string): Promise<SeriesDto> {
     const name = input.name.trim();
     if (!name) throw new ValidationError('name is required');
-    const timezone = input.timezone ?? 'Africa/Lagos';
+    const timezone = input.timezone ?? 'UTC';
     todayIn(timezone);
 
     const effectiveFrom = assertDate(input.effectiveFrom, 'effectiveFrom');

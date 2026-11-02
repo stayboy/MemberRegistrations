@@ -1,12 +1,12 @@
 # Spec — MemberRegistrations API
 
-|            |                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------ |
-| Status     | **Approved 2026-11-02** — design settled through a structured interview; v1 in build |
-| Date       | 2026-11-02                                                                           |
-| Repo       | `MemberRegistrations` (standalone repository)                                        |
-| Origin     | Conversational feature request, 2026-11-02                                           |
-| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres)         |
+|            |                                                                              |
+| ---------- | ---------------------------------------------------------------------------- |
+| Status     | **Approved 2026-11-02** — shepherding amendment approved; v1 in build        |
+| Date       | 2026-11-02                                                                   |
+| Repo       | `MemberRegistrations` (standalone repository)                                |
+| Origin     | Conversational feature request, 2026-11-02                                   |
+| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres) |
 
 ---
 
@@ -32,6 +32,8 @@ deployed to Vercel as a single function.
   `attended` / `expected` per series.
 - The domain is **behaviour-rich**: member, subscription, relationship and series aggregates own their
   invariants; routes only parse input and delegate.
+- Shepherding is **historical, not a checkbox**: presbyters own assignment and call histories, a
+  reassignment needs explicit consent and a reason, and every call attempt is permanent.
 - The API is **typed and documented** from the same Zod schemas that validate requests, generating an
   OpenAPI 3.1 document.
 - Personal data sits behind bearer authentication, writes are attributed, and concurrency is
@@ -64,6 +66,12 @@ deployed to Vercel as a single function.
     without guesswork.
 12. As a security owner, I want PII behind authentication, never cached, and purgeable, so that the
     church can honour deletion requests.
+13. As a presbyter, I want my shepherding list with each member's contacts and last contact, so that I
+    know who to call next.
+14. As a presbyter, I want to log every call attempt with feedback, any issue, and whether the member
+    is still with the church, so that follow-up is recorded once and is not lost.
+15. As a pastor, I want coverage and call totals per officer, so that I can see which members are not
+    being shepherded and which lists have gone quiet.
 
 ## Domain Model
 
@@ -79,6 +87,7 @@ deployed to Vercel as a single function.
 | `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                          |
 | `placeOfResidence`, `addressLine` | Free text.                                                               |
 | `joinedOn`                        | Date; defaults to the registration date when omitted.                    |
+| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.           |
 | `archivedAt`                      | Set by archive, cleared by restore.                                      |
 | `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.           |
 
@@ -125,11 +134,81 @@ status, reference?, startedOn, endedOn? }`
 - `parent` describes kinship; `guardian` describes responsibility. A member may hold both edges.
 - Every related member is a real member with its own `memberNo`; there are no shadow people.
 
+### Shepherding
+
+A **presbyter** is any member with `isPresbyter = true`. Presbyter is a flag, not a ministry: it grants
+officer eligibility without implying a ministry assignment, and it is set through the ordinary member
+create/update payloads.
+
+An **assignment** puts one member on one officer's shepherding list:
+
+`{ id, officerMemberId, memberId, assignedOn, endedOn?, assignedBy, endedBy?, reason?, endedReason? }`
+
+- The officer must be an active member with `isPresbyter = true`; the shepherded member must be an
+  active member. Neither may be archived or purged, and a member cannot shepherd themselves.
+- A member has **at most one active assignment**. An officer may hold any number.
+- Assignments are ended, never deleted. Ending sets `endedOn`, `endedBy` and `endedReason`
+  (optional for a plain end, required on reassignment).
+- **Reassignment requires consent.** When the member already has an active assignment, the request
+  must carry both `replaceAssignmentId` (the active assignment the caller saw) and a free-text
+  `reason` (3–500 characters). Missing, mismatched or stale values return `409`; the problem body
+  includes a `currentAssignment` extension (`id`, `officerMemberNo`, `assignedOn`) so the client can
+  ask the user before retrying. A `replaceAssignmentId` supplied when no active assignment exists is
+  also `409`.
+- On reassignment the previous assignment is ended on the new assignment's `assignedOn`; the new row
+  stores `reason` and the ended row stores the same text as `endedReason`, so the history explains
+  itself from either side.
+- `assignedOn` defaults to today (UTC), must not be in the future, and a replacement must not start
+  before the assignment it replaces.
+- Clearing `isPresbyter` or archiving a member is refused (`409`) while they have active assignments
+  as officer: the list must be reassigned first. Archiving a _shepherded_ member automatically ends
+  their active assignment (reason recorded); restoring them does not revive it.
+- Presbyters may themselves be shepherded by another presbyter, and count in coverage totals.
+
+A **call** records one contact attempt:
+
+`{ id, assignmentId, calledOn, outcome: reached | no_answer | wrong_number, stillInChurch: yes | no | unknown, feedback?, issue?, recordedBy, createdAt }`
+
+- Calls are **append-only**: no update and no delete, because a pastoral record with history is not
+  editable. A correction is another call on the day the correction is made; feedback and issues
+  accumulate across days. Two attempts on the same day are two rows — the API does not deduplicate,
+  so clients must not auto-retry a `POST`.
+- A call may only be logged against an **active** assignment (an ended assignment is read-only).
+- `calledOn` defaults to today (UTC), must not be in the future and must not precede `assignedOn`.
+- `stillInChurch` is required when `outcome = reached`; it defaults to `unknown` for `no_answer` and
+  `wrong_number`.
+- **Current status** is the latest call by `calledOn`, then `createdAt`, whose `stillInChurch` is
+  `yes` or `no`. An `unknown` later report never erases a known answer; the status is `null` until
+  the first definite report.
+
+Counts for a member and a window:
+
+```
+attempts       = |calls|
+conversations  = |calls with outcome = reached|
+lastCalledOn   = max(calledOn)
+```
+
+The **roster** shows one row per active assignment: member identity, owned and linked contacts,
+residence, `attempts`, `conversations`, `lastCalledOn`, `lastOutcome`, current `stillInChurch`,
+`latestFeedback` and `latestIssue`. Counts cover the **current assignment only**; the member's own
+shepherding view exposes the full history across previous officers, including prior feedback and
+issues.
+
+The **church report** aggregates the same data per officer plus totals: officers, active members,
+assigned members, unassigned members, attempts, conversations, members never called, and the current
+status distribution (`yes`, `no`, `unknown`, never reported).
+
+**Purge** deletes the member's assignments and calls in both roles. This is the one exception to the
+append-only rule: purge is a legal PII erasure, not a history-management operation.
+
 ### EventSeries
 
 `{ id, name, ministryId?, timezone, description?, archivedAt? }`
 
 - `description` carries free text such as the service time.
+- `timezone` is an optional IANA override used only to decide what "today" means for that series. It
+  defaults to `UTC`; every other backend default and comparison uses UTC calendar dates.
 - Unique on `(lower(name), ministryId)` among non-archived series.
 - Schedules are **versioned**: `series_schedule(effectiveFrom, rrule, endsOn?)`. Editing a schedule
   adds a version; history is never rewritten.
@@ -207,6 +286,25 @@ every write requires `X-Actor-Id`.
 | `POST`   | `/v1/members/{memberNo}/relationships`             | `{ relatedMemberNo, type, isDependent }`                                  |
 | `DELETE` | `/v1/members/{memberNo}/relationships/{id}`        | Remove the edge                                                           |
 
+### Shepherding
+
+| Method   | Path                                               | Result                                                                      |
+| -------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `POST`   | `/v1/shepherding/assignments`                      | Assign a member; reassignment needs `replaceAssignmentId` + `reason`        |
+| `DELETE` | `/v1/shepherding/assignments/{assignmentId}`       | End an assignment; `409` when already ended                                 |
+| `POST`   | `/v1/shepherding/assignments/{assignmentId}/calls` | Log one attempt; `409` when the assignment has ended                        |
+| `GET`    | `/v1/shepherding/assignments/{assignmentId}/calls` | Full call history for the assignment                                        |
+| `GET`    | `/v1/shepherding/officers`                         | Presbyters with list size and call totals (`from`, `to`)                    |
+| `GET`    | `/v1/shepherding/officers/{memberNo}/members`      | The officer's roster with contacts, counts and latest report (`from`, `to`) |
+| `GET`    | `/v1/shepherding/report`                           | Church-wide coverage and call totals (`from`, `to`)                         |
+| `GET`    | `/v1/members/{memberNo}/shepherding`               | Current shepherd, assignment history, calls and current status              |
+
+Assignment body: `{ officerMemberNo, memberNo, assignedOn?, replaceAssignmentId?, reason? }`.
+
+Call body: `{ calledOn?, outcome, stillInChurch?, feedback?, issue? }`.
+
+There is deliberately no `DELETE` for a call.
+
 ### Reference data
 
 | Method       | Path                                | Result                                             |
@@ -243,25 +341,28 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 ### Concurrency and caching
 
 - `version` on the member row produces `ETag: "v{n}"`; `If-Match` is checked on `PUT`.
-- All member responses send `Cache-Control: no-store` — the records are personal data.
+- Reassignment uses `replaceAssignmentId` as its consent checkpoint, so a stale client cannot move a
+  member between shepherds.
+- All member and shepherding responses send `Cache-Control: no-store` — the records are personal data.
 
 ## Implementation Decisions
 
-| Concern         | Choice                                                          |
-| --------------- | --------------------------------------------------------------- |
-| Runtime         | Node.js 24 LTS                                                  |
-| Language        | TypeScript 5.9, `strict`, ESM                                   |
-| HTTP            | Express 5                                                       |
-| Validation      | Zod 4                                                           |
-| Contract        | OpenAPI 3.1 generated from Zod via `z.toJSONSchema`             |
-| Database        | Postgres — Neon in production, PGlite in tests                  |
-| Access layer    | Parameterised SQL behind a two-method `Db` port (`pg` / PGlite) |
-| Migrations      | Embedded SQL applied by a tracked runner                        |
-| Recurrence      | `rrule` package, dates handled as calendar dates                |
-| Testing         | Vitest 5 + Supertest 7 + PGlite                                 |
-| Logging         | Pino 10 (JSON)                                                  |
-| Lint / format   | ESLint 10 flat config + Prettier 3                              |
-| Package manager | npm 11, lockfile committed                                      |
+| Concern         | Choice                                                                      |
+| --------------- | --------------------------------------------------------------------------- |
+| Runtime         | Node.js 24 LTS                                                              |
+| Language        | TypeScript 5.9, `strict`, ESM                                               |
+| HTTP            | Express 5                                                                   |
+| Validation      | Zod 4                                                                       |
+| Contract        | OpenAPI 3.1 generated from Zod via `z.toJSONSchema`                         |
+| Database        | Postgres — Neon in production, PGlite in tests                              |
+| Access layer    | Parameterised SQL behind a two-method `Db` port (`pg` / PGlite)             |
+| Migrations      | Embedded SQL applied by a tracked runner                                    |
+| Recurrence      | `rrule` package, dates handled as calendar dates                            |
+| Date handling   | All defaults and "today" are UTC; `series.timezone` is an optional override |
+| Testing         | Vitest 5 + Supertest 7 + PGlite                                             |
+| Logging         | Pino 10 (JSON)                                                              |
+| Lint / format   | ESLint 10 flat config + Prettier 3                                          |
+| Package manager | npm 11, lockfile committed                                                  |
 
 ### Why these choices
 
@@ -296,8 +397,9 @@ src/
     contacts.ts         # normalisation + uniqueness rules
     series.ts           # RRULE validation, schedule expansion, occurrence resolution
     attendance.ts       # denominator engine
-  repos/                # members, ministries, series, occurrences, imports
-  routes/               # members, subscriptions, ministries, series, imports
+    shepherding.ts      # latest-known status, counts, coverage rules
+  repos/                # members, ministries, series, occurrences, imports, shepherding
+  routes/               # members, subscriptions, ministries, series, imports, shepherding
   schemas/              # Zod request/response schemas
   errors/               # domain errors + problem+json middleware
 ```
@@ -305,11 +407,15 @@ src/
 ## Testing Decisions
 
 1. **Domain unit tests** (pure, no database): contact normalisation, RRULE expansion and exceptions,
-   the denominator window, subscription coverage rules, relationship symmetries.
+   the denominator window, subscription coverage rules, relationship symmetries, and the
+   latest-known shepherding status (an `unknown` report never erases `yes`/`no`).
 2. **Repository contract tests** against PGlite: constraints (duplicate contact, one spouse edge,
-   unique member number), import idempotency, suppression behaviour, archive/purge.
+   unique member number, one active shepherd), import idempotency, suppression behaviour,
+   archive/purge, and append-only calls surviving assignment end.
 3. **HTTP contract tests** (Supertest + PGlite): status codes, problem+json bodies, ETag/`If-Match`,
-   actor enforcement, paging, import failure reports, OpenAPI coverage.
+   actor enforcement, paging, import failure reports, reassignment consent (`409` with
+   `currentAssignment`, then success with `replaceAssignmentId` + `reason`), roster and report counts,
+   and OpenAPI coverage.
 
 Tests assert external behaviour — responses, persisted rows, computed counts — not internal call
 sequences.
@@ -330,4 +436,9 @@ sequences.
 - Automatic/scheduled imports (cron).
 - Duplicate-person merge.
 - Multi-tenancy, SSO, per-user tokens, rate limiting.
+- Per-officer authorization or data scoping: v1 keeps one shared bearer token, and `X-Actor-Id` is
+  audit attribution, not identity. Any authenticated actor can assign or log for any officer.
+- Shepherding cadence targets, overdue flags, reminders, or SMS/email notification; the API exposes
+  `lastCalledOn` and `membersNeverCalled` instead.
+- Bulk assignment in one request.
 - Email/SMS notification, reporting exports.

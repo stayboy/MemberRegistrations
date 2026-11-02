@@ -221,4 +221,53 @@ insert into ministries (code, name, description) values
 on conflict do nothing;
 `,
   },
+  {
+    version: '0003_shepherding',
+    sql: `
+alter table members add column is_presbyter boolean not null default false;
+create index members_presbyter on members (member_no) where is_presbyter;
+
+-- UTC is the backend default; an explicit per-series timezone remains allowed.
+alter table event_series alter column timezone set default 'UTC';
+alter table member_ministries alter column assigned_on set default ((now() at time zone 'UTC')::date);
+
+create table shepherding_assignments (
+  id uuid primary key default gen_random_uuid(),
+  officer_member_id uuid not null references members(id),
+  member_id uuid not null references members(id),
+  assigned_on date not null,
+  ended_on date,
+  assigned_by text not null,
+  ended_by text,
+  reason text,
+  ended_reason text,
+  created_at timestamptz not null default now(),
+  check (officer_member_id <> member_id),
+  check (ended_on is null or ended_on >= assigned_on)
+);
+-- One active shepherd per member; an officer may hold any number.
+create unique index shepherding_assignments_active_member
+  on shepherding_assignments (member_id) where ended_on is null;
+create index shepherding_assignments_officer
+  on shepherding_assignments (officer_member_id) where ended_on is null;
+create index shepherding_assignments_history
+  on shepherding_assignments (member_id, assigned_on desc);
+
+-- Append-only: there is deliberately no update or delete path for a call.
+create table shepherding_calls (
+  id uuid primary key default gen_random_uuid(),
+  assignment_id uuid not null references shepherding_assignments(id) on delete cascade,
+  called_on date not null,
+  outcome text not null check (outcome in ('reached', 'no_answer', 'wrong_number')),
+  still_in_church text not null default 'unknown'
+    check (still_in_church in ('yes', 'no', 'unknown')),
+  feedback text,
+  issue text,
+  recorded_by text not null,
+  created_at timestamptz not null default now()
+);
+create index shepherding_calls_assignment on shepherding_calls (assignment_id, called_on desc);
+create index shepherding_calls_called_on on shepherding_calls (called_on);
+`,
+  },
 ];

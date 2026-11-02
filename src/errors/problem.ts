@@ -1,6 +1,12 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
-import { ConflictError, ImportError, NotFoundError, ValidationError } from './domain-errors.js';
+import {
+  ConflictError,
+  ImportError,
+  NotFoundError,
+  ReassignmentRequiredError,
+  ValidationError,
+} from './domain-errors.js';
 
 export interface ProblemBody {
   type: string;
@@ -82,6 +88,17 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof NotFoundError) {
     sendProblem(res, 404, 'Not Found', error.message, 'not_found');
+    return;
+  }
+
+  if (error instanceof ReassignmentRequiredError) {
+    res
+      .status(409)
+      .type('application/problem+json')
+      .json({
+        ...problemBody(409, 'Conflict', error.message, 'conflict'),
+        currentAssignment: error.currentAssignment,
+      });
     return;
   }
 

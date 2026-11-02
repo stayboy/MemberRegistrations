@@ -8,10 +8,12 @@ import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
 import { MinistryRepository } from './repos/ministries.js';
 import { SeriesRepository } from './repos/series.js';
+import { ShepherdingRepository } from './repos/shepherding.js';
 import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
 import { ministriesRouter } from './routes/ministries.js';
 import { seriesRouter } from './routes/series.js';
+import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
 import type { Db } from './db/sql.js';
 
@@ -34,6 +36,7 @@ export function createApp(options: AppOptions): Express {
   const ministries = new MinistryRepository(options.db);
   const series = new SeriesRepository(options.db);
   const imports = new ImportRepository(options.db);
+  const shepherding = new ShepherdingRepository(options.db);
 
   app.disable('x-powered-by');
   app.set('trust proxy', true);
@@ -80,10 +83,12 @@ export function createApp(options: AppOptions): Express {
     : (_req, _res, next) => next();
 
   app.use('/v1/members', gate, membersRouter(members));
+  app.use('/v1/members', gate, memberShepherdingRouter(shepherding));
   app.use('/v1/subscriptions', gate, subscriptionsRouter(members));
   app.use('/v1/ministries', gate, ministriesRouter(ministries));
   app.use('/v1/series', gate, seriesRouter(series));
   app.use('/v1/imports', gate, importsRouter(imports));
+  app.use('/v1/shepherding', gate, shepherdingRouter(shepherding));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

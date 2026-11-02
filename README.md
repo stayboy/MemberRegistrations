@@ -6,7 +6,7 @@ series and imported attendance registries. Built with **Express 5**, **TypeScrip
 
 - Spec: [`documents/specs/member-registrations-api.md`](documents/specs/member-registrations-api.md)
 - Contract: `GET /openapi.json` (OpenAPI 3.1, generated from the Zod schemas)
-- Tests: 42 Vitest + Supertest cases — domain rules, full HTTP surface, real Postgres via PGlite
+- Tests: 64 Vitest + Supertest cases — domain rules, full HTTP surface, real Postgres via PGlite
 
 Attendance is **modelled, not transcribed**. A series declares a recurrence; occurrences are derived
 from the schedule and refined by imported event lists; a member's record reports
@@ -115,6 +115,28 @@ Everything lives under `/v1` except `/health` and `/openapi.json`. Every route r
 | `POST` | `/v1/imports/attendance` | Rows `(memberno, date, eventno)`, all-or-nothing                 |
 | `GET`  | `/v1/imports/{batchId}`  | Batch record (`kind`, `actor`, `rowCount`, `checksum`)           |
 
+### Shepherding
+
+Presbyters are members with `isPresbyter: true`. Each member has at most one active shepherd; a
+presbyter may hold any number. Calls are **append-only**: there is no update and no delete, and an
+unanswered call recorded as `unknown` never erases an earlier `yes`/`no`.
+
+| Method   | Path                                               | Result                                                                    |
+| -------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `POST`   | `/v1/shepherding/assignments`                      | Assign; reassignment needs `replaceAssignmentId` + `reason` (else `409`)  |
+| `DELETE` | `/v1/shepherding/assignments/{assignmentId}`       | End an assignment; history is kept                                        |
+| `POST`   | `/v1/shepherding/assignments/{assignmentId}/calls` | Log one attempt (`reached` / `no_answer` / `wrong_number`)                |
+| `GET`    | `/v1/shepherding/assignments/{assignmentId}/calls` | Full call history                                                         |
+| `GET`    | `/v1/shepherding/officers`                         | Presbyters with list size and call totals (`from`, `to`)                  |
+| `GET`    | `/v1/shepherding/officers/{memberNo}/members`      | Roster with contacts, attempts, conversations, latest feedback and status |
+| `GET`    | `/v1/shepherding/report`                           | Coverage totals plus one row per officer                                  |
+| `GET`    | `/v1/members/{memberNo}/shepherding`               | Current shepherd, assignment history and recent calls                     |
+
+A `409` on assignment carries a `currentAssignment` extension (`id`, `officerMemberNo`, `assignedOn`)
+so the client can show who the member is currently assigned to before asking for consent.
+
+### Attendance window
+
 - Idempotent by natural key: events upsert on `(seriesId, date)`, attendance on
   `(memberId, seriesId, date)`.
 - An `eventname` with no matching series fails the whole import and lists the unknown names. Series
@@ -155,7 +177,13 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 
 Member reads return `ETag: "v{n}"`. Send it back as `If-Match` on `PUT` to get optimistic
 concurrency: a stale tag yields `409`. Member responses are marked `Cache-Control: no-store`
-because the records are personal data.
+because the records are personal data. Reassignment uses `replaceAssignmentId` as its consent
+checkpoint, so a stale client cannot move a member between shepherds.
+
+### Dates and time
+
+Backend dates are UTC calendar dates. Every default and every "today" is UTC; a series may set an
+explicit IANA `timezone` to decide what "today" means for that series. Clients convert to local time.
 
 ## Configuration
 
@@ -202,8 +230,9 @@ src/
     contacts.ts         # normalisation + uniqueness rules
     series.ts           # RRULE validation, schedule expansion, occurrence resolution
     attendance.ts       # the denominator engine
-  repos/                # members, ministries, series, occurrences, imports — SQL behind typed methods
-  routes/               # members, subscriptions, ministries, series, imports
+    shepherding.ts      # latest-known status and call summaries
+  repos/                # members, ministries, series, occurrences, imports, shepherding
+  routes/               # members, subscriptions, ministries, series, imports, shepherding
   schemas/              # Zod request/response schemas (single source of truth)
   errors/               # typed domain errors + problem+json middleware
 ```
@@ -219,6 +248,10 @@ Design rules:
   (`ILIKE`, `any($1::text[])`, `generate_series`-free date logic, partial unique indexes).
 - **PII stays private.** Bearer auth on every data route, no-store caching, archive by default,
   and a purge that nulls PII while keeping the member number reserved forever.
+- **Shepherding history is append-only.** Calls are never updated or deleted; a reassignment needs
+  the current assignment id plus a reason, and only purge may erase pastoral history.
+- **The repo rules live in [`AGENTS.md`](AGENTS.md).** Spec first, grill and get explicit sign-off,
+  UTC dates, append-only history, and the verification commands.
 
 ## Deploying to Vercel
 
