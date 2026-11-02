@@ -1,0 +1,12 @@
+#!/bin/sh
+# Direct pushes to main are blocked; push a feature branch and open a PR.
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      echo "Direct pushes to main are blocked. Push a branch and open a PR." >&2
+      status=1
+      ;;
+  esac
+done
+exit "$status"
