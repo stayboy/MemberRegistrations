@@ -38,6 +38,8 @@ function toEtag(raw: string): string {
 
 function fromIfMatch(header: string | undefined): string | undefined {
   if (!header) return undefined;
+  // `If-Match: *` means "only if it exists"; the store already loaded it.
+  if (header.trim() === '*') return undefined;
   const normalized = header.replace(/^W\//, '').replace(/"/g, '').trim();
   return normalized || undefined;
 }
