@@ -11,4 +11,5 @@ scope. Move an item to a GitHub issue only when the tracker is adopted.
 | Bulk assignment                                | One member per request keeps the consent gate simple                               | A UI needs multi-select assignment                              |
 | Notifications (email/SMS)                      | Out of v1                                                                          | A delivery provider and consent model exist                     |
 | Vercel project link and production environment | No Vercel team scope; `DATABASE_URL` and `API_BEARER_TOKEN` are not provisioned    | Vercel access is available                                      |
+| Server-side branch protection                  | GitHub returns 403 for rulesets/branch protection on a private Free repository     | GitHub Pro/Team or a public repository                          |
 | Coverage threshold                             | A number without a policy invites gaming                                           | The owner sets a target                                         |

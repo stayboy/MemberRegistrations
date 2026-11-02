@@ -5,6 +5,9 @@ trigger that should have caught it. Product rules belong in the spec, not here.
 
 Propose an entry in the reply; it reaches this file only when the owner accepts it.
 
+Owner acceptance is recorded with the entry. The 2026-11-02 entry was accepted with the workflow
+adoption on 2026-11-02 (grill Q16: "all as recommended").
+
 ---
 
 ## 2026-11-02 — A green test run does not prove the Node entrypoint

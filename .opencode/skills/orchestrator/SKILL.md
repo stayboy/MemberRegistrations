@@ -16,7 +16,7 @@ disagree, `AGENTS.md` wins and this file is amended in the same change.
 
 | Tier         | Use when                                                                                 | Who runs                                               | Output             |
 | ------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------ |
-| 0 — Solo     | Docs, config, or a contained change the owner explicitly puts at Tier 0                  | Parent implements, self-reviews, self-accepts          | Commit body only   |
+| 0 — Solo     | Docs, config, or a contained change the owner explicitly places at Tier 0                | Parent implements, self-reviews, self-accepts          | Commit body only   |
 | 1 — Plan     | A behavioural change in one area, tests exist or are added                               | Approved spec + parent implements + written acceptance | Round doc          |
 | 2 — Reviewed | A behavioural change spanning files, a migration, auth, wire contract, or anything risky | Tier 1 + an independent reviewer subagent              | Round doc + review |
 

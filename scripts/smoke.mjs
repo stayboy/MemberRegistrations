@@ -29,7 +29,7 @@ child.stderr.on('data', (chunk) => (output += chunk));
 let failed = false;
 try {
   await waitForHealth();
-  await run();
+  await runScenario();
   console.log('smoke: PASS');
 } catch (error) {
   failed = true;
@@ -41,7 +41,7 @@ try {
 
 process.exit(failed ? 1 : 0);
 
-async function run() {
+async function runScenario() {
   const write = {
     Authorization: `Bearer ${TOKEN}`,
     'X-Actor-Id': 'smoke',

@@ -20,10 +20,12 @@ procedure lives in `.opencode/skills/orchestrator/SKILL.md`; this file owns the 
 
 ## 3. Execution modes
 
-Use the tiered workflow in `.opencode/skills/orchestrator/SKILL.md`. State the tier in the round doc.
+Use the tiered workflow in `.opencode/skills/orchestrator/SKILL.md`. Record the tier in the round doc
+(Tier 0: in the commit body).
 
-- **Tier 0 (Solo)** — docs, config, contained changes. The parent implements, self-reviews and
-  self-accepts; the commit body is the record.
+- **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0
+  (trivial or no behaviour risk). The parent implements, self-reviews and self-accepts; the commit
+  body is the record.
 - **Tier 1 (Plan)** — a behavioural change. Approved spec + parent implements + written acceptance.
 - **Tier 2 (Reviewed)** — multi-file behaviour, migrations, auth, wire contracts or risk. Tier 1 plus
   a `code-review` pass (Standards + Spec; fallback: the read-only `reviewer` subagent).
