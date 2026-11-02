@@ -69,17 +69,17 @@ Acceptance criteria:
 
 ## Acceptance
 
-| #   | Criterion                                                               | Met                                | Evidence                                                                     |
-| --- | ----------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------- |
-| 1   | Lean skill, tiers 0–2, parent implements, code-review gate, V2 deferral | yes                                | `.opencode/skills/orchestrator/SKILL.md`                                     |
-| 2   | Reviewer denies edits/builds and reads the diff                         | yes                                | `.opencode/agents/reviewer.md`; `opencode api get /api/agent --standalone`   |
-| 3   | `AGENTS.md` non-negotiables and pointers                                | yes                                | `AGENTS.md` §1–12                                                            |
-| 4   | Merge policy + CI                                                       | yes (process, not server-enforced) | `.github/merge-policy.md`, `.github/workflows/ci.yml`                        |
-| 5   | Scripts and pre-commit hook                                             | yes                                | `package.json`; `.githooks/pre-commit` (100755)                              |
-| 6   | Compiled-server smoke                                                   | yes                                | `scripts/smoke.mjs`; `npm run smoke` pass                                    |
-| 7   | Rounds/lessons/backlog                                                  | yes                                | `documents/rounds/README.md`, `documents/lessons.md`, `documents/backlog.md` |
-| 8   | No API change or spec drift                                             | yes                                | `git diff 221b6aa...HEAD --name-only` has no `src/` or spec file             |
-| 9   | Repo, PR, green CI, squash merge                                        | yes after merge                    | PR link; `verify` check; `main` at squash commit                             |
+| #   | Criterion                                                               | Met                                | Evidence                                                                                                |
+| --- | ----------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1   | Lean skill, tiers 0–2, parent implements, code-review gate, V2 deferral | yes                                | `.opencode/skills/orchestrator/SKILL.md`                                                                |
+| 2   | Reviewer denies edits/builds and reads the diff                         | yes                                | `.opencode/agents/reviewer.md`; `opencode api get /api/agent --standalone`                              |
+| 3   | `AGENTS.md` non-negotiables and pointers                                | yes                                | `AGENTS.md` §1–12                                                                                       |
+| 4   | Merge policy + CI                                                       | yes (process, not server-enforced) | `.github/merge-policy.md`, `.github/workflows/ci.yml`                                                   |
+| 5   | Scripts and pre-commit hook                                             | yes                                | `package.json`; `.githooks/pre-commit` (100755)                                                         |
+| 6   | Compiled-server smoke                                                   | yes                                | `scripts/smoke.mjs`; `npm run smoke` pass                                                               |
+| 7   | Rounds/lessons/backlog                                                  | yes                                | `documents/rounds/README.md`, `documents/lessons.md`, `documents/backlog.md`                            |
+| 8   | No API change or spec drift                                             | yes                                | `git diff 221b6aa...HEAD --name-only` has no `src/` or spec file                                        |
+| 9   | Repo, PR, green CI, squash merge                                        | yes after merge                    | [PR #1](https://github.com/stayboy/MemberRegistrations/pull/1); `verify` check; `main` at squash commit |
 
 Verdict: **ACCEPTED** for criteria 1–8; criterion 9 completes with the PR merge this round exists to
 exercise.
