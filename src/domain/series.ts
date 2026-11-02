@@ -1,6 +1,11 @@
-import { rrulestr } from 'rrule';
+// `rrule` ships a CommonJS UMD build whose ESM entry is not reachable through
+// Node's resolver (no exports map, no "type": "module"), so the default import
+// is the only shape that works at runtime. Destructure the named exports.
+import rrule from 'rrule';
 import { ValidationError } from '../errors/domain-errors.js';
 import { assertDate } from './contacts.js';
+
+const { rrulestr } = rrule;
 
 export interface ScheduleVersion {
   effectiveFrom: string;

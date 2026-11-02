@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import {
   expandSchedule,
   occurrenceWindow,
@@ -26,6 +27,23 @@ describe('rrule validation', () => {
 
   it('rejects a body that is not a recurrence rule', () => {
     expect(() => validateRrule('every sunday')).toThrow(ValidationError);
+  });
+});
+
+describe('rrule runtime interop', () => {
+  // Vitest resolves `rrule` through its `module` field, which Node does not.
+  // This runs the same import in a real Node process so the packaging trap
+  // cannot come back unnoticed.
+  it('exposes rrulestr through the CommonJS default export', () => {
+    execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        "import rrule from 'rrule'; if (typeof rrule.rrulestr !== 'function') process.exit(1);",
+      ],
+      { cwd: process.cwd(), stdio: 'pipe' },
+    );
   });
 });
 

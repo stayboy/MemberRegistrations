@@ -6,7 +6,7 @@ series and imported attendance registries. Built with **Express 5**, **TypeScrip
 
 - Spec: [`documents/specs/member-registrations-api.md`](documents/specs/member-registrations-api.md)
 - Contract: `GET /openapi.json` (OpenAPI 3.1, generated from the Zod schemas)
-- Tests: 41 Vitest + Supertest cases — domain rules, full HTTP surface, real Postgres via PGlite
+- Tests: 42 Vitest + Supertest cases — domain rules, full HTTP surface, real Postgres via PGlite
 
 Attendance is **modelled, not transcribed**. A series declares a recurrence; occurrences are derived
 from the schedule and refined by imported event lists; a member's record reports
