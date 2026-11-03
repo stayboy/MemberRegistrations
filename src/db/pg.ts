@@ -1,4 +1,6 @@
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool, types, type PoolClient } from 'pg';
+import * as schema from './schema.js';
 import type { Db, DbClient, Row } from './sql.js';
 
 // Calendar dates stay strings: a JS Date would reintroduce the timezone bug
@@ -17,11 +19,12 @@ export function createPgDb(connectionString: string): Db {
     async exec(text: string): Promise<void> {
       await source.query(text);
     },
+    // Bound to the connection, so an ORM write inside transaction() joins it.
+    orm: drizzle(source, { schema }),
   });
 
   return {
-    query: client(pool).query,
-    exec: client(pool).exec,
+    ...client(pool),
     async transaction<T>(fn: (tx: DbClient) => Promise<T>): Promise<T> {
       const connection = await pool.connect();
       try {

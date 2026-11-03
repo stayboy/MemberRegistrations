@@ -8,6 +8,7 @@ import {
   UnauthorizedError,
   ValidationError,
 } from './domain-errors.js';
+import { sqlState } from './sqlstate.js';
 
 export interface ProblemBody {
   type: string;
@@ -113,7 +114,7 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     return;
   }
 
-  const pgCode = (error as { code?: string }).code;
+  const pgCode = sqlState(error);
   if (pgCode === '23503') {
     sendProblem(res, 409, 'Conflict', 'A referenced record does not exist.', 'conflict');
     return;

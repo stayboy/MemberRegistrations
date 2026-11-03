@@ -1,5 +1,8 @@
+import { sql } from 'drizzle-orm';
+import { ministries } from '../db/schema.js';
+import type { OrmClient } from '../db/sql.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
-import type { Db } from '../db/sql.js';
+import { sqlState } from '../errors/sqlstate.js';
 
 export interface MinistryDto {
   code: string;
@@ -26,51 +29,39 @@ function assertCode(code: string): string {
   return normalized;
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (error as { code?: string }).code === '23505';
-}
+const columns = {
+  code: ministries.code,
+  name: ministries.name,
+  description: ministries.description,
+  active: ministries.active,
+};
 
 export class MinistryRepository {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: OrmClient) {}
 
   async list(): Promise<MinistryDto[]> {
-    const rows = await this.db.query<{
-      code: string;
-      name: string;
-      description: string | null;
-      active: boolean;
-    }>('select code, name, description, active from ministries order by code');
-    return rows;
+    return this.db.orm.select(columns).from(ministries).orderBy(ministries.code);
   }
 
   async get(code: string): Promise<MinistryDto | null> {
-    const [row] = await this.db.query<{
-      code: string;
-      name: string;
-      description: string | null;
-      active: boolean;
-    }>('select code, name, description, active from ministries where lower(code) = lower($1)', [
-      code,
-    ]);
+    const [row] = await this.db.orm
+      .select(columns)
+      .from(ministries)
+      .where(sql`lower(${ministries.code}) = lower(${code})`)
+      .limit(1);
     return row ?? null;
   }
 
   async create(input: MinistryInput): Promise<MinistryDto> {
     const code = assertCode(input.code);
     try {
-      const [row] = await this.db.query<{
-        code: string;
-        name: string;
-        description: string | null;
-        active: boolean;
-      }>(
-        `insert into ministries (code, name, description) values ($1,$2,$3)
-         returning code, name, description, active`,
-        [code, input.name.trim(), input.description ?? null],
-      );
+      const [row] = await this.db.orm
+        .insert(ministries)
+        .values({ code, name: input.name.trim(), description: input.description ?? null })
+        .returning(columns);
       return row!;
     } catch (error) {
-      if (isUniqueViolation(error)) throw new ConflictError(`Ministry ${code} already exists`);
+      if (sqlState(error) === '23505') throw new ConflictError(`Ministry ${code} already exists`);
       throw error;
     }
   }
@@ -82,21 +73,16 @@ export class MinistryRepository {
     const existing = await this.get(code);
     if (!existing) throw new NotFoundError(`Ministry ${code} was not found`);
 
-    const [row] = await this.db.query<{
-      code: string;
-      name: string;
-      description: string | null;
-      active: boolean;
-    }>(
-      `update ministries set name = $2, description = $3, active = $4, updated_at = now()
-       where code = $1 returning code, name, description, active`,
-      [
-        existing.code,
-        input.name?.trim() || existing.name,
-        input.description === undefined ? existing.description : input.description,
-        input.active ?? existing.active,
-      ],
-    );
+    const [row] = await this.db.orm
+      .update(ministries)
+      .set({
+        name: input.name?.trim() || existing.name,
+        description: input.description === undefined ? existing.description : input.description,
+        active: input.active ?? existing.active,
+        updatedAt: sql`now()`,
+      })
+      .where(sql`lower(${ministries.code}) = lower(${existing.code})`)
+      .returning(columns);
     return row!;
   }
 
@@ -104,19 +90,18 @@ export class MinistryRepository {
     const existing = await this.get(code);
     if (!existing) throw new NotFoundError(`Ministry ${code} was not found`);
 
-    const [references] = await this.db.query<{ members: number; series: number }>(
-      `select
-         (select count(*)::int from member_ministries mm join ministries mi on mi.id = mm.ministry_id where mi.code = $1) as members,
-         (select count(*)::int from event_series s join ministries mi on mi.id = s.ministry_id where mi.code = $1) as series`,
-      [existing.code],
-    );
-
-    if ((references?.members ?? 0) > 0 || (references?.series ?? 0) > 0) {
-      throw new ConflictError(
-        `Ministry ${existing.code} is referenced by ${references?.members ?? 0} member(s) and ${references?.series ?? 0} series; deactivate it instead`,
-      );
+    try {
+      await this.db.orm
+        .delete(ministries)
+        .where(sql`lower(${ministries.code}) = lower(${existing.code})`);
+    } catch (error) {
+      // The database, not a pre-count, is the authority on references.
+      if (sqlState(error) === '23503') {
+        throw new ConflictError(
+          `Ministry ${existing.code} is referenced by members or series; deactivate it instead`,
+        );
+      }
+      throw error;
     }
-
-    await this.db.query('delete from ministries where code = $1', [existing.code]);
   }
 }
