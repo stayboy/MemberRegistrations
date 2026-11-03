@@ -12,6 +12,7 @@ scope. Move an item to a GitHub issue only when the tracker is adopted.
 | Notifications (email/SMS)                 | Out of v1                                                                                                 | A delivery provider and consent model exist             |
 | Server-side branch protection             | GitHub returns 403 for rulesets/branch protection on a private Free repository                            | A second contributor or a merge queue needs enforcement |
 | Coverage threshold                        | A number without a policy invites gaming                                                                  | The owner sets a target                                 |
+| Labeled mock-parity calibration set       | The screen is advisory until calibrated; a hard gate needs false-pass 0 on ≥100 rows                      | A UI round needs the hard gate                          |
 | Orchestrator skill packaging              | The canonical lives at `~/.agents/skills/orchestrator`; a second machine does not need it yet             | A second machine or repo needs the shared skill         |
 | School-Collab orchestrator fork           | Its `.pi/skills/...` is a protected doc with a higher-model review gate; migrating it needs its own round | That repo opens a docs round                            |
 | `verify:skill` canonical check in CI      | CI has no `~/.agents/skills`; only the repo-side pointer is checked there                                 | CI gains a way to install the canonical skill           |

@@ -26,6 +26,11 @@ Goal, scope, expected files, acceptance criteria (numbered).
 | ---- | ---------------- | --------- |
 | ...  | `npm run verify` | pass/fail |
 
+## Mock parity (when a mock exists)
+
+| Claim | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
+| ----- | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
+
 ## Acceptance
 
 One row per criterion: met/not met, evidence (`file:line` or test name), and the verdict
@@ -42,3 +47,4 @@ Rules:
 - Tier 2 records the reviewer's Standards and Spec verdicts under `## Review`.
 - Tier 0 records only in the commit body.
 - Never put a round doc in `documents/specs/`.
+- A round with no mock records "no mock"; it never skips silently.
