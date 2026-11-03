@@ -1,6 +1,7 @@
 ---
 description: Read-only reviewer for a frozen diff against the spec and acceptance criteria
 mode: subagent
+model: ollama-cloud/deepseek-v4-pro:0813
 permissions:
   - action: '*'
     resource: '*'
