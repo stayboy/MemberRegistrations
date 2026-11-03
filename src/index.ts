@@ -1,4 +1,5 @@
 import { loadEnv } from './config/env.js';
+import { createMailer } from './authn/mailer.js';
 import { createApp } from './create-app.js';
 import { migrate } from './db/migrate.js';
 import { createPgDb } from './db/pg.js';
@@ -17,7 +18,21 @@ if (env.DATABASE_URL) {
   await migrate(db);
 }
 
-const app = createApp({ db, bearerToken: env.API_BEARER_TOKEN, logLevel: env.LOG_LEVEL });
+const app = createApp({
+  db,
+  bearerToken: env.API_BEARER_TOKEN,
+  logLevel: env.LOG_LEVEL,
+  mailer: createMailer(env),
+  authConfig: {
+    magicLinkTtlMinutes: env.AUTH_MAGIC_LINK_TTL_MINUTES,
+    sessionIdleMinutes: env.AUTH_SESSION_IDLE_MINUTES,
+    sessionAbsoluteMinutes: env.AUTH_SESSION_ABSOLUTE_MINUTES,
+    magicLinkBaseUrl: env.UI_BASE_URL,
+  },
+  corsOrigins: env.CORS_ALLOWED_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+});
 
 if (process.env.VERCEL !== '1') {
   app.listen(env.PORT, () => {

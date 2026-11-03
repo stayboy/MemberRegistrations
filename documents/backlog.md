@@ -3,12 +3,25 @@
 Deferred work, most important first. Round docs and lessons point here instead of silently cutting
 scope. Move an item to a GitHub issue only when the tracker is adopted.
 
-| Item                                  | Why deferred                                                                       | Revisit when                                                    |
-| ------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| V2 UI, Tier 3 round and UI tester     | No UI exists yet                                                                   | The first UI lands; re-enable the mock gate and tester together |
-| Per-officer authorization             | v1 uses one shared bearer token; `X-Actor-Id` is audit only                        | Officers need scoped access                                     |
-| Shepherding cadence and overdue flags | Policy differs per church; the API exposes `lastCalledOn` and `membersNeverCalled` | A reporting UI or a cadence rule is agreed                      |
-| Bulk assignment                       | One member per request keeps the consent gate simple                               | A UI needs multi-select assignment                              |
-| Notifications (email/SMS)             | Out of v1                                                                          | A delivery provider and consent model exist                     |
-| Server-side branch protection         | GitHub returns 403 for rulesets/branch protection on a private Free repository     | A second contributor or a merge queue needs enforcement         |
-| Coverage threshold                    | A number without a policy invites gaming                                           | The owner sets a target                                         |
+| Item                                      | Why deferred                                                                            | Revisit when                                            |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Full Tier 3 round and dedicated UI tester | A UI is planned; ticket 19 ships a minimal Playwright + axe + live-vs-mock gate instead | The V2 UI is stable and the flake cost is acceptable    |
+| Per-officer authorization                 | v1 uses one shared bearer token; `X-Actor-Id` is audit only                             | Officers need scoped access                             |
+| Shepherding cadence and overdue flags     | Policy differs per church; the API exposes `lastCalledOn` and `membersNeverCalled`      | A reporting UI or a cadence rule is agreed              |
+| Bulk assignment                           | One member per request keeps the consent gate simple                                    | A UI needs multi-select assignment                      |
+| Notifications (email/SMS)                 | Out of v1                                                                               | A delivery provider and consent model exist             |
+| Server-side branch protection             | GitHub returns 403 for rulesets/branch protection on a private Free repository          | A second contributor or a merge queue needs enforcement |
+| Coverage threshold                        | A number without a policy invites gaming                                                | The owner sets a target                                 |
+
+## V2 events, UI and ORM ticket set
+
+`documents/tickets/v2-events-ui/` holds 25 tickets in dependency order. Tickets 01-19 plus 11a deliver
+V2 (specs and ORM gate, events API, session gateway, shell, members, imports, shepherding, events,
+series); tickets 20-24 are the gated V3 offerings/USSD phase. Start at 01. The ORM decision gate is
+03-04, 11a is the magic-link session gateway that blocks the UI shell in 12, and ticket 19 is the
+live-vs-mock release probe.
+
+After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
+covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
+
+11a is implemented and accepted on `feat/session-gateway` (2026-11-03); the next ticket is 02.

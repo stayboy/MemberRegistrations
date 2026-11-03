@@ -22,7 +22,8 @@ disagree, `AGENTS.md` wins and this file is amended in the same change.
 
 Default to the lowest safe tier. If the tier is genuinely ambiguous, put it to the owner in the grill
 round; do not guess. Record the tier in the round-doc header table (Tier 0: in the commit body).
-Tier 3 and the UI tester are **deferred until V2**, when a UI exists.
+Tier 3 and a dedicated UI tester are **deferred**; the V2 gate is the minimal Playwright/axe/
+live-vs-mock check in ticket 19.
 
 ## Roles
 
@@ -84,8 +85,8 @@ No build/test numbers. An empty verdict is no review.
 
 ## Deliberately not adopted
 
-- **UI tester and Tier 3** — deferred to V2 when a UI exists. Re-enable with a mock gate and a tester
-  then.
+- **Full Tier 3 and a dedicated UI tester** - deferred; the V2 gate is the minimal Playwright/axe/
+  live-vs-mock check in ticket 19. Revisit with a full mock gate and tester when the UI is stable.
 - **Unattended rounds** — every round is owner-attended.
 - **Protected-doc hash gates** — the approved spec and git history are the control.
 - **Parallel workers and worktrees** — one writer per working tree; the parent is the only writer.

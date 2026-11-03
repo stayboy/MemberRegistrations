@@ -17,6 +17,8 @@ procedure lives in `.opencode/skills/orchestrator/SKILL.md`; this file owns the 
 - Do not write implementation code until the frontier is empty **and the owner has explicitly approved
   the amended spec**. Approval is a separate, explicit step.
 - Record every settled decision in the spec, including the ones that were rejected.
+- After approval, a behavioural change to a spec needs re-approval. Typo, formatting and clarifying
+  edits are allowed with a changelog line in the spec and a note in the ticket or round doc.
 
 ## 3. Execution modes
 
@@ -31,7 +33,8 @@ Use the tiered workflow in `.opencode/skills/orchestrator/SKILL.md`. Record the 
   a `code-review` pass (Standards + Spec; fallback: the read-only `reviewer` subagent).
 
 The parent implements at every tier. If the tier is genuinely ambiguous, put it in the grill round;
-do not guess. Tier 3 and the UI tester are deferred until V2.
+do not guess. Tier 3 and a dedicated UI tester stay deferred; the V2 UI gate is the minimal check in
+ticket 19.
 
 ## 4. Date and time
 
@@ -47,8 +50,20 @@ do not guess. Tier 3 and the UI tester are deferred until V2.
 
 ## 6. Security and privacy
 
-- All data routes require the bearer token; writes require `X-Actor-Id`.
-- `X-Actor-Id` is audit attribution, not authentication. v1 has no per-officer scoping.
+- API routes require the bearer token. Browser traffic goes through the session gateway (`/auth/*`,
+  `/gateway/v1/*`), which runs in the same Express app and Vercel function as the API and rewrites
+  internally to `/v1/*`; it alone holds the bearer.
+- The browser holds only a short-lived, revocable session credential, sent as a bearer header and
+  stored in `sessionStorage`, never the API bearer and never an auth cookie. The bearer must not appear
+  in the bundle, `localStorage`, a URL, a log or a screenshot.
+- Sessions, magic links and rate-limit counters live in Postgres; do not rely on per-instance memory.
+- Magic links go through a `Mailer` port: Resend in production, console/no-op in development and tests.
+  Only active officers seeded by CLI can sign in; there is no self-service or domain allowlist.
+- Browser writes carry no `X-Actor-Id`; the gateway derives it from the authenticated officer and
+  discards a client-supplied value. For direct server-to-server callers, `X-Actor-Id` remains audit
+  attribution, not authentication.
+- V2 has no per-officer authorization: every authenticated officer can read and write the whole
+  register. Do not imply otherwise in the UI or docs.
 - Personal-data responses send `Cache-Control: no-store`.
 
 ## 7. Verification
@@ -95,8 +110,25 @@ do not guess. Tier 3 and the UI tester are deferred until V2.
 - Parameterised SQL behind repository methods; never interpolate values into SQL.
 - Match the existing structure and naming; keep routes thin and invariants with their data.
 
-## 12. Deliberately not adopted
+## 12. Data access and the ORM boundary
 
-UI tester and Tier 3 (V2), unattended rounds, protected-doc hash gates, parallel workers/worktrees,
-GitHub issue/triage labels, and pinned model seats. Revisit when the condition that excluded them
-changes; do not reintroduce them silently.
+- The `Db` port (`query`, `exec`, `transaction`) is the transaction seam and the only access path for
+  the attendance, occurrence and import engine. Those queries stay raw SQL.
+- Drizzle is the chosen ORM for CRUD repositories only, and only after the Series trial (tickets
+  03–04). It is imported inside `src/repos/`, never in routes, domain, schemas or `src/db/sql.ts`.
+- Migrations stay embedded SQL owned by the tracked runner. Drizzle Kit does not own migrations; a
+  drift check asserts the ORM schema and the SQL migrations agree.
+- Values are bound parameters; never interpolate them into `sql.raw`.
+- Repositories map unique, foreign-key and check failures to the existing domain errors. No ORM error
+  reaches a route or the problem+json handler.
+- Both drivers — `pg` on Neon and PGlite in tests — must pass the same repository tests. A change that
+  only works on one is a failure.
+- Reverting the ORM must not require a schema change. If a ticket cannot meet that, it is not a
+  CRUD-only change.
+
+## 13. Deliberately not adopted
+
+Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
+ticket 19), unattended rounds, protected-doc hash gates, parallel workers/worktrees, GitHub
+issue/triage labels, and pinned model seats. Revisit when the condition that excluded them changes;
+do not reintroduce them silently.
