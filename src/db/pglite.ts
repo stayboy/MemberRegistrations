@@ -1,9 +1,12 @@
 import { PGlite } from '@electric-sql/pglite';
+import { drizzle } from 'drizzle-orm/pglite';
+import * as schema from './schema.js';
 import type { Db, DbClient, Row } from './sql.js';
 
 /**
  * Test adapter: a real Postgres engine compiled to WASM, in-process.
  * `generate_series`, date arithmetic and constraints behave as in production.
+ * The Drizzle handle is bound to the same engine (or transaction) as the client.
  */
 export async function createPgliteDb(): Promise<Db> {
   const pglite = new PGlite();
@@ -17,11 +20,12 @@ export async function createPgliteDb(): Promise<Db> {
     async exec(text: string): Promise<void> {
       await tx.exec(text);
     },
+    // Bound to the same engine/transaction, so an ORM write joins transaction().
+    orm: drizzle(tx, { schema }),
   });
 
   return {
-    query: client(pglite).query,
-    exec: client(pglite).exec,
+    ...client(pglite),
     async transaction<T>(fn: (tx: DbClient) => Promise<T>): Promise<T> {
       return pglite.transaction(async (tx) => fn(client(tx as unknown as PGlite)));
     },

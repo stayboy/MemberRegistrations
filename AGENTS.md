@@ -114,8 +114,10 @@ ticket 19.
 
 - The `Db` port (`query`, `exec`, `transaction`) is the transaction seam and the only access path for
   the attendance, occurrence and import engine. Those queries stay raw SQL.
-- Drizzle is the chosen ORM for CRUD repositories only, and only after the Series trial (tickets
-  03–04). It is imported inside `src/repos/`, never in routes, domain, schemas or `src/db/sql.ts`.
+- Drizzle is the chosen ORM for CRUD repositories only. Ticket 02 wires the schema and both drivers as
+  the smoke; wider adoption is gated by the Series trial and gate (tickets 03–04). Construction lives
+  in `src/db/schema.ts`, `src/db/orm.ts`, `src/db/pglite.ts` and `src/db/pg.ts`; query building stays
+  inside `src/repos/`, never in routes, domain, Zod schemas or `src/db/sql.ts`.
 - Migrations stay embedded SQL owned by the tracked runner. Drizzle Kit does not own migrations; a
   drift check asserts the ORM schema and the SQL migrations agree.
 - Values are bound parameters; never interpolate them into `sql.raw`.

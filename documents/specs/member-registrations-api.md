@@ -793,27 +793,27 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 
 ## Implementation Decisions
 
-| Concern         | Choice                                                                                                                                                                                 |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime         | Node.js 24 LTS                                                                                                                                                                         |
-| Language        | TypeScript 5.9, `strict`, ESM                                                                                                                                                          |
-| HTTP            | Express 5                                                                                                                                                                              |
-| Validation      | Zod 4                                                                                                                                                                                  |
-| Contract        | OpenAPI 3.1 generated from Zod via `z.toJSONSchema`                                                                                                                                    |
-| Database        | Postgres — Neon in production, PGlite in tests                                                                                                                                         |
-| Access layer    | `Db` port (`query`/`exec`/`transaction`) stays the seam; Drizzle is the chosen ORM for CRUD repositories after the Series gate; attendance, occurrence and import queries stay raw SQL |
-| Migrations      | Embedded SQL applied by a tracked runner; the ORM never owns migrations                                                                                                                |
-| Events storage  | `event_instances` with `sessions` JSONB; attendance keyed by event instance and session date                                                                                           |
-| Money           | GHS, integer minor units (`bigint`)                                                                                                                                                    |
-| Idempotency     | Unique key on contributions; retry-safe generation, imports and callbacks                                                                                                              |
-| Visitor privacy | Name plus hashed phone; no member record; receipt or reference returned                                                                                                                |
-| Browser auth    | Same Express app: magic link via Resend, Postgres session, gateway router, bearer server-side, actor derived                                                                           |
-| Recurrence      | `rrule` package, dates handled as calendar dates                                                                                                                                       |
-| Date handling   | All defaults and "today" are UTC; `series.timezone` is an optional override                                                                                                            |
-| Testing         | Vitest 5 + Supertest 7 + PGlite                                                                                                                                                        |
-| Logging         | Pino 10 (JSON)                                                                                                                                                                         |
-| Lint / format   | ESLint 10 flat config + Prettier 3                                                                                                                                                     |
-| Package manager | npm 11, lockfile committed                                                                                                                                                             |
+| Concern         | Choice                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime         | Node.js 24 LTS                                                                                                                                                                                                            |
+| Language        | TypeScript 5.9, `strict`, ESM                                                                                                                                                                                             |
+| HTTP            | Express 5                                                                                                                                                                                                                 |
+| Validation      | Zod 4                                                                                                                                                                                                                     |
+| Contract        | OpenAPI 3.1 generated from Zod via `z.toJSONSchema`                                                                                                                                                                       |
+| Database        | Postgres — Neon in production, PGlite in tests                                                                                                                                                                            |
+| Access layer    | `Db` port (`query`/`exec`/`transaction`) stays the seam; Drizzle is wired by ticket 02 as the CRUD smoke, and wider adoption is gated by the Series trial (03–04); attendance, occurrence and import queries stay raw SQL |
+| Migrations      | Embedded SQL applied by a tracked runner; the ORM never owns migrations                                                                                                                                                   |
+| Events storage  | `event_instances` with `sessions` JSONB; attendance keyed by event instance and session date                                                                                                                              |
+| Money           | GHS, integer minor units (`bigint`)                                                                                                                                                                                       |
+| Idempotency     | Unique key on contributions; retry-safe generation, imports and callbacks                                                                                                                                                 |
+| Visitor privacy | Name plus hashed phone; no member record; receipt or reference returned                                                                                                                                                   |
+| Browser auth    | Same Express app: magic link via Resend, Postgres session, gateway router, bearer server-side, actor derived                                                                                                              |
+| Recurrence      | `rrule` package, dates handled as calendar dates                                                                                                                                                                          |
+| Date handling   | All defaults and "today" are UTC; `series.timezone` is an optional override                                                                                                                                               |
+| Testing         | Vitest 5 + Supertest 7 + PGlite                                                                                                                                                                                           |
+| Logging         | Pino 10 (JSON)                                                                                                                                                                                                            |
+| Lint / format   | ESLint 10 flat config + Prettier 3                                                                                                                                                                                        |
+| Package manager | npm 11, lockfile committed                                                                                                                                                                                                |
 
 ### Why these choices
 
@@ -822,8 +822,9 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 - **A thin SQL port, with an ORM only where it pays**: the denominator engine, occurrence resolution and
   imports are SQL-shaped, and every ORM abstraction had to be escaped to write them. The `Db` port
   stays the seam, with `pg` in production and PGlite in tests. Drizzle is adopted for CRUD repositories
-  only, behind the repository boundary and gated by the Series trial; it never owns migrations or the
-  engine queries. This keeps the seam explicit and the revert cheap.
+  only, behind the repository boundary: ticket 02 wires the schema and both drivers and migrates the
+  Ministries repository as the smoke, while wider adoption is gated by the Series trial (03–04). It
+  never owns migrations or the engine queries. This keeps the seam explicit and the revert cheap.
 - **Events, not a dummy series**: a standalone conference is an event with no `seriesId`. Sessions live
   in one JSONB array because they are read and written as a set, and a three-day event is one row, not
   three parent-child round trips. A trigger keeps attendance honest when a date is not a session.
@@ -910,3 +911,10 @@ sequences.
 - OS-10: Shepherding cadence targets and overdue flags; pledge reminders are in scope.
 - OS-11: Bulk assignment in one request.
 - OS-12: Email/SMS delivery for shepherding.
+
+## Changelog
+
+- **2026-11-03** — Clarifying edit (no behaviour change): ticket 02 wires the Drizzle schema and both
+  drivers and migrates only the Ministries repository as the smoke. Wider CRUD adoption stays gated by
+  the Series trial (ticket 03) and the adopt/revert gate (ticket 04), and reverting needs no schema
+  change.
