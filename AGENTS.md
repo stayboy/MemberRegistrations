@@ -1,7 +1,8 @@
 # Repo rules — MemberRegistrations
 
 Working agreement for agents in this repository. These are rules, not suggestions. The detailed
-procedure lives in `.opencode/skills/orchestrator/SKILL.md`; this file owns the non-negotiables.
+procedure lives in the shared `orchestrator` skill (`~/.agents/skills/orchestrator/SKILL.md`); the repo
+delta is `documents/agents/orchestrator-policy.md`. This file owns the non-negotiables.
 
 ## 1. Spec first
 
@@ -22,8 +23,9 @@ procedure lives in `.opencode/skills/orchestrator/SKILL.md`; this file owns the 
 
 ## 3. Execution modes
 
-Use the tiered workflow in `.opencode/skills/orchestrator/SKILL.md`. Record the tier in the round doc
-(Tier 0: in the commit body).
+Use the tiered workflow in the shared `orchestrator` skill, narrowed by
+`documents/agents/orchestrator-policy.md`. Record the tier in the round doc (Tier 0: in the commit
+body).
 
 - **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0
   (trivial or no behaviour risk). The parent implements, self-reviews and self-accepts; the commit
@@ -32,8 +34,9 @@ Use the tiered workflow in `.opencode/skills/orchestrator/SKILL.md`. Record the 
 - **Tier 2 (Reviewed)** — multi-file behaviour, migrations, auth, wire contracts or risk. Tier 1 plus
   a `code-review` pass (Standards + Spec; fallback: the read-only `reviewer` subagent).
 
-The parent implements at every tier. If the tier is genuinely ambiguous, put it in the grill round;
-do not guess. Tier 3 and a dedicated UI tester stay deferred; the V2 UI gate is the minimal check in
+At Tier 0–1 the parent implements; at Tier 2+ a worker implements and the reviewer gate is
+independent of it (see the policy). If the tier is genuinely ambiguous, put it in the grill round; do
+not guess. Tier 3 and a dedicated UI tester stay deferred; the V2 UI gate is the minimal check in
 ticket 19.
 
 ## 4. Date and time
@@ -69,7 +72,9 @@ ticket 19.
 ## 7. Verification
 
 - `npm run verify:fast` = `format:check` + `lint` + `typecheck` + `test`.
-- `npm run verify` = `verify:fast` + `build`; this is the required gate.
+- `npm run verify` = `verify:skill` + `verify:fast` + `build`; this is the required gate.
+- `npm run verify:skill` checks the installed orchestrator skill (files, hashes, seat ids) and this
+  repo's pointer; in CI only the pointer is checked.
 - `npm run smoke` builds and exercises the compiled server against PGlite. Run it for migrations,
   auth, wire-contract or cross-cutting changes.
 - `.githooks/pre-commit` runs `verify:fast`; install it with `npm run hooks:install`. It can be
@@ -131,6 +136,6 @@ ticket 19.
 ## 13. Deliberately not adopted
 
 Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
-ticket 19), unattended rounds, protected-doc hash gates, parallel workers/worktrees, GitHub
-issue/triage labels, and pinned model seats. Revisit when the condition that excluded them changes;
-do not reintroduce them silently.
+ticket 19), unattended rounds, protected-doc hash gates, parallel workers/worktrees, and GitHub
+issue/triage labels. Revisit when the condition that excluded them changes; do not reintroduce them
+silently.
