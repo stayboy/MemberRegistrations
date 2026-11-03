@@ -42,6 +42,17 @@ why (the catalog conflates the 1M context window with the output cap).
   repo pointer below. In CI the canonical is absent, so CI checks only the repo-side pointer and the
   script reports the canonical check as skipped.
 
+## Mock parity
+
+- Applies at Tiers 1–3 when a round changes a surface with a mock under `documents/mockups/**`;
+  otherwise record "no mock".
+- The screen is advisory: it flags atoms, the reviewer confirms each with `path:line`, and only
+  confirmed misses on **spec-required** atoms force `REWORK`; mock-only atoms are mock corrections.
+- `clef:27b` is optional; `scripts/round/decision-probe.mjs` is the harness. It is not wired into
+  `verify`/CI — a model endpoint is not a repo precondition.
+- A hard gate needs the labeled calibration set (≥100 rows, false-pass 0, false-rework ≤10%, ≥3
+  rounds) and a protected-doc round.
+
 ## Deliberately not adopted
 
 - **Full Tier 3 and a dedicated UI tester** — deferred; the V2 gate is the minimal Playwright/axe/
