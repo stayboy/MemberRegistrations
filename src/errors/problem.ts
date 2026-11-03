@@ -5,6 +5,7 @@ import {
   ImportError,
   NotFoundError,
   ReassignmentRequiredError,
+  UnauthorizedError,
   ValidationError,
 } from './domain-errors.js';
 
@@ -78,6 +79,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof ImportError) {
     sendProblem(res, 422, 'Import rejected', error.message, 'import_failed');
+    return;
+  }
+
+  if (error instanceof UnauthorizedError) {
+    sendProblem(res, 401, 'Unauthorized', error.message, 'unauthorized');
     return;
   }
 

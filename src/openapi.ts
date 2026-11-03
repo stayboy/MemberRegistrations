@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { healthResponseSchema, problemSchema } from './schemas/common.js';
 import {
+  exchangeRequestSchema,
+  exchangeResponseSchema,
+  magicLinkAcceptedSchema,
+  magicLinkRequestSchema,
+  meResponseSchema,
+  sessionOfficerSchema,
+} from './schemas/auth.js';
+import {
   attendanceEntryResponseSchema,
   attendanceInputSchema,
   attendanceListSchema,
@@ -104,19 +112,41 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: 'MemberRegistrations API',
-      version: '2.1.0',
+      version: '2.2.0',
       description:
-        'Member registrations, ministries, event series, derived attendance, and shepherding. Attendance counts are computed from series schedules, imported occurrence lists and attendance registries; shepherding calls are append-only.',
+        'Member registrations, ministries, event series, derived attendance, and shepherding. Attendance counts are computed from series schedules, imported occurrence lists and attendance registries; shepherding calls are append-only. Browser clients call /auth/* and /gateway/v1/*; the gateway holds the API bearer and derives X-Actor-Id from the officer session.',
     },
     servers: [{ url: '/', description: 'Current deployment' }],
+    'x-gateway': {
+      prefix: '/gateway/v1',
+      target: '/v1',
+      authentication: 'session',
+      description:
+        'Browser traffic calls this prefix with an officer session; the gateway injects the API bearer and derived X-Actor-Id, then rewrites to /v1.',
+    },
     security: [{ bearerAuth: [] }],
     components: {
       securitySchemes: {
-        bearerAuth: { type: 'http', scheme: 'bearer' },
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          description: 'Server-to-server API token. Never held by a browser.',
+        },
+        sessionAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          description: 'Short-lived officer session issued by /auth/exchange.',
+        },
       },
       schemas: {
         Problem: toSchema(problemSchema, 'output'),
         Health: toSchema(healthResponseSchema, 'output'),
+        MagicLinkRequest: toSchema(magicLinkRequestSchema, 'input'),
+        MagicLinkAccepted: toSchema(magicLinkAcceptedSchema, 'output'),
+        ExchangeRequest: toSchema(exchangeRequestSchema, 'input'),
+        SessionOfficer: toSchema(sessionOfficerSchema, 'output'),
+        ExchangeResponse: toSchema(exchangeResponseSchema, 'output'),
+        MeResponse: toSchema(meResponseSchema, 'output'),
         MemberSummary: toSchema(memberSummarySchema, 'output'),
         MemberDetail: toSchema(memberDetailSchema, 'output'),
         MemberList: toSchema(memberListSchema, 'output'),
@@ -159,6 +189,61 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
     },
     paths: {
+      '/auth/magic-link': {
+        post: {
+          summary: 'Request a single-use sign-in link',
+          security: [],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('MagicLinkRequest') } },
+          },
+          responses: {
+            202: json(
+              'Accepted; the response is identical for every address.',
+              'MagicLinkAccepted',
+            ),
+            422: validation,
+          },
+        },
+      },
+
+      '/auth/exchange': {
+        post: {
+          summary: 'Exchange a magic-link token for a session',
+          security: [],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ExchangeRequest') } },
+          },
+          responses: {
+            200: json('Session credential and officer.', 'ExchangeResponse'),
+            401: problem('The link is invalid, used or expired.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/auth/me': {
+        get: {
+          summary: 'The signed-in officer and derived actor id',
+          security: [{ sessionAuth: [] }],
+          responses: {
+            200: json('Officer identity.', 'MeResponse'),
+            401: problem('The session is invalid or expired.'),
+          },
+        },
+      },
+
+      '/auth/logout': {
+        post: {
+          summary: 'Revoke the current session',
+          security: [{ sessionAuth: [] }],
+          responses: {
+            204: noContent('The session is revoked.'),
+          },
+        },
+      },
+
       '/health': {
         get: {
           summary: 'Liveness and database reachability',

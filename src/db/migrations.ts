@@ -270,4 +270,51 @@ create index shepherding_calls_assignment on shepherding_calls (assignment_id, c
 create index shepherding_calls_called_on on shepherding_calls (called_on);
 `,
   },
+  {
+    version: '0004_session_gateway',
+    sql: `
+create table officers (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  name text not null,
+  actor_id text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index officers_email_ci on officers (lower(email));
+create unique index officers_actor_ci on officers (lower(actor_id));
+
+create table auth_magic_links (
+  id uuid primary key default gen_random_uuid(),
+  officer_id uuid not null references officers(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index auth_magic_links_officer on auth_magic_links (officer_id, created_at desc);
+
+create table auth_sessions (
+  id uuid primary key default gen_random_uuid(),
+  officer_id uuid not null references officers(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  absolute_expires_at timestamptz not null,
+  last_used_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (absolute_expires_at >= expires_at)
+);
+create index auth_sessions_officer on auth_sessions (officer_id, created_at desc);
+
+-- Fixed-window counters. The primary key is the subject (email:<address> or ip:<addr>).
+create table auth_rate_limits (
+  key text primary key,
+  window_start timestamptz not null default now(),
+  count integer not null default 0
+);
+create index auth_rate_limits_window on auth_rate_limits (window_start);
+`,
+  },
 ];

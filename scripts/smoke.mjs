@@ -118,7 +118,12 @@ async function runScenario() {
   );
 
   const openapi = await request('/openapi.json');
-  check('openapi is served', openapi.status === 200 && openapi.body.info?.version === '2.1.0');
+  check(
+    'openapi is served',
+    openapi.status === 200 &&
+      openapi.body.info?.version === '2.2.0' &&
+      Boolean(openapi.body.paths?.['/auth/magic-link']),
+  );
 }
 
 async function waitForHealth() {

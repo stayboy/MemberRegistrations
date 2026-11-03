@@ -28,6 +28,13 @@ export class ConflictError extends DomainError {
   }
 }
 
+/** Missing, invalid, expired or revoked credentials. */
+export class UnauthorizedError extends DomainError {
+  constructor(message = 'Authentication is required.') {
+    super(message, 'unauthorized');
+  }
+}
+
 /** The member already has a shepherd; the caller must confirm with the current assignment id. */
 export interface CurrentAssignment {
   id: string;

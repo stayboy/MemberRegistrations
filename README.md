@@ -61,8 +61,31 @@ curl -X POST http://localhost:3000/v1/members \
 
 ## API
 
-Everything lives under `/v1` except `/health` and `/openapi.json`. Every route requires
-`Authorization: Bearer <API_BEARER_TOKEN>`; every write also requires `X-Actor-Id`.
+Server-to-server callers use `/v1` with `Authorization: Bearer <API_BEARER_TOKEN>`; every write also
+requires `X-Actor-Id`. Browser clients use the session gateway instead and never receive the API
+bearer.
+
+### Sign-in and the gateway
+
+| Method | Path               | Result                                                       |
+| ------ | ------------------ | ------------------------------------------------------------ |
+| `POST` | `/auth/magic-link` | `202`; emails a single-use link to an active officer         |
+| `POST` | `/auth/exchange`   | Exchange the link token for a short-lived session credential |
+| `GET`  | `/auth/me`         | Officer identity and derived actor id                        |
+| `POST` | `/auth/logout`     | Revoke the session                                           |
+| `ALL`  | `/gateway/v1/*`    | Validate the session, inject the bearer, rewrite to `/v1/*`  |
+
+The gateway runs in the same Express app and Vercel Function as the API. It derives `X-Actor-Id` from
+the officer, so browser requests do not send it. Sessions live in Postgres: 8 hours idle, 12 hours
+absolute, revocable. Magic links are single-use and expire after 15 minutes.
+
+Officers are seeded by an operator; there is no self-service enrolment:
+
+```bash
+npm run officers:add -- ama@church.org "Ama Mensah" ama
+npm run officers:list
+npm run officers:deactivate -- ama@church.org
+```
 
 ### Members
 
@@ -187,33 +210,43 @@ explicit IANA `timezone` to decide what "today" means for that series. Clients c
 
 ## Configuration
 
-| Variable           | Default       | Notes                                                            |
-| ------------------ | ------------- | ---------------------------------------------------------------- |
-| `NODE_ENV`         | `development` | `production` requires `API_BEARER_TOKEN` and `DATABASE_URL`.     |
-| `PORT`             | `3000`        | Local listener only; Vercel manages the port.                    |
-| `DATABASE_URL`     | —             | Unset → in-process PGlite with automatic migrations (ephemeral). |
-| `API_BEARER_TOKEN` | —             | Shared bearer token; required in production.                     |
-| `LOG_LEVEL`        | `info`        | Pino level (`silent` in tests).                                  |
+| Variable                        | Default       | Notes                                                                                             |
+| ------------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                      | `development` | `production` requires `API_BEARER_TOKEN`, `DATABASE_URL`, `RESEND_API_KEY` and `MAGIC_LINK_FROM`. |
+| `PORT`                          | `3000`        | Local listener only; Vercel manages the port.                                                     |
+| `DATABASE_URL`                  | —             | Unset → in-process PGlite with automatic migrations (ephemeral).                                  |
+| `API_BEARER_TOKEN`              | —             | Server-side bearer; required in production. Never sent to a browser.                              |
+| `AUTH_MAGIC_LINK_TTL_MINUTES`   | `15`          | Single-use link lifetime.                                                                         |
+| `AUTH_SESSION_IDLE_MINUTES`     | `480`         | Session idle lifetime.                                                                            |
+| `AUTH_SESSION_ABSOLUTE_MINUTES` | `720`         | Absolute session cap; must be at least the idle lifetime.                                         |
+| `UI_BASE_URL`                   | local Pages   | Magic-link landing page; set to the deployed `/#/connect` URL.                                    |
+| `RESEND_API_KEY`                | —             | Production mail delivery.                                                                         |
+| `MAGIC_LINK_FROM`               | —             | Verified Resend sender address.                                                                   |
+| `CORS_ALLOWED_ORIGINS`          | Pages + local | Comma-separated allowlist for `/auth/*` and `/gateway/v1/*`.                                      |
+| `LOG_LEVEL`                     | `info`        | Pino level (`silent` in tests).                                                                   |
 
 ## Scripts
 
-| Script                  | Purpose                                   |
-| ----------------------- | ----------------------------------------- |
-| `npm run dev`           | `tsx watch` with `.env` loaded            |
-| `npm run db:migrate`    | Apply pending migrations (`DATABASE_URL`) |
-| `npm run build`         | Compile `src` to `dist`                   |
-| `npm start`             | Run the compiled server                   |
-| `npm run typecheck`     | `tsc --noEmit`                            |
-| `npm test`              | Vitest run (PGlite, no external services) |
-| `npm run test:watch`    | Vitest watch mode                         |
-| `npm run test:coverage` | Coverage report                           |
-| `npm run lint`          | ESLint 10 flat config                     |
-| `npm run format`        | Prettier write                            |
-| `npm run format:check`  | Prettier check                            |
-| `npm run verify:fast`   | format:check + lint + typecheck + test    |
-| `npm run verify`        | `verify:fast` + build (the required gate) |
-| `npm run smoke`         | Build + exercise the compiled server      |
-| `npm run hooks:install` | Install the pre-commit hook               |
+| Script                        | Purpose                                   |
+| ----------------------------- | ----------------------------------------- |
+| `npm run dev`                 | `tsx watch` with `.env` loaded            |
+| `npm run db:migrate`          | Apply pending migrations (`DATABASE_URL`) |
+| `npm run officers:add`        | Seed or reactivate an officer             |
+| `npm run officers:list`       | List officers and their actor ids         |
+| `npm run officers:deactivate` | Deactivate an officer and revoke sessions |
+| `npm run build`               | Compile `src` to `dist`                   |
+| `npm start`                   | Run the compiled server                   |
+| `npm run typecheck`           | `tsc --noEmit`                            |
+| `npm test`                    | Vitest run (PGlite, no external services) |
+| `npm run test:watch`          | Vitest watch mode                         |
+| `npm run test:coverage`       | Coverage report                           |
+| `npm run lint`                | ESLint 10 flat config                     |
+| `npm run format`              | Prettier write                            |
+| `npm run format:check`        | Prettier check                            |
+| `npm run verify:fast`         | format:check + lint + typecheck + test    |
+| `npm run verify`              | `verify:fast` + build (the required gate) |
+| `npm run smoke`               | Build + exercise the compiled server      |
+| `npm run hooks:install`       | Install the pre-commit hook               |
 
 ## Architecture
 
@@ -274,11 +307,14 @@ Design rules:
 2. Add **Neon Postgres** through the Vercel Marketplace and connect it to the project, so
    `DATABASE_URL` is injected. Use the **pooled** connection string.
 3. Set `API_BEARER_TOKEN` (`openssl rand -base64 32`).
-4. Run `npm run db:migrate` once against the production database, from your machine or CI, with
+4. Set `RESEND_API_KEY` and a verified `MAGIC_LINK_FROM`, plus `UI_BASE_URL` and
+   `CORS_ALLOWED_ORIGINS` for the Pages origin.
+5. Run `npm run db:migrate` once against the production database, from your machine or CI, with
    `DATABASE_URL` set. Migrations never run on request.
-5. Deploy. `vercel.json` pins the function region to `fra1`; change it to the region closest to the
+6. Seed at least one officer with `npm run officers:add -- <email> <name> <actorId>`.
+7. Deploy. `vercel.json` pins the function region to `fra1`; change it to the region closest to the
    users and to the database.
-6. Verify `GET /health`, then exercise a `POST /v1/members` with the bearer token.
+8. Verify `GET /health`, then request a magic link and complete `/auth/exchange`.
 
 Notes:
 

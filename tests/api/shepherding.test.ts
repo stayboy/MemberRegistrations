@@ -347,7 +347,7 @@ describe('contract', () => {
   it('documents shepherding in OpenAPI', async () => {
     const response = await request(app).get('/openapi.json');
     expect(response.status).toBe(200);
-    expect(response.body.info.version).toBe('2.1.0');
+    expect(response.body.info.version).toBe('2.2.0');
     expect(response.body.paths['/v1/shepherding/assignments']).toBeTruthy();
     expect(response.body.paths['/v1/members/{memberNo}/shepherding']).toBeTruthy();
     expect(response.body.components.schemas.MemberShepherding).toBeTruthy();

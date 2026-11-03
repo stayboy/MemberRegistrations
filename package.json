@@ -20,11 +20,15 @@
     "smoke": "npm run build && node scripts/smoke.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
     "db:migrate": "tsx src/db/migrate-cli.ts",
+    "officers:add": "tsx src/authn/cli.ts add",
+    "officers:deactivate": "tsx src/authn/cli.ts deactivate",
+    "officers:list": "tsx src/authn/cli.ts list",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@vercel/functions": "^3.10.6",
     "express": "^5.3.0",
     "helmet": "^8.3.0",
     "pg": "^8.23.1",
