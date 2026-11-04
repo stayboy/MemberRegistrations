@@ -888,6 +888,24 @@ stays raw.
 - **Verification:** behavioural identity, not speed. The attendance and shepherding tests stay
   unedited; new tests cover CRUD, duplicate `memberNo`, and a stale ETag.
 
+### Contacts, subscriptions and shepherding batch (ticket 06)
+
+Move the contact, coverage, subscription and append-only shepherding-call operations to Drizzle; the
+report and aggregate queries stay raw.
+
+- **In scope:** `loadContacts` and the member contact operations (`addContact`, `updateContact`,
+  `removeContact`, `linkContact`, `unlinkContact`, `insertContact`); `addCoverage`/`removeCoverage` and
+  `insertCoverage`; `addSubscription`/`endSubscription` and `subscriptionsFor`; and the append-only
+  shepherding calls (`logCall`, `listCalls`, `loadCallsForMember`).
+- **Raw:** the member `list` (the cross-entity contact search), the attendance/ministries/relationships
+  loaders, the shepherding assignment lifecycle (`assign`, `endAssignment`), and the roster/report/
+  officer aggregates.
+- **Contract:** unchanged. The summary contract keeps its contact list (Q65); contact values are not
+  removed from list responses in this ticket.
+- **Append-only:** shepherding calls remain insert/read-only; no update or delete route appears.
+- **Verification:** the existing behavioural tests pass unedited; new tests cover a contact conflict
+  and link rule, coverage overlap, subscription end, and the append-only call path.
+
 ### Project layout
 
 ```
@@ -981,3 +999,6 @@ sequences.
 - **2026-11-04** — Spec-first for ticket 05: the Members CRUD trial migrates the members-table row
   operations to Drizzle while the `list` search, the related-table reads/writes and the
   attendance/denominator queries stay raw; ticket 06 owns contacts/subscriptions.
+- **2026-11-04** — Spec-first for ticket 06: the contacts/coverage/subscriptions/shepherding batch
+  migrates those writes and reads to Drizzle, keeps the report and aggregate queries raw, preserves the
+  existing summary contact contract (Q65), and keeps shepherding calls append-only.
