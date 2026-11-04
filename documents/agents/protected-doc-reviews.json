@@ -10,24 +10,24 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "9ef20fdac660dce5f894015be309a182070df30747634b21a38afda7d7fc3241",
+      "sha256": "c4ca7510cb8ed86dc9cd4e23d7aacc459a97816c17e9041b1bbbe248bd8b110b",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds §16 Fluent UI first, and the React baseline — a Fluent v9 component is the first choice before any raw element, hand-rolled controls are a defect when an equivalent exists (a round-doc reason is required when none does), semantic landmarks/headings/lists/form stay HTML with Fluent `Label`, one component library, `react.dev` Rules of React with the Rules of Hooks enforced by `eslint-plugin-react-hooks` and Strict Mode, and a skill ladder that starts with the repo's own skills then the `awesome-copilot` catalogue and `microsoft/skills`. why: the owner reported pages built without Fluent components and asked for the rule plus a community React baseline, pointing first at the awesome-copilot skills index. rejected: adopting `bulletproof-react` (its folder model fights this repo), a lint rule banning raw controls (needs a custom AST plugin), and doing the structural refactor in this change.",
+      "reason": "changes: unattended rounds leave §13 and become §17 — the end-of-round go-forward grill is auto-accepted, accepted decisions are written into the owning spec and recorded as `Mode: unattended (auto-accept recommendations)`, migrations/wire contracts/security/tenant isolation/deleting a public route still park unless pre-authorised for that named round, and `go unattended` pre-authorises only that round's commit/push/PR/merge. §2 and §9 gain cross-references. why: the owner adopted the mode on 2026-11-04 so rounds do not stall waiting for a go-forward approval. rejected: keeping unattended rounds out of scope; letting silence imply consent; letting auto-accept cover the hard gates.",
       "verdict": "ACCEPTED",
-      "attestation": "§16 was re-read verbatim and the five amendments are confirmed in place — the skill-discovery ladder names the repo's `.opencode/skills/` and installed skills before the `awesome-copilot`-then-`microsoft/skills` catalogue search, the React baseline correctly scopes `eslint-plugin-react-hooks` to the Rules of Hooks with Strict Mode and review obligations for purity/immutability, and `label` was removed from the stays-HTML list in favour of Fluent `Label` with the heading cap replaced by 'real headings' — with no regression or cross-file contradiction.",
+      "attestation": "Re-reviewed the amended AGENTS.md; §17 now owns the unattended-round rule with the two authorisation triggers contrasted, the auto-accepted decision destination named (the spec), the change-set rule handled via `git show --stat`, and §2/§9 cross-referencing §17, with no contradiction or regression against orchestrator-policy.md or the canonical skill.",
       "at": "2026-11-04"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "a6bca026adf5812e2fb0ec1f379b989c1990aefb4a74a099c2dfa2e51917d672",
+      "sha256": "74c5a7f0d4c2230c0c13310ec75b29e720f5a77786b659f6c00cf5eb0563cd88",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the mock-parity rule now points at the local, git-ignored `mockups/**` instead of `documents/mockups/**`. why: all mockups moved to one ignored root folder. rejected: leaving the parity rule pointing at a deleted path.",
+      "reason": "changes: unattended rounds leave `Deliberately not adopted` and gain a local section — auto-accept is the default for the end-of-round go-forward grill, the hard gates still park unless a named round is pre-authorised, the round doc records the mode, and accepted decisions are written into the owning spec. why: `AGENTS.md` §17 now adopts the mode and this file is the repo delta the skill defers to. rejected: leaving a live contradiction that every round is owner-attended.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the mockups relocation and the new §14 rule as a read-only reviewer: the rule is unambiguous, consistent with §10a/§9/mock-parity, no stale documents/mockups references remain, nothing automated breaks on the deletion, and the new import mock is faithful to the accepted Q107–Q110 contract.",
+      "attestation": "Re-reviewed the amended orchestrator-policy.md; the new Unattended rounds section and the removal from Deliberately not adopted are correct and consistent with AGENTS.md §17 and the canonical orchestrator skill — no P1/P2 findings.",
       "at": "2026-11-04"
     },
     {
@@ -54,13 +54,13 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "da02f3548369a8af4b4656f0ec549aea6b5effb580aa6e124465ff6c46c26edd",
+      "sha256": "0e0993713bc7d2e04363434bc0e99713400ad3c0a517cf04e7063637e5aa48d4",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: a round doc must keep recording the Workers mode and the track-only acceptance. rejected: no provenance line.",
+      "reason": "changes: the round-doc template gains a `Mode` row (`attended` / `unattended (auto-accept recommendations)`) so an unattended pin can never look like an attended one. why: `AGENTS.md` §17 and `documents/agents/orchestrator-policy.md` require the field and the shared template did not carry it. rejected: leaving the field to prose in each round doc.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
+      "attestation": "Re-read documents/rounds/README.md and confirmed the added Mode row is verbatim-consistent with the Mode requirement in AGENTS.md §17 and documents/agents/orchestrator-policy.md, with template ordering, the Workers row and all sections intact and nothing else in the file contradicting the rule.",
       "at": "2026-11-04"
     },
     {

@@ -13,6 +13,7 @@ the durable record.
 | ------- | ---------------------------------------------------------------- |
 | Status  | OPEN / CLOSED / PARKED                                           |
 | Tier    | 0 / 1 / 2                                                        |
+| Mode    | `attended` / `unattended (auto-accept recommendations)`          |
 | Base    | `<short sha>`                                                    |
 | Spec    | `documents/specs/<file>.md` (or `AGENTS.md` for process work)    |
 | Workers | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)` |

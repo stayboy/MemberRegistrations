@@ -16,7 +16,8 @@ delta is `documents/agents/orchestrator-policy.md`. This file owns the non-negot
 - For a non-trivial feature, run the grilling interview: map the design tree, ask the whole frontier
   in one round (numbered questions, each with a recommendation and its cost), and wait for answers.
 - Do not write implementation code until the frontier is empty **and the owner has explicitly approved
-  the amended spec**. Approval is a separate, explicit step.
+  the amended spec**. Approval is a separate, explicit step. In an unattended round (§17) the end-of-round
+  go-forward grill is auto-accepted, but the spec is still amended and recorded before any code.
 - Record every settled decision in the spec, including the ones that were rejected.
 - After approval, a behavioural change to a spec needs re-approval. Typo, formatting and clarifying
   edits are allowed with a changelog line in the spec and a note in the ticket or round doc.
@@ -105,7 +106,8 @@ lives in `documents/lessons.md`.
 ## 9. Commit, push, PR merge
 
 - Spec approval does **not** authorise a commit. Each of commit, push, PR and merge needs its own
-  explicit owner instruction.
+  explicit owner instruction — except that "go unattended" pre-authorises those four for that round
+  (§17). Every action outside the round still needs its own instruction.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for
@@ -174,8 +176,8 @@ change next to a plausible-looking edit, and the recorded reason is the claim th
 ## 13. Deliberately not adopted
 
 Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
-ticket 19), unattended rounds, and GitHub issue/triage labels. Revisit when
-the condition that excluded them changes; do not reintroduce them silently.
+ticket 19), and GitHub issue/triage labels. Revisit when the condition that excluded them changes; do not
+reintroduce them silently.
 
 ## 14. Mockups
 
@@ -221,3 +223,24 @@ the condition that excluded them changes; do not reintroduce them silently.
   `https://github.com/microsoft/skills` for first-party Microsoft guidance. If one covers the task, use
   or install it; if none does, say so and propose the approach. Never substitute an unlisted source
   silently.
+
+## 17. Unattended rounds (owner, 2026-11-04)
+
+- **Standing instruction.** At the **end of a round**, run the go-forward `grill-me` round and **accept
+  its recommendations automatically**, so the next round starts without a wait. The owner may still run a
+  round attended by saying so. The consent is this rule, never the owner's silence.
+- **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
+  recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
+  recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report
+  repeats them as a table. A decision must never live only in the round doc.
+- **What auto-accept does not cover.** A migration, a wire-contract change, security or auth, tenant
+  isolation, or deleting a public route still parks for the owner unless they pre-authorised **that
+  specific round by name**. "Go unattended" is not that authorisation: it covers the round's mechanics
+  and its commit/push/PR/merge, not those gates.
+- **The gates are unchanged.** Tier, plan review, the worker/reviewer split, tests and the PR flow all
+  still run. "Unattended" is a modifier on a round, never a tier and never a reason to skip a check. The
+  owner cannot see the change set before the commit, so the completion report carries it instead
+  (`git show --stat` per commit); §9's "show before committing" applies to attended rounds.
+- **Pre-authorisation.** The owner may also pre-authorise a named round's hard gate in advance (for
+  example "unattended, and the migration is approved"). That must name the round and the gate.
+- `documents/rounds/README.md` owns the round-doc shape; this section owns when the mode applies.
