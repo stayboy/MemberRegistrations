@@ -43,13 +43,13 @@
     },
     {
       "path": "documents/lessons.md",
-      "sha256": "ee636dfae7654f1646b74d8a22c90642330819dca0dc6a8ac09a0149e6f5d7e9",
+      "sha256": "fd7e992bede0dd6ae61edfcea53fb4ea59ccfa50adc14ec6dabbe4c16f0f9cfb",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the pilot lessons are still proposed, and only an explicit owner acceptance may write them. rejected: writing the lessons before acceptance.",
+      "reason": "changes: adds four owner-accepted lessons dated 2026-11-04 (a reused component inherits the narrowest capability of its call sites; a parallel worker verifies with unit/API tests, never a browser harness; an uneven parallel pair is slower than serial; a fresh worktree or freshly merged tree needs `npm ci` first). why: the owner accepted them in the Q126 round on 2026-11-04 after the pilot closed and ticket 14 merged; the acceptance is backed by `documents/rounds/lessons-2026-11-04.md`. rejected: leaving them as session prose, writing them before acceptance, and writing the workspace-gate candidate now (held until the UI CI job lands so its evidence is the final gate).",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
+      "attestation": "Every evidence claim in the four 2026-11-04 lessons is supported by `parallel-pilot.md` or `member-detail-edit.md`, the Q126 acceptance is backed by the new `lessons-2026-11-04.md` round doc, and no prior entry regressed.",
       "at": "2026-11-04"
     },
     {
