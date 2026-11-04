@@ -1,8 +1,11 @@
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
+import { members } from '../db/schema.js';
+import { sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
 import { loadCalendar, resolveSeriesOccurrences } from './occurrences.js';
 
@@ -150,9 +153,37 @@ interface MemberRow extends Row {
 
 const MEMBER_NO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 
-function isUniqueViolation(error: unknown): boolean {
-  return (error as { code?: string }).code === '23505';
-}
+/** Aliases keep the snake_case `MemberRow` shape the raw queries returned. */
+const memberColumns = {
+  id: members.id,
+  member_no: members.memberNo,
+  first_name: members.firstName,
+  last_name: members.lastName,
+  other_names: members.otherNames,
+  maiden_name: members.maidenName,
+  alias: members.alias,
+  dob: members.dob,
+  gender: members.gender,
+  place_of_residence: members.placeOfResidence,
+  address_line: members.addressLine,
+  joined_on: members.joinedOn,
+  is_presbyter: members.isPresbyter,
+  archived_at: members.archivedAt,
+  purged_at: members.purgedAt,
+  version: members.version,
+  created_at: members.createdAt,
+  updated_at: members.updatedAt,
+} as const;
+
+type Statement = ReturnType<typeof sql>;
+
+type MemberSet = Partial<
+  Omit<typeof members.$inferInsert, 'version' | 'updatedAt' | 'updatedBy'>
+> & {
+  version: Statement;
+  updatedAt: Statement;
+  updatedBy: string;
+};
 
 function isoDate(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -281,28 +312,25 @@ export class MemberRepository {
 
     try {
       const id = await this.db.transaction(async (tx) => {
-        const [row] = await tx.query<{ id: string }>(
-          `insert into members (
-             member_no, first_name, last_name, other_names, maiden_name, alias, dob, gender,
-             place_of_residence, address_line, joined_on, is_presbyter, created_by, updated_by
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
-           returning id`,
-          [
+        const [row] = await tx.orm
+          .insert(members)
+          .values({
             memberNo,
-            requiredText(input.firstName, 'firstName'),
-            requiredText(input.lastName, 'lastName'),
-            optionalText(input.otherNames),
-            optionalText(input.maidenName),
-            optionalText(input.alias),
+            firstName: requiredText(input.firstName, 'firstName'),
+            lastName: requiredText(input.lastName, 'lastName'),
+            otherNames: optionalText(input.otherNames),
+            maidenName: optionalText(input.maidenName),
+            alias: optionalText(input.alias),
             dob,
             gender,
-            optionalText(input.placeOfResidence),
-            optionalText(input.addressLine),
+            placeOfResidence: optionalText(input.placeOfResidence),
+            addressLine: optionalText(input.addressLine),
             joinedOn,
-            input.isPresbyter ?? false,
-            actor,
-          ],
-        );
+            isPresbyter: input.isPresbyter ?? false,
+            createdBy: actor,
+            updatedBy: actor,
+          })
+          .returning({ id: members.id });
 
         for (const [index, contact] of (input.contacts ?? []).entries()) {
           await this.insertContact(tx, row!.id, contact, index);
@@ -316,7 +344,7 @@ export class MemberRepository {
       const detail = await this.findById(id);
       return detail!;
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`A member with number ${memberNo} already exists`);
       }
       throw error;
@@ -344,53 +372,49 @@ export class MemberRepository {
       }
     }
 
-    const sets: string[] = [];
-    const params: unknown[] = [];
+    const fields: Partial<
+      Omit<typeof members.$inferInsert, 'version' | 'updatedAt' | 'updatedBy'>
+    > = {};
 
-    const columns: Array<[keyof UpdateMemberInput, string]> = [
-      ['firstName', 'first_name'],
-      ['lastName', 'last_name'],
-      ['otherNames', 'other_names'],
-      ['maidenName', 'maiden_name'],
-      ['alias', 'alias'],
-      ['dob', 'dob'],
-      ['gender', 'gender'],
-      ['placeOfResidence', 'place_of_residence'],
-      ['addressLine', 'address_line'],
-      ['joinedOn', 'joined_on'],
-      ['isPresbyter', 'is_presbyter'],
-    ];
-
-    for (const [field, column] of columns) {
-      if (input[field] === undefined) continue;
-      let value: unknown = input[field];
-      if (field === 'firstName' || field === 'lastName') {
-        value = requiredText(value as string | null, field);
-      }
-      if (field === 'dob' || field === 'joinedOn') {
-        value = value ? assertDate(String(value), field) : null;
-      }
-      if (field === 'gender' && !GENDERS.includes(value as Gender)) {
+    if (input.firstName !== undefined) {
+      fields.firstName = requiredText(input.firstName, 'firstName');
+    }
+    if (input.lastName !== undefined) {
+      fields.lastName = requiredText(input.lastName, 'lastName');
+    }
+    if (input.otherNames !== undefined) fields.otherNames = input.otherNames;
+    if (input.maidenName !== undefined) fields.maidenName = input.maidenName;
+    if (input.alias !== undefined) fields.alias = input.alias;
+    if (input.dob !== undefined) {
+      fields.dob = input.dob ? assertDate(input.dob, 'dob') : null;
+    }
+    if (input.gender !== undefined) {
+      if (!GENDERS.includes(input.gender)) {
         throw new ValidationError('gender is not recognised');
       }
-      params.push(value);
-      sets.push(`${column} = $${params.length}`);
+      fields.gender = input.gender;
     }
+    if (input.placeOfResidence !== undefined) fields.placeOfResidence = input.placeOfResidence;
+    if (input.addressLine !== undefined) fields.addressLine = input.addressLine;
+    if (input.joinedOn !== undefined) {
+      fields.joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
+    }
+    if (input.isPresbyter !== undefined) fields.isPresbyter = input.isPresbyter;
 
-    if (sets.length === 0) throw new ValidationError('No fields to update');
+    if (Object.keys(fields).length === 0) throw new ValidationError('No fields to update');
 
-    const idIndex = params.length + 1;
-    const actorIndex = params.length + 2;
-    const versionIndex = params.length + 3;
-    params.push(row.id, actor, expectedVersion ?? row.version);
+    const set: MemberSet = {
+      ...fields,
+      version: sql`${members.version} + 1`,
+      updatedAt: sql`now()`,
+      updatedBy: actor,
+    };
 
-    const updated = await this.db.query<{ id: string }>(
-      `update members
-       set ${sets.join(', ')}, version = version + 1, updated_at = now(), updated_by = $${actorIndex}
-       where id = $${idIndex} and version = $${versionIndex}
-       returning id`,
-      params,
-    );
+    const updated = await this.db.orm
+      .update(members)
+      .set(set)
+      .where(and(eq(members.id, row.id), eq(members.version, expectedVersion ?? row.version)))
+      .returning({ id: members.id });
 
     if (updated.length === 0) {
       throw new ConflictError('The member was modified since the supplied ETag');
@@ -422,22 +446,35 @@ export class MemberRepository {
          where member_id = $1 and ended_on is null`,
         [row.id, todayIn('UTC'), actor],
       );
-      await tx.query(
-        `update members
-         set archived_at = now(), version = version + 1, updated_at = now(), updated_by = $2
-         where id = $1`,
-        [row.id, actor],
-      );
+      await tx.orm
+        .update(members)
+        .set({
+          archivedAt: sql`now()`,
+          version: sql`${members.version} + 1`,
+          updatedAt: sql`now()`,
+          updatedBy: actor,
+        })
+        .where(eq(members.id, row.id));
     });
   }
 
   async restore(memberNo: string, actor: string): Promise<MemberDetail> {
-    const rows = await this.db.query<{ id: string }>(
-      `update members set archived_at = null, version = version + 1, updated_at = now(), updated_by = $2
-       where lower(member_no) = lower($1) and archived_at is not null and purged_at is null
-       returning id`,
-      [memberNo, actor],
-    );
+    const rows = await this.db.orm
+      .update(members)
+      .set({
+        archivedAt: null,
+        version: sql`${members.version} + 1`,
+        updatedAt: sql`now()`,
+        updatedBy: actor,
+      })
+      .where(
+        and(
+          sql`lower(${members.memberNo}) = lower(${memberNo})`,
+          sql`${members.archivedAt} is not null`,
+          isNull(members.purgedAt),
+        ),
+      )
+      .returning({ id: members.id });
     if (rows.length === 0) {
       throw new ConflictError(`Member ${memberNo} is not archived, or does not exist`);
     }
@@ -471,15 +508,26 @@ export class MemberRepository {
       );
       await tx.query('delete from attendance_suppressions where member_id = $1', [row.id]);
       await tx.query('delete from attendance where member_id = $1', [row.id]);
-      await tx.query(
-        `update members set
-           first_name = null, last_name = null, other_names = null, maiden_name = null,
-           alias = null, dob = null, place_of_residence = null, address_line = null,
-           gender = 'undisclosed', is_presbyter = false, archived_at = now(), purged_at = now(),
-           version = version + 1, updated_at = now(), updated_by = $2
-         where id = $1`,
-        [row.id, actor],
-      );
+      await tx.orm
+        .update(members)
+        .set({
+          firstName: null,
+          lastName: null,
+          otherNames: null,
+          maidenName: null,
+          alias: null,
+          dob: null,
+          placeOfResidence: null,
+          addressLine: null,
+          gender: 'undisclosed',
+          isPresbyter: false,
+          archivedAt: sql`now()`,
+          purgedAt: sql`now()`,
+          version: sql`${members.version} + 1`,
+          updatedAt: sql`now()`,
+          updatedBy: actor,
+        })
+        .where(eq(members.id, row.id));
     });
   }
 
@@ -527,7 +575,7 @@ export class MemberRepository {
         await touch(tx, row.id, actor);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`Contact value "${value}" already belongs to a member`);
       }
       throw error;
@@ -575,7 +623,7 @@ export class MemberRepository {
         await touch(tx, row.id, actor);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError('This contact is already linked to the member');
       }
       throw error;
@@ -663,7 +711,7 @@ export class MemberRepository {
         await touch(tx, covered.id, actor);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new ConflictError('Member is already covered');
+      if (sqlState(error) === '23505') throw new ConflictError('Member is already covered');
       throw error;
     }
   }
@@ -732,7 +780,7 @@ export class MemberRepository {
         await touch(tx, related.id, actor);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(
           'This relationship already exists, or the member already has a spouse',
         );
@@ -799,7 +847,7 @@ export class MemberRepository {
         await touch(tx, row.id, actor);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`Attendance for ${date} is already recorded`);
       }
       throw error;
@@ -847,23 +895,25 @@ export class MemberRepository {
   // -- internals -----------------------------------------------------------
 
   async findRow(memberNo: string, includeArchived: boolean): Promise<MemberRow | null> {
-    const [row] = await this.db.query<MemberRow>(
-      `select * from members
-       where lower(member_no) = lower($1)
-         and purged_at is null
-         and (archived_at is null or $2::boolean)`,
-      [memberNo, includeArchived],
-    );
-    return row ?? null;
+    const where = includeArchived
+      ? and(sql`lower(${members.memberNo}) = lower(${memberNo})`, isNull(members.purgedAt))
+      : and(
+          sql`lower(${members.memberNo}) = lower(${memberNo})`,
+          isNull(members.purgedAt),
+          isNull(members.archivedAt),
+        );
+    const [row] = await this.db.orm.select(memberColumns).from(members).where(where).limit(1);
+    return (row as MemberRow) ?? null;
   }
 
   /** Purge has to see its own tombstone to answer "already purged". */
   private async findAnyRow(memberNo: string): Promise<MemberRow | null> {
-    const [row] = await this.db.query<MemberRow>(
-      'select * from members where lower(member_no) = lower($1)',
-      [memberNo],
-    );
-    return row ?? null;
+    const [row] = await this.db.orm
+      .select(memberColumns)
+      .from(members)
+      .where(sql`lower(${members.memberNo}) = lower(${memberNo})`)
+      .limit(1);
+    return (row as MemberRow) ?? null;
   }
 
   async requireRow(memberNo: string): Promise<MemberRow> {
@@ -873,8 +923,12 @@ export class MemberRepository {
   }
 
   private async findById(id: string): Promise<MemberDetail | null> {
-    const [row] = await this.db.query<MemberRow>('select * from members where id = $1', [id]);
-    return row ? this.toDetail(row) : null;
+    const [row] = await this.db.orm
+      .select(memberColumns)
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1);
+    return row ? this.toDetail(row as MemberRow) : null;
   }
 
   private async toSummaries(rows: MemberRow[]): Promise<MemberSummary[]> {
@@ -1141,7 +1195,7 @@ export class MemberRepository {
       );
       return row!;
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`Contact value "${input.value}" already belongs to a member`);
       }
       throw error;
@@ -1161,7 +1215,7 @@ export class MemberRepository {
         [memberId, ministry.id, todayIn('UTC')],
       );
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`Member already serves in ${code}`);
       }
       throw error;
