@@ -6,7 +6,7 @@
 attended as `4/5 (26-Oct-26)`, subscriptions as a pill only, and `Contacts · n` as the only route to
 contact values. Status detail lives in tooltips, never in pills.
 
-**Blocked by:** 12 (UI workspace, shell and Pages).
+**Blocked by:** 12 (UI workspace, shell and Pages), 13a (Members list API).
 
 **Status:** ready-for-agent
 

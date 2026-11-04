@@ -202,6 +202,58 @@ describe('subscriptions and coverage', () => {
       .set(writeHeaders);
     expect(second.status).toBe(404);
   });
+
+  it('summarises policyholder and covered rows in one page-level listing', async () => {
+    await create('S-3301');
+    await create('S-3302');
+    await create('S-3303');
+
+    const created = await request(app)
+      .post('/v1/members/S-3301/subscriptions')
+      .set(writeHeaders)
+      .send({
+        kind: 'life_insurance',
+        scope: 'household',
+        reference: 'POL-3301',
+        coveredMemberNos: ['S-3302', 'S-3303'],
+      });
+    expect(created.status).toBe(201);
+
+    const holder = await request(app)
+      .get('/v1/members')
+      .query({ q: 'S-3301', include: 'subscriptions' })
+      .set(readHeaders);
+    expect(holder.status).toBe(200);
+    expect(holder.body.items[0].subscriptions).toEqual([
+      {
+        id: created.body.id,
+        kind: 'life_insurance',
+        scope: 'household',
+        status: 'active',
+        role: 'policyholder',
+        policyholderMemberNo: 'S-3301',
+        coveredCount: 2,
+      },
+    ]);
+    expect(holder.body.items[0]).not.toHaveProperty('contacts');
+
+    const covered = await request(app)
+      .get('/v1/members')
+      .query({ q: 'S-3302', include: 'subscriptions' })
+      .set(readHeaders);
+    expect(covered.status).toBe(200);
+    expect(covered.body.items[0].subscriptions).toEqual([
+      {
+        id: created.body.id,
+        kind: 'life_insurance',
+        scope: 'household',
+        status: 'active',
+        role: 'covered',
+        policyholderMemberNo: 'S-3301',
+        coveredCount: 2,
+      },
+    ]);
+  });
 });
 
 describe('shepherding calls', () => {

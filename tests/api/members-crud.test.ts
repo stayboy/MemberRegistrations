@@ -378,3 +378,204 @@ describe('members import', () => {
     await request(app).get('/v1/members/R-1001').set(readHeaders).expect(404);
   });
 });
+
+describe('members list contract', () => {
+  it('returns contactCount and never a contact value', async () => {
+    await create('L-1001', { contacts: [{ kind: 'phone', value: '0805 111 2222' }] });
+    await create('L-1002');
+
+    const response = await request(app).get('/v1/members').query({ q: 'L-10' }).set(readHeaders);
+
+    expect(response.status).toBe(200);
+    const owner = response.body.items.find(
+      (item: { memberNo: string }) => item.memberNo === 'L-1001',
+    );
+    expect(owner.contactCount).toBe(1);
+    expect(owner).not.toHaveProperty('contacts');
+    expect(JSON.stringify(response.body)).not.toContain('08051112222');
+    expect(JSON.stringify(response.body)).not.toContain('0805 111 2222');
+  });
+
+  it('filters by status, keeps includeArchived as an alias, and never lists purged members', async () => {
+    await create('L-2001');
+    await create('L-2002');
+    await create('L-2003');
+    await request(app).delete('/v1/members/L-2002').set(writeHeaders).expect(204);
+    await request(app)
+      .post('/v1/members/L-2003/purge')
+      .set(writeHeaders)
+      .send({ confirm: 'L-2003' })
+      .expect(204);
+
+    const memberNos = (body: { items: Array<{ memberNo: string }> }) =>
+      body.items.map((item) => item.memberNo).sort();
+
+    const defaulted = await request(app).get('/v1/members').query({ q: 'L-20' }).set(readHeaders);
+    expect(memberNos(defaulted.body)).toEqual(['L-2001']);
+
+    const active = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-20', status: 'active' })
+      .set(readHeaders);
+    expect(memberNos(active.body)).toEqual(['L-2001']);
+
+    const archived = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-20', status: 'archived' })
+      .set(readHeaders);
+    expect(memberNos(archived.body)).toEqual(['L-2002']);
+
+    const alias = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-20', includeArchived: 'true' })
+      .set(readHeaders);
+    expect(memberNos(alias.body)).toEqual(['L-2001', 'L-2002']);
+    expect(JSON.stringify(alias.body)).not.toContain('L-2003');
+  });
+
+  it('adds page-level attendance for the requested series and clips each window', async () => {
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'List Attendance Series',
+        timezone: 'UTC',
+        schedule: {
+          effectiveFrom: '2026-09-06',
+          rrule: 'FREQ=WEEKLY;BYDAY=SU',
+          endsOn: '2026-10-04',
+        },
+      });
+    expect(series.status).toBe(201);
+    const seriesId = series.body.id as string;
+
+    await create('L-3001', { joinedOn: '2026-09-01' });
+    await create('L-3002', { joinedOn: '2026-09-20' });
+
+    for (const date of ['2026-09-06', '2026-10-04']) {
+      await request(app)
+        .post('/v1/members/L-3001/attendance')
+        .set(writeHeaders)
+        .send({ seriesId, date })
+        .expect(201);
+    }
+    await request(app)
+      .post('/v1/members/L-3002/attendance')
+      .set(writeHeaders)
+      .send({ seriesId, date: '2026-09-27' })
+      .expect(201);
+
+    const fullWindow = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-3001', include: 'attendance', seriesId })
+      .set(readHeaders);
+    expect(fullWindow.body.items[0].attendance).toEqual({
+      seriesId,
+      seriesName: 'List Attendance Series',
+      attended: 2,
+      expected: 5,
+      remaining: 3,
+      status: 'completed',
+      lastAttendedOn: '2026-10-04',
+    });
+
+    const clipped = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-3002', include: 'attendance', seriesId })
+      .set(readHeaders);
+    expect(clipped.body.items[0].attendance).toEqual({
+      seriesId,
+      seriesName: 'List Attendance Series',
+      attended: 1,
+      expected: 3,
+      remaining: 2,
+      status: 'completed',
+      lastAttendedOn: '2026-09-27',
+    });
+
+    const both = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-3001', include: 'attendance,subscriptions', seriesId })
+      .set(readHeaders);
+    expect(both.status).toBe(200);
+    expect(both.body.items[0]).toHaveProperty('attendance');
+    expect(both.body.items[0].subscriptions).toEqual([]);
+
+    const missing = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-3001', include: 'attendance' })
+      .set(readHeaders);
+    expect(missing.status).toBe(422);
+    expect(missing.body.code).toBe('validation_error');
+
+    const invalid = await request(app)
+      .get('/v1/members')
+      .query({ q: 'L-3001', include: 'attendance', seriesId: 'not-a-uuid' })
+      .set(readHeaders);
+    expect(invalid.status).toBe(422);
+    expect(invalid.body.code).toBe('validation_error');
+
+    const unknown = await request(app)
+      .get('/v1/members')
+      .query({
+        q: 'L-3001',
+        include: 'attendance',
+        seriesId: '00000000-0000-4000-8000-000000000000',
+      })
+      .set(readHeaders);
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.code).toBe('not_found');
+  });
+
+  it('aggregates a page of 25 rows with the same number of queries as one row', async () => {
+    for (let index = 1; index <= 25; index += 1) {
+      await create(`BULK-${String(index).padStart(2, '0')}`);
+    }
+
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Bulk Page Series',
+        timezone: 'UTC',
+        schedule: {
+          effectiveFrom: '2026-09-06',
+          rrule: 'FREQ=WEEKLY;BYDAY=SU',
+          endsOn: '2026-10-04',
+        },
+      });
+    expect(series.status).toBe(201);
+    const seriesId = series.body.id as string;
+
+    const db = harness.db;
+    const original = db.query;
+    let calls = 0;
+    db.query = ((text: string, params?: readonly unknown[]) => {
+      calls += 1;
+      return original.call(db, text, params);
+    }) as unknown as typeof db.query;
+
+    try {
+      const single = await request(app)
+        .get('/v1/members')
+        .query({ q: 'BULK-01', include: 'attendance,subscriptions', seriesId, limit: 1 })
+        .set(readHeaders);
+      expect(single.status).toBe(200);
+      const singleCalls = calls;
+
+      calls = 0;
+      const page = await request(app)
+        .get('/v1/members')
+        .query({ q: 'BULK-', include: 'attendance,subscriptions', seriesId, limit: 25 })
+        .set(readHeaders);
+      expect(page.status).toBe(200);
+      expect(page.body.items).toHaveLength(25);
+      expect(
+        page.body.items.every((item: { contactCount: number }) => item.contactCount === 0),
+      ).toBe(true);
+      expect(calls).toBe(singleCalls);
+    } finally {
+      db.query = original;
+    }
+  });
+});

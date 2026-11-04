@@ -80,9 +80,16 @@ describe('member lifecycle', () => {
       .set(readHeaders);
 
     expect(response.status).toBe(200);
-    expect(response.body.items.map((item: { memberNo: string }) => item.memberNo)).toContain(
+    expect(response.body.items.map((entry: { memberNo: string }) => entry.memberNo)).toContain(
       'M-1001',
     );
+    const item = response.body.items.find(
+      (entry: { memberNo: string }) => entry.memberNo === 'M-1001',
+    );
+    expect(item.contactCount).toBe(1);
+    expect(item).not.toHaveProperty('contacts');
+    expect(JSON.stringify(response.body)).not.toContain('0801 234 5678');
+    expect(JSON.stringify(response.body)).not.toContain('08012345678');
   });
 
   it('rejects a stale If-Match', async () => {
