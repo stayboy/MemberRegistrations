@@ -454,6 +454,10 @@ export interface EventAttendance {
 }
 ```
 
+`EventAttendance.rows` lists only the stored attendance rows (`status: 'present'`); the data model has
+no absence record, so absent members are never fabricated. `expected` is the register at the session
+date (`joined_on <= sessionDate`, not archived, not purged).
+
 **Event fields and storage.** `event_instances` holds `id`, `event_no` (unique), `name`, `series_id`
 (nullable), `ministry_code` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`,
 `venue_type`, `venue_name`, `description`, `status`, `source`, `sessions` (JSONB), timestamps.

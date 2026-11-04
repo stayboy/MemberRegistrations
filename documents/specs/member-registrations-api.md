@@ -355,9 +355,22 @@ on `(eventInstanceId, sessionDate, memberId)`.
 - A `manual` row shadows an `import` row for the same key; a later import MUST NOT overwrite it.
 - Deleting a `manual` row deletes it. Deleting an `import` row writes a **suppression** keyed on
   `(memberId, eventInstanceId, sessionDate)`.
-- Attendance may only be recorded for a session that was actually held.
+- Attendance may only be recorded for a session that was actually held. A write against a cancelled or
+  archived event is rejected, and a cancelled session is read-only; reads remain available.
 - The existing per-member attendance endpoints remain for corrections; the event attendance report is
   the V2 read path.
+
+**Per-session attendance report.** `GET /v1/events/{eventId}/attendance?date=` returns
+`{ eventId, sessionDate, present, expected, importedRows, rows }`.
+
+- `present` is the number of attendance rows for that session; `rows` lists exactly those members with
+  `status: 'present'` and their `import | manual` source. The data model has no absence row, so the
+  report never invents an absent member; `expected - present` is the only absence signal.
+- `expected` is the register at the session date: members with `joined_on <= sessionDate`, not archived
+  and not purged. Each session is counted on its own date, so a multi-day event may report a different
+  denominator per day.
+- A manual `POST` over an imported row for the same key converts it to `source: manual`; a second
+  manual post is `409`. `DELETE` removes a manual row and writes a suppression for an imported row.
 
 The member-and-series count is unchanged; each held session counts once:
 
@@ -1013,3 +1026,8 @@ sequences.
   status in UTC, per-session present/imported/source counts, `expected` deferred to ticket 10, zero
   offerings/stats until they land, and `eventNo` nullable for a series-minted instance until ticket 11
   assigns one.
+- **2026-11-04** — Spec-first for ticket 10 (grill Q103–Q105): `expected` per session is the register at
+  that session date (`joined_on <= sessionDate`, not archived, not purged); the attendance report lists
+  only stored rows as `present` and never fabricates absences; a manual post shadows an import row and
+  a second manual post is `409`; writes are rejected on a cancelled or archived event and a cancelled
+  session is read-only. A database trigger enforces `session_date ∈ sessions`.

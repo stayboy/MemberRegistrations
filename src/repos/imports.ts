@@ -36,6 +36,22 @@ function isoDate(value: unknown): string {
   return String(value);
 }
 
+/** `sessions` is JSONB: PGlite returns an array, `pg` may return the raw text. */
+function sessionDates(value: unknown): string[] {
+  let entries: unknown[] = [];
+  if (Array.isArray(value)) {
+    entries = value;
+  } else if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      entries = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      entries = [];
+    }
+  }
+  return entries.map((entry) => isoDate((entry as { date?: unknown })?.date));
+}
+
 function isoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -111,8 +127,13 @@ export class ImportRepository {
       const batch = await this.createBatch(tx, 'attendance', rows, actor);
 
       const eventNos = [...new Set(rows.map((row) => row.eventno.trim()))];
-      const events = await tx.query<{ event_no: string; id: string; start_date: string }>(
-        'select event_no, id, start_date from event_instances where event_no = any($1::text[])',
+      const events = await tx.query<{
+        event_no: string;
+        name: string;
+        id: string;
+        sessions: unknown;
+      }>(
+        'select event_no, name, id, sessions from event_instances where event_no = any($1::text[])',
         [eventNos],
       );
       const eventMap = new Map(events.map((event) => [event.event_no, event]));
@@ -129,7 +150,8 @@ export class ImportRepository {
       const unknownEvents = new Set<string>();
       const unknownMembers = new Set<string>();
 
-      for (const row of rows) {
+      for (const [index, row] of rows.entries()) {
+        const sessionDate = assertDate(row.date, `rows[${index}].date`);
         const event = eventMap.get(row.eventno.trim());
         if (!event) {
           unknownEvents.add(row.eventno);
@@ -139,6 +161,11 @@ export class ImportRepository {
         if (!memberId) {
           unknownMembers.add(row.memberno);
           continue;
+        }
+        if (!sessionDates(event.sessions).includes(sessionDate)) {
+          throw new ImportError(
+            `Event ${event.event_no} (${event.name}) has no session on ${sessionDate}`,
+          );
         }
 
         await tx.query(
@@ -153,7 +180,7 @@ export class ImportRepository {
                  import_batch_id = excluded.import_batch_id,
                  created_by = excluded.created_by
              where attendance.source <> 'manual'`,
-          [memberId, event.id, isoDate(event.start_date), batch.id, actor],
+          [memberId, event.id, sessionDate, batch.id, actor],
         );
       }
 
