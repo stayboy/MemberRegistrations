@@ -27,11 +27,18 @@ export interface ExchangeResult {
   readonly officer: Officer;
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly body?: unknown;
   readonly sessionToken?: string;
   readonly signal?: AbortSignal;
+  /** Extra request headers, such as `If-Match` for a versioned update. */
+  readonly headers?: Record<string, string>;
+}
+
+export interface GatewayResult<T> {
+  readonly data: T | null;
+  readonly headers: Headers;
 }
 
 const JSON_HEADERS = { Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -40,14 +47,18 @@ const JSON_HEADERS = { Accept: 'application/json', 'Content-Type': 'application/
  * One request helper for the gateway. Only the short-lived session credential is
  * sent, as `Authorization: Bearer`. `X-Actor-Id` is never sent: the gateway
  * derives it from the session (FR-16).
+ *
+ * `gatewayRequestWithMeta` keeps the response headers so callers can read
+ * `ETag` and `Location`; `gatewayRequest` is the plain-data wrapper.
  */
-export async function gatewayRequest<T>(
+export async function gatewayRequestWithMeta<T>(
   baseUrl: string,
   path: string,
   options: RequestOptions = {},
-): Promise<T | null> {
+): Promise<GatewayResult<T>> {
   const headers: Record<string, string> = { ...JSON_HEADERS };
   if (options.sessionToken) headers.Authorization = `Bearer ${options.sessionToken}`;
+  if (options.headers) Object.assign(headers, options.headers);
 
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
@@ -59,8 +70,17 @@ export async function gatewayRequest<T>(
   });
 
   if (!response.ok) throw await toApiError(response);
-  if (response.status === 204) return null;
-  return (await response.json()) as T;
+  const data = response.status === 204 ? null : ((await response.json()) as T);
+  return { data, headers: response.headers };
+}
+
+export async function gatewayRequest<T>(
+  baseUrl: string,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T | null> {
+  const { data } = await gatewayRequestWithMeta<T>(baseUrl, path, options);
+  return data;
 }
 
 export async function probeGateway(baseUrl: string, signal?: AbortSignal): Promise<boolean> {

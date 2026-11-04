@@ -4,6 +4,8 @@ import { SECTIONS, type SectionId } from '../shell/navigation';
 import { RequireSession } from '../auth/RequireSession';
 import { PlaceholderPage } from '../components/PlaceholderPage';
 import { ConnectPage } from '../pages/ConnectPage';
+import { MemberDetailPage } from '../pages/MemberDetailPage';
+import { MemberFormPage } from '../pages/MemberFormPage';
 import { MembersPage } from '../pages/MembersPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -38,12 +40,10 @@ export const router = createHashRouter([
         element: <RequireSession />,
         children: [
           { path: 'members', element: <MembersPage /> },
-          { path: 'members/new', element: placeholder('members', '/members/new') },
+          { path: 'members/new', element: <MemberFormPage /> },
           { path: 'members/archived', element: <MembersPage defaultStatus="archived" /> },
-          {
-            path: 'members/:memberNo',
-            element: placeholder('members', '/members', 'Member record'),
-          },
+          { path: 'members/:memberNo', element: <MemberDetailPage /> },
+          { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
           { path: 'events', element: placeholder('events', '/events') },
           { path: 'events/series', element: placeholder('events', '/events/series') },
           { path: 'imports/events', element: placeholder('imports', '/imports/events') },

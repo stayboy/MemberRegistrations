@@ -2,12 +2,6 @@ import {
   Avatar,
   Badge,
   Button,
-  Dialog,
-  DialogActions,
-  DialogBody,
-  DialogContent,
-  DialogSurface,
-  DialogTitle,
   Dropdown,
   MessageBar,
   MessageBarBody,
@@ -40,17 +34,16 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
-import { useSession } from '../auth/SessionProvider';
-import { PageFrame } from '../components/PageFrame';
 import {
-  getMember,
   listMembers,
   listSeries,
-  type ContactKind,
   type MemberSummary,
   type MemberStatus,
   type SubscriptionSummary,
 } from '../api/members';
+import { useSession } from '../auth/SessionProvider';
+import { ContactsDialog } from '../components/ContactsDialog';
+import { PageFrame } from '../components/PageFrame';
 import {
   attendanceDescription,
   contactLabel,
@@ -64,12 +57,6 @@ import {
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
-
-const CONTACT_GROUPS: readonly { kind: ContactKind; label: string }[] = [
-  { kind: 'phone', label: 'Phone' },
-  { kind: 'email', label: 'Email' },
-  { kind: 'whatsapp', label: 'WhatsApp' },
-];
 
 const useStyles = makeStyles({
   page: {
@@ -246,53 +233,6 @@ const useStyles = makeStyles({
     listStyleType: 'none',
     maxWidth: '320px',
   },
-  dialogSurface: {
-    maxWidth: '620px',
-  },
-  dialogContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalL,
-  },
-  dialogMember: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalM,
-  },
-  note: {
-    display: 'flex',
-    gap: tokens.spacingHorizontalS,
-    padding: tokens.spacingHorizontalM,
-    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground2,
-  },
-  contactGroups: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalL,
-  },
-  contactGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
-  },
-  contactRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalM,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
-    borderRadius: tokens.borderRadiusMedium,
-  },
-  contactValue: {
-    wordBreak: 'break-all',
-  },
-  contactOwner: {
-    color: tokens.colorNeutralForeground3,
-    whiteSpace: 'nowrap',
-  },
 });
 
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -404,149 +344,15 @@ function StatusCell({ member }: { member: MemberSummary }) {
 
   return (
     <Tooltip content={detail} relationship="description" withArrow>
-      <span className={styles.statusText} role="note" tabIndex={0} aria-label={`${label}: ${detail}`}>
+      <span
+        className={styles.statusText}
+        role="note"
+        tabIndex={0}
+        aria-label={`${label}: ${detail}`}
+      >
         {label}
       </span>
     </Tooltip>
-  );
-}
-
-function ContactsDialog({
-  member,
-  onClose,
-}: {
-  member: MemberSummary | null;
-  onClose: () => void;
-}) {
-  const styles = useStyles();
-  const navigate = useNavigate();
-  const { baseUrl, session, signOut } = useSession();
-  const token = session?.token ?? '';
-  const memberNo = member?.memberNo ?? '';
-
-  const detail = useQuery({
-    queryKey: ['member', baseUrl, memberNo],
-    queryFn: ({ signal }) => getMember(baseUrl, token, memberNo, signal),
-    enabled: member !== null && Boolean(token),
-  });
-
-  useEffect(() => {
-    if (isUnauthorized(detail.error)) void signOut();
-  }, [detail.error, signOut]);
-
-  const contacts = detail.data?.contacts ?? [];
-
-  return (
-    <Dialog
-      open={member !== null}
-      onOpenChange={(_, data) => {
-        if (!data.open) onClose();
-      }}
-    >
-      <DialogSurface className={styles.dialogSurface} aria-label="Contacts">
-        <DialogBody>
-          <DialogTitle>Contacts</DialogTitle>
-          {member ? (
-            <>
-              <DialogContent className={styles.dialogContent}>
-                <div className={styles.dialogMember}>
-                  <Avatar
-                    name={memberName(member)}
-                    initials={memberInitials(member)}
-                    color="colorful"
-                    size={40}
-                  />
-                  <div>
-                    <div className={styles.nameRow}>
-                      <Text weight="semibold">{memberName(member)}</Text>
-                      {member.isPresbyter ? (
-                        <Badge appearance="tint" color="informative" size="small">
-                          Presbyter
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <Text size={200} className={styles.muted}>
-                      {member.memberNo}
-                    </Text>
-                  </div>
-                </div>
-
-                <div className={styles.note}>
-                  <Text size={200}>
-                    Contact values are shown only after this explicit action. The member list
-                    returns a count, not the values.
-                  </Text>
-                </div>
-
-                {detail.isPending ? (
-                  <Spinner size="small" label="Loading contacts…" />
-                ) : detail.isError ? (
-                  <MessageBar intent="error">
-                    <MessageBarBody>
-                      <MessageBarTitle>Contacts could not be loaded</MessageBarTitle>
-                      {errorMessage(detail.error)}
-                      <Button
-                        size="small"
-                        appearance="transparent"
-                        onClick={() => {
-                          void detail.refetch();
-                        }}
-                      >
-                        Retry
-                      </Button>
-                    </MessageBarBody>
-                  </MessageBar>
-                ) : contacts.length === 0 ? (
-                  <Text className={styles.muted}>No contacts recorded for this member.</Text>
-                ) : (
-                  <div className={styles.contactGroups}>
-                    {CONTACT_GROUPS.map((group) => {
-                      const items = contacts
-                        .filter((contact) => contact.kind === group.kind)
-                        .slice()
-                        .sort((left, right) => left.displayOrder - right.displayOrder);
-                      if (items.length === 0) return null;
-
-                      return (
-                        <section
-                          key={group.kind}
-                          className={styles.contactGroup}
-                          aria-label={group.label}
-                        >
-                          <Text weight="semibold">{group.label}</Text>
-                          {items.map((contact) => (
-                            <div key={contact.id} className={styles.contactRow}>
-                              <Text className={styles.contactValue}>{contact.value}</Text>
-                              <Text size={200} className={styles.contactOwner}>
-                                {contact.linked ? `Linked · ${contact.ownerMemberNo}` : 'Owned'}
-                              </Text>
-                            </div>
-                          ))}
-                        </section>
-                      );
-                    })}
-                  </div>
-                )}
-              </DialogContent>
-              <DialogActions>
-                <Button appearance="secondary" onClick={onClose}>
-                  Close
-                </Button>
-                <Button
-                  appearance="primary"
-                  onClick={() => {
-                    onClose();
-                    navigate(`/members/${encodeURIComponent(member.memberNo)}`);
-                  }}
-                >
-                  Open member
-                </Button>
-              </DialogActions>
-            </>
-          ) : null}
-        </DialogBody>
-      </DialogSurface>
-    </Dialog>
   );
 }
 
@@ -680,8 +486,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
             value={status === 'archived' ? 'Archived' : 'Active'}
             selectedOptions={[status]}
             onOptionSelect={(_, data) => {
-              const next: MemberStatus =
-                data.optionValue === 'archived' ? 'archived' : 'active';
+              const next: MemberStatus = data.optionValue === 'archived' ? 'archived' : 'active';
               const nextParams = new URLSearchParams(searchParams);
               nextParams.set('status', next);
               navigate({
@@ -898,7 +703,14 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
         )}
       </div>
 
-      <ContactsDialog member={contactsFor} onClose={() => setContactsFor(null)} />
+      <ContactsDialog
+        member={contactsFor}
+        open={contactsFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setContactsFor(null);
+        }}
+        onOpenMember={(no) => navigate(`/members/${encodeURIComponent(no)}`)}
+      />
     </PageFrame>
   );
 }
