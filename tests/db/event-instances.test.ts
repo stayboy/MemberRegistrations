@@ -83,22 +83,44 @@ describe('0005 event-instance backfill', () => {
        values ($1, $2, '2026-01-11', 'manual', 'test')`,
       [member!.id, series!.id],
     );
+    await db.query(
+      `insert into attendance_suppressions (member_id, series_id, occurs_on, suppressed_by)
+       values ($1, $2, '2026-01-18', 'test')`,
+      [member!.id, series!.id],
+    );
 
     const migration = MIGRATIONS.find((entry) => entry.version === '0005_event_instances');
     await db.exec(migration!.sql);
 
-    const instances = await db.query<{ id: string; name: string; start_date: Date | string }>(
-      'select id, name, start_date from event_instances order by start_date',
-    );
+    const instances = await db.query<{
+      id: string;
+      name: string;
+      start_date: Date | string;
+      sessions: unknown;
+    }>('select id, name, start_date, sessions from event_instances order by start_date');
     const dates = (value: Date | string) =>
       value instanceof Date ? value.toISOString().slice(0, 10) : String(value);
-    expect(instances.map((row) => dates(row.start_date))).toEqual(['2026-01-04', '2026-01-11']);
+    expect(instances.map((row) => dates(row.start_date))).toEqual([
+      '2026-01-04',
+      '2026-01-11',
+      '2026-01-18',
+    ]);
     expect(instances.every((row) => row.name === 'Sunday Service')).toBe(true);
+    expect(instances.every((row) => Array.isArray(row.sessions) && row.sessions.length === 1)).toBe(
+      true,
+    );
 
     const rows = await db.query<{ event_instance_id: string; session_date: Date | string }>(
       'select event_instance_id, session_date from attendance order by session_date',
     );
     expect(rows.map((row) => dates(row.session_date))).toEqual(['2026-01-04', '2026-01-11']);
     expect(rows.every((row) => row.event_instance_id !== null)).toBe(true);
+
+    const suppressions = await db.query<{
+      event_instance_id: string;
+      session_date: Date | string;
+    }>('select event_instance_id, session_date from attendance_suppressions order by session_date');
+    expect(suppressions.map((row) => dates(row.session_date))).toEqual(['2026-01-18']);
+    expect(suppressions.every((row) => row.event_instance_id !== null)).toBe(true);
   });
 });

@@ -33,8 +33,8 @@ Acceptance criteria (ticket 07):
   - gives each row a stable `id`, moves the primary key off `(series_id, occurs_on)`, makes
     `series_id` nullable;
   - adds `name`, `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`,
-    `venue_name`, `description`, `status`, `source` and the `sessions` JSONB, and backfills from the
-    series;
+    `venue_name`, `description`, `status`, `source` and the `sessions` JSONB; name/timezone/dates are
+    backfilled from the series, venue/status/source are defaulted;
   - repoints `attendance` and `attendance_suppressions` to `(event_instance_id, session_date)`, drops
     the old keys/columns, and adds the new unique/PK and FKs;
   - adds the `(series_id, start_date)` idempotency index and renames the table.
@@ -60,16 +60,24 @@ The 3 skipped tests are the pooled `pg` ministry cases (CI runs them).
 
 ## Review
 
-**Self-review (unattended).** The migration is exercised on every fresh PGlite database by the whole
-suite; `tests/db/event-instances.test.ts` adds three focused cases: a standalone three-session event
-(`series_id` null), the FK on a non-null `series_id`, and a backfill test that applies `0001`–`0004`,
-seeds an occurrence plus a manual attendance with no occurrence, applies `0005`, and asserts the
-instances and the repointed attendance.
+Independent Tier-2 review on `ollama-cloud/deepseek-v4-pro:0813` (Standards + Spec against the merged
+diff `efe9ed6..dd1d967`). **Standards: PASS** (no P1; four P2 notes). **Spec: PASS** (criteria 1–6 met).
 
-The one behavioural trap found and fixed during implementation: `recordAttendance` now mints an event
-instance, and `loadCalendar` initially treated every instance as an authoritative imported date,
-which dropped a scheduled date from the denominator. The fix limits imported-date authority to rows
-with `import_batch_id is not null`, preserving the previous occurrence behaviour.
+The P2 notes and their resolution:
+
+- The suppression backfill had no test → a seeded suppression is now repointed and asserted in the
+  backfill test.
+- The backfill test did not assert the `sessions` array → a one-session-per-instance assertion is now
+  present.
+- Null-`series_id` uniqueness is not enforced (a plain unique index lets standalone events rely on
+  `event_no`); latent until tickets 08–09 write standalone events. Recorded here.
+- `description` is not inherited (the spec only requires name/ministry/timezone/venue); the wording is
+  corrected above — name/timezone/dates are backfilled, venue/status/source are defaulted.
+
+The one behavioural trap found during implementation: `recordAttendance` now mints an event instance,
+and `loadCalendar` initially treated every instance as an authoritative imported date, which dropped a
+scheduled date from the denominator. The fix limits imported-date authority to rows with
+`import_batch_id is not null`, which the reviewer confirmed preserves the pre-migration behaviour.
 
 ## Acceptance
 
@@ -86,8 +94,9 @@ Verdict: **ACCEPTED**.
 
 ## Deviations
 
-- **Unattended (owner instruction 2026-11-04, risk accepted).** The parent authored and self-reviewed
-  this round; there was no separate worker. The full suite and the migration-specific tests are the
-  control.
+- **Unattended (owner instruction 2026-11-04, risk accepted).** The parent authored this round (no
+  separate worker); an independent Tier-2 review on `ollama-cloud/deepseek-v4-pro:0813` was run retro
+  against the merged diff and passed (see Review). The durable lesson stands: a pro session should not
+  author a Tier 2 implementation — the author split is the fix for tickets 08+.
 - The migration is a schema rewrite, not a CRUD refactor; the round is parked here for the events API
   (tickets 08–09) to build on the new shape.
