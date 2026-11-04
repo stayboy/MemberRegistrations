@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navItemForPath, sectionForPath } from './navigation';
+import { navItemForPath, SECTIONS, sectionForPath } from './navigation';
 
 describe('contextual section resolution', () => {
   it('maps a section route to its section and first submenu', () => {
@@ -24,5 +24,14 @@ describe('contextual section resolution', () => {
     expect(sectionForPath('/imports/attendance').id).toBe('imports');
     expect(sectionForPath('/shepherding/roster').id).toBe('shepherding');
     expect(sectionForPath('/admin/ministries').id).toBe('admin');
+  });
+
+  it('names the member database import and retires the event list', () => {
+    expect(navItemForPath('/imports/members').label).toBe('Member database');
+    expect(navItemForPath('/imports/batches').label).toBe('Batch lookup');
+    expect(navItemForPath('/imports/attendance').label).toBe('Attendance registry');
+
+    const imports = SECTIONS.find((section) => section.id === 'imports');
+    expect(imports?.items.map((item) => item.path)).not.toContain('/imports/events');
   });
 });

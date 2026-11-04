@@ -84,16 +84,16 @@ export const SECTIONS: readonly NavSection[] = [
     icon: DocumentTableRegular,
     items: [
       {
-        label: 'Event list',
-        path: '/imports/events',
+        label: 'Member database',
+        path: '/imports/members',
         icon: DocumentTableRegular,
-        description: 'Import the event list from a CSV file.',
+        description: 'Import the member database from a CSV or the Excel template.',
       },
       {
         label: 'Attendance registry',
         path: '/imports/attendance',
         icon: ArrowUploadRegular,
-        description: 'Import the attendance registry from a CSV file.',
+        description: 'Import the attendance registry from a CSV or the Excel template.',
       },
       {
         label: 'Batch lookup',
