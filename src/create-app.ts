@@ -9,11 +9,13 @@ import { DEFAULT_CORS_ORIGINS } from './config/env.js';
 import { errorHandler, notFoundHandler, sendProblem } from './errors/problem.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { AuthRepository } from './repos/auth.js';
+import { EventRepository } from './repos/events.js';
 import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
 import { MinistryRepository } from './repos/ministries.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
+import { eventsRouter } from './routes/events.js';
 import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
 import { ministriesRouter } from './routes/ministries.js';
@@ -45,6 +47,7 @@ export function createApp(options: AppOptions): Express {
   const series = new SeriesRepository(options.db);
   const imports = new ImportRepository(options.db);
   const shepherding = new ShepherdingRepository(options.db);
+  const events = new EventRepository(options.db);
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -118,6 +121,7 @@ export function createApp(options: AppOptions): Express {
   v1.use('/ministries', ministriesRouter(ministries));
   v1.use('/series', seriesRouter(series));
   v1.use('/imports', importsRouter(imports));
+  v1.use('/events', eventsRouter(events));
   v1.use('/shepherding', shepherdingRouter(shepherding));
 
   app.use('/v1', gate, v1);
