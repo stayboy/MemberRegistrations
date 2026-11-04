@@ -44,8 +44,8 @@ why (the catalog conflates the 1M context window with the output cap).
 
 ## Mock parity
 
-- Applies at Tiers 1–3 when a round changes a surface with a mock under `documents/mockups/**`;
-  otherwise record "no mock".
+- Applies at Tiers 1–3 when a round changes a surface with a mock under the local, git-ignored
+  `mockups/**`; otherwise record "no mock".
 - The screen is advisory: it flags atoms, the reviewer confirms each with `path:line`, and only
   confirmed misses on **spec-required** atoms force `REWORK`; mock-only atoms are mock corrections.
 - `clef:27b` is optional; `scripts/round/decision-probe.mjs` is the harness. It is not wired into

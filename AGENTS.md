@@ -175,3 +175,12 @@ change next to a plausible-looking edit, and the recorded reason is the claim th
 Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
 ticket 19), unattended rounds, and GitHub issue/triage labels. Revisit when
 the condition that excluded them changes; do not reintroduce them silently.
+
+## 14. Mockups
+
+- Visual mockups live in `mockups/` at the repository root, and that folder is **git-ignored**. A mock is
+  a local review artifact, not source: never commit it and never cite a versioned path for it.
+- The durable record is the spec and the round doc. Regenerate a mock locally when a screen changes;
+  `documents/` must not hold mock images.
+- Do not put real member data, contact values, bearer tokens or session credentials into a mock or its
+  screenshots.

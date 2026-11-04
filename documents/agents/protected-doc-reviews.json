@@ -10,24 +10,24 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "b83112060a2a60e5645b6ba7d21a80dc8e6e128458638e35989e2683807e8afd",
+      "sha256": "8510745dfb0bd9a1915604139734e92119f55bc2ec05dd9eea375d3fac86b439",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: §3a adds size parity, mandatory persistent worktree slots, the no-browser worker scope, the memory-guard/peak-RSS rule and the lessons pointer. why: put the pilot's rules in the non-negotiables, with evidence in the lessons file. rejected: leaving the rules only in the policy; keeping the 0xC0000409/OOM attribution.",
+      "reason": "changes: adds §14 Mockups (all mockups in the root `mockups/`, git-ignored; the spec and round doc are the durable record; no real data, tokens or credentials). why: the owner moved all mockups out of documents/ into one ignored root folder. rejected: committing mocks, keeping mock images under documents/, or citing a versioned mock path.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
+      "attestation": "Reviewed the mockups relocation and the new §14 rule as a read-only reviewer: the rule is unambiguous, consistent with §10a/§9/mock-parity, no stale documents/mockups references remain, nothing automated breaks on the deletion, and the new import mock is faithful to the accepted Q107–Q110 contract.",
       "at": "2026-11-04"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "ae2fd307f59edaff6bc2012543fcf8fe2b7a343d4195e93d64b37336079f4ac2",
+      "sha256": "a6bca026adf5812e2fb0ec1f379b989c1990aefb4a74a099c2dfa2e51917d672",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the Parallel workers section gains size parity, mandatory persistent slots, the no-browser worker scope and the peak-RSS memory guard; the 09–11 ‖ 12–16 track map is removed and the lessons pointer added. why: the old map prescribed the uneven pair the pilot disproved. rejected: keeping the track map; copying the incident prose into the policy.",
+      "reason": "changes: the mock-parity rule now points at the local, git-ignored `mockups/**` instead of `documents/mockups/**`. why: all mockups moved to one ignored root folder. rejected: leaving the parity rule pointing at a deleted path.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
+      "attestation": "Reviewed the mockups relocation and the new §14 rule as a read-only reviewer: the rule is unambiguous, consistent with §10a/§9/mock-parity, no stale documents/mockups references remain, nothing automated breaks on the deletion, and the new import mock is faithful to the accepted Q107–Q110 contract.",
       "at": "2026-11-04"
     },
     {

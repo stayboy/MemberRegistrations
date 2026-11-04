@@ -11,7 +11,7 @@ tickets 07–11 and 20–24. The Strategic Conference is the reference event.
 | ------- | ------------------------------------------------------------------------------------- |
 | Repo    | `MemberRegistrations`                                                                 |
 | Related | `documents/specs/member-registrations-api.md`, `member-registrations-ui.md`           |
-| Mockup  | `documents/mockups/v2-events/` (review artifact)                                      |
+| Mockup  | local `mockups/v2-events/` (git-ignored review artifact)                              |
 | Scope   | V2 events/series screens (existing API) and V3 offerings/USSD/payment (new, upcoming) |
 
 ---
@@ -701,5 +701,5 @@ decide it only in chat.
 - Every FR has an AC; every AC has a test or a documented manual check.
 - Money is integer minor units and reconciles; contributions/pledges are append-only and idempotent.
 - The church landing shows totals by member/offering/event subject to Q9; no contact values.
-- The mock at `documents/mockups/v2-events/` is reviewed and the layout decisions are folded into this
+- The mock at local `mockups/v2-events/` (git-ignored) is reviewed and the layout decisions are folded into this
   spec.

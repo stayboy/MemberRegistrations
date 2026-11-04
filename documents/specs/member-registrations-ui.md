@@ -15,7 +15,7 @@ implementation is gated by tickets 01–24 plus 11a.
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Repo       | `MemberRegistrations`, UI as an `ui/` npm workspace                                                                                                                                                     |
 | Origin     | Conversational request, 2026-11-03: V2 UI for connect, import and CRUD against the API                                                                                                                  |
-| Related    | `documents/specs/member-registrations-api.md`, `documents/mockups/v2-shell/`                                                                                                                            |
+| Related    | `documents/specs/member-registrations-api.md`, local `mockups/` (git-ignored)                                                                                                                           |
 | Supersedes | The “V2 UI” line in `documents/backlog.md` once this spec is approved                                                                                                                                   |
 | Change log | 2026-11-03: gateway env names aligned with ticket 11a (`AUTH_*`, `UI_BASE_URL`). 2026-11-04: two imports (member database, attendance registry) plus Excel templates; the event-list import is retired. |
 
@@ -34,7 +34,7 @@ consistent. It is a static single-page application, so it can be hosted on GitHu
 stays on Vercel.
 
 The first deliverable is the shared **app shell** — the `MainLayout` every page renders inside. It is
-mocked in [`documents/mockups/v2-shell/`](../mockups/v2-shell/README.md) and is the subject of this
+mocked locally under `mockups/v2-shell/` (git-ignored) and is the subject of this
 review.
 
 ## Solution
@@ -289,6 +289,9 @@ roster detail, not as global sidebar items.
 - FR-32: The UI MUST NOT offer hard delete for members or any entity whose API preserves history.
 
 ### 5.4 Imports
+
+Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members-import.png`,
+`02-attendance-import.png` and `03-import-preview-errors.png`.
 
 - FR-33: V2 MUST accept **CSV** and the downloaded **Excel template** (`.xlsx`) for the member database
   and the attendance registry, parse them client-side into the API's JSON row shapes, and show a
