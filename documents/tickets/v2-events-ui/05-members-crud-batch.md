@@ -8,10 +8,10 @@ batch that proves the boundary holds in the largest repository.
 
 **Blocked by:** 04 (Gate outcome and drift check).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] Member CRUD behaves identically, including the documented PII-erasure exception on purge.
-- [ ] Attendance counts, `lastAttended` and the denominator queries remain raw and return the same numbers.
-- [ ] Duplicate member numbers and contact conflicts still return the existing problem+json codes.
-- [ ] Attendance and shepherding tests pass without edits.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] Member CRUD behaves identically, including the documented PII-erasure exception on purge.
+- [x] Attendance counts, `lastAttended` and the denominator queries remain raw and return the same numbers.
+- [x] Duplicate member numbers and contact conflicts still return the existing problem+json codes.
+- [x] Attendance and shepherding tests pass without edits.
+- [x] `npm run verify` and `npm run smoke` pass.
