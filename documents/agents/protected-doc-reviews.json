@@ -1,5 +1,5 @@
 {
-  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (glm-5.3 only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
+  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/agents/component-first.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (glm-5.3 only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
   "firstChoice": {
     "model": "deepseek-v4-pro",
     "build": "0813"
@@ -10,13 +10,13 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "8510745dfb0bd9a1915604139734e92119f55bc2ec05dd9eea375d3fac86b439",
+      "sha256": "8dbb5667e409fe96fc5c29c5815342b1765c062972e00dcd4e8f58eb1b4db949",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds §14 Mockups (all mockups in the root `mockups/`, git-ignored; the spec and round doc are the durable record; no real data, tokens or credentials). why: the owner moved all mockups out of documents/ into one ignored root folder. rejected: committing mocks, keeping mock images under documents/, or citing a versioned mock path.",
+      "reason": "changes: adds §15 Component-first reuse (second-call-site trigger, compose-don't-wrap, feature vs presentational, policy + skill pointers) and adds `documents/agents/component-first.md` to the §10a protected set. why: adopt the School-Collab component-first approach for the `ui/` work and review-gate its policy. rejected: leaving the policy unprotected; duplicating the policy in AGENTS.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the mockups relocation and the new §14 rule as a read-only reviewer: the rule is unambiguous, consistent with §10a/§9/mock-parity, no stale documents/mockups references remain, nothing automated breaks on the deletion, and the new import mock is faithful to the accepted Q107–Q110 contract.",
+      "attestation": "Reviewed 2026-11-04 (deepseek-v4-pro build 0813): §15 accurately states the non-negotiables and points at the policy and skill; the policy is a faithful, Blazor-free React/Fluent-UI adaptation of the School-Collab source; the skill is procedure-only and correctly located; the ContactsDialog extraction is a single implementation with both call sites wired; §10a now protects the policy.",
       "at": "2026-11-04"
     },
     {
@@ -28,6 +28,17 @@
       "reason": "changes: the mock-parity rule now points at the local, git-ignored `mockups/**` instead of `documents/mockups/**`. why: all mockups moved to one ignored root folder. rejected: leaving the parity rule pointing at a deleted path.",
       "verdict": "ACCEPTED",
       "attestation": "Reviewed the mockups relocation and the new §14 rule as a read-only reviewer: the rule is unambiguous, consistent with §10a/§9/mock-parity, no stale documents/mockups references remain, nothing automated breaks on the deletion, and the new import mock is faithful to the accepted Q107–Q110 contract.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "documents/agents/component-first.md",
+      "sha256": "8ff3bcc8e04663bba65b6fa3625599320c6d793254ffd77352b8d00bbe16296d",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: new component-first reuse policy (second-call-site trigger, location rules, design/spec approval gate, React render/styling/indirection costs, Fluent UI compose-don't-wrap). why: the owner adopted the School-Collab approach for `ui/` to stop repeated JSX. rejected: keeping the rule only in AGENTS.md; a Blazor-style policy with RenderFragment/::deep terms.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed 2026-11-04 (deepseek-v4-pro build 0813): §15 accurately states the non-negotiables and points at the policy and skill; the policy is a faithful, Blazor-free React/Fluent-UI adaptation of the School-Collab source; the skill is procedure-only and correctly located; the ContactsDialog extraction is a single implementation with both call sites wired; §10a now protects the policy.",
       "at": "2026-11-04"
     },
     {

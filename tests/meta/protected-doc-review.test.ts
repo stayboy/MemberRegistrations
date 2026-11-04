@@ -14,6 +14,7 @@ const canonicalPresent = existsSync(canonicalDir);
 const REPO_PROTECTED = [
   'AGENTS.md',
   'documents/agents/orchestrator-policy.md',
+  'documents/agents/component-first.md',
   'documents/lessons.md',
   'documents/rounds/README.md',
   '.github/merge-policy.md',
@@ -78,6 +79,7 @@ describe('protected documents', () => {
     const paths = protectedPaths();
     expect(paths).toContain('AGENTS.md');
     expect(paths).toContain('documents/agents/orchestrator-policy.md');
+    expect(paths).toContain('documents/agents/component-first.md');
     expect(paths).toContain('documents/lessons.md');
     expect(paths).toContain('documents/rounds/README.md');
     expect(paths).toContain('.github/merge-policy.md');
