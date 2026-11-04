@@ -13,7 +13,11 @@ import {
 } from '../db/schema.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
-import { loadCalendar, resolveSeriesOccurrences } from './occurrences.js';
+import {
+  loadCalendar,
+  resolveCalendarOccurrences,
+  resolveSeriesOccurrences,
+} from './occurrences.js';
 
 export const GENDERS = ['male', 'female', 'other', 'undisclosed'] as const;
 export type Gender = (typeof GENDERS)[number];
@@ -64,6 +68,23 @@ export interface AttendanceSeriesDto extends AttendanceCounts {
   entries: AttendanceEntryDto[];
 }
 
+/** Page-level attendance for one series; `lastAttendedOn` is in the same window. */
+export interface MemberAttendanceSummary extends AttendanceCounts {
+  seriesId: string;
+  seriesName: string;
+  lastAttendedOn: string | null;
+}
+
+export interface MemberSubscriptionSummary {
+  id: string;
+  kind: SubscriptionKind;
+  scope: 'individual' | 'household';
+  status: 'active' | 'ended';
+  role: 'policyholder' | 'covered';
+  policyholderMemberNo: string;
+  coveredCount: number;
+}
+
 export interface MemberSummary {
   memberNo: string;
   firstName: string;
@@ -74,11 +95,16 @@ export interface MemberSummary {
   joinedOn: string | null;
   isPresbyter: boolean;
   archivedAt: string | null;
-  contacts: ContactDto[];
+  /** Count only; the list never carries contact values. */
+  contactCount: number;
   ministries: MinistryDto[];
+  /** Present only when the list is requested with `include=attendance&seriesId=`. */
+  attendance?: MemberAttendanceSummary | null;
+  /** Present only when the list is requested with `include=subscriptions`. */
+  subscriptions?: MemberSubscriptionSummary[];
 }
 
-export interface MemberDetail extends MemberSummary {
+export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscriptions'> {
   id: string;
   maidenName: string | null;
   alias: string | null;
@@ -88,6 +114,7 @@ export interface MemberDetail extends MemberSummary {
   version: number;
   createdAt: string;
   updatedAt: string;
+  contacts: ContactDto[];
   subscriptions: SubscriptionDto[];
   relationships: RelationshipDto[];
   attendance: AttendanceSeriesDto[];
@@ -120,12 +147,25 @@ export type UpdateMemberInput = Partial<
   Omit<CreateMemberInput, 'memberNo' | 'contacts' | 'ministries'>
 >;
 
+export const LIST_INCLUDES = ['attendance', 'subscriptions'] as const;
+export type ListInclude = (typeof LIST_INCLUDES)[number];
+
 export interface ListQuery {
   q?: string;
   contact?: string;
+  status?: 'active' | 'archived';
+  /** Deprecated alias for active + archived. */
   includeArchived?: boolean;
+  include?: ListInclude[];
+  seriesId?: string;
   limit?: number;
   cursor?: string;
+}
+
+interface SummaryOptions {
+  includeAttendance?: boolean;
+  includeSubscriptions?: boolean;
+  seriesId?: string;
 }
 
 export interface SubscriptionInput {
@@ -239,7 +279,14 @@ export class MemberRepository {
     const params: unknown[] = [];
     const where: string[] = [];
 
-    if (!query.includeArchived) {
+    if (query.status === 'archived') {
+      where.push('m.archived_at is not null and m.purged_at is null');
+    } else if (query.status === 'active') {
+      where.push('m.archived_at is null and m.purged_at is null');
+    } else if (query.includeArchived) {
+      // Deprecated alias: active + archived, never purged.
+      where.push('m.purged_at is null');
+    } else {
       where.push('m.archived_at is null and m.purged_at is null');
     }
 
@@ -296,7 +343,12 @@ export class MemberRepository {
     );
 
     const page = rows.slice(0, limit);
-    const items = await this.toSummaries(page);
+    const include = new Set(query.include ?? []);
+    const items = await this.toSummaries(page, {
+      includeAttendance: include.has('attendance'),
+      includeSubscriptions: include.has('subscriptions'),
+      seriesId: query.seriesId,
+    });
 
     return {
       items,
@@ -978,19 +1030,37 @@ export class MemberRepository {
     return row ? this.toDetail(row as MemberRow) : null;
   }
 
-  private async toSummaries(rows: MemberRow[]): Promise<MemberSummary[]> {
+  private async toSummaries(
+    rows: MemberRow[],
+    options: SummaryOptions = {},
+  ): Promise<MemberSummary[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((row) => row.id);
     const contacts = await this.contactsForMany(ids);
     const ministries = await this.ministriesForMany(ids);
-    return rows.map((row) =>
-      this.toSummary(row, contacts.get(row.id) ?? [], ministries.get(row.id) ?? []),
-    );
+
+    const attendance = options.includeAttendance
+      ? await this.attendanceSummaries(rows, options.seriesId)
+      : null;
+    const subscriptions = options.includeSubscriptions
+      ? await this.subscriptionSummaries(ids)
+      : null;
+
+    return rows.map((row) => {
+      const summary = this.toSummary(
+        row,
+        (contacts.get(row.id) ?? []).length,
+        ministries.get(row.id) ?? [],
+      );
+      if (attendance) summary.attendance = attendance.get(row.id) ?? null;
+      if (subscriptions) summary.subscriptions = subscriptions.get(row.id) ?? [];
+      return summary;
+    });
   }
 
   private toSummary(
     row: MemberRow,
-    contacts: ContactDto[],
+    contactCount: number,
     ministries: MinistryDto[],
   ): MemberSummary {
     return {
@@ -1003,7 +1073,7 @@ export class MemberRepository {
       joinedOn: isoDate(row.joined_on),
       isPresbyter: row.is_presbyter,
       archivedAt: isoTimestamp(row.archived_at),
-      contacts,
+      contactCount,
       ministries,
     };
   }
@@ -1018,7 +1088,7 @@ export class MemberRepository {
     ]);
 
     return {
-      ...this.toSummary(row, contacts, ministries),
+      ...this.toSummary(row, contacts.length, ministries),
       id: row.id,
       maidenName: row.maiden_name,
       alias: row.alias,
@@ -1028,6 +1098,7 @@ export class MemberRepository {
       version: row.version,
       createdAt: isoTimestamp(row.created_at)!,
       updatedAt: isoTimestamp(row.updated_at)!,
+      contacts,
       subscriptions,
       relationships,
       attendance,
@@ -1036,6 +1107,159 @@ export class MemberRepository {
 
   private async contactsFor(memberId: string): Promise<ContactDto[]> {
     return (await this.contactsForMany([memberId])).get(memberId) ?? [];
+  }
+
+  /**
+   * One calendar load and one attendance query for the whole page; each member
+   * is then clipped to their own window with the same rule the detail uses.
+   */
+  private async attendanceSummaries(
+    rows: MemberRow[],
+    seriesId: string | undefined,
+  ): Promise<Map<string, MemberAttendanceSummary>> {
+    if (!seriesId) {
+      throw new ValidationError('seriesId is required when include=attendance');
+    }
+
+    const [series] = await this.db.query<{ name: string; timezone: string }>(
+      'select name, timezone from event_series where id = $1 and archived_at is null',
+      [seriesId],
+    );
+    if (!series) throw new NotFoundError(`Series ${seriesId} was not found`);
+
+    const calendar = await loadCalendar(this.db, seriesId);
+    const start = seriesStart(calendar.schedules);
+    const endsOn = calendar.schedules[calendar.schedules.length - 1]?.endsOn ?? null;
+    const today = todayIn(series.timezone);
+    const rangeEnd = endsOn ?? today;
+
+    const occurrences =
+      start && start <= rangeEnd ? resolveCalendarOccurrences(calendar, start, rangeEnd) : [];
+
+    const ids = rows.map((row) => row.id);
+    const attended = await this.db.query<{ member_id: string; session_date: string | Date }>(
+      `select a.member_id, a.session_date
+         from attendance a
+         join event_instances e on e.id = a.event_instance_id
+        where e.series_id = $1 and a.member_id = any($2::uuid[])`,
+      [seriesId, ids],
+    );
+
+    const byMember = new Map<string, string[]>();
+    for (const entry of attended) {
+      const dates = byMember.get(entry.member_id) ?? [];
+      dates.push(isoDate(entry.session_date)!);
+      byMember.set(entry.member_id, dates);
+    }
+
+    const summaries = new Map<string, MemberAttendanceSummary>();
+    for (const row of rows) {
+      const joinedOn = isoDate(row.joined_on) ?? isoDate(row.created_at);
+      const windowStart = start ? (joinedOn && joinedOn > start ? joinedOn : start) : today;
+      const windowEnd = endsOn && endsOn < today ? endsOn : today;
+      const inWindow =
+        start && windowStart <= windowEnd
+          ? occurrences.filter((date) => date >= windowStart && date <= windowEnd)
+          : [];
+      const attendedDates = start
+        ? (byMember.get(row.id) ?? []).filter((date) => date >= windowStart && date <= windowEnd)
+        : [];
+
+      const counts = summariseAttendance({
+        occurrences: inWindow,
+        attendedDates,
+        endsOn,
+        today,
+      });
+
+      summaries.set(row.id, {
+        seriesId,
+        seriesName: series.name,
+        ...counts,
+        lastAttendedOn: attendedDates.length
+          ? attendedDates.reduce((latest, date) => (date > latest ? date : latest))
+          : null,
+      });
+    }
+
+    return summaries;
+  }
+
+  /** One query for policyholder rows and one for active coverage rows, merged per member. */
+  private async subscriptionSummaries(
+    memberIds: string[],
+  ): Promise<Map<string, MemberSubscriptionSummary[]>> {
+    const held = await this.db.query<{
+      member_id: string;
+      id: string;
+      kind: SubscriptionKind;
+      scope: 'individual' | 'household';
+      status: 'active' | 'ended';
+      policyholder_member_no: string;
+      covered_count: number;
+    }>(
+      `select s.policyholder_member_id as member_id, s.id, s.kind, s.scope, s.status,
+              holder.member_no as policyholder_member_no,
+              (select count(*)::int from subscription_coverage sc
+                where sc.subscription_id = s.id and sc.removed_on is null) as covered_count
+         from subscriptions s
+         join members holder on holder.id = s.policyholder_member_id
+        where s.policyholder_member_id = any($1::uuid[])`,
+      [memberIds],
+    );
+
+    const covering = await this.db.query<{
+      member_id: string;
+      id: string;
+      kind: SubscriptionKind;
+      scope: 'individual' | 'household';
+      status: 'active' | 'ended';
+      policyholder_member_no: string;
+      covered_count: number;
+    }>(
+      `select sc.member_id, s.id, s.kind, s.scope, s.status,
+              holder.member_no as policyholder_member_no,
+              (select count(*)::int from subscription_coverage all_sc
+                where all_sc.subscription_id = s.id and all_sc.removed_on is null) as covered_count
+         from subscription_coverage sc
+         join subscriptions s on s.id = sc.subscription_id
+         join members holder on holder.id = s.policyholder_member_id
+        where sc.member_id = any($1::uuid[]) and sc.removed_on is null`,
+      [memberIds],
+    );
+
+    const summaries = new Map<string, Map<string, MemberSubscriptionSummary>>();
+    const add = (row: (typeof held)[number], role: MemberSubscriptionSummary['role']): void => {
+      const bySubscription = summaries.get(row.member_id) ?? new Map();
+      // A member can be both policyholder and covered; the policyholder view wins.
+      if (bySubscription.has(row.id)) return;
+      bySubscription.set(row.id, {
+        id: row.id,
+        kind: row.kind,
+        scope: row.scope,
+        status: row.status,
+        role,
+        policyholderMemberNo: row.policyholder_member_no,
+        coveredCount: row.covered_count,
+      });
+      summaries.set(row.member_id, bySubscription);
+    };
+
+    for (const row of held) add(row, 'policyholder');
+    for (const row of covering) add(row, 'covered');
+
+    const result = new Map<string, MemberSubscriptionSummary[]>();
+    for (const [memberId, bySubscription] of summaries) {
+      result.set(
+        memberId,
+        [...bySubscription.values()].sort((a, b) => {
+          if (a.role !== b.role) return a.role === 'policyholder' ? -1 : 1;
+          if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+          return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        }),
+      );
+    }
+    return result;
   }
 
   private async contactsForMany(memberIds: string[]): Promise<Map<string, ContactDto[]>> {
@@ -1198,7 +1422,7 @@ export class MemberRepository {
 
       const endsOn = calendar.schedules[calendar.schedules.length - 1]?.endsOn ?? null;
       const today = todayIn(item.timezone);
-      const joinedOn = isoDate(row.joined_on);
+      const joinedOn = isoDate(row.joined_on) ?? isoDate(row.created_at);
       const windowStart = joinedOn && joinedOn > start ? joinedOn : start;
       const windowEnd = endsOn && endsOn < today ? endsOn : today;
       if (windowStart > windowEnd) continue;

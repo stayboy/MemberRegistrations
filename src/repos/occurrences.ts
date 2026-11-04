@@ -45,13 +45,11 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
   };
 }
 
-export async function resolveSeriesOccurrences(
-  db: DbClient,
-  seriesId: string,
+export function resolveCalendarOccurrences(
+  calendar: SeriesCalendar,
   from: string,
   to: string,
-): Promise<string[]> {
-  const calendar = await loadCalendar(db, seriesId);
+): string[] {
   return resolveOccurrences({
     schedules: calendar.schedules,
     from,
@@ -59,6 +57,16 @@ export async function resolveSeriesOccurrences(
     exceptions: calendar.exceptions,
     importedDates: calendar.importedDates,
   });
+}
+
+export async function resolveSeriesOccurrences(
+  db: DbClient,
+  seriesId: string,
+  from: string,
+  to: string,
+): Promise<string[]> {
+  const calendar = await loadCalendar(db, seriesId);
+  return resolveCalendarOccurrences(calendar, from, to);
 }
 
 /** True when the series actually met on that date. */

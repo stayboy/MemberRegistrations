@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { CONTACT_KINDS } from '../domain/contacts.js';
-import { GENDERS, RELATIONSHIP_TYPES, SUBSCRIPTION_KINDS, type Gender } from '../repos/members.js';
+import {
+  GENDERS,
+  LIST_INCLUDES,
+  RELATIONSHIP_TYPES,
+  SUBSCRIPTION_KINDS,
+  type Gender,
+  type ListInclude,
+} from '../repos/members.js';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
 
 export const contactInputSchema = z.object({
@@ -59,16 +66,48 @@ export const attendanceInputSchema = z.object({
   date: dateStringSchema,
 });
 
-export const listQuerySchema = z.object({
-  q: z.string().min(1).max(100).optional(),
-  contact: z.string().min(3).max(256).optional(),
-  includeArchived: z
-    .enum(['true', 'false'])
-    .optional()
-    .transform((value) => value === 'true'),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-  cursor: z.string().min(1).max(64).optional(),
-});
+export const listQuerySchema = z
+  .object({
+    q: z.string().min(1).max(100).optional(),
+    contact: z.string().min(3).max(256).optional(),
+    status: z.enum(['active', 'archived']).optional(),
+    includeArchived: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
+    include: z
+      .string()
+      .optional()
+      .transform((value) => {
+        if (!value) return undefined;
+        const parts = value
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean);
+        return [...new Set(parts)] as ListInclude[];
+      }),
+    seriesId: z.string().uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    cursor: z.string().min(1).max(64).optional(),
+  })
+  .superRefine((query, ctx) => {
+    for (const item of query.include ?? []) {
+      if (!(LIST_INCLUDES as readonly string[]).includes(item)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['include'],
+          message: `include must be one of: ${LIST_INCLUDES.join(', ')}`,
+        });
+      }
+    }
+    if (query.include?.includes('attendance') && !query.seriesId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['seriesId'],
+        message: 'seriesId is required when include=attendance',
+      });
+    }
+  });
 
 export const purgeSchema = z.object({
   confirm: z.string().min(1),
@@ -127,6 +166,26 @@ const attendanceSeriesSchema = z.object({
   entries: z.array(attendanceEntrySchema),
 });
 
+const memberAttendanceSummarySchema = z.object({
+  seriesId: z.string(),
+  seriesName: z.string(),
+  attended: z.number().int(),
+  expected: z.number().int(),
+  remaining: z.number().int(),
+  status: z.enum(['ongoing', 'completed', 'in_progress']),
+  lastAttendedOn: z.string().nullable(),
+});
+
+const memberSubscriptionSummarySchema = z.object({
+  id: z.string(),
+  kind: z.enum(SUBSCRIPTION_KINDS),
+  scope: z.enum(['individual', 'household']),
+  status: z.enum(['active', 'ended']),
+  role: z.enum(['policyholder', 'covered']),
+  policyholderMemberNo: z.string(),
+  coveredCount: z.number().int(),
+});
+
 export const memberSummarySchema = z.object({
   memberNo: z.string(),
   firstName: z.string(),
@@ -137,8 +196,10 @@ export const memberSummarySchema = z.object({
   joinedOn: z.string().nullable(),
   isPresbyter: z.boolean(),
   archivedAt: z.string().nullable(),
-  contacts: z.array(contactSchema),
+  contactCount: z.number().int(),
   ministries: z.array(ministrySchema),
+  attendance: memberAttendanceSummarySchema.nullable().optional(),
+  subscriptions: z.array(memberSubscriptionSummarySchema).optional(),
 });
 
 export const memberDetailSchema = memberSummarySchema.extend({
@@ -151,6 +212,7 @@ export const memberDetailSchema = memberSummarySchema.extend({
   version: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  contacts: z.array(contactSchema),
   subscriptions: z.array(subscriptionSchema),
   relationships: z.array(relationshipSchema),
   attendance: z.array(attendanceSeriesSchema),

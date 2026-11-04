@@ -160,6 +160,8 @@ deployed to Vercel as a single function.
 - FR-30: Every import MUST expose its expected columns through the API and MUST offer an Excel
   (`.xlsx`) template for download; a client that cannot take the file MUST be able to show the same
   column list inline.
+- FR-31: `GET /v1/members` MUST return `contactCount` instead of contact values; contact values are
+  readable only through the member detail or the contacts endpoints.
 
 ## Non-Functional Requirements
 
@@ -489,6 +491,16 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 | `GET`    | `/v1/members/{memberNo}/relationships`             | Spouse, dependents, guardians                                                           |
 | `POST`   | `/v1/members/{memberNo}/relationships`             | `{ relatedMemberNo, type, isDependent }`                                                |
 | `DELETE` | `/v1/members/{memberNo}/relationships/{id}`        | Remove the edge                                                                         |
+
+**Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
+`archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
+
+- `status=active|archived` selects the set; the default is `active`, and purged members are never
+  returned. `includeArchived=true` is a deprecated alias for active + archived.
+- `include=attendance&seriesId=` adds `attendance: { seriesId, seriesName, attended, expected,
+remaining, status, lastAttendedOn }`, computed for the page in one aggregate (FR-8).
+- `include=subscriptions` adds `subscriptions: [{ id, kind, scope, status, role,
+policyholderMemberNo, coveredCount }]`, computed for the page in one query.
 
 ### Shepherding
 
@@ -1057,3 +1069,6 @@ sequences.
   and the attendance registry. The event-list import is retired; occurrences come from the schedule and
   exceptions. Every import publishes its column contract (`GET /v1/imports/formats`) and an Excel
   template (`GET /v1/imports/templates/{kind}`).
+- **2026-11-04** — Spec-first for ticket 13a: `GET /v1/members` returns `contactCount` instead of
+  contact values, supports `status=active|archived`, and adds page-level `include=attendance&seriesId=`
+  and `include=subscriptions` aggregates.

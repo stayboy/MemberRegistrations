@@ -1209,9 +1209,10 @@ from Pages and show the compact grid, the API spec and code must add:
 
 **Members list aggregate**
 
-- Add `status=active|archived|all` to `GET /v1/members`. `active` excludes archived and purged rows;
-  `archived` returns archived, non-purged rows only; `all` applies no status predicate. Keep
-  `includeArchived` for compatibility (`status` wins if both are present); the UI uses `status`.
+- Add `status=active|archived` to `GET /v1/members`. `active` excludes archived and purged rows;
+  `archived` returns archived, non-purged rows only. Keep `includeArchived` for compatibility
+  (`status` wins if both are present; `includeArchived=true` means active + archived, never purged);
+  the UI uses `status`.
 - Add `include=attendance,subscriptions` (comma-separated) to `GET /v1/members`.
 - `include=attendance&seriesId=<uuid>` adds an optional `attendance` object to each `MemberSummary`
   (`seriesId`, `seriesName`, `attended`, `expected`, `remaining`, `status`, **`lastAttendedOn`**).
