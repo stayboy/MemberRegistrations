@@ -317,4 +317,105 @@ create table auth_rate_limits (
 create index auth_rate_limits_window on auth_rate_limits (window_start);
 `,
   },
+  {
+    version: '0005_event_instances',
+    sql: `
+-- Mint event instances for attendance/suppression keys that have no occurrence row,
+-- while the old (series_id, occurs_on) primary key still exists as a conflict target.
+insert into event_occurrences (series_id, occurs_on)
+select distinct a.series_id, a.occurs_on from attendance a
+where not exists (
+  select 1 from event_occurrences e where e.series_id = a.series_id and e.occurs_on = a.occurs_on
+)
+on conflict (series_id, occurs_on) do nothing;
+
+insert into event_occurrences (series_id, occurs_on)
+select distinct s.series_id, s.occurs_on from attendance_suppressions s
+where not exists (
+  select 1 from event_occurrences e where e.series_id = s.series_id and e.occurs_on = s.occurs_on
+)
+on conflict (series_id, occurs_on) do nothing;
+
+-- Stable id; move the primary key off (series_id, occurs_on).
+alter table event_occurrences add column id uuid default gen_random_uuid();
+update event_occurrences set id = gen_random_uuid() where id is null;
+alter table event_occurrences alter column id set not null;
+alter table event_occurrences drop constraint event_occurrences_pkey;
+alter table event_occurrences add primary key (id);
+
+-- Event-instance columns.
+alter table event_occurrences
+  alter column series_id drop not null,
+  add column name text,
+  add column timezone text not null default 'UTC',
+  add column start_date date,
+  add column end_date date,
+  add column start_time text,
+  add column end_time text,
+  add column venue_type text not null default 'auditorium',
+  add column venue_name text,
+  add column description text,
+  add column status text not null default 'scheduled',
+  add column source text not null default 'series',
+  add column sessions jsonb not null default '[]'::jsonb;
+
+update event_occurrences e
+set name = coalesce(e.name, s.name),
+    timezone = coalesce(s.timezone, 'UTC'),
+    start_date = e.occurs_on,
+    end_date = e.occurs_on,
+    sessions = jsonb_build_array(jsonb_build_object(
+      'date', e.occurs_on,
+      'startTime', null,
+      'endTime', null,
+      'status', 'scheduled'
+    ))
+from event_series s
+where s.id = e.series_id;
+
+alter table event_occurrences
+  alter column start_date set not null,
+  alter column end_date set not null;
+
+-- Attendance → event instance + session date.
+alter table attendance add column event_instance_id uuid;
+alter table attendance add column session_date date;
+update attendance a
+set event_instance_id = e.id, session_date = a.occurs_on
+from event_occurrences e
+where e.series_id = a.series_id and e.occurs_on = a.occurs_on;
+alter table attendance alter column event_instance_id set not null;
+alter table attendance alter column session_date set not null;
+alter table attendance drop constraint attendance_member_id_series_id_occurs_on_key;
+alter table attendance drop column series_id;
+alter table attendance drop column occurs_on;
+alter table attendance add unique (event_instance_id, session_date, member_id);
+alter table attendance add foreign key (event_instance_id) references event_occurrences(id) on delete cascade;
+create index attendance_member on attendance (member_id);
+
+-- Suppressions → event instance + session date.
+alter table attendance_suppressions add column event_instance_id uuid;
+alter table attendance_suppressions add column session_date date;
+update attendance_suppressions s
+set event_instance_id = e.id, session_date = s.occurs_on
+from event_occurrences e
+where e.series_id = s.series_id and e.occurs_on = s.occurs_on;
+alter table attendance_suppressions alter column event_instance_id set not null;
+alter table attendance_suppressions alter column session_date set not null;
+alter table attendance_suppressions drop constraint attendance_suppressions_pkey;
+alter table attendance_suppressions drop column series_id;
+alter table attendance_suppressions drop column occurs_on;
+alter table attendance_suppressions add primary key (member_id, event_instance_id, session_date);
+alter table attendance_suppressions add foreign key (event_instance_id) references event_occurrences(id) on delete cascade;
+
+-- Series idempotency key and indexes, then rename in place.
+alter table event_occurrences drop column occurs_on;
+drop index event_occurrences_event_no;
+create unique index event_instances_event_no on event_occurrences (event_no) where event_no is not null;
+create unique index event_instances_series_date on event_occurrences (series_id, start_date);
+create index event_instances_series on event_occurrences (series_id, start_date);
+
+alter table event_occurrences rename to event_instances;
+`,
+  },
 ];

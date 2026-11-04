@@ -869,57 +869,69 @@ export class MemberRepository {
     }
 
     try {
-      await this.db.transaction(async (tx) => {
-        await tx.query(
-          `insert into attendance (member_id, series_id, occurs_on, source, created_by)
-           values ($1,$2,$3,'manual',$4)`,
-          [row.id, input.seriesId, date, actor],
+      const eventInstanceId = await this.db.transaction(async (tx) => {
+        const [instance] = await tx.query<{ id: string }>(
+          `insert into event_instances (
+             series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
+           )
+           select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
+                  jsonb_build_array(jsonb_build_object('date', $2::date, 'startTime', null, 'endTime', null, 'status', 'scheduled'))
+           from event_series s where s.id = $1
+           on conflict (series_id, start_date) do update set start_date = excluded.start_date
+           returning id`,
+          [input.seriesId, date],
         );
         await tx.query(
-          'delete from attendance_suppressions where member_id = $1 and series_id = $2 and occurs_on = $3',
-          [row.id, input.seriesId, date],
+          `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+           values ($1,$2,$3,'manual',$4)`,
+          [row.id, instance!.id, date, actor],
+        );
+        await tx.query(
+          'delete from attendance_suppressions where member_id = $1 and event_instance_id = $2 and session_date = $3',
+          [row.id, instance!.id, date],
         );
         await touch(tx, row.id, actor);
+        return instance!.id;
       });
+
+      const [entry] = await this.db.query<{
+        id: string;
+        session_date: string;
+        source: 'import' | 'manual';
+      }>(
+        'select id, session_date, source from attendance where member_id = $1 and event_instance_id = $2 and session_date = $3',
+        [row.id, eventInstanceId, date],
+      );
+
+      return { id: entry!.id, date: isoDate(entry!.session_date)!, source: entry!.source };
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError(`Attendance for ${date} is already recorded`);
       }
       throw error;
     }
-
-    const [entry] = await this.db.query<{
-      id: string;
-      occurs_on: string;
-      source: 'import' | 'manual';
-    }>(
-      'select id, occurs_on, source from attendance where member_id = $1 and series_id = $2 and occurs_on = $3',
-      [row.id, input.seriesId, date],
-    );
-
-    return { id: entry!.id, date: isoDate(entry!.occurs_on)!, source: entry!.source };
   }
 
   async deleteAttendance(memberNo: string, attendanceId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
       const [entry] = await tx.query<{
-        series_id: string;
-        occurs_on: string;
+        event_instance_id: string;
+        session_date: string;
         source: 'import' | 'manual';
-      }>('select series_id, occurs_on, source from attendance where id = $1 and member_id = $2', [
-        attendanceId,
-        row.id,
-      ]);
+      }>(
+        'select event_instance_id, session_date, source from attendance where id = $1 and member_id = $2',
+        [attendanceId, row.id],
+      );
       if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
 
       await tx.query('delete from attendance where id = $1', [attendanceId]);
 
       if (entry.source === 'import') {
         await tx.query(
-          `insert into attendance_suppressions (member_id, series_id, occurs_on, suppressed_by)
+          `insert into attendance_suppressions (member_id, event_instance_id, session_date, suppressed_by)
            values ($1,$2,$3,$4) on conflict do nothing`,
-          [row.id, entry.series_id, entry.occurs_on, actor],
+          [row.id, entry.event_instance_id, entry.session_date, actor],
         );
       }
 
@@ -1145,7 +1157,11 @@ export class MemberRepository {
        left join ministries mi on mi.id = s.ministry_id
        where s.archived_at is null
          and (
-           exists (select 1 from attendance a where a.series_id = s.id and a.member_id = $1)
+           exists (
+              select 1 from attendance a
+              join event_instances e on e.id = a.event_instance_id
+              where e.series_id = s.id and a.member_id = $1
+            )
            or exists (
              select 1 from member_ministries mm
              where mm.member_id = $1 and mm.ministry_id = s.ministry_id
@@ -1158,14 +1174,19 @@ export class MemberRepository {
     const attended = await this.db.query<{
       id: string;
       series_id: string;
-      occurs_on: string;
+      session_date: string;
       source: 'import' | 'manual';
-    }>('select id, series_id, occurs_on, source from attendance where member_id = $1', [row.id]);
+    }>(
+      `select a.id, e.series_id, a.session_date, a.source
+         from attendance a join event_instances e on e.id = a.event_instance_id
+        where a.member_id = $1`,
+      [row.id],
+    );
 
     const bySeries = new Map<string, AttendanceEntryDto[]>();
     for (const entry of attended) {
       const list = bySeries.get(entry.series_id) ?? [];
-      list.push({ id: entry.id, date: isoDate(entry.occurs_on)!, source: entry.source });
+      list.push({ id: entry.id, date: isoDate(entry.session_date)!, source: entry.source });
       bySeries.set(entry.series_id, list);
     }
 

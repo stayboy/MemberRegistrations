@@ -77,12 +77,19 @@ export class ImportRepository {
         }
 
         await tx.query(
-          `insert into event_occurrences (series_id, occurs_on, event_no, ministry_name, import_batch_id)
-           values ($1,$2,$3,$4,$5)
-           on conflict (series_id, occurs_on) do update
+          `insert into event_instances (
+             series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions,
+             event_no, ministry_name, import_batch_id
+           )
+           select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
+                  jsonb_build_array(jsonb_build_object('date', $2::date, 'startTime', null, 'endTime', null, 'status', 'scheduled')),
+                  $3, $4, $5
+           from event_series s where s.id = $1
+           on conflict (series_id, start_date) do update
              set event_no = excluded.event_no,
                  ministry_name = excluded.ministry_name,
-                 import_batch_id = excluded.import_batch_id`,
+                 import_batch_id = excluded.import_batch_id,
+                 name = excluded.name`,
           [seriesId, date, row.eventno.trim(), row.ministryName ?? null, batch.id],
         );
       }
@@ -104,8 +111,8 @@ export class ImportRepository {
       const batch = await this.createBatch(tx, 'attendance', rows, actor);
 
       const eventNos = [...new Set(rows.map((row) => row.eventno.trim()))];
-      const events = await tx.query<{ event_no: string; series_id: string; occurs_on: string }>(
-        'select event_no, series_id, occurs_on from event_occurrences where event_no = any($1::text[])',
+      const events = await tx.query<{ event_no: string; id: string; start_date: string }>(
+        'select event_no, id, start_date from event_instances where event_no = any($1::text[])',
         [eventNos],
       );
       const eventMap = new Map(events.map((event) => [event.event_no, event]));
@@ -135,18 +142,18 @@ export class ImportRepository {
         }
 
         await tx.query(
-          `insert into attendance (member_id, series_id, occurs_on, source, import_batch_id, created_by)
+          `insert into attendance (member_id, event_instance_id, session_date, source, import_batch_id, created_by)
            select $1,$2,$3,'import',$4,$5
            where not exists (
              select 1 from attendance_suppressions s
-             where s.member_id = $1 and s.series_id = $2 and s.occurs_on = $3
+             where s.member_id = $1 and s.event_instance_id = $2 and s.session_date = $3
            )
-           on conflict (member_id, series_id, occurs_on) do update
+           on conflict (event_instance_id, session_date, member_id) do update
              set source = 'import',
                  import_batch_id = excluded.import_batch_id,
                  created_by = excluded.created_by
              where attendance.source <> 'manual'`,
-          [memberId, event.series_id, isoDate(event.occurs_on), batch.id, actor],
+          [memberId, event.id, isoDate(event.start_date), batch.id, actor],
         );
       }
 
