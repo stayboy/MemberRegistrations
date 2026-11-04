@@ -1,12 +1,12 @@
 import type { CallOutcome, StillInChurch } from '../api/members';
-import type { ShepherdingWindow } from '../api/shepherding';
 import { ApiError } from '../api/errors';
 import { utcToday } from './member-form';
 
 /**
- * Pure shepherding helpers: labels, the UTC date window, the follow-up
- * predicate (FR-60), call validation (FR-61/FR-67) and reassignment conflict
- * detection (FR-63). The browser rejects the same input the API would reject.
+ * Pure shepherding helpers: labels, the follow-up predicate (FR-60), call
+ * validation (FR-61/FR-67) and reassignment conflict detection (FR-63). The
+ * browser rejects the same input the API would reject. The shared UTC date
+ * window moved to `format/date-window.ts` at its second call site.
  */
 
 export const OUTCOME_LABELS: Record<CallOutcome, string> = {
@@ -47,7 +47,6 @@ export function stillInChurchLabel(status: StillInChurch | null | undefined): st
   return status ? STILL_IN_CHURCH_LABELS[status] : 'Never reported';
 }
 
-export const WINDOW_DAYS = 90;
 export const FOLLOW_UP_DAYS = 30;
 export const REASON_MIN_LENGTH = 3;
 export const REASON_MAX_LENGTH = 500;
@@ -67,42 +66,6 @@ function parseUtcDate(value: string | null | undefined): Date | null {
     date.getUTCDate() === day
     ? date
     : null;
-}
-
-function formatUtcDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-/** Shifts a UTC calendar date by whole days; an invalid input returns `null`. */
-export function shiftUtcDate(value: string, days: number): string | null {
-  const date = parseUtcDate(value);
-  if (!date) return null;
-  return formatUtcDate(new Date(date.getTime() + days * DAY_MS));
-}
-
-/** The default window: the last 90 UTC calendar days, inclusive of today. */
-export function defaultShepherdingWindow(today: string = utcToday()): ShepherdingWindow {
-  const from = shiftUtcDate(today, -WINDOW_DAYS);
-  return { from: from ?? today, to: today };
-}
-
-/**
- * Resolves the URL's `from`/`to`. Missing or invalid values fall back to the
- * defaults; a reversed range also falls back rather than querying the API with
- * a window it would reject (FR-67).
- */
-export function resolveShepherdingWindow(
-  from: string | null | undefined,
-  to: string | null | undefined,
-  today: string = utcToday(),
-): ShepherdingWindow {
-  const fallback = defaultShepherdingWindow(today);
-  const resolvedFrom = parseUtcDate(from) ? from!.trim() : fallback.from;
-  const resolvedTo = parseUtcDate(to) ? to!.trim() : fallback.to;
-  return resolvedFrom <= resolvedTo ? { from: resolvedFrom, to: resolvedTo } : fallback;
 }
 
 /**
