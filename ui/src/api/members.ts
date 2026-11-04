@@ -5,14 +5,24 @@ import { gatewayRequest, gatewayRequestWithMeta } from './gateway';
 
 export type Gender = 'male' | 'female' | 'other' | 'undisclosed';
 export type ContactKind = 'phone' | 'email' | 'whatsapp';
-export type RelationshipType = 'spouse' | 'parent' | 'child' | 'guardian' | 'other';
+/** Mirrors `RELATIONSHIP_TYPES` in `src/repos/members.ts`. */
+export const RELATIONSHIP_TYPES = ['spouse', 'parent', 'child', 'guardian', 'other'] as const;
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
 export type SubscriptionKind = 'life_insurance' | 'credit_union';
 export type AttendanceStatus = 'ongoing' | 'completed' | 'in_progress';
 export type MemberStatus = 'active' | 'archived';
+export type CallOutcome = 'reached' | 'no_answer' | 'wrong_number';
+export type StillInChurch = 'yes' | 'no' | 'unknown';
 
 export interface MinistryRef {
   readonly code: string;
   readonly name: string;
+}
+
+/** Mirrors `MinistryDto`; the reference list is used by the Ministries tab. */
+export interface Ministry extends MinistryRef {
+  readonly description: string | null;
+  readonly active: boolean;
 }
 
 export interface AttendanceSummary {
@@ -84,6 +94,57 @@ export interface MemberRelationship {
   readonly memberNo: string;
   readonly name: string;
   readonly archived: boolean;
+}
+
+/** Mirrors `relationshipInputSchema`. */
+export interface RelationshipInput {
+  readonly relatedMemberNo: string;
+  readonly type: RelationshipType;
+  readonly isDependent?: boolean;
+}
+
+export interface ShepherdingCall {
+  readonly id: string;
+  readonly assignmentId: string;
+  readonly calledOn: string;
+  readonly outcome: CallOutcome;
+  readonly stillInChurch: StillInChurch;
+  readonly feedback: string | null;
+  readonly issue: string | null;
+  readonly recordedBy: string;
+  readonly createdAt: string;
+}
+
+export interface ShepherdingAssignmentHistory {
+  readonly assignmentId: string;
+  readonly officerMemberNo: string;
+  readonly officerName: string;
+  readonly assignedOn: string;
+  readonly endedOn: string | null;
+  readonly reason: string | null;
+  readonly endedReason: string | null;
+}
+
+/** Mirrors `MemberShepherdingDto` in `src/repos/shepherding.ts`. */
+export interface MemberShepherding {
+  readonly memberNo: string;
+  readonly name: string;
+  readonly shepherd: {
+    readonly assignmentId: string;
+    readonly memberNo: string;
+    readonly name: string;
+    readonly assignedOn: string;
+  } | null;
+  readonly history: readonly ShepherdingAssignmentHistory[];
+  readonly calls: {
+    readonly attempts: number;
+    readonly conversations: number;
+    readonly lastCalledOn: string | null;
+  };
+  readonly stillInChurch: StillInChurch | null;
+  readonly latestFeedback: string | null;
+  readonly latestIssue: string | null;
+  readonly recentCalls: readonly (ShepherdingCall & { readonly officerMemberNo: string })[];
 }
 
 export interface AttendanceEntry {
@@ -192,6 +253,7 @@ interface SeriesListResponse {
 const MEMBERS_PATH = '/gateway/v1/members';
 const SUBSCRIPTIONS_PATH = '/gateway/v1/subscriptions';
 const SERIES_PATH = '/gateway/v1/series';
+const MINISTRIES_PATH = '/gateway/v1/ministries';
 
 /** Builds the members list query in the order the API documents it. */
 export function membersListPath(options: ListMembersOptions = {}): string {
@@ -223,6 +285,38 @@ export async function listMembers(
     signal: options.signal,
   });
   if (!page) throw new ApiError(500, 'The member list response was empty.');
+  return page;
+}
+
+/** The picker never asks for more rows than this. */
+export const MEMBER_PICKER_LIMIT = 10;
+
+/**
+ * `GET /v1/members?q=…&limit=10` with no aggregates: the picker only needs the
+ * number and the name. An empty query is not fetched by the component, but the
+ * builder stays total.
+ */
+export function memberPickerPath(query: string): string {
+  const trimmed = query.trim();
+  return membersListPath({
+    q: trimmed || undefined,
+    limit: MEMBER_PICKER_LIMIT,
+    includeSubscriptions: false,
+  });
+}
+
+/** The debounced member search behind `MemberPicker` (Q156). */
+export async function searchMembers(
+  baseUrl: string,
+  sessionToken: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<MemberListPage> {
+  const page = await gatewayRequest<MemberListPage>(baseUrl, memberPickerPath(query), {
+    sessionToken,
+    signal,
+  });
+  if (!page) throw new ApiError(500, 'The member search response was empty.');
   return page;
 }
 
@@ -426,6 +520,98 @@ export async function removeCoverage(
     )}`,
     { method: 'DELETE', sessionToken },
   );
+}
+
+/** `GET /v1/ministries`; the Ministries tab filters the reference list. */
+export async function listMinistries(
+  baseUrl: string,
+  sessionToken: string,
+  signal?: AbortSignal,
+): Promise<Ministry[]> {
+  const result = await gatewayRequest<{ readonly items: readonly Ministry[] }>(
+    baseUrl,
+    MINISTRIES_PATH,
+    { sessionToken, signal },
+  );
+  return [...(result?.items ?? [])];
+}
+
+/** `POST /v1/members/:memberNo/ministries` with `{ code }`. */
+export async function addMemberMinistry(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  code: string,
+): Promise<MinistryRef> {
+  const ministry = await gatewayRequest<MinistryRef>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/ministries`,
+    { method: 'POST', body: { code }, sessionToken },
+  );
+  if (!ministry) throw new ApiError(500, 'The assigned ministry response was empty.');
+  return ministry;
+}
+
+/** `DELETE /v1/members/:memberNo/ministries/:code`; unassigns, never deletes. */
+export async function removeMemberMinistry(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  code: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/ministries/${encodeURIComponent(code)}`,
+    { method: 'DELETE', sessionToken },
+  );
+}
+
+/** `POST /v1/members/:memberNo/relationships`. */
+export async function addMemberRelationship(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  input: RelationshipInput,
+): Promise<MemberRelationship> {
+  const relationship = await gatewayRequest<MemberRelationship>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/relationships`,
+    { method: 'POST', body: input, sessionToken },
+  );
+  if (!relationship) throw new ApiError(500, 'The created relationship response was empty.');
+  return relationship;
+}
+
+/** `DELETE /v1/members/:memberNo/relationships/:relationshipId`. */
+export async function removeMemberRelationship(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  relationshipId: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/relationships/${encodeURIComponent(
+      relationshipId,
+    )}`,
+    { method: 'DELETE', sessionToken },
+  );
+}
+
+/** `GET /v1/members/:memberNo/shepherding`; read-only on the member detail (FR-66). */
+export async function getMemberShepherding(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  signal?: AbortSignal,
+): Promise<MemberShepherding> {
+  const result = await gatewayRequest<MemberShepherding>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/shepherding`,
+    { sessionToken, signal },
+  );
+  if (!result) throw new ApiError(500, 'The shepherding response was empty.');
+  return result;
 }
 
 export async function listSeries(
