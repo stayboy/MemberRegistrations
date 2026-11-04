@@ -4,20 +4,20 @@
 
 **Date:** 2026-11-03
 
-**Status:** **Approved 2026-11-03.** V2 scope frozen: shell and sign-in gate, members, imports,
-shepherding, events and series. Q2 keeps the UI on GitHub Pages behind a Vercel session gateway that
-holds the API bearer; officers sign in with a magic link, so no bearer is entered by a user or shipped
-in the bundle. Offerings and USSD are V3 and are specified in
+**Status:** **Approved 2026-11-03**, amended 2026-11-04. V2 scope frozen: shell and sign-in gate,
+members, imports, shepherding, events and series. Q2 keeps the UI on GitHub Pages behind a Vercel session
+gateway that holds the API bearer; officers sign in with a magic link, so no bearer is entered by a user
+or shipped in the bundle. Offerings and USSD are V3 and are specified in
 `member-registrations-events-offerings.md`. The API amendment is in `member-registrations-api.md`;
-implementation is gated by tickets 01–24 plus 11a.
+implementation is gated by tickets 01-24 plus 11a and 15a.
 
-|            |                                                                                                                                                                                                         |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repo       | `MemberRegistrations`, UI as an `ui/` npm workspace                                                                                                                                                     |
-| Origin     | Conversational request, 2026-11-03: V2 UI for connect, import and CRUD against the API                                                                                                                  |
-| Related    | `documents/specs/member-registrations-api.md`, local `mockups/` (git-ignored)                                                                                                                           |
-| Supersedes | The “V2 UI” line in `documents/backlog.md` once this spec is approved                                                                                                                                   |
-| Change log | 2026-11-03: gateway env names aligned with ticket 11a (`AUTH_*`, `UI_BASE_URL`). 2026-11-04: two imports (member database, attendance registry) plus Excel templates; the event-list import is retired. |
+|            |                                                                                                                                                                                                                                                                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo       | `MemberRegistrations`, UI as an `ui/` npm workspace                                                                                                                                                                                                                                                                          |
+| Origin     | Conversational request, 2026-11-03: V2 UI for connect, import and CRUD against the API                                                                                                                                                                                                                                       |
+| Related    | `documents/specs/member-registrations-api.md`, local `mockups/` (git-ignored)                                                                                                                                                                                                                                                |
+| Supersedes | The “V2 UI” line in `documents/backlog.md` once this spec is approved                                                                                                                                                                                                                                                        |
+| Change log | 2026-11-03: gateway env names aligned with ticket 11a (`AUTH_*`, `UI_BASE_URL`). 2026-11-04: two imports (member database, attendance registry) plus Excel templates; the event-list import is retired. 2026-11-04: attendance import scoped to a chosen session (FR-36a); OS-7 corrected; retired event-name case replaced. |
 
 ---
 
@@ -303,8 +303,14 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   UI MUST NOT chunk automatically, because chunking breaks the API's all-or-nothing guarantee.
 - FR-36: A confirmed import MUST POST to `/v1/imports/members` or `/v1/imports/attendance` and MUST
   show the returned batch id, kind, row count, checksum and created time.
-- FR-37: On `import_failed`, the UI MUST show the API message and, when present, the unknown member or
-  event numbers with their row numbers. The register MUST remain unchanged (all-or-nothing).
+- FR-36a: The attendance import MUST be scoped to **one event session chosen before the upload** — a
+  picker on the screen, or a deep link from the event detail that carries the event and date. The chosen
+  occurrence MUST be visible before commit, and the file's optional `datetime` column MUST be checked
+  against it. The UI MUST NOT offer a per-row event column.
+- FR-37: On `import_failed`, the UI MUST show the API message and, when present, the unknown member
+  numbers or the row whose `datetime` does not match the selected session, with their row numbers. A
+  duplicate of an already-imported occurrence and rows (`409`) MUST be reported as already imported,
+  naming the existing batch id. The register MUST remain unchanged (all-or-nothing).
 - FR-38: Batch lookup MUST be a session-scoped list of batch ids created by this browser, plus a
   `batch id` lookup via `GET /v1/imports/:batchId`. The API has no list-batches endpoint; the UI MUST
   NOT claim to show server-side history.
@@ -520,9 +526,9 @@ Each criterion is testable and references at least one requirement.
 
 ### AC-18: **Given** a CSV with 10,001 rows or a serialised body over 1,048,576 bytes, **When** it is selected, **Then** the UI rejects it with split guidance and sends no request. (FR-35)
 
-### AC-19: **Given** a valid event import, **When** it is confirmed, **Then** the batch id, kind, row count, checksum and created time are shown and the file contents are discarded. (FR-36, FR-39)
+### AC-19: **Given** a valid member or attendance import, **When** it is confirmed, **Then** the batch id, kind, row count, checksum and created time are shown and the file contents are discarded. (FR-36, FR-39)
 
-### AC-20: **Given** a file containing an unknown event name, **When** it is imported, **Then** the UI lists the unknown names and the register is unchanged. (FR-37, FR-44)
+### AC-20: **Given** an attendance file whose `datetime` falls on a different date from the selected session, **When** it is imported, **Then** the UI lists the offending rows against the chosen session and the register is unchanged. (FR-36a, FR-37)
 
 ### AC-21: **Given** a previous import in this tab, **When** `Batch lookup` is opened, **Then** the batch appears in the session list and its id resolves through `GET /v1/imports/:batchId`. (FR-38)
 
@@ -593,7 +599,8 @@ Each criterion is testable and references at least one requirement.
 | FR-5        | AC-4, AC-24         | FR-34       | AC-18                                   |
 | FR-6        | AC-4                | FR-35       | AC-18                                   |
 | FR-7        | AC-5                | FR-36       | AC-19                                   |
-| FR-8        | AC-23               | FR-37       | AC-20                                   |
+| FR-8        | AC-23               | FR-36a      | AC-20                                   |
+|             |                     | FR-37       | AC-20                                   |
 | FR-9        | AC-3                | FR-38       | AC-21                                   |
 | FR-10       | AC-29               | FR-39       | AC-19                                   |
 | FR-11       | AC-6                | FR-40       | AC-19, AC-30                            |
@@ -1369,7 +1376,8 @@ names and the generated accent ramps remain working placeholders until launch.
 - OS-5: A global attendance analytics dashboard across every member and series. V2 shows the selected
   series in the member list plus per-member attendance detail.
 - OS-6: Automatic chunking of imports over the API limit. Rejected because it breaks all-or-nothing.
-- OS-7: Excel (`.xlsx`) import. CSV only in V2 (Q8).
+- OS-7: JSON-only import. CSV and the downloaded Excel template are the supported inputs; a JSON upload
+  is at most an advanced option (Q8).
 - OS-8: Offline mode, service worker, PWA install and background sync. Not needed for an online admin.
 - OS-9: Bulk edit, bulk import of members, and CSV export. Separate specs.
 - OS-10: A global cross-officer follow-up queue. The API exposes follow-up data per officer; V2 filters
