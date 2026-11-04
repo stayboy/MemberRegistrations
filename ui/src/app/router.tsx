@@ -48,6 +48,12 @@ const ShepherdingReportPage = lazy(() =>
     default: page,
   })),
 );
+const EventsListPage = lazy(() =>
+  import('../pages/EventsListPage').then(({ EventsListPage: page }) => ({ default: page })),
+);
+const EventDetailPage = lazy(() =>
+  import('../pages/EventDetailPage').then(({ EventDetailPage: page }) => ({ default: page })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -83,8 +89,9 @@ export const router = createHashRouter([
           { path: 'members/archived', element: <MembersPage defaultStatus="archived" /> },
           { path: 'members/:memberNo', element: <MemberDetailPage /> },
           { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
-          { path: 'events', element: placeholder('events', '/events') },
+          { path: 'events', element: <EventsListPage /> },
           { path: 'events/series', element: placeholder('events', '/events/series') },
+          { path: 'events/:id', element: <EventDetailPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: <ImportsAttendancePage /> },
           { path: 'imports/batches', element: <ImportBatchesPage /> },

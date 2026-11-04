@@ -21,10 +21,7 @@ import { listOfficers } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import { formatDateLong } from '../format/member';
-import {
-  ShepherdingWindowControl,
-  useShepherdingWindow,
-} from '../components/ShepherdingWindowControl';
+import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { useShepherdingStyles } from './shepherding-styles';
 
 function errorMessage(error: unknown): string {
@@ -45,7 +42,7 @@ export function ShepherdingOfficersPage() {
   const styles = useShepherdingStyles();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
-  const [window, setWindow] = useShepherdingWindow();
+  const [window, setWindow] = useDateWindow();
 
   const officersQuery = useQuery({
     queryKey: ['shepherding', baseUrl, 'officers', window.from, window.to],
@@ -78,7 +75,12 @@ export function ShepherdingOfficersPage() {
       }
     >
       <div className={styles.page}>
-        <ShepherdingWindowControl value={window} onChange={setWindow} />
+        <DateWindowControl
+          value={window}
+          onChange={setWindow}
+          label="Shepherding date window"
+          hint="UTC dates · calls outside this window are not counted."
+        />
 
         {officersQuery.isError ? (
           <MessageBar intent="error">

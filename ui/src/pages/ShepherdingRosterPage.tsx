@@ -38,10 +38,7 @@ import { PageFrame } from '../components/PageFrame';
 import { contactLabel, formatDateLong } from '../format/member';
 import { isFollowUp, outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { LogCallDialog } from './LogCallDialog';
-import {
-  ShepherdingWindowControl,
-  useShepherdingWindow,
-} from '../components/ShepherdingWindowControl';
+import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { useShepherdingStyles } from './shepherding-styles';
 
 type RosterFilter = 'all' | 'never_called' | 'follow_up';
@@ -122,7 +119,7 @@ export function ShepherdingRosterPage() {
   const styles = useShepherdingStyles();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
-  const [window, setWindow] = useShepherdingWindow();
+  const [window, setWindow] = useDateWindow();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
@@ -233,7 +230,12 @@ export function ShepherdingRosterPage() {
       }
     >
       <div className={styles.page}>
-        <ShepherdingWindowControl value={window} onChange={setWindow} />
+        <DateWindowControl
+          value={window}
+          onChange={setWindow}
+          label="Shepherding date window"
+          hint="UTC dates · calls outside this window are not counted."
+        />
 
         {actionError ? (
           <MessageBar intent="error">
