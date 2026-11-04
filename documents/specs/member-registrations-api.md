@@ -869,6 +869,25 @@ repository client, and the gate adds two guards:
 
 The rejected alternative — reverting Drizzle and recording why — is in the round doc.
 
+### Members CRUD trial (ticket 05)
+
+Migrate the `members`-table row operations to Drizzle; everything that crosses into another entity
+stays raw.
+
+- **In scope:** `create` (the member row insert), the reads (`findRow`/`findAnyRow`/`findById`),
+  `update` (the version-gated update), `archive`/`restore` (the member row update), and `purge` (the
+  PII nulling).
+- **Raw:** `list` (the cross-entity name/contact search), every related-table read and write (contacts,
+  subscriptions, coverage, ministries, relationships, attendance, shepherding), the contact/ministry
+  sub-inserts inside `create`, and the related-table deletes inside `purge`. Ticket 06 owns
+  contacts/subscriptions.
+- **Attendance and denominator:** the counts, `lastAttended` and the denominator queries stay raw and
+  return the same numbers.
+- **Concurrency:** the `version = version + 1 where version = $x` gate is preserved; a stale ETag still
+  returns the existing `409` problem+json.
+- **Verification:** behavioural identity, not speed. The attendance and shepherding tests stay
+  unedited; new tests cover CRUD, duplicate `memberNo`, and a stale ETag.
+
 ### Project layout
 
 ```
@@ -959,3 +978,6 @@ sequences.
 - **2026-11-04** — ORM gate (ticket 04): adopted Drizzle for CRUD repositories after the Series trial;
   added the schema-vs-migrations drift check and the repository boundary test. The trial's PGlite
   latency finding is recorded and caveated.
+- **2026-11-04** — Spec-first for ticket 05: the Members CRUD trial migrates the members-table row
+  operations to Drizzle while the `list` search, the related-table reads/writes and the
+  attendance/denominator queries stay raw; ticket 06 owns contacts/subscriptions.

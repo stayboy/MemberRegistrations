@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -28,6 +29,33 @@ export const ministries = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex('ministries_code_ci').on(sql`lower(${table.code})`)],
+);
+
+export const members = pgTable(
+  'members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberNo: text('member_no').notNull(),
+    firstName: text('first_name'),
+    lastName: text('last_name'),
+    otherNames: text('other_names'),
+    maidenName: text('maiden_name'),
+    alias: text('alias'),
+    dob: date('dob'),
+    gender: text('gender').notNull().default('undisclosed'),
+    placeOfResidence: text('place_of_residence'),
+    addressLine: text('address_line'),
+    joinedOn: date('joined_on'),
+    isPresbyter: boolean('is_presbyter').notNull().default(false),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    purgedAt: timestamp('purged_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text('created_by').notNull(),
+    updatedBy: text('updated_by').notNull(),
+  },
+  (table) => [uniqueIndex('members_member_no_ci').on(sql`lower(${table.memberNo})`)],
 );
 
 export const eventSeries = pgTable(
