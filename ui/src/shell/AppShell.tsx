@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { makeStyles, tokens } from '@fluentui/react-components';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { PageSpinner } from '../components/PageSpinner';
 import { AccountMenu } from './AccountMenu';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
@@ -160,7 +161,9 @@ export function AppShell() {
           onToggle={toggleSidebar}
         />
         <main id="main-content" ref={mainRef} tabIndex={-1} className={styles.content}>
-          <Outlet />
+          <Suspense fallback={<PageSpinner label="Loading the page" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

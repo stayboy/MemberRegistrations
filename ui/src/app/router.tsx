@@ -1,14 +1,27 @@
+import { lazy } from 'react';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '../shell/AppShell';
 import { SECTIONS, type SectionId } from '../shell/navigation';
 import { RequireSession } from '../auth/RequireSession';
 import { PlaceholderPage } from '../components/PlaceholderPage';
 import { ConnectPage } from '../pages/ConnectPage';
-import { MemberDetailPage } from '../pages/MemberDetailPage';
-import { MemberFormPage } from '../pages/MemberFormPage';
-import { MembersPage } from '../pages/MembersPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
-import { SettingsPage } from '../pages/SettingsPage';
+
+// Route-level split: the sign-in screen and the tiny placeholder/not-found pages
+// stay eager so the first paint never waits on a chunk; the four data pages load
+// on demand behind the shell's single Suspense boundary.
+const MembersPage = lazy(() =>
+  import('../pages/MembersPage').then(({ MembersPage: page }) => ({ default: page })),
+);
+const MemberDetailPage = lazy(() =>
+  import('../pages/MemberDetailPage').then(({ MemberDetailPage: page }) => ({ default: page })),
+);
+const MemberFormPage = lazy(() =>
+  import('../pages/MemberFormPage').then(({ MemberFormPage: page }) => ({ default: page })),
+);
+const SettingsPage = lazy(() =>
+  import('../pages/SettingsPage').then(({ SettingsPage: page }) => ({ default: page })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
