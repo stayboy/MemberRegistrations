@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "ui"
+  ],
   "description": "Member registration lookup and CRUD API (Express + TypeScript, deployable to Vercel)",
   "engines": {
     "node": ">=24"
@@ -20,6 +23,11 @@
     "verify": "npm run verify:skill && npm run verify:fast && npm run build",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
+    "ui:dev": "npm --prefix ui run dev",
+    "ui:build": "npm --prefix ui run build",
+    "ui:test": "npm --prefix ui run test",
+    "ui:lint": "npm --prefix ui run lint",
+    "ui:typecheck": "npm --prefix ui run typecheck",
     "db:migrate": "tsx src/db/migrate-cli.ts",
     "officers:add": "tsx src/authn/cli.ts add",
     "officers:deactivate": "tsx src/authn/cli.ts deactivate",

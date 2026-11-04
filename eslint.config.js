@@ -4,7 +4,9 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**'],
+    // The UI is its own workspace with its own ESLint/Prettier/tsconfig.
+    // Keeping it out of the root config keeps `npm run verify` unchanged.
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**', 'ui/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
