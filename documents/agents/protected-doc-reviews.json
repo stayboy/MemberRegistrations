@@ -10,13 +10,13 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "8dbb5667e409fe96fc5c29c5815342b1765c062972e00dcd4e8f58eb1b4db949",
+      "sha256": "9ef20fdac660dce5f894015be309a182070df30747634b21a38afda7d7fc3241",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds §15 Component-first reuse (second-call-site trigger, compose-don't-wrap, feature vs presentational, policy + skill pointers) and adds `documents/agents/component-first.md` to the §10a protected set. why: adopt the School-Collab component-first approach for the `ui/` work and review-gate its policy. rejected: leaving the policy unprotected; duplicating the policy in AGENTS.",
+      "reason": "changes: adds §16 Fluent UI first, and the React baseline — a Fluent v9 component is the first choice before any raw element, hand-rolled controls are a defect when an equivalent exists (a round-doc reason is required when none does), semantic landmarks/headings/lists/form stay HTML with Fluent `Label`, one component library, `react.dev` Rules of React with the Rules of Hooks enforced by `eslint-plugin-react-hooks` and Strict Mode, and a skill ladder that starts with the repo's own skills then the `awesome-copilot` catalogue and `microsoft/skills`. why: the owner reported pages built without Fluent components and asked for the rule plus a community React baseline, pointing first at the awesome-copilot skills index. rejected: adopting `bulletproof-react` (its folder model fights this repo), a lint rule banning raw controls (needs a custom AST plugin), and doing the structural refactor in this change.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed 2026-11-04 (deepseek-v4-pro build 0813): §15 accurately states the non-negotiables and points at the policy and skill; the policy is a faithful, Blazor-free React/Fluent-UI adaptation of the School-Collab source; the skill is procedure-only and correctly located; the ContactsDialog extraction is a single implementation with both call sites wired; §10a now protects the policy.",
+      "attestation": "§16 was re-read verbatim and the five amendments are confirmed in place — the skill-discovery ladder names the repo's `.opencode/skills/` and installed skills before the `awesome-copilot`-then-`microsoft/skills` catalogue search, the React baseline correctly scopes `eslint-plugin-react-hooks` to the Rules of Hooks with Strict Mode and review obligations for purity/immutability, and `label` was removed from the stays-HTML list in favour of Fluent `Label` with the heading cap replaced by 'real headings' — with no regression or cross-file contradiction.",
       "at": "2026-11-04"
     },
     {
@@ -32,13 +32,13 @@
     },
     {
       "path": "documents/agents/component-first.md",
-      "sha256": "8ff3bcc8e04663bba65b6fa3625599320c6d793254ffd77352b8d00bbe16296d",
+      "sha256": "a91a9d8ba3c9809e0d052db7a58adcba75dc6d4a4ae3ce76c53e30c8fd52431a",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: new component-first reuse policy (second-call-site trigger, location rules, design/spec approval gate, React render/styling/indirection costs, Fluent UI compose-don't-wrap). why: the owner adopted the School-Collab approach for `ui/` to stop repeated JSX. rejected: keeping the rule only in AGENTS.md; a Blazor-style policy with RenderFragment/::deep terms.",
+      "reason": "changes: §6 gains a first rule, 'Fluent first' — a Fluent v9 component is the first choice before any raw element, a hand-rolled control is a defect when an equivalent exists (round-doc reason required otherwise), semantic landmarks/headings/lists/form stay HTML with token styling, and the full equivalents list plus the non-negotiable live in `AGENTS.md` §16 so the two files cannot drift. why: the owner asked for Fluent-first as a repository rule so repeated raw markup stops hiding component reuse. rejected: duplicating the full equivalents list in the policy; a second component library.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed 2026-11-04 (deepseek-v4-pro build 0813): §15 accurately states the non-negotiables and points at the policy and skill; the policy is a faithful, Blazor-free React/Fluent-UI adaptation of the School-Collab source; the skill is procedure-only and correctly located; the ContactsDialog extraction is a single implementation with both call sites wired; §10a now protects the policy.",
+      "attestation": "§6 was re-read verbatim and the de-duplication fix is confirmed — the Fluent-first rule now lists primitives 'and their siblings' and defers the non-negotiable and the full equivalents list to `AGENTS.md` §16, remaining consistent with §16 and the UI spec rather than restating them.",
       "at": "2026-11-04"
     },
     {

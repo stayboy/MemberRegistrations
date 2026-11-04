@@ -87,8 +87,14 @@ alternative (plain JSX, a local helper, or a class) with the reason.
 
 ## 6. Fluent UI rules
 
+- **Fluent first.** A Fluent UI v9 component is the first choice for any control, before any raw
+  element. A hand-rolled `<button>`, `<input>`, `<select>`, `<table>` or `<dialog>` is a defect when an
+  equivalent exists; where none does, the round doc records why. Semantic landmarks, headings, lists
+  and `form` stay HTML with token styling, because their value is semantics, not appearance. The
+  non-negotiable and the full equivalents list are `AGENTS.md` §16.
 - **Compose, do not wrap.** Use `Dialog`, `Table`, `Button`, `Badge`, `Tooltip`, `MessageBar`,
-  `SearchBox`, `Dropdown` directly. Do not create `AppDialog`/`AppButton` wrappers to restyle them.
+  `SearchBox`, `Dropdown` and their siblings directly. Do not create `AppDialog`/`AppButton` wrappers
+  to restyle them.
 - **Tokens, not literals.** `makeStyles` + `tokens` from `@fluentui/react-components`; no third-party UI
   library and no raw colours.
 - **One box language.** Cards, dialogs, page frames and toolbars reuse `PageFrame` and the Fluent

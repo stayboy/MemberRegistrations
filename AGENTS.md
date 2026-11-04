@@ -196,3 +196,28 @@ the condition that excluded them changes; do not reintroduce them silently.
 - A component that fetches data or owns state is a **feature** component (a dialog or a route); a
   presentational component takes props and callbacks only.
 - Full policy: `documents/agents/component-first.md`. Procedure: `.opencode/skills/component-first/SKILL.md`.
+
+## 16. Fluent UI first, and the React baseline
+
+- **A Fluent UI component is the first choice, before any raw element.** Reach for the v9 equivalent
+  first: `Button`, `Input`, `Textarea`, `Dropdown`/`Combobox`, `Checkbox`/`Switch`/`Radio`,
+  `Table`, `Dialog`, `Tooltip`, `Badge`, `Spinner`, `MessageBar`, `Card`, `Divider`, `Text`. A
+  hand-rolled `<button>`, `<input>`, `<select>`, `<table>` or `<dialog>` is a defect when Fluent has an
+  equivalent; if it genuinely has none, the round doc records why.
+- **Semantic elements are not controls.** `main`, `section`, `nav`, `form`, real headings, and lists
+  stay HTML where semantics require them, styled with `makeStyles` and tokens; use Fluent `Label` for a
+  form label. Heading levels are an accessibility contract, not a styling choice. The one other
+  exception is an error-boundary fallback: it must not depend on the component tree that just failed.
+- **One component library.** Fluent UI v9 is the only one. Never add a second, and never wrap a Fluent
+  primitive merely to restyle it (§15).
+- **React correctness is `react.dev`'s Rules of React** (`https://react.dev/reference/rules`). The
+  Rules of Hooks are enforced mechanically by `eslint-plugin-react-hooks`, already configured in the UI
+  workspace, and Strict Mode is enabled; purity and immutability are review obligations. When a rule and
+  a habit disagree, the rule wins; when the docs and a blog post disagree, the docs win.
+- **Look for an existing skill before inventing a pattern.** The repo's own `.opencode/skills/` and the
+  installed skills come first — they are this repo's procedure. For anything they do not cover, start
+  the catalogue search at the GitHub `awesome-copilot` skills index
+  (`https://github.com/github/awesome-copilot/blob/main/docs/README.skills.md`), then
+  `https://github.com/microsoft/skills` for first-party Microsoft guidance. If one covers the task, use
+  or install it; if none does, say so and propose the approach. Never substitute an unlisted source
+  silently.
