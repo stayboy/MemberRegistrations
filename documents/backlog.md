@@ -28,4 +28,6 @@ live-vs-mock release probe.
 After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
-11a and 02–08 are implemented and accepted (2026-11-04); the next ticket is 09 (Event detail, create and update).
+11a, 02–09 and 12 are implemented and accepted (2026-11-04); the next serial ticket is 10 (Attendance per session), then 11 (Series-to-event generation), then 13–19.
+
+UI gaps backlogged: the Pages deploy workflow, CI UI checks (`ui:lint`/`ui:typecheck`/`ui:test`/`ui:build`), route-level code splitting, and the ticket-19 browser gate.
