@@ -19,7 +19,7 @@ export interface EventSessionItem {
   status: EventSessionStatus;
   venueType?: VenueType;
   present: number;
-  /** Deferred to ticket 10; zero until the expected-per-session engine lands. */
+  /** The register at this session date: joined on or before it, not archived or purged. */
   expected: number;
   importedRows: number;
   source: SessionSource;
@@ -95,6 +95,35 @@ interface SessionCount {
   importedRows: number | string;
 }
 
+interface SessionExpected {
+  date: unknown;
+  expected: number | string;
+}
+
+export interface EventAttendanceRow {
+  memberNo: string;
+  name: string;
+  status: 'present';
+  source: 'import' | 'manual';
+}
+
+export interface EventAttendance {
+  eventId: string;
+  sessionDate: string;
+  present: number;
+  expected: number;
+  importedRows: number;
+  rows: EventAttendanceRow[];
+}
+
+export interface EventAttendanceEntry {
+  id: string;
+  memberNo: string;
+  name: string;
+  sessionDate: string;
+  source: 'import' | 'manual';
+}
+
 type EventRow = {
   id: string;
   event_no: string | null;
@@ -114,10 +143,14 @@ type EventRow = {
   ministry_code: string | null;
   ministry_name: string | null;
   session_counts: unknown;
+  session_expected: unknown;
 };
 
 /** The event_instances row without the joined ministry or attendance aggregate. */
-type EventRowCore = Omit<EventRow, 'session_counts' | 'ministry_code' | 'ministry_name'>;
+type EventRowCore = Omit<
+  EventRow,
+  'session_counts' | 'session_expected' | 'ministry_code' | 'ministry_name'
+>;
 
 const EVENT_COLUMNS = `
   e.id,
@@ -150,22 +183,41 @@ const EVENT_FROM = `
 function sessionCounts(alias: string): string {
   return `
   left join lateral (
-    select jsonb_agg(
-             jsonb_build_object(
-               'date', c.session_date,
-               'present', c.present,
-               'importedRows', c.imported_rows
-             )
-             order by c.session_date
-           ) as session_counts
-    from (
-      select a.session_date,
-             count(*)::int as present,
-             count(*) filter (where a.source = 'import')::int as imported_rows
-      from attendance a
-      where a.event_instance_id = ${alias}.id
-      group by a.session_date
-    ) c
+    select
+      coalesce((
+        select jsonb_agg(
+                 jsonb_build_object(
+                   'date', c.session_date,
+                   'present', c.present,
+                   'importedRows', c.imported_rows
+                 )
+                 order by c.session_date
+               )
+        from (
+          select a.session_date,
+                 count(*)::int as present,
+                 count(*) filter (where a.source = 'import')::int as imported_rows
+          from attendance a
+          where a.event_instance_id = ${alias}.id
+          group by a.session_date
+        ) c
+      ), '[]'::jsonb) as session_counts,
+      coalesce((
+        select jsonb_agg(
+                 jsonb_build_object('date', d.session_date, 'expected', d.expected)
+                 order by d.session_date
+               )
+        from (
+          select (session->>'date')::date as session_date,
+                 count(m.id)::int as expected
+          from jsonb_array_elements(${alias}.sessions) session
+          left join members m
+            on coalesce(m.joined_on, m.created_at::date) <= (session->>'date')::date
+           and m.archived_at is null
+           and m.purged_at is null
+          group by (session->>'date')::date
+        ) d
+      ), '[]'::jsonb) as session_expected
   ) counts on true`;
 }
 
@@ -190,7 +242,8 @@ with page as (
   limit $6::int offset $7::int
 )
 select p.*,
-       coalesce(counts.session_counts, '[]'::jsonb) as session_counts
+       coalesce(counts.session_counts, '[]'::jsonb) as session_counts,
+       coalesce(counts.session_expected, '[]'::jsonb) as session_expected
 from page p
 ${sessionCounts('p')}
 order by p.start_date, p.id
@@ -198,7 +251,8 @@ order by p.start_date, p.id
 
 const DETAIL_SQL = `
 select ${EVENT_COLUMNS},
-       coalesce(counts.session_counts, '[]'::jsonb) as session_counts
+       coalesce(counts.session_counts, '[]'::jsonb) as session_counts,
+       coalesce(counts.session_expected, '[]'::jsonb) as session_expected
 ${EVENT_FROM}
 ${sessionCounts('e')}
 where e.id = $1
@@ -313,6 +367,19 @@ function asSessionStatus(value: string | undefined): EventSessionStatus {
   return SESSION_STATUSES.includes(value as EventSessionStatus)
     ? (value as EventSessionStatus)
     : 'scheduled';
+}
+
+function findSession(
+  sessions: unknown,
+  date: string,
+): { date: string; status: EventSessionStatus } | null {
+  for (const entry of parseJsonArray(sessions)) {
+    const session = entry as StoredSession;
+    if (isoDate(session.date) === date) {
+      return { date, status: asSessionStatus(session.status) };
+    }
+  }
+  return null;
 }
 
 function asVenueType(value: string): VenueType {
@@ -503,6 +570,186 @@ export class EventRepository {
     return (await this.get(id))!;
   }
 
+  async getAttendance(eventId: string, date: string): Promise<EventAttendance> {
+    const sessionDate = assertDate(date);
+
+    const [event] = await this.db.query<{ id: string; sessions: unknown }>(
+      'select id, sessions from event_instances where id = $1',
+      [eventId],
+    );
+    if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
+    if (!findSession(event.sessions, sessionDate)) {
+      throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
+    }
+
+    const rows = await this.db.query<{
+      member_no: string;
+      first_name: string | null;
+      last_name: string | null;
+      source: 'import' | 'manual';
+    }>(
+      `select m.member_no, m.first_name, m.last_name, a.source
+       from attendance a
+       join members m on m.id = a.member_id
+       where a.event_instance_id = $1 and a.session_date = $2
+       order by lower(concat_ws(' ', m.first_name, m.last_name)), m.member_no`,
+      [eventId, sessionDate],
+    );
+
+    const [register] = await this.db.query<{ count: number | string }>(
+      `select count(*)::int as count
+       from members
+       where coalesce(joined_on, created_at::date) <= $1::date
+         and archived_at is null
+         and purged_at is null`,
+      [sessionDate],
+    );
+
+    return {
+      eventId,
+      sessionDate,
+      present: rows.length,
+      expected: Number(register?.count ?? 0),
+      importedRows: rows.filter((row) => row.source === 'import').length,
+      rows: rows.map((row) => ({
+        memberNo: row.member_no,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        status: 'present' as const,
+        source: row.source,
+      })),
+    };
+  }
+
+  async addManualAttendance(
+    eventId: string,
+    memberNo: string,
+    date: string,
+    actor: string,
+  ): Promise<EventAttendanceEntry> {
+    const sessionDate = assertDate(date);
+
+    return this.db.transaction(async (tx) => {
+      const [event] = await tx.query<{ status: string; sessions: unknown }>(
+        'select status, sessions from event_instances where id = $1',
+        [eventId],
+      );
+      if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
+      if (event.status === 'cancelled' || event.status === 'archived') {
+        throw new ConflictError('A cancelled or archived event is read-only');
+      }
+
+      const session = findSession(event.sessions, sessionDate);
+      if (!session) {
+        throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
+      }
+      if (session.status === 'cancelled') {
+        throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
+
+      const [member] = await tx.query<{
+        id: string;
+        member_no: string;
+        first_name: string | null;
+        last_name: string | null;
+      }>(
+        `select id, member_no, first_name, last_name
+         from members
+         where lower(member_no) = lower($1) and purged_at is null and archived_at is null`,
+        [memberNo],
+      );
+      if (!member) throw new NotFoundError(`Member ${memberNo} was not found`);
+
+      const [existing] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
+        `select id, source
+         from attendance
+         where event_instance_id = $1 and session_date = $2 and member_id = $3`,
+        [eventId, sessionDate, member.id],
+      );
+
+      let row: { id: string; source: 'import' | 'manual' };
+      if (existing?.source === 'manual') {
+        throw new ConflictError(
+          `Attendance for ${member.member_no} on ${sessionDate} is already recorded`,
+        );
+      }
+      if (existing) {
+        const [updated] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
+          `update attendance set source = 'manual', created_by = $2
+           where id = $1
+           returning id, source`,
+          [existing.id, actor],
+        );
+        row = updated!;
+      } else {
+        try {
+          const [inserted] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
+            `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+             values ($1,$2,$3,'manual',$4)
+             returning id, source`,
+            [member.id, eventId, sessionDate, actor],
+          );
+          row = inserted!;
+        } catch (error) {
+          if (sqlState(error) === '23505') {
+            throw new ConflictError(
+              `Attendance for ${member.member_no} on ${sessionDate} is already recorded`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      return {
+        id: row.id,
+        memberNo: member.member_no,
+        name: [member.first_name, member.last_name].filter(Boolean).join(' '),
+        sessionDate,
+        source: row.source,
+      };
+    });
+  }
+
+  async deleteAttendance(eventId: string, attendanceId: string, actor: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [event] = await tx.query<{ status: string; sessions: unknown }>(
+        'select status, sessions from event_instances where id = $1',
+        [eventId],
+      );
+      if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
+      if (event.status === 'cancelled' || event.status === 'archived') {
+        throw new ConflictError('A cancelled or archived event is read-only');
+      }
+
+      const [entry] = await tx.query<{
+        member_id: string;
+        session_date: unknown;
+        source: 'import' | 'manual';
+      }>(
+        `select member_id, session_date, source
+         from attendance
+         where id = $1 and event_instance_id = $2`,
+        [attendanceId, eventId],
+      );
+      if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
+
+      const sessionDate = isoDate(entry.session_date);
+      const session = findSession(event.sessions, sessionDate);
+      if (session?.status === 'cancelled') {
+        throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
+
+      await tx.query('delete from attendance where id = $1', [attendanceId]);
+      if (entry.source === 'import') {
+        await tx.query(
+          `insert into attendance_suppressions (member_id, event_instance_id, session_date, suppressed_by)
+           values ($1,$2,$3,$4)
+           on conflict do nothing`,
+          [entry.member_id, eventId, isoDate(entry.session_date), actor],
+        );
+      }
+    });
+  }
+
   private async loadRow(id: string): Promise<EventRowCore | null> {
     const [row] = await this.db.query<EventRowCore>(ROW_SQL, [id]);
     return row ?? null;
@@ -527,6 +774,13 @@ export class EventRepository {
       }),
     );
 
+    const expectedByDate = new Map(
+      parseJsonArray(row.session_expected).map((entry) => {
+        const count = entry as SessionExpected;
+        return [isoDate(count.date), Number(count.expected)] as const;
+      }),
+    );
+
     const sessions: EventSessionItem[] = parseJsonArray(row.sessions).map((entry) => {
       const session = entry as StoredSession;
       const date = isoDate(session.date);
@@ -543,7 +797,7 @@ export class EventRepository {
         status: asSessionStatus(session.status),
         ...(sessionVenueType ? { venueType: sessionVenueType } : {}),
         present: count.present,
-        expected: 0,
+        expected: expectedByDate.get(date) ?? 0,
         importedRows: count.importedRows,
         source: sessionSource(count.present, count.importedRows),
       };

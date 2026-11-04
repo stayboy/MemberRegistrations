@@ -40,6 +40,9 @@ import {
 import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
 import {
   createEventSchema,
+  eventAttendanceEntrySchema,
+  eventAttendanceInputSchema,
+  eventAttendanceSchema,
   eventListSchema,
   eventSchema,
   updateEventSchema,
@@ -182,6 +185,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventList: toSchema(eventListSchema, 'output'),
         CreateEvent: toSchema(createEventSchema, 'input'),
         UpdateEvent: toSchema(updateEventSchema, 'input'),
+        EventAttendance: toSchema(eventAttendanceSchema, 'output'),
+        EventAttendanceEntry: toSchema(eventAttendanceEntrySchema, 'output'),
+        EventAttendanceInput: toSchema(eventAttendanceInputSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         EventImport: toSchema(eventImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -898,6 +904,62 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             409: conflict,
             422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/attendance': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'Attendance report for one event session',
+          description:
+            'Lists the stored rows as present and reports expected as the register at the session date. A date outside the event sessions is a validation error.',
+          parameters: [
+            {
+              name: 'date',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            200: json('Present, expected and the member rows.', 'EventAttendance'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Record manual attendance for a session',
+          description:
+            'A manual row shadows an imported row for the same member and session; a second manual post is a conflict.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventAttendanceInput') } },
+          },
+          responses: {
+            201: json('Attendance recorded; Location names the row.', 'EventAttendanceEntry'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/attendance/{attendanceId}': {
+        parameters: [idParam('eventId'), idParam('attendanceId')],
+        delete: {
+          summary: 'Remove an attendance row for a session',
+          description:
+            'Deleting an imported row writes a suppression so the next import does not resurrect it.',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Attendance removed.'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
           },
         },
       },

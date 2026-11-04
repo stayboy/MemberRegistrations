@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dateStringSchema } from './common.js';
+import { dateStringSchema, memberNoParamSchema } from './common.js';
 
 export const VENUE_TYPES = ['auditorium', 'virtual', 'hybrid'] as const;
 export const EVENT_STATUSES = ['draft', 'scheduled', 'held', 'cancelled', 'archived'] as const;
@@ -125,3 +125,39 @@ export const eventSchema = z.object({
 export const eventListSchema = z.object({
   items: z.array(eventSchema),
 });
+
+export const eventAttendanceQuerySchema = z.object({
+  date: dateStringSchema,
+});
+
+export const eventAttendanceInputSchema = z.object({
+  memberNo: memberNoParamSchema,
+  date: dateStringSchema,
+});
+
+export const eventAttendanceRowSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  status: z.literal('present'),
+  source: z.enum(['import', 'manual']),
+});
+
+export const eventAttendanceSchema = z.object({
+  eventId: z.string(),
+  sessionDate: z.string(),
+  present: z.number().int(),
+  expected: z.number().int(),
+  importedRows: z.number().int(),
+  rows: z.array(eventAttendanceRowSchema),
+});
+
+export const eventAttendanceEntrySchema = z.object({
+  id: z.string(),
+  memberNo: z.string(),
+  name: z.string(),
+  sessionDate: z.string(),
+  source: z.enum(['import', 'manual']),
+});
+
+export type EventAttendanceQuery = z.infer<typeof eventAttendanceQuerySchema>;
+export type EventAttendanceInput = z.infer<typeof eventAttendanceInputSchema>;

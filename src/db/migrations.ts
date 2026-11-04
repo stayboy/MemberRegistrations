@@ -418,4 +418,33 @@ create index event_instances_series on event_occurrences (series_id, start_date)
 alter table event_occurrences rename to event_instances;
 `,
   },
+  {
+    version: '0006_attendance_session_guard',
+    sql: `
+-- Backstop for a direct write: a session date must be one of the event's sessions.
+create function attendance_session_guard() returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1
+    from event_instances e
+    cross join lateral jsonb_array_elements(e.sessions) session
+    where e.id = new.event_instance_id
+      and (session->>'date')::date = new.session_date
+  ) then
+    raise exception
+      'Attendance session date % is not one of the sessions of event instance %',
+      new.session_date, new.event_instance_id
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger attendance_session_guard
+before insert or update of event_instance_id, session_date on attendance
+for each row execute function attendance_session_guard();
+`,
+  },
 ];

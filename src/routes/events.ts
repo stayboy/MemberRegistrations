@@ -2,10 +2,17 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { actorOf } from '../actor.js';
 import { NotFoundError } from '../errors/domain-errors.js';
-import { createEventSchema, eventListQuerySchema, updateEventSchema } from '../schemas/events.js';
+import {
+  createEventSchema,
+  eventAttendanceInputSchema,
+  eventAttendanceQuerySchema,
+  eventListQuerySchema,
+  updateEventSchema,
+} from '../schemas/events.js';
 import type { EventDetail, EventRepository } from '../repos/events.js';
 
 const eventIdSchema = z.string().uuid();
+const attendanceIdSchema = z.string().uuid();
 
 /** `If-Match: *` means "any current version"; an absent header skips the check. */
 function expectedEtag(req: Request): string | null {
@@ -35,6 +42,34 @@ export function eventsRouter(repo: EventRepository): Router {
     const detail = await repo.create(input);
     res.setHeader('Location', `/v1/events/${encodeURIComponent(detail.event.id)}`);
     sendEvent(res, detail, 201);
+  });
+
+  // Defined before /:id so the nested attendance paths can never be shadowed.
+  router.get('/:id/attendance', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const { date } = eventAttendanceQuerySchema.parse(req.query);
+    const report = await repo.getAttendance(id, date);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(report);
+  });
+
+  router.post('/:id/attendance', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = eventAttendanceInputSchema.parse(req.body);
+    const entry = await repo.addManualAttendance(id, input.memberNo, input.date, actorOf(req));
+    res.setHeader(
+      'Location',
+      `/v1/events/${encodeURIComponent(id)}/attendance/${encodeURIComponent(entry.id)}`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(entry);
+  });
+
+  router.delete('/:id/attendance/:attendanceId', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const attendanceId = attendanceIdSchema.parse(req.params.attendanceId);
+    await repo.deleteAttendance(id, attendanceId, actorOf(req));
+    res.status(204).end();
   });
 
   router.get('/:id', async (req, res) => {
