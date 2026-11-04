@@ -93,7 +93,7 @@ export const SECTIONS: readonly NavSection[] = [
         label: 'Attendance registry',
         path: '/imports/attendance',
         icon: ArrowUploadRegular,
-        description: 'Import the attendance registry from a CSV or the Excel template.',
+        description: 'Import attendance for an event session chosen on this screen.',
       },
       {
         label: 'Batch lookup',

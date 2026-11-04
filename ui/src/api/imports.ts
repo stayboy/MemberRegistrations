@@ -52,6 +52,20 @@ export interface MemberImportRow {
   readonly email?: string;
 }
 
+/** Mirrors `attendanceImportSchema` in `src/schemas/imports.ts`. */
+export interface AttendanceImportRow {
+  readonly memberNo: string;
+  /** `YYYY-MM-DD` or `YYYY-MM-DD[Tt ]HH:MM[:SS]`; its date must be the session. */
+  readonly datetime?: string;
+}
+
+/** The occurrence is chosen once on the screen; rows cannot retarget it (FR-36a). */
+export interface AttendanceImportRequest {
+  readonly eventId: string;
+  readonly sessionDate: string;
+  readonly rows: readonly AttendanceImportRow[];
+}
+
 /** The `rows` member of a `422 import_failed` problem body. */
 export interface ImportRowProblem {
   readonly row: number;
@@ -152,6 +166,20 @@ export async function postMemberImport(
   return batch;
 }
 
+export async function postAttendanceImport(
+  baseUrl: string,
+  sessionToken: string,
+  request: AttendanceImportRequest,
+): Promise<ImportBatch> {
+  const batch = await gatewayRequest<ImportBatch>(baseUrl, `${IMPORTS_PATH}/attendance`, {
+    method: 'POST',
+    body: request,
+    sessionToken,
+  });
+  if (!batch) throw new ApiError(500, 'The import response was empty.');
+  return batch;
+}
+
 /** `GET /v1/imports/:batchId`; the API has no list endpoint (FR-38). */
 export async function getImportBatch(
   baseUrl: string,
@@ -166,6 +194,23 @@ export async function getImportBatch(
   );
   if (!batch) throw new ApiError(500, 'The import batch response was empty.');
   return batch;
+}
+
+/**
+ * True when the API refused the batch because the same occurrence and rows were
+ * already imported (`409`). The API detail names the existing batch id (FR-37).
+ */
+export function isDuplicateImport(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
+
+/**
+ * A duplicate is final for the chosen file: the panel clears the preview, so the
+ * same body cannot be re-POSTed. A generic error keeps the preview so the
+ * operator can fix the file and retry.
+ */
+export function duplicateBlocksCommit(error: unknown, hasPreview: boolean): boolean {
+  return hasPreview && isDuplicateImport(error);
 }
 
 /**

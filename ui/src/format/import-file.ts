@@ -1,5 +1,10 @@
 import Papa from 'papaparse';
-import type { ImportFormatColumn, MemberGender, MemberImportRow } from '../api/imports';
+import type {
+  AttendanceImportRow,
+  ImportFormatColumn,
+  MemberGender,
+  MemberImportRow,
+} from '../api/imports';
 
 /**
  * Pure import parsing and validation: CSV text or an `.xlsx` matrix becomes the
@@ -243,11 +248,8 @@ export function parseMemberMatrix(
   return { rows, errors };
 }
 
-/** Parses CSV text, including quoted commas, CRLF and a leading BOM. */
-export function parseMemberCsv(
-  text: string,
-  columns: readonly ImportFormatColumn[],
-): ParsedImportRows<MemberImportRow> {
+/** Parses CSV text into a raw matrix, including quoted commas, CRLF and a BOM. */
+export function parseCsvMatrix(text: string): string[][] {
   const result = Papa.parse<string[]>(text.replace(/^\uFEFF/, ''), {
     skipEmptyLines: 'greedy',
   });
@@ -257,7 +259,139 @@ export function parseMemberCsv(
     throw new Error(`The CSV could not be read: ${fatal.message}`);
   }
 
-  return parseMemberMatrix(result.data, columns);
+  return result.data;
+}
+
+/** Parses member CSV text, including quoted commas, CRLF and a leading BOM. */
+export function parseMemberCsv(
+  text: string,
+  columns: readonly ImportFormatColumn[],
+): ParsedImportRows<MemberImportRow> {
+  return parseMemberMatrix(parseCsvMatrix(text), columns);
+}
+
+/**
+ * `YYYY-MM-DD`, optionally followed by `T`, a lowercase `t`, or a space and
+ * `HH:MM[:SS]` — the same shape the API's repository accepts.
+ */
+export const ATTENDANCE_DATETIME_PATTERN =
+  /^(\d{4}-\d{2}-\d{2})(?:[Tt ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+function buildAttendanceRow(
+  cells: readonly unknown[],
+  headerIndex: ReadonlyMap<string, number>,
+  row: number,
+  required: ReadonlySet<string>,
+  sessionDate: string,
+): { row: AttendanceImportRow; errors: ImportRowError[] } {
+  const errors: ImportRowError[] = [];
+  const fail = (message: string): void => {
+    errors.push({ row, message });
+  };
+
+  const text = (name: string): string | undefined =>
+    normaliseCell(cellAt(cells, headerIndex, name)) ?? undefined;
+
+  const memberNo = text('memberNo');
+  if (!memberNo) {
+    if (required.has('memberNo')) fail('memberNo is required');
+  } else if (!MEMBER_NO_PATTERN.test(memberNo)) {
+    fail('memberNo must be 1-32 characters using letters, digits, hyphens or underscores');
+  }
+
+  let datetime: string | undefined;
+  const raw = text('datetime');
+  if (raw) {
+    const match = ATTENDANCE_DATETIME_PATTERN.exec(raw);
+    if (!match) {
+      fail('datetime must be YYYY-MM-DD or YYYY-MM-DD[Tt ]HH:MM[:SS]');
+    } else {
+      const date = match[1]!;
+      const hours = match[2];
+      const minutes = match[3];
+      const seconds = match[4] ?? '00';
+      if (
+        hours !== undefined &&
+        (Number(hours) > 23 || Number(minutes) > 59 || Number(seconds) > 59)
+      ) {
+        fail(`datetime ${raw} has a time outside 00:00:00-23:59:59`);
+      } else if (!isCalendarDate(date)) {
+        fail(`datetime ${raw} is not a calendar date`);
+      } else if (date !== sessionDate) {
+        fail(`${raw} is not on the selected session (${sessionDate})`);
+      } else {
+        datetime = raw;
+      }
+    }
+  }
+
+  const draft: { memberNo: string; datetime?: string } = { memberNo: memberNo ?? '' };
+  if (datetime) draft.datetime = datetime;
+  return { row: draft, errors };
+}
+
+/**
+ * Turns a matrix (a CSV's rows or an `.xlsx` sheet) into attendance rows for one
+ * chosen session. The file never names the event: an optional `datetime` must
+ * fall on `sessionDate`, and a mismatch is reported against its 1-based data row
+ * (FR-36a).
+ */
+export function parseAttendanceMatrix(
+  matrix: readonly (readonly unknown[])[],
+  columns: readonly ImportFormatColumn[],
+  sessionDate: string,
+): ParsedImportRows<AttendanceImportRow> {
+  const data = matrix.filter((row) => row.some((cell) => normaliseCell(cell) !== null));
+  if (data.length === 0) throw new Error('The file has no header row.');
+
+  const headerIndex = mapHeaderRow(
+    data[0] ?? [],
+    columns.map((column) => column.name),
+  );
+  const required = requiredNames(columns);
+  const missing = [...required].filter((name) => !headerIndex.has(name));
+  if (missing.length > 0) {
+    throw new Error(`The file is missing required columns: ${missing.join(', ')}.`);
+  }
+
+  const rows: AttendanceImportRow[] = [];
+  const errors: ImportRowError[] = [];
+
+  data.slice(1).forEach((cells, index) => {
+    const rowNumber = index + 1;
+    const built = buildAttendanceRow(cells, headerIndex, rowNumber, required, sessionDate);
+    rows.push(built.row);
+    errors.push(...built.errors);
+  });
+
+  if (rows.length === 0) throw new Error('The file has a header row but no data rows.');
+  return { rows, errors };
+}
+
+/**
+ * Reads a chosen `.csv` or the downloaded `.xlsx` template into a raw matrix.
+ * Both import kinds share this dispatch; the workbook reader is imported on
+ * demand so this module stays pure and the Node test suite never loads a browser
+ * parser.
+ */
+export async function readImportMatrix(file: File): Promise<readonly (readonly unknown[])[]> {
+  if (/\.xlsx$/i.test(file.name)) {
+    const { readSheet } = await import('read-excel-file/browser');
+    return readSheet(file);
+  }
+  if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+    return parseCsvMatrix(await file.text());
+  }
+  throw new Error('Choose a .csv file or the downloaded .xlsx template.');
+}
+
+/** Reads a chosen attendance file into rows for one session. */
+export async function parseAttendanceFile(
+  file: File,
+  columns: readonly ImportFormatColumn[],
+  sessionDate: string,
+): Promise<ParsedImportRows<AttendanceImportRow>> {
+  return parseAttendanceMatrix(await readImportMatrix(file), columns, sessionDate);
 }
 
 /**

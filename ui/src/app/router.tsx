@@ -28,6 +28,11 @@ const ImportsPage = lazy(() =>
 const ImportBatchesPage = lazy(() =>
   import('../pages/ImportBatchesPage').then(({ ImportBatchesPage: page }) => ({ default: page })),
 );
+const ImportsAttendancePage = lazy(() =>
+  import('../pages/ImportsAttendancePage').then(({ ImportsAttendancePage: page }) => ({
+    default: page,
+  })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -66,7 +71,7 @@ export const router = createHashRouter([
           { path: 'events', element: placeholder('events', '/events') },
           { path: 'events/series', element: placeholder('events', '/events/series') },
           { path: 'imports/members', element: <ImportsPage /> },
-          { path: 'imports/attendance', element: placeholder('imports', '/imports/attendance') },
+          { path: 'imports/attendance', element: <ImportsAttendancePage /> },
           { path: 'imports/batches', element: <ImportBatchesPage /> },
           {
             path: 'shepherding/officers',

@@ -6,6 +6,8 @@ import {
   MAX_IMPORT_BYTES,
   MAX_IMPORT_ROWS,
   normaliseCell,
+  parseAttendanceFile,
+  parseAttendanceMatrix,
   parseMemberCsv,
   parseMemberMatrix,
 } from './import-file';
@@ -170,6 +172,143 @@ describe('matrix parsing', () => {
   });
 });
 
+/** The attendance contract as `GET /v1/imports/formats` publishes it. */
+const ATTENDANCE_COLUMNS: readonly ImportFormatColumn[] = [
+  { name: 'memberNo', required: true, type: 'text', example: 'M-1001' },
+  {
+    name: 'datetime',
+    required: false,
+    type: 'date',
+    example: '2026-11-01T09:00',
+  },
+];
+
+const SESSION_DATE = '2026-11-01';
+
+describe('attendance parsing', () => {
+  it('accepts every documented datetime shape on the selected session', () => {
+    const parsed = parseAttendanceMatrix(
+      [
+        ['memberNo', 'datetime'],
+        ['M-1', '2026-11-01T09:00'],
+        ['M-2', '2026-11-01 09:00:30'],
+        ['M-3', '2026-11-01t09:00'],
+        ['M-4', '2026-11-01'],
+        ['M-5', new Date(Date.UTC(2026, 10, 1))],
+      ],
+      ATTENDANCE_COLUMNS,
+      SESSION_DATE,
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows.map((row) => row.datetime)).toEqual([
+      '2026-11-01T09:00',
+      '2026-11-01 09:00:30',
+      '2026-11-01t09:00',
+      '2026-11-01',
+      '2026-11-01',
+    ]);
+  });
+
+  it('omits datetime when the cell is blank', () => {
+    const parsed = parseAttendanceMatrix(
+      [
+        ['memberNo', 'datetime'],
+        ['M-1', ''],
+      ],
+      ATTENDANCE_COLUMNS,
+      SESSION_DATE,
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows[0]).toEqual({ memberNo: 'M-1' });
+  });
+
+  it('reports a datetime on another date against the chosen session', () => {
+    const parsed = parseAttendanceMatrix(
+      [
+        ['memberNo', 'datetime'],
+        ['M-1', '2026-11-01 09:00'],
+        ['M-2', '2026-11-02 09:00'],
+      ],
+      ATTENDANCE_COLUMNS,
+      SESSION_DATE,
+    );
+
+    expect(parsed.errors).toEqual([
+      {
+        row: 2,
+        message: '2026-11-02 09:00 is not on the selected session (2026-11-01)',
+      },
+    ]);
+    expect(parsed.rows[1]).toEqual({ memberNo: 'M-2' });
+  });
+
+  it('reports a bad member number and a missing member number', () => {
+    const parsed = parseAttendanceMatrix(
+      [
+        ['memberNo', 'datetime'],
+        ['M 2', '2026-11-01'],
+        ['', '2026-11-01'],
+      ],
+      ATTENDANCE_COLUMNS,
+      SESSION_DATE,
+    );
+
+    expect(parsed.errors).toEqual([
+      {
+        row: 1,
+        message: 'memberNo must be 1-32 characters using letters, digits, hyphens or underscores',
+      },
+      { row: 2, message: 'memberNo is required' },
+    ]);
+  });
+
+  it('reports a malformed datetime and a time outside the clock', () => {
+    const parsed = parseAttendanceMatrix(
+      [
+        ['memberNo', 'datetime'],
+        ['M-1', '01/11/2026 09:00'],
+        ['M-2', '2026-11-01T24:00'],
+        ['M-3', '2026-02-30'],
+      ],
+      ATTENDANCE_COLUMNS,
+      SESSION_DATE,
+    );
+
+    expect(parsed.errors).toEqual([
+      { row: 1, message: 'datetime must be YYYY-MM-DD or YYYY-MM-DD[Tt ]HH:MM[:SS]' },
+      { row: 2, message: 'datetime 2026-11-01T24:00 has a time outside 00:00:00-23:59:59' },
+      { row: 3, message: 'datetime 2026-02-30 is not a calendar date' },
+    ]);
+  });
+
+  it('throws when the required member number column is absent', () => {
+    expect(() =>
+      parseAttendanceMatrix([['datetime'], ['2026-11-01']], ATTENDANCE_COLUMNS, SESSION_DATE),
+    ).toThrow(/missing required columns: memberNo/);
+  });
+
+  it('reads a CSV file for the chosen session', async () => {
+    const file = new File(['memberNo,datetime\nM-1,2026-11-01 09:00\n'], 'attendance.csv', {
+      type: 'text/csv',
+    });
+
+    const parsed = await parseAttendanceFile(file, ATTENDANCE_COLUMNS, SESSION_DATE);
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toEqual([{ memberNo: 'M-1', datetime: '2026-11-01 09:00' }]);
+  });
+
+  it('rejects a non-CSV file that is not the Excel template', async () => {
+    const file = new File(['memberNo'], 'attendance.txt', { type: 'text/plain' });
+
+    await expect(parseAttendanceFile(file, ATTENDANCE_COLUMNS, SESSION_DATE)).rejects.toThrow(
+      /Choose a \.csv file/,
+    );
+  });
+});
+
 describe('import limits', () => {
   it('accepts exactly 10,000 rows', () => {
     const rows = Array.from({ length: MAX_IMPORT_ROWS }, (_, index) => ({
@@ -200,5 +339,13 @@ describe('import limits', () => {
 
   it('rejects an empty file', () => {
     expect(checkImportLimits([])).toMatch(/no data rows/);
+  });
+
+  it('applies the same limits to attendance rows', () => {
+    const rows = Array.from({ length: MAX_IMPORT_ROWS }, () => ({ memberNo: 'M-1' }));
+    expect(checkImportLimits(rows)).toBeNull();
+
+    const overLimit = Array.from({ length: MAX_IMPORT_ROWS + 1 }, () => ({ memberNo: 'M-1' }));
+    expect(checkImportLimits(overLimit)).toContain('10001 rows');
   });
 });
