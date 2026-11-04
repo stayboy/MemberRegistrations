@@ -54,12 +54,22 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       // Rolldown path (Vite 8): `manualChunks` is deprecated and may be dropped,
       // so vendor grouping is expressed with rolldown's `codeSplitting.groups`.
-      // One cacheable vendor chunk: every node_modules module lands here and
-      // app code (including the lazy route chunks) stays separate.
+      // `vendor` holds every node_modules module except the explicitly
+      // carved-out `import-parsers` group; app code (including the lazy route
+      // chunks) stays separate.
       rolldownOptions: {
         output: {
           codeSplitting: {
-            groups: [{ name: 'vendor', test: /node_modules[\\/]/ }],
+            groups: [
+              // The import parsers are only reachable from the lazy imports
+              // route, so they get their own chunk instead of the eager vendor
+              // one; read-excel-file's dependencies travel with it.
+              {
+                name: 'import-parsers',
+                test: /node_modules[\\/](?:papaparse|read-excel-file|fflate|saxen|unzipper-esm|worker-f)[\\/]/,
+              },
+              { name: 'vendor', test: /node_modules[\\/]/ },
+            ],
           },
         },
       },

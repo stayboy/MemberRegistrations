@@ -22,6 +22,12 @@ const MemberFormPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('../pages/SettingsPage').then(({ SettingsPage: page }) => ({ default: page })),
 );
+const ImportsPage = lazy(() =>
+  import('../pages/ImportsPage').then(({ ImportsPage: page }) => ({ default: page })),
+);
+const ImportBatchesPage = lazy(() =>
+  import('../pages/ImportBatchesPage').then(({ ImportBatchesPage: page }) => ({ default: page })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -59,9 +65,9 @@ export const router = createHashRouter([
           { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
           { path: 'events', element: placeholder('events', '/events') },
           { path: 'events/series', element: placeholder('events', '/events/series') },
-          { path: 'imports/events', element: placeholder('imports', '/imports/events') },
+          { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: placeholder('imports', '/imports/attendance') },
-          { path: 'imports/batches', element: placeholder('imports', '/imports/batches') },
+          { path: 'imports/batches', element: <ImportBatchesPage /> },
           {
             path: 'shepherding/officers',
             element: placeholder('shepherding', '/shepherding/officers'),
