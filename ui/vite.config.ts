@@ -52,6 +52,17 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
+      // Rolldown path (Vite 8): `manualChunks` is deprecated and may be dropped,
+      // so vendor grouping is expressed with rolldown's `codeSplitting.groups`.
+      // One cacheable vendor chunk: every node_modules module lands here and
+      // app code (including the lazy route chunks) stays separate.
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [{ name: 'vendor', test: /node_modules[\\/]/ }],
+          },
+        },
+      },
     },
   };
 });

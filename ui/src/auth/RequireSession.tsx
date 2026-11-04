@@ -1,5 +1,5 @@
-import { Spinner } from '@fluentui/react-components';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { PageSpinner } from '../components/PageSpinner';
 import { useSession } from './SessionProvider';
 
 /**
@@ -11,18 +11,7 @@ export function RequireSession() {
   const location = useLocation();
 
   if (status === 'checking') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '40vh',
-        }}
-      >
-        <Spinner label="Checking your session…" />
-      </div>
-    );
+    return <PageSpinner label="Checking your session…" />;
   }
 
   if (status !== 'signed-in') {
