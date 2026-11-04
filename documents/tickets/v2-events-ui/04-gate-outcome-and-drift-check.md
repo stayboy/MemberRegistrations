@@ -8,10 +8,10 @@ the repository boundary. On revert, remove Drizzle and record why.
 
 **Blocked by:** 03 (Series ORM trial).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] The decision is recorded with its evidence and the rejected alternative.
-- [ ] A deliberate column mismatch fails the drift check; the committed schema passes it.
-- [ ] No ORM type appears in a route, Zod schema or OpenAPI output.
-- [ ] If reverted, Drizzle is gone and the 64 tests still pass.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] The decision is recorded with its evidence and the rejected alternative.
+- [x] A deliberate column mismatch fails the drift check; the committed schema passes it.
+- [x] No ORM type appears in a route, Zod schema or OpenAPI output.
+- [ ] If reverted, Drizzle is gone and the 64 tests still pass. (not applicable — adopted)
+- [x] `npm run verify` and `npm run smoke` pass.

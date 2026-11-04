@@ -9,10 +9,10 @@ contract.
 
 **Blocked by:** 02 (Drizzle wiring and Ministries smoke).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] Appending a schedule version, adding/removing an exception, resolving occurrences and rolling back a failed transaction behave identically to today.
-- [ ] All series tests pass; new tests cover concurrent version append and exception idempotency.
-- [ ] The round doc records code size, query count, p95 latency on PGlite, and every SQL fragment kept raw.
-- [ ] No request or response shape changes.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] Appending a schedule version, adding/removing an exception, resolving occurrences and rolling back a failed transaction behave identically to today.
+- [x] All series tests pass; new tests cover concurrent version append and exception idempotency.
+- [x] The round doc records code size, query count, p95 latency on PGlite, and every SQL fragment kept raw.
+- [x] No request or response shape changes.
+- [x] `npm run verify` and `npm run smoke` pass.
