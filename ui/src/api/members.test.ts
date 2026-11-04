@@ -3,13 +3,22 @@ import { ApiError } from './errors';
 import {
   addContact,
   addCoverage,
+  addMemberMinistry,
+  addMemberRelationship,
   addSubscription,
   createMember,
+  getMemberShepherding,
+  listMinistries,
   memberDetailPath,
+  memberPickerPath,
   membersListPath,
   removeContact,
   removeCoverage,
+  removeMemberMinistry,
+  removeMemberRelationship,
+  searchMembers,
   updateMember,
+  type RelationshipInput,
   type SubscriptionInput,
 } from './members';
 
@@ -227,5 +236,156 @@ describe('addContact', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(409);
     expect((error as ApiError).message).toBe('The contact value already belongs to M-1002.');
+  });
+});
+
+describe('memberPickerPath and searchMembers', () => {
+  it('builds a ten-row search path with no aggregates', () => {
+    expect(memberPickerPath('  ama  ')).toBe('/gateway/v1/members?q=ama&limit=10');
+    expect(memberPickerPath('   ')).toBe('/gateway/v1/members?limit=10');
+  });
+
+  it('searches through the gateway with the session credential', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        items: [{ memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah' }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const page = await searchMembers('https://gateway.example', 'session-token', 'ama');
+
+    expect(page.items).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members?q=ama&limit=10');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer session-token');
+  });
+});
+
+describe('listMinistries', () => {
+  it('reads the reference list with no-store traffic', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        items: [{ code: 'CHOIR', name: 'Choir', description: null, active: true }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ministries = await listMinistries('https://gateway.example', 'session-token');
+
+    expect(ministries).toEqual([{ code: 'CHOIR', name: 'Choir', description: null, active: true }]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/ministries');
+    expect(init.method).toBe('GET');
+  });
+});
+
+describe('addMemberMinistry and removeMemberMinistry', () => {
+  it('posts { code } and encodes the member number', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ code: 'CHOIR', name: 'Choir' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ministry = await addMemberMinistry(
+      'https://gateway.example',
+      'session-token',
+      'M 1/2',
+      'CHOIR',
+    );
+
+    expect(ministry).toEqual({ code: 'CHOIR', name: 'Choir' });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/ministries');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ code: 'CHOIR' });
+  });
+
+  it('deletes with the code encoded and tolerates 204', async () => {
+    fetchMock.mockResolvedValueOnce(emptyResponse(204));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      removeMemberMinistry('https://gateway.example', 'session-token', 'M-1001', 'CH OIR'),
+    ).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M-1001/ministries/CH%20OIR');
+    expect(init.method).toBe('DELETE');
+  });
+});
+
+describe('addMemberRelationship and removeMemberRelationship', () => {
+  it('posts the relationship body and encodes the member number', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          id: 'rel-1',
+          type: 'spouse',
+          isDependent: false,
+          memberNo: 'M-1002',
+          name: 'Kofi Mensah',
+          archived: false,
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const input: RelationshipInput = {
+      relatedMemberNo: 'M-1002',
+      type: 'spouse',
+      isDependent: false,
+    };
+    const relationship = await addMemberRelationship(
+      'https://gateway.example',
+      'session-token',
+      'M 1/2',
+      input,
+    );
+
+    expect(relationship.id).toBe('rel-1');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/relationships');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual(input);
+  });
+
+  it('deletes with the relationship id encoded and tolerates 204', async () => {
+    fetchMock.mockResolvedValueOnce(emptyResponse(204));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      removeMemberRelationship('https://gateway.example', 'session-token', 'M-1001', 'rel 1/2'),
+    ).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M-1001/relationships/rel%201%2F2');
+    expect(init.method).toBe('DELETE');
+  });
+});
+
+describe('getMemberShepherding', () => {
+  it('reads the member summary and encodes the member number', async () => {
+    const summary = {
+      memberNo: 'M 1/2',
+      name: 'Ama Mensah',
+      shepherd: null,
+      history: [],
+      calls: { attempts: 0, conversations: 0, lastCalledOn: null },
+      stillInChurch: null,
+      latestFeedback: null,
+      latestIssue: null,
+      recentCalls: [],
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(summary));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getMemberShepherding('https://gateway.example', 'session-token', 'M 1/2');
+
+    expect(result).toEqual(summary);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/shepherding');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer session-token');
   });
 });

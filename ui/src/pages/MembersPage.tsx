@@ -54,6 +54,7 @@ import {
   subscriptionDescription,
   subscriptionLabel,
 } from '../format/member';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -234,17 +235,6 @@ const useStyles = makeStyles({
     maxWidth: '320px',
   },
 });
-
-function useDebouncedValue<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delay);
-    return () => window.clearTimeout(timer);
-  }, [value, delay]);
-
-  return debounced;
-}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
