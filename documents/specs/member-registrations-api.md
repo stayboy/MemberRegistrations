@@ -835,6 +835,27 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 - **Name search uses `ILIKE`**, not `pg_trgm`: a register of a few thousand members does not justify
   the extension, and PGlite parity is worth more than an index that is invisible at this size.
 
+### Series ORM trial (ticket 03)
+
+The trial measures whether Drizzle earns its place beyond the Ministries smoke. It does not change the
+public contract.
+
+- **Scope.** Migrate the Series **CRUD and transaction** operations (`list`, `get`, `create`, `update`,
+  `addSchedule`, `setException`, `removeException`, `load`) to Drizzle. The **occurrence engine**
+  (`resolveSeriesOccurrences` and `loadCalendar` in `src/repos/occurrences.ts`) stays raw SQL:
+  `AGENTS.md` §12 keeps the attendance, occurrence and import queries on the `Db` port, and the trial
+  records that fragment as kept raw rather than migrating it.
+- **Comparison.** The round doc publishes, for the migrated operations against the raw baseline: code
+  size (lines), query count per operation, p95 latency on PGlite over N runs, and every SQL fragment
+  kept raw. The measurement is a reproducible trial artefact, not a CI gate.
+- **Transaction seam.** Writes inside `db.transaction` use the transaction-scoped `orm` (ticket 02); a
+  rolled-back transaction leaves no row.
+- **Decision.** The trial publishes the comparison and a recommendation; **the owner decides** adopt or
+  revert, and ticket 04 records the ruling with its evidence and the rejected alternative. On adopt,
+  ticket 04 adds the ORM-versus-migrations drift check and enforces the repository boundary; on revert,
+  Drizzle is removed in one revertible commit and the test suite stays green.
+- **Tests.** All series tests pass; new tests cover concurrent version append and exception idempotency.
+
 ### Project layout
 
 ```
@@ -918,3 +939,7 @@ sequences.
   drivers and migrates only the Ministries repository as the smoke. Wider CRUD adoption stays gated by
   the Series trial (ticket 03) and the adopt/revert gate (ticket 04), and reverting needs no schema
   change.
+- **2026-11-04** — Spec-first for ticket 03: the Series ORM trial migrates the Series CRUD and
+  transaction operations to Drizzle, keeps the occurrence engine raw per `AGENTS.md` §12, and publishes
+  code size, query count, p95 PGlite latency and the kept-raw fragments; the owner decides and ticket
+  04 records the ruling.

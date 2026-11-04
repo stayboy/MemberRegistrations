@@ -1,7 +1,10 @@
+import { and, eq, isNull, sql } from 'drizzle-orm';
+import { eventSeries, ministries, seriesExceptions, seriesSchedules } from '../db/schema.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { assertDate } from '../domain/contacts.js';
 import { validateRrule, todayIn } from '../domain/series.js';
 import type { Db } from '../db/sql.js';
+import { sqlState } from '../errors/sqlstate.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
 
 export interface ScheduleDto {
@@ -45,10 +48,6 @@ export interface UpdateSeriesInput {
   archived?: boolean;
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (error as { code?: string }).code === '23505';
-}
-
 function isoDate(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -61,15 +60,20 @@ function isoTimestamp(value: unknown): string | null {
   return String(value);
 }
 
+type Statement = ReturnType<typeof sql>;
+
+type SeriesUpdate = Partial<Omit<typeof eventSeries.$inferInsert, 'archivedAt' | 'updatedAt'>> & {
+  archivedAt?: Statement | null;
+  updatedAt: Statement;
+};
+
 export class SeriesRepository {
   constructor(private readonly db: Db) {}
 
   async list(includeArchived = false): Promise<SeriesDto[]> {
-    const rows = await this.db.query<{ id: string }>(
-      `select id from event_series
-       ${includeArchived ? '' : 'where archived_at is null'}
-       order by lower(name)`,
-    );
+    let query = this.db.orm.select({ id: eventSeries.id }).from(eventSeries).$dynamic();
+    if (!includeArchived) query = query.where(isNull(eventSeries.archivedAt));
+    const rows = await query.orderBy(sql`lower(${eventSeries.name})`);
     const result: SeriesDto[] = [];
     for (const row of rows) {
       const series = await this.load(row.id);
@@ -104,22 +108,30 @@ export class SeriesRepository {
 
     try {
       const id = await this.db.transaction(async (tx) => {
-        const [series] = await tx.query<{ id: string }>(
-          `insert into event_series (name, ministry_id, timezone, description, created_by, updated_by)
-           values ($1,$2,$3,$4,$5,$5) returning id`,
-          [name, ministryId, timezone, input.description ?? null, actor],
-        );
-        await tx.query(
-          `insert into series_schedules (series_id, effective_from, rrule, ends_on, created_by)
-           values ($1,$2,$3,$4,$5)`,
-          [series!.id, effectiveFrom, rrule, endsOn, actor],
-        );
+        const [series] = await tx.orm
+          .insert(eventSeries)
+          .values({
+            name,
+            ministryId,
+            timezone,
+            description: input.description ?? null,
+            createdBy: actor,
+            updatedBy: actor,
+          })
+          .returning({ id: eventSeries.id });
+        await tx.orm.insert(seriesSchedules).values({
+          seriesId: series!.id,
+          effectiveFrom,
+          rrule,
+          endsOn,
+          createdBy: actor,
+        });
         return series!.id;
       });
 
       return (await this.load(id))!;
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError('A series with this name already exists for that ministry');
       }
       throw error;
@@ -127,51 +139,45 @@ export class SeriesRepository {
   }
 
   async update(id: string, input: UpdateSeriesInput, actor: string): Promise<SeriesDto> {
-    const existing = await this.require(id);
-    const sets: string[] = [];
-    const params: unknown[] = [];
+    await this.require(id);
+    const set: SeriesUpdate = { updatedAt: sql`now()`, updatedBy: actor };
+    let changed = false;
 
     if (input.name !== undefined) {
       const name = input.name.trim();
       if (!name) throw new ValidationError('name is required');
-      params.push(name);
-      sets.push(`name = $${params.length}`);
+      set.name = name;
+      changed = true;
     }
     if (input.ministryCode !== undefined) {
-      params.push(await this.resolveMinistry(input.ministryCode));
-      sets.push(`ministry_id = $${params.length}`);
+      set.ministryId = await this.resolveMinistry(input.ministryCode);
+      changed = true;
     }
     if (input.timezone !== undefined) {
       todayIn(input.timezone);
-      params.push(input.timezone);
-      sets.push(`timezone = $${params.length}`);
+      set.timezone = input.timezone;
+      changed = true;
     }
     if (input.description !== undefined) {
-      params.push(input.description);
-      sets.push(`description = $${params.length}`);
+      set.description = input.description;
+      changed = true;
     }
     if (input.archived !== undefined) {
-      params.push(input.archived);
-      sets.push(`archived_at = case when $${params.length} then now() else null end`);
+      set.archivedAt = input.archived ? sql`now()` : null;
+      changed = true;
     }
 
-    if (sets.length === 0) throw new ValidationError('No fields to update');
+    if (!changed) throw new ValidationError('No fields to update');
 
-    params.push(id, actor);
     try {
-      await this.db.query(
-        `update event_series set ${sets.join(', ')}, updated_at = now(), updated_by = $${params.length}
-         where id = $${params.length - 1}`,
-        params,
-      );
+      await this.db.orm.update(eventSeries).set(set).where(eq(eventSeries.id, id));
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError('A series with this name already exists for that ministry');
       }
       throw error;
     }
 
-    void existing;
     return this.require(id);
   }
 
@@ -189,13 +195,15 @@ export class SeriesRepository {
     const rrule = validateRrule(input.rrule);
 
     try {
-      await this.db.query(
-        `insert into series_schedules (series_id, effective_from, rrule, ends_on, created_by)
-         values ($1,$2,$3,$4,$5)`,
-        [id, effectiveFrom, rrule, endsOn, actor],
-      );
+      await this.db.orm.insert(seriesSchedules).values({
+        seriesId: id,
+        effectiveFrom,
+        rrule,
+        endsOn,
+        createdBy: actor,
+      });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError(`A schedule already starts on ${effectiveFrom}`);
       }
       throw error;
@@ -211,20 +219,29 @@ export class SeriesRepository {
   ): Promise<SeriesDto> {
     await this.require(id);
     const date = assertDate(input.date, 'date');
-    await this.db.query(
-      `insert into series_exceptions (series_id, occurs_on, kind, note, created_by)
-       values ($1,$2,$3,$4,$5)
-       on conflict (series_id, occurs_on) do update set kind = excluded.kind, note = excluded.note`,
-      [id, date, input.kind, input.note ?? null, actor],
-    );
+    await this.db.orm
+      .insert(seriesExceptions)
+      .values({
+        seriesId: id,
+        occursOn: date,
+        kind: input.kind,
+        note: input.note ?? null,
+        createdBy: actor,
+      })
+      .onConflictDoUpdate({
+        target: [seriesExceptions.seriesId, seriesExceptions.occursOn],
+        set: { kind: input.kind, note: input.note ?? null },
+      });
     return this.require(id);
   }
 
   async removeException(id: string, date: string): Promise<void> {
-    const deleted = await this.db.query(
-      'delete from series_exceptions where series_id = $1 and occurs_on = $2 returning occurs_on',
-      [id, assertDate(date)],
-    );
+    const deleted = await this.db.orm
+      .delete(seriesExceptions)
+      .where(
+        and(eq(seriesExceptions.seriesId, id), eq(seriesExceptions.occursOn, assertDate(date))),
+      )
+      .returning({ occursOn: seriesExceptions.occursOn });
     if (deleted.length === 0) throw new NotFoundError(`No exception on ${date}`);
   }
 
@@ -234,59 +251,59 @@ export class SeriesRepository {
   }
 
   private async load(id: string): Promise<SeriesDto | null> {
-    const [row] = await this.db.query<{
-      id: string;
-      name: string;
-      timezone: string;
-      description: string | null;
-      archived_at: Date | string | null;
-      ministry_code: string | null;
-      ministry_name: string | null;
-    }>(
-      `select s.id, s.name, s.timezone, s.description, s.archived_at,
-              mi.code as ministry_code, mi.name as ministry_name
-       from event_series s
-       left join ministries mi on mi.id = s.ministry_id
-       where s.id = $1`,
-      [id],
-    );
+    const [row] = await this.db.orm
+      .select({
+        id: eventSeries.id,
+        name: eventSeries.name,
+        timezone: eventSeries.timezone,
+        description: eventSeries.description,
+        archivedAt: eventSeries.archivedAt,
+        ministryCode: ministries.code,
+        ministryName: ministries.name,
+      })
+      .from(eventSeries)
+      .leftJoin(ministries, eq(ministries.id, eventSeries.ministryId))
+      .where(eq(eventSeries.id, id))
+      .limit(1);
     if (!row) return null;
 
-    const schedules = await this.db.query<{
-      effective_from: string;
-      rrule: string;
-      ends_on: string | null;
-    }>(
-      'select effective_from, rrule, ends_on from series_schedules where series_id = $1 order by effective_from',
-      [id],
-    );
-    const exceptions = await this.db.query<{
-      occurs_on: string;
-      kind: 'cancelled' | 'extra';
-      note: string | null;
-    }>(
-      'select occurs_on, kind, note from series_exceptions where series_id = $1 order by occurs_on',
-      [id],
-    );
+    const schedules = await this.db.orm
+      .select({
+        effectiveFrom: seriesSchedules.effectiveFrom,
+        rrule: seriesSchedules.rrule,
+        endsOn: seriesSchedules.endsOn,
+      })
+      .from(seriesSchedules)
+      .where(eq(seriesSchedules.seriesId, id))
+      .orderBy(seriesSchedules.effectiveFrom);
+    const exceptions = await this.db.orm
+      .select({
+        occursOn: seriesExceptions.occursOn,
+        kind: seriesExceptions.kind,
+        note: seriesExceptions.note,
+      })
+      .from(seriesExceptions)
+      .where(eq(seriesExceptions.seriesId, id))
+      .orderBy(seriesExceptions.occursOn);
 
     return {
       id: row.id,
       name: row.name,
       ministry:
-        row.ministry_code && row.ministry_name
-          ? { code: row.ministry_code, name: row.ministry_name }
+        row.ministryCode && row.ministryName
+          ? { code: row.ministryCode, name: row.ministryName }
           : null,
       timezone: row.timezone,
       description: row.description,
-      archivedAt: isoTimestamp(row.archived_at),
+      archivedAt: isoTimestamp(row.archivedAt),
       schedules: schedules.map((schedule) => ({
-        effectiveFrom: isoDate(schedule.effective_from)!,
+        effectiveFrom: isoDate(schedule.effectiveFrom)!,
         rrule: schedule.rrule,
-        endsOn: isoDate(schedule.ends_on),
+        endsOn: isoDate(schedule.endsOn),
       })),
       exceptions: exceptions.map((exception) => ({
-        date: isoDate(exception.occurs_on)!,
-        kind: exception.kind,
+        date: isoDate(exception.occursOn)!,
+        kind: exception.kind as 'cancelled' | 'extra',
         note: exception.note,
       })),
     };
@@ -294,10 +311,11 @@ export class SeriesRepository {
 
   private async resolveMinistry(code: string | null): Promise<string | null> {
     if (!code) return null;
-    const [ministry] = await this.db.query<{ id: string }>(
-      'select id from ministries where lower(code) = lower($1)',
-      [code],
-    );
+    const [ministry] = await this.db.orm
+      .select({ id: ministries.id })
+      .from(ministries)
+      .where(sql`lower(${ministries.code}) = lower(${code})`)
+      .limit(1);
     if (!ministry) throw new NotFoundError(`Ministry ${code} was not found`);
     return ministry.id;
   }
