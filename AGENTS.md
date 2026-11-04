@@ -125,12 +125,13 @@ lives in `documents/lessons.md`.
 
 ## 10a. Governing documents are review-gated
 
-`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/lessons.md`,
-`documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown file in the canonical
-orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change lands only after
-`deepseek-v4-pro` build `0813` has reviewed the exact text. `glm-5.3` is admissible only when no
-provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as unavailable; a
-registry listing does not), and only with the unavailability stated in `fallbackReason`.
+`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
+`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown
+file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
+lands only after `deepseek-v4-pro` build `0813` has reviewed the exact text. `glm-5.3` is admissible
+only when no provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as
+unavailable; a registry listing does not), and only with the unavailability stated in
+`fallbackReason`.
 
 The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
 (of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
@@ -184,3 +185,14 @@ the condition that excluded them changes; do not reintroduce them silently.
   `documents/` must not hold mock images.
 - Do not put real member data, contact values, bearer tokens or session credentials into a mock or its
   screenshots.
+
+## 15. Component-first reuse (UI)
+
+- In `ui/`, extract a component at the **second** call site; never speculatively. A design- or
+  spec-named surface is extracted after the grill and the mock's states. A single call site stays
+  inline.
+- Compose Fluent UI primitives; do not wrap one to restyle it. Cross-page components live in
+  `ui/src/components/`; page-local ones in `ui/src/pages/`.
+- A component that fetches data or owns state is a **feature** component (a dialog or a route); a
+  presentational component takes props and callbacks only.
+- Full policy: `documents/agents/component-first.md`. Procedure: `.opencode/skills/component-first/SKILL.md`.
