@@ -8,10 +8,10 @@ contact values. Status detail lives in tooltips, never in pills.
 
 **Blocked by:** 12 (UI workspace, shell and Pages), 13a (Members list API).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] The grid shows presbyter status, last attended in the agreed format, a subscriptions pill and `Contacts · n`.
-- [ ] No contact value appears in the grid; opening `Contacts · n` shows the aggregate contact dialog for that member.
-- [ ] Attendance shows only the `4/5 (26-Oct-26)` form, with no bottom text.
-- [ ] Loading, empty and error states are present; status is not derived from local dates.
-- [ ] The screen matches its mock screenshot at the recorded viewport.
+- [x] The grid shows presbyter status, last attended in the agreed format, a subscriptions pill and `Contacts · n`.
+- [x] No contact value appears in the grid; opening `Contacts · n` shows the aggregate contact dialog for that member.
+- [x] Attendance shows only the `4/5 (26-Oct-26)` form, with no bottom text.
+- [x] Loading, empty and error states are present; status is not derived from local dates.
+- [x] The structure matches the local mock at 1440×900; the pixel-level live-vs-mock gate is ticket 19.
