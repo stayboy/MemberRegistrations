@@ -1002,3 +1002,8 @@ sequences.
 - **2026-11-04** — Spec-first for ticket 06: the contacts/coverage/subscriptions/shepherding batch
   migrates those writes and reads to Drizzle, keeps the report and aggregate queries raw, preserves the
   existing summary contact contract (Q65), and keeps shepherding calls append-only.
+- **2026-11-04** — Spec-first for ticket 07: the `event_instances` migration evolves
+  `event_occurrences` in place (id primary key, nullable `series_id`, dates/venue/status/source and the
+  `sessions` JSONB), mints an instance for every attendance-only key, and repoints attendance and
+  suppressions to `(event instance, session date)`. Imported-date authority is limited to real imports
+  (`import_batch_id` not null).

@@ -30,7 +30,7 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
     [seriesId],
   );
   const imported = await db.query<{ occurs_on: string }>(
-    'select occurs_on from event_occurrences where series_id = $1 order by occurs_on',
+    'select start_date as occurs_on from event_instances where series_id = $1 and import_batch_id is not null order by start_date',
     [seriesId],
   );
 
