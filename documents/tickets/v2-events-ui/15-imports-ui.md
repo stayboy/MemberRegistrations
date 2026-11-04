@@ -18,4 +18,4 @@ and reported as already imported.
 - [ ] Rejected rows show row-level reasons and no partial commit occurs.
 - [ ] Members and attendance queries refresh after a successful import.
 - [ ] There is no event-list import screen.
-- [ ] The screen matches its mock screenshot at the recorded viewport.
+- [ ] The screen matches the local `mockups/v2-imports/` capture at the recorded viewport (git-ignored; regenerate locally).

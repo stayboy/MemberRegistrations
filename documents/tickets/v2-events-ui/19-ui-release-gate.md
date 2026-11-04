@@ -15,6 +15,6 @@ drift ships.
 - [ ] Responsive at 360, 768 and 1440 px; the mobile navigation is usable.
 - [ ] Dark/light and each accent theme pass an axe contrast check on the shell, members and events screens.
 - [ ] Playwright smoke covers shell navigation, members list plus contacts, add member, event detail and series detail.
-- [ ] Every screen in the mock index has a live capture at the mock's viewport, compared in the round doc against `documents/mockups/`.
+- [ ] Every screen in the mock index has a live capture at the mock's viewport, compared in the round doc against the local `mockups/` (git-ignored).
 - [ ] Each difference is recorded as intentional (with the decision) or regression (with the fix or ticket); there is no unexplained drift.
-- [ ] A screenshot baseline is committed, and the build plus smoke run in CI.
+- [ ] A live-build screenshot baseline is committed (distinct from the local, git-ignored mock), and the build plus smoke run in CI.
