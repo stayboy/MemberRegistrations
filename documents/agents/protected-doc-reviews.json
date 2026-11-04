@@ -10,24 +10,24 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "be9dfdad4cada49c93d33311e8189c7e9c2adb779cf39cc79e9ab6425745726e",
+      "sha256": "b83112060a2a60e5645b6ba7d21a80dc8e6e128458638e35989e2683807e8afd",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds §3a (parallel workers) and removes parallel workers/worktrees from §13. why: adopt the opt-in tracks/slices with the L1-L3 guards, the 2-worker cap, parent-owned git and the post-merge acceptance. rejected: keeping the single-writer non-adoption; copying the within-round School-Collab design without the cross-ticket and root-config corrections.",
+      "reason": "changes: §3a adds size parity, mandatory persistent worktree slots, the no-browser worker scope, the memory-guard/peak-RSS rule and the lessons pointer. why: put the pilot's rules in the non-negotiables, with evidence in the lessons file. rejected: leaving the rules only in the policy; keeping the 0xC0000409/OOM attribution.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
       "at": "2026-11-04"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "cdf6a3df5ae1af865f051b0762824a3648b2506a2fd64f694efd67b2e1eff29f",
+      "sha256": "ae2fd307f59edaff6bc2012543fcf8fe2b7a343d4195e93d64b37336079f4ac2",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds the Parallel workers section and removes the non-adoption bullet. why: the repo delta needs the track map (the API cluster owns openapi.ts; the UI workspace owns ui/** and root config) and the post-merge acceptance. rejected: leaving the rule only in AGENTS.md.",
+      "reason": "changes: the Parallel workers section gains size parity, mandatory persistent slots, the no-browser worker scope and the peak-RSS memory guard; the 09–11 ‖ 12–16 track map is removed and the lessons pointer added. why: the old map prescribed the uneven pair the pilot disproved. rejected: keeping the track map; copying the incident prose into the policy.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
       "at": "2026-11-04"
     },
     {
@@ -36,7 +36,7 @@
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the gate covers the durable lessons agents obey before reading code. rejected: protecting only AGENTS.md; leaving the lessons file out of the set.",
+      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the pilot lessons are still proposed, and only an explicit owner acceptance may write them. rejected: writing the lessons before acceptance.",
       "verdict": "ACCEPTED",
       "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
       "at": "2026-11-04"
@@ -47,9 +47,9 @@
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds the Workers row and the parallel acceptance rule. why: a parallel round must record its model and verify only its own work. rejected: no provenance line; leaving the parent-only-writer rule unqualified.",
+      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: a round doc must keep recording the Workers mode and the track-only acceptance. rejected: no provenance line.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
       "at": "2026-11-04"
     },
     {
@@ -69,9 +69,9 @@
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the Worker role says one writer per worktree, the parent integrates, and parallel writers are opt-in. why: the skill must permit the sanctioned variant. rejected: leaving one-writer-per-working-tree absolute.",
+      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the entry point already points to the reference and the lessons file. rejected: duplicating the pilot rules in SKILL.md.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
       "at": "2026-11-04"
     },
     {
@@ -91,9 +91,9 @@
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the Parent, Worker and Brief-discipline contracts now say per-worktree with the opt-in pointer. why: every seat must see the exception, not just the Parent. rejected: only the Parent seat stating it.",
+      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the per-worktree writer contract already points at the parallel-workers reference. rejected: restating the pilot rules in the role contracts.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
       "at": "2026-11-04"
     },
     {
@@ -109,24 +109,24 @@
     },
     {
       "path": "canonical/references/parallel-workers.md",
-      "sha256": "24cd05fd64fc6b420127574ae760c4e4ded67bac65d35a319c5b8dec886d90b6",
+      "sha256": "d0e1cf2362d284b2ce4850799a32216cdb7bb6dfbb221b05b8606ad36f7e31de",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: new reference (cross-ticket tracks and within-round slices, L1-L3 guards, 2-worker cap, parent-owned git, base materialization, persistent worktrees, unit tests only, post-merge acceptance, park/resume, honest limits). why: the shared procedure for opt-in parallel work. rejected: copying School-Collab's within-round file verbatim; omitting the cross-ticket and root-config corrections.",
+      "reason": "changes: adds item 5 size parity, makes persistent worktree slots mandatory, bans the browser/headless harness in a worker (e2e stays with the parent/CI), rewords the 2-worker cap as a memory guard with peak RSS, and points at documents/lessons.md for the evidence. why: the pilot rules (Q99), with the incident prose kept out of the rule file. rejected: copying the incident prose; keeping the 0xC0000409-as-OOM attribution.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
       "at": "2026-11-04"
     },
     {
       "path": "canonical/CHANGELOG.md",
-      "sha256": "dcb6fcc7aab07e2d5be4042f4855d60fcd8a24b9cb212669acb022d96b159c9f",
+      "sha256": "1c04e04c42a381de686db5c3be0985e080faa6c42a18a37f1f43c00bc0450ca6",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the 2026-11-04 opt-in parallel-workers entry. why: record the ruling and the one-writer-per-worktree change. rejected: appending to an older entry.",
+      "reason": "changes: the 2026-11-04 parallel-pilot rules entry. why: record the amendment and its evidence pointer. rejected: appending to the earlier opt-in entry.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-workers amendment against Q78-Q83/Q90-Q96: the reference is faithful on tracks-vs-slices, the §13 removal is complete, the track map avoids the root-config collision, and the opt-in pointer is present in every seat; no P1.",
+      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
       "at": "2026-11-04"
     }
   ]

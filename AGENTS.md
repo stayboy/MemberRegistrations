@@ -45,11 +45,13 @@ Parallel work is **opt-in per round**, recorded on round-doc line 1 as `Workers:
 or `Workers: parallel (slices: …)`. Eligibility is mechanical: the work partitions into file-disjoint
 tracks/slices with no shared symbols, wire contracts or call-chain seams; a coupled unit merges into
 one. The parent owns git and every shared file (migrations run one at a time); a track that delivers a
-shared file owns it and the other tracks must not touch it. Two building workers by default (concurrent
-full builds/test suites have OOM-killed the process); workers run unit/API tests only, and the parent's
-merged pass is the gate. Each round verifies only its own track; the cross-track integration is a
-post-merge pass on `main`. Full rules:
-`~/.agents/skills/orchestrator/references/parallel-workers.md`.
+shared file owns it and the other tracks must not touch it. Tracks must be similar-sized; an uneven
+pair runs serially. Persistent worktree slots are mandatory (a fresh slot pays a full install). Two
+building workers by default — the cap is a memory guard, so record the peak RSS; workers run unit/API
+tests only, never a browser harness, and the parent's merged pass is the gate. Each round verifies only
+its own track; the cross-track integration is a post-merge pass on `main`. Rules live in
+`~/.agents/skills/orchestrator/references/parallel-workers.md`; incident evidence, once owner-accepted,
+lives in `documents/lessons.md`.
 
 ## 4. Date and time
 

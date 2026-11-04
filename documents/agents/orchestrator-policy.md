@@ -56,13 +56,16 @@ why (the catalog conflates the 1M context window with the output cap).
 ## Parallel workers
 
 - Opt-in per round, recorded as `Workers: parallel (tracks: …)` or `(slices: …)`.
-- Track map: the events API cluster (tickets 09–11) owns `src/repos/events.ts`, `src/routes/events.ts`,
-  `src/schemas/events.ts` and `src/openapi.ts`; the UI workspace (12–16) owns `ui/**` and its root
-  workspace/scripts/ignores. The two are file-disjoint at `src/` vs `ui/`.
+- Tracks must be similar-sized and genuinely disjoint; an uneven pair runs serially, because the
+  slowest track plus setup and integration dominates the wall-clock.
+- Persistent worktree slots are mandatory; a fresh slot pays a full install.
 - The parent owns every shared file and all git; migrations serialize. Two building workers by default;
-  workers run unit/API tests on PGlite only; the parent's merged `verify` is the gate.
+  workers run unit/API tests on PGlite only (never a browser/headless harness — e2e belongs to the
+  parent/CI post-merge); the parent's merged `verify` is the gate. The 2-worker cap is a memory guard:
+  record the peak RSS.
 - Each round verifies only its own track; the cross-track integration is a post-merge pass on `main`.
 - Full rules: `~/.agents/skills/orchestrator/references/parallel-workers.md`.
+- Incident evidence (once the owner accepts it): `documents/lessons.md`.
 
 ## Protected documents
 
