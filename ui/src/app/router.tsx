@@ -33,6 +33,21 @@ const ImportsAttendancePage = lazy(() =>
     default: page,
   })),
 );
+const ShepherdingOfficersPage = lazy(() =>
+  import('../pages/ShepherdingOfficersPage').then(({ ShepherdingOfficersPage: page }) => ({
+    default: page,
+  })),
+);
+const ShepherdingRosterPage = lazy(() =>
+  import('../pages/ShepherdingRosterPage').then(({ ShepherdingRosterPage: page }) => ({
+    default: page,
+  })),
+);
+const ShepherdingReportPage = lazy(() =>
+  import('../pages/ShepherdingReportPage').then(({ ShepherdingReportPage: page }) => ({
+    default: page,
+  })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -75,15 +90,15 @@ export const router = createHashRouter([
           { path: 'imports/batches', element: <ImportBatchesPage /> },
           {
             path: 'shepherding/officers',
-            element: placeholder('shepherding', '/shepherding/officers'),
+            element: <ShepherdingOfficersPage />,
           },
           {
             path: 'shepherding/roster',
-            element: placeholder('shepherding', '/shepherding/roster'),
+            element: <ShepherdingRosterPage />,
           },
           {
             path: 'shepherding/report',
-            element: placeholder('shepherding', '/shepherding/report'),
+            element: <ShepherdingReportPage />,
           },
           { path: 'admin/ministries', element: placeholder('admin', '/admin/ministries') },
           { path: 'settings', element: <SettingsPage /> },
