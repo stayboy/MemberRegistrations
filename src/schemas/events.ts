@@ -12,6 +12,10 @@ export const eventStatusSchema = z.enum(EVENT_STATUSES);
 export const eventSessionStatusSchema = z.enum(EVENT_SESSION_STATUSES);
 export const sessionSourceSchema = z.enum(SESSION_SOURCES);
 
+export const timeStringSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a 24-hour time (HH:MM)');
+
 export const eventListQuerySchema = z.object({
   from: dateStringSchema.optional(),
   to: dateStringSchema.optional(),
@@ -23,6 +27,39 @@ export const eventListQuerySchema = z.object({
 });
 
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
+
+/**
+ * A written session inherits the event start/end time when it omits them. The
+ * cross-field rules (range, unique dates) need the merged event, so they live
+ * in the repository rather than in a Zod refinement.
+ */
+export const eventSessionInputSchema = z.object({
+  date: dateStringSchema,
+  startTime: timeStringSchema.optional(),
+  endTime: timeStringSchema.nullable().optional(),
+  status: eventSessionStatusSchema.optional(),
+  venueType: venueTypeSchema.optional(),
+});
+
+export const createEventSchema = z.object({
+  eventNo: z.string().trim().min(1).max(64),
+  name: z.string().trim().min(1).max(200),
+  timezone: z.string().min(1).max(64).optional(),
+  startDate: dateStringSchema,
+  endDate: dateStringSchema,
+  startTime: timeStringSchema,
+  endTime: timeStringSchema.nullable().optional(),
+  venueType: venueTypeSchema,
+  venueName: z.string().max(200).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  sessions: z.array(eventSessionInputSchema).min(1),
+});
+
+/** `eventNo` is the import key and is never reused, so it is not mutable. */
+export const updateEventSchema = createEventSchema.omit({ eventNo: true }).partial();
+
+export type CreateEventInput = z.infer<typeof createEventSchema>;
+export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 
 export const eventSessionSchema = z.object({
   date: z.string(),

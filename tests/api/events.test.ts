@@ -401,3 +401,301 @@ describe('GET /v1/events', () => {
     expect(response.body.code).toBe('validation_error');
   });
 });
+
+function createEvent(body: Record<string, unknown>) {
+  return request(harness.app).post('/v1/events').set(writeHeaders).send(body);
+}
+
+function readEvent(id: string) {
+  return request(harness.app).get(`/v1/events/${id}`).set(readHeaders);
+}
+
+function updateEvent(id: string, body: Record<string, unknown>, etag?: string) {
+  return request(harness.app)
+    .put(`/v1/events/${id}`)
+    .set(etag ? { ...writeHeaders, 'If-Match': etag } : writeHeaders)
+    .send(body);
+}
+
+const emptyStats = {
+  attachedEvents: 0,
+  pledgedMinor: 0,
+  paidMinor: 0,
+  pendingMinor: 0,
+  honorRate: 0,
+  contributionCount: 0,
+};
+
+const conferenceBody = {
+  eventNo: 'SC-2026',
+  name: 'Strategic Conference',
+  timezone: 'Africa/Lagos',
+  startDate: '2026-10-13',
+  endDate: '2026-10-15',
+  startTime: '17:30',
+  endTime: '20:00',
+  venueType: 'auditorium',
+  venueName: 'Main Auditorium',
+  description: 'Annual strategic conference',
+  sessions: [{ date: '2026-10-13' }, { date: '2026-10-14' }, { date: '2026-10-15' }],
+};
+
+const validBody = {
+  eventNo: 'SC-VALID',
+  name: 'Validation Event',
+  startDate: '2026-12-01',
+  endDate: '2026-12-03',
+  startTime: '18:00',
+  venueType: 'auditorium',
+  sessions: [{ date: '2026-12-01' }],
+};
+
+let conferenceId: string;
+let conferenceEtag: string;
+
+describe('POST /v1/events', () => {
+  it('creates the Strategic Conference standalone with three 17:30 sessions', async () => {
+    const response = await createEvent(conferenceBody);
+
+    expect(response.status).toBe(201);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers.location).toBe(`/v1/events/${response.body.id}`);
+    expect(response.headers.etag).toMatch(/^"e[0-9a-f]+"$/);
+
+    conferenceId = response.body.id as string;
+    conferenceEtag = response.headers.etag as string;
+
+    expect(response.body).toMatchObject({
+      eventNo: 'SC-2026',
+      name: 'Strategic Conference',
+      seriesId: null,
+      ministry: null,
+      timezone: 'Africa/Lagos',
+      startDate: '2026-10-13',
+      endDate: '2026-10-15',
+      startTime: '17:30',
+      endTime: '20:00',
+      venueType: 'auditorium',
+      venueName: 'Main Auditorium',
+      description: 'Annual strategic conference',
+      // Today is after 2026-10-15, so the stored `scheduled` derives to held.
+      status: 'held',
+      source: 'manual',
+      offerings: [],
+      stats: emptyStats,
+    });
+    expect(response.body.sessions).toEqual([
+      {
+        date: '2026-10-13',
+        startTime: '17:30',
+        endTime: '20:00',
+        status: 'scheduled',
+        present: 0,
+        expected: 0,
+        importedRows: 0,
+        source: 'none',
+      },
+      {
+        date: '2026-10-14',
+        startTime: '17:30',
+        endTime: '20:00',
+        status: 'scheduled',
+        present: 0,
+        expected: 0,
+        importedRows: 0,
+        source: 'none',
+      },
+      {
+        date: '2026-10-15',
+        startTime: '17:30',
+        endTime: '20:00',
+        status: 'scheduled',
+        present: 0,
+        expected: 0,
+        importedRows: 0,
+        source: 'none',
+      },
+    ]);
+  });
+
+  it('rejects an empty session list', async () => {
+    const response = await createEvent({ ...validBody, eventNo: 'SC-EMPTY', sessions: [] });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+  });
+
+  it('rejects duplicate session dates', async () => {
+    const response = await createEvent({
+      ...validBody,
+      eventNo: 'SC-DUPLICATE',
+      sessions: [{ date: '2026-12-01' }, { date: '2026-12-01' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('2026-12-01');
+  });
+
+  it('rejects a session outside the event date range and writes nothing', async () => {
+    const response = await createEvent({
+      ...validBody,
+      eventNo: 'SC-OUTSIDE',
+      sessions: [{ date: '2026-11-30' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('2026-11-30');
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      "select count(*)::int as count from event_instances where event_no = 'SC-OUTSIDE'",
+    );
+    expect(Number(row!.count)).toBe(0);
+  });
+
+  it('rejects an unknown venue type and writes nothing', async () => {
+    const response = await createEvent({
+      ...validBody,
+      eventNo: 'SC-CHURCH',
+      venueType: 'church',
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      "select count(*)::int as count from event_instances where event_no = 'SC-CHURCH'",
+    );
+    expect(Number(row!.count)).toBe(0);
+  });
+
+  it('rejects a missing event number', async () => {
+    const response = await createEvent({
+      name: 'No Number',
+      startDate: '2026-12-01',
+      endDate: '2026-12-01',
+      startTime: '18:00',
+      venueType: 'auditorium',
+      sessions: [{ date: '2026-12-01' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+  });
+
+  it('rejects a duplicate event number with 409', async () => {
+    const response = await createEvent({ ...validBody, eventNo: 'EL-100' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('conflict');
+  });
+});
+
+describe('GET /v1/events/{eventId}', () => {
+  it('returns the detail with sessions, placeholders and an ETag', async () => {
+    const response = await readEvent(conferenceId);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers.etag).toBe(conferenceEtag);
+    expect(response.body).toMatchObject({
+      id: conferenceId,
+      eventNo: 'SC-2026',
+      name: 'Strategic Conference',
+      seriesId: null,
+      status: 'held',
+      offerings: [],
+      stats: emptyStats,
+    });
+    expect(response.body.sessions).toHaveLength(3);
+    expect(
+      response.body.sessions.map((session: { date: string; status: string; expected: number }) => ({
+        date: session.date,
+        status: session.status,
+        expected: session.expected,
+      })),
+    ).toEqual([
+      { date: '2026-10-13', status: 'scheduled', expected: 0 },
+      { date: '2026-10-14', status: 'scheduled', expected: 0 },
+      { date: '2026-10-15', status: 'scheduled', expected: 0 },
+    ]);
+  });
+
+  it('returns 404 for an unknown event', async () => {
+    const response = await readEvent('00000000-0000-4000-8000-000000000000');
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('not_found');
+  });
+});
+
+describe('PUT /v1/events/{eventId}', () => {
+  it('updates mutable fields with a matching If-Match and rejects a stale one', async () => {
+    const updated = await updateEvent(
+      conferenceId,
+      {
+        name: 'Strategic Conference 2026',
+        venueName: 'Main Auditorium + Zoom',
+        description: 'Updated conference',
+      },
+      conferenceEtag,
+    );
+
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      id: conferenceId,
+      eventNo: 'SC-2026',
+      name: 'Strategic Conference 2026',
+      venueName: 'Main Auditorium + Zoom',
+      description: 'Updated conference',
+      seriesId: null,
+    });
+    const freshEtag = updated.headers.etag as string;
+    expect(freshEtag).toBeTruthy();
+    expect(freshEtag).not.toBe(conferenceEtag);
+
+    const stale = await updateEvent(conferenceId, { name: 'Stale Name' }, conferenceEtag);
+    expect(stale.status).toBe(409);
+    expect(stale.body.code).toBe('conflict');
+
+    const reread = await readEvent(conferenceId);
+    expect(reread.body.name).toBe('Strategic Conference 2026');
+  });
+
+  it('updates without an If-Match header', async () => {
+    const response = await updateEvent(conferenceId, { description: 'No precondition' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.description).toBe('No precondition');
+  });
+
+  it('rejects an update that leaves a session outside the new range', async () => {
+    const response = await updateEvent(conferenceId, { startDate: '2026-10-14' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('2026-10-13');
+  });
+
+  it('treats a cancelled event as read-only', async () => {
+    const response = await updateEvent(eventIds.cancelled!, { name: 'Renamed' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('conflict');
+  });
+
+  it('treats an archived event as read-only', async () => {
+    const response = await updateEvent(eventIds.archived!, { name: 'Renamed' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('conflict');
+  });
+
+  it('returns 404 for an unknown event', async () => {
+    const response = await updateEvent('00000000-0000-4000-8000-000000000000', { name: 'Nope' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('not_found');
+  });
+});
