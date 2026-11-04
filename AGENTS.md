@@ -109,6 +109,29 @@ ticket 19.
   only when the owner accepts it.
 - Deferred work goes to `documents/backlog.md`. Never silently descope.
 
+## 10a. Governing documents are review-gated
+
+`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/lessons.md`,
+`documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown file in the canonical
+orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change lands only after
+`deepseek-v4-pro` build `0813` has reviewed the exact text. `glm-5.3` is admissible only when no
+provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as unavailable; a
+registry listing does not), and only with the unavailability stated in `fallbackReason`.
+
+The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
+(of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
+dropped), `reviewedBy`, `model`, `build`, `reason` (what changes, why it goes in now, what was
+rejected), optional `fallbackReason`, `verdict`, `attestation` and `at`.
+`tests/meta/protected-doc-review.test.ts` recomputes each hash and fails when the text moved after the
+review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, a
+protected file is missing, or the protected set loses its entry point. **Edit → review → re-record**,
+and the amended document, its record entry and any guard change land in **one commit**; there is no
+trivial-edit bypass, and an unavailable reviewer parks the change.
+
+The hash is a tripwire, not a signature: it cannot catch a document and its record being edited
+together. The review is the control for that — a human reading the diff sees an unexplained hash
+change next to a plausible-looking edit, and the recorded reason is the claim that must hold up.
+
 ## 11. Style
 
 - TypeScript strict, ESM; Zod schemas are the contract and OpenAPI is generated from them.
@@ -136,6 +159,5 @@ ticket 19.
 ## 13. Deliberately not adopted
 
 Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
-ticket 19), unattended rounds, protected-doc hash gates, parallel workers/worktrees, and GitHub
-issue/triage labels. Revisit when the condition that excluded them changes; do not reintroduce them
-silently.
+ticket 19), unattended rounds, parallel workers/worktrees, and GitHub issue/triage labels. Revisit when
+the condition that excluded them changes; do not reintroduce them silently.

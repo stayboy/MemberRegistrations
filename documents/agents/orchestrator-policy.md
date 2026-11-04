@@ -53,12 +53,21 @@ why (the catalog conflates the 1M context window with the output cap).
 - A hard gate needs the labeled calibration set (≥100 rows, false-pass 0, false-rework ≤10%, ≥3
   rounds) and a protected-doc round.
 
+## Protected documents
+
+`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/lessons.md`,
+`documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical orchestrator skill's markdown
+are review-gated: a change lands only after `deepseek-v4-pro:0813` reviews the exact text, with
+`glm-5.3` only as a recorded fallback. The record is `documents/agents/protected-doc-reviews.json`; the
+guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
+guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
+while the repo checks always run.
+
 ## Deliberately not adopted
 
 - **Full Tier 3 and a dedicated UI tester** — deferred; the V2 gate is the minimal Playwright/axe/
   live-vs-mock check in ticket 19. Revisit when the UI is stable.
 - **Unattended rounds** — every round is owner-attended.
-- **Protected-doc hash gates** — the approved spec and git history are the control.
 - **Parallel workers and worktrees** — one writer per working tree; the parent is the only writer.
 - **GitHub issue/triage labels** — use `documents/backlog.md` until a tracker is adopted.
 

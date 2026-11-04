@@ -1,0 +1,122 @@
+{
+  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (glm-5.3 only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
+  "firstChoice": {
+    "model": "deepseek-v4-pro",
+    "build": "0813"
+  },
+  "fallback": {
+    "model": "glm-5.3"
+  },
+  "reviews": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "e64b20c06dfd64c21415dc75a902a76a60b36c1637b27f09235ab063f0dfabcf",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: adds §10a (governing documents are review-gated) and removes 'protected-doc hash gates' from §13. why: the repo adopted a review gate so a governing-doc edit lands only after deepseek-v4-pro:0813 reviews the exact text. rejected: the previous non-adoption (the spec and git history as the control); a commit-trailer attestation (written by the same agent, lost on squash); protecting only AGENTS.md rather than the whole set.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "documents/agents/orchestrator-policy.md",
+      "sha256": "9fb93d9499da44cebe97bef72491e84871e3adb0c4bcf7a33c386193b74872b4",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: adds the top-level 'Protected documents' rule and removes the protected-doc non-adoption bullet. why: the repo delta must name the gate, the record, the guard and the one-commit atomicity. rejected: leaving the rule only in AGENTS.md (the policy is what agents read for local choices).",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "documents/lessons.md",
+      "sha256": "ee636dfae7654f1646b74d8a22c90642330819dca0dc6a8ac09a0149e6f5d7e9",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the gate covers the durable lessons agents obey before reading code. rejected: protecting only AGENTS.md; leaving the lessons file out of the set.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "documents/rounds/README.md",
+      "sha256": "7a65f9ba034f1496172369cfb6639441b260d56f82ffb7d29dc3ae31272bd36b",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the round-doc shape is a governing instruction agents follow. rejected: protecting only AGENTS.md; leaving the round-doc README out of the set.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": ".github/merge-policy.md",
+      "sha256": "9949321b6504d64ee2eb9f041f34740a148633692192362f96b37b8babe654d9",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the merge policy is a governing instruction agents follow. rejected: protecting only AGENTS.md; leaving the merge policy out of the set.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "canonical/SKILL.md",
+      "sha256": "aeea9749db61f1b3739a1ef96ffc5dd75be8a1612b68aeaf57bfb02360e3dacc",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the canonical orchestrator skill is newly protected and attested at its current text. why: the shared procedure is the document agents obey before reading code. rejected: leaving the canonical to the verify:skill manifest alone (integrity is checked there, but the review gate is separate).",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "canonical/references/models.md",
+      "sha256": "0f9e5f64b56a17ff6510c7d22b767228106bd83825de53aa9a0397f6a03e3664",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the model seat catalogue and dispatch rules govern every round. rejected: protecting only the skill entry point rather than the references.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "canonical/references/role-contracts.md",
+      "sha256": "37e654fd40f54a73bff5e85d69978c46ea13d5d938c5d8df2aa0a6bc4446e347",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the role contracts govern worker, reviewer and parent behaviour. rejected: protecting only the skill entry point rather than the references.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "canonical/references/mock-parity.md",
+      "sha256": "1659dd0e251058efd0fda6e179ea4747d887a3affb28c7219e230e89c8856452",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the mock-parity screen governs how UI work is judged against a mock. rejected: protecting only the skill entry point rather than the references.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    },
+    {
+      "path": "canonical/CHANGELOG.md",
+      "sha256": "22b56563bd1782a0562fd7605ef3ca543aa522e2ec5046d9b0b2427ffacda7d8",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "build": "0813",
+      "reason": "changes: no text change this round; the file is newly protected and attested at its current text. why: the skill's changelog is the ruling history the next agent reads. rejected: protecting only the skill entry point rather than the whole folder.",
+      "verdict": "ACCEPTED",
+      "attestation": "Reviewed the protected-doc gate amendment and the protected set against Q84-Q89: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1s; the amendment satisfies the accepted design.",
+      "at": "2026-11-04"
+    }
+  ]
+}
