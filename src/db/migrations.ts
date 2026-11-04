@@ -466,4 +466,14 @@ group by 1
 on conflict (year) do nothing;
 `,
   },
+  {
+    version: '0008_import_kind_members',
+    sql: `
+-- V2 has exactly two imports: members and attendance. Legacy event-list
+-- batches stay readable because 'events' remains allowed.
+alter table import_batches drop constraint if exists import_batches_kind_check;
+alter table import_batches add constraint import_batches_kind_check
+  check (kind in ('events', 'members', 'attendance'));
+`,
+  },
 ];

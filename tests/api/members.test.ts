@@ -252,7 +252,9 @@ describe('reference endpoints', () => {
     const openapi = await request(app).get('/openapi.json');
     expect(openapi.status).toBe(200);
     expect(openapi.body.paths['/v1/members/{memberNo}/attendance']).toBeTruthy();
-    expect(openapi.body.paths['/v1/imports/events']).toBeTruthy();
+    expect(openapi.body.paths['/v1/imports/members']).toBeTruthy();
+    expect(openapi.body.paths['/v1/imports/formats']).toBeTruthy();
+    expect(openapi.body.paths['/v1/imports/events']).toBeUndefined();
   });
 
   it('refuses to delete a ministry that is referenced', async () => {

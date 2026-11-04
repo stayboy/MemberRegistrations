@@ -24,10 +24,10 @@ contacts, service subscriptions, ministry assignments and attendance. There is n
 a member up, no CRUD API over the register, and no trustworthy way to answer "how often did this
 member attend the Sunday service this quarter?".
 
-Attendance currently arrives as two unrelated imports — an event list (`date`, `eventno`,
-`eventname`, `by_ministryname`) and an attendance registry (`memberno`, `date`, `eventno`) — and is
-reported as free text such as `eventname1 - 2 out of 5`. Nothing defines what the "5" is, so the
-number cannot be computed, audited or trusted.
+The register and attendance currently arrive as two separate files — a member database export and an
+attendance registry (`memberno`, `date`, `eventno`) — and attendance is reported as free text such as
+`eventname1 - 2 out of 5`. Nothing defines what the "5" is, so the number cannot be computed, audited
+or trusted.
 
 The V2 amendment addresses the next gap: a standalone multi-day event such as the Strategic
 Conference (13–15 October 2026, 17:30, Main Auditorium) cannot be represented as a recurring series,
@@ -68,8 +68,8 @@ deployed to Vercel as a single function.
    register stays correct without hand-editing files.
 5. As an administrator, I want to record and correct attendance for a member against a series and date,
    so that manual corrections coexist with imported registries.
-6. As an administrator, I want to import event lists and attendance registries idempotently, so that
-   re-running a file is safe and a bad file changes nothing.
+6. As an administrator, I want to import the member database and attendance registry idempotently, with
+   a downloadable Excel template, so that re-running a file is safe and a bad file changes nothing.
 7. As an administrator, I want ministries, series and their schedules managed through the API, so that
    reference data is not hard-coded in a deployment.
 8. As an administrator, I want spouse and dependent links between real member records, so that a
@@ -154,6 +154,12 @@ deployed to Vercel as a single function.
   in `sessionStorage` only. The gateway MUST NOT set an authentication cookie.
 - FR-28: Sessions, magic links and rate-limit counters MUST live in Postgres. In-memory auth state MUST
   NOT be relied on, because serverless instances do not share memory.
+- FR-29: A member database import MUST upsert members by `memberNo`, all-or-nothing. A duplicate
+  `memberNo` in one file, an archived member or a purged member MUST fail the batch; `phone`/`email`
+  MUST become contacts without duplicating an existing one.
+- FR-30: Every import MUST expose its expected columns through the API and MUST offer an Excel
+  (`.xlsx`) template for download; a client that cannot take the file MUST be able to show the same
+  column list inline.
 
 ## Non-Functional Requirements
 
@@ -334,7 +340,8 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 - Generation runs over a `from`/`to` window for every non-archived series. A generated event is
   single-session (its occurrence date), `source = series`, `startTime '00:00'`, `venueType
 'auditorium'`, and gets a unique `eventNo` of the form `EVT-<year>-<NNN>` from a per-year counter.
-  Re-running adds nothing and never overwrites an existing event.
+  Re-running adds nothing and never overwrites an existing event; it fills a missing `eventNo` so an
+  attendance import can target an instance created by a manual attendance entry.
 - `event_instances` is the evolved `event_occurrences` table: the primary key moves from
   `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
 
@@ -344,9 +351,6 @@ An **occurrence** is still a date on which a series actually met:
 
 1. Expand the schedule version in force on each date within the window.
 2. Remove `cancelled` exceptions, add `extra` exceptions.
-3. Where an imported event list covers a range (the span between its first and last imported date),
-   the imported dates are authoritative for that range: a scheduled date absent from the import was
-   not held, and an imported date off-schedule was.
 
 A **series occurrence generates at most one event instance**, idempotently on `(seriesId, date)`. A
 cancelled occurrence suppresses generation; an extra exception creates an event.
@@ -393,14 +397,20 @@ Extras count when held; cancellations do not.
 Every import is one transaction and one `import_batch` row (`kind`, `actor`, `rowCount`, `checksum`,
 `createdAt`). Row-level errors fail the whole request with a `422` report; there is no partial apply.
 
-An **event-list import** row `(date, eventno, eventname, ministryName?)` resolves the event by
-`event_no` (or by series name when the code is absent), then upserts that session date. A second row
-for the same event and date updates the session; a row for a new date adds a session. An `eventname`
-with no matching series fails the import and returns the unknown names.
+A **member import** row `(memberNo, firstName, lastName, otherNames?, gender?, dob?, joinedOn?,
+placeOfResidence?, addressLine?, isPresbyter?, phone?, email?)` upserts the member by `memberNo`
+(case-insensitive). A duplicate `memberNo` inside one file, an archived member or a purged member fails
+the whole batch. A blank optional cell leaves the stored value unchanged. `phone` and `email` become
+contacts: an identical contact is skipped, and a value already held by another member is an error.
+Ministries, relationships and subscriptions are not imported.
 
 An **attendance import** row `(memberno, date, eventno)` resolves `eventno` to the event instance and
 `date` to one of its sessions. A date outside `sessions` fails the whole batch and names the event and
 date; attendance is never written against an unlisted date.
+
+Every import publishes its column contract at `GET /v1/imports/formats` and serves an Excel template at
+`GET /v1/imports/templates/{kind}` (header row, one example row and a notes sheet). The template and
+the JSON contract MUST describe the same columns.
 
 ### Offering
 
@@ -567,17 +577,20 @@ export interface Event {
 
 ### Imports
 
-| Method | Path                     | Result                                                           |
-| ------ | ------------------------ | ---------------------------------------------------------------- |
-| `POST` | `/v1/imports/events`     | Rows `(date, eventno, eventname, ministryName?)`, all-or-nothing |
-| `POST` | `/v1/imports/attendance` | Rows `(memberno, date, eventno)`, all-or-nothing                 |
-| `GET`  | `/v1/imports/{batchId}`  | Batch record                                                     |
+| Method | Path                           | Result                                                    |
+| ------ | ------------------------------ | --------------------------------------------------------- |
+| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing |
+| `POST` | `/v1/imports/attendance`       | Rows `(memberno, date, eventno)`, all-or-nothing          |
+| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                     |
+| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`            |
+| `GET`  | `/v1/imports/{batchId}`        | Batch record                                              |
 
-- JSON, 1 MB cap (~10k rows); larger files are chunked by the caller.
-- Idempotent by natural key: events upsert on `(eventNo, sessionDate)`, attendance on
+- JSON rows, 1 MB cap (~10k rows); larger files are chunked by the caller. The UI parses CSV or the
+  downloaded `.xlsx` into these rows.
+- Idempotent by natural key: members on `memberNo`, attendance on
   `(eventInstanceId, sessionDate, memberId)`.
-- An `eventname` with no matching series and no matching `event_no` fails the import and returns the
-  unknown names. Series are created by an administrator, never by an import.
+- An unknown `eventno` or a date outside the event's `sessions` fails the attendance import. Series are
+  created by an administrator or by generation, never by an import.
 
 ### Offerings and giving
 
@@ -1039,3 +1052,8 @@ sequences.
   non-archived series, inherits the series name/ministry/timezone with the default `auditorium` venue
   and `00:00` start, is idempotent on `(seriesId, startDate)`, and mints `EVT-<year>-<NNN>` from a
   per-year counter.
+- **2026-11-04** — Spec-first for the imports amendment (grill Q107–Q110): V2 has exactly two imports —
+  the member database (`POST /v1/imports/members`, upsert by `memberNo`, contacts without duplicates)
+  and the attendance registry. The event-list import is retired; occurrences come from the schedule and
+  exceptions. Every import publishes its column contract (`GET /v1/imports/formats`) and an Excel
+  template (`GET /v1/imports/templates/{kind}`).

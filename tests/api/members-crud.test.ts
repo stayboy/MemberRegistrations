@@ -174,3 +174,207 @@ describe('member row operations', () => {
     expect(rejected.body.code).toBe('conflict');
   });
 });
+
+describe('members import', () => {
+  function importMembers(rows: unknown[]) {
+    return request(app).post('/v1/imports/members').set(writeHeaders).send({ rows });
+  }
+
+  it('creates new members and a members batch', async () => {
+    const response = await importMembers([
+      {
+        memberNo: 'I-1001',
+        firstName: 'Akosua',
+        lastName: 'Owusu',
+        otherNames: 'Ama',
+        gender: 'female',
+        dob: '1990-05-14',
+        joinedOn: '2026-01-04',
+        placeOfResidence: 'Accra',
+        addressLine: '12 Independence Avenue',
+        isPresbyter: true,
+        phone: '0801 234 5678',
+        email: 'Akosua@Example.com',
+      },
+      { memberNo: 'I-1002', firstName: 'Kwame', lastName: 'Asante', joinedOn: '2026-01-11' },
+    ]);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ kind: 'members', rowCount: 2, actor: 'test-admin' });
+
+    const batch = await request(app).get(`/v1/imports/${response.body.id}`).set(readHeaders);
+    expect(batch.status).toBe(200);
+    expect(batch.body.kind).toBe('members');
+
+    const first = await request(app).get('/v1/members/I-1001').set(readHeaders).expect(200);
+    expect(first.body).toMatchObject({
+      memberNo: 'I-1001',
+      firstName: 'Akosua',
+      lastName: 'Owusu',
+      otherNames: 'Ama',
+      gender: 'female',
+      dob: '1990-05-14',
+      joinedOn: '2026-01-04',
+      placeOfResidence: 'Accra',
+      addressLine: '12 Independence Avenue',
+      isPresbyter: true,
+      version: 1,
+    });
+    expect(first.body.contacts).toEqual([
+      expect.objectContaining({ kind: 'phone', value: '0801 234 5678', displayOrder: 1 }),
+      expect.objectContaining({ kind: 'email', value: 'Akosua@Example.com', displayOrder: 2 }),
+    ]);
+
+    const second = await request(app).get('/v1/members/I-1002').set(readHeaders).expect(200);
+    expect(second.body).toMatchObject({ memberNo: 'I-1002', isPresbyter: false, version: 1 });
+  });
+
+  it('re-imports idempotently without duplicating members or contacts', async () => {
+    const rows = [
+      {
+        memberNo: 'I-2001',
+        firstName: 'Yaa',
+        lastName: 'Boateng',
+        joinedOn: '2026-01-04',
+        phone: '08011112222',
+        email: 'yaa@example.com',
+      },
+    ];
+
+    await importMembers(rows).expect(201);
+    await importMembers(rows).expect(201);
+
+    const members = await request(app).get('/v1/members').query({ q: 'I-2001' }).set(readHeaders);
+    expect(members.body.items).toHaveLength(1);
+
+    const member = await request(app).get('/v1/members/I-2001').set(readHeaders);
+    expect(member.body.version).toBe(2);
+    expect(member.body.contacts).toHaveLength(2);
+  });
+
+  it('updates an existing member and keeps its number and creation time', async () => {
+    const created = await create('U-1001', {
+      firstName: 'Old',
+      lastName: 'Name',
+      otherNames: 'Kofi',
+      placeOfResidence: 'Kumasi',
+      joinedOn: '2026-01-01',
+    });
+
+    const response = await importMembers([
+      {
+        memberNo: 'u-1001',
+        firstName: 'New',
+        lastName: 'Name',
+        otherNames: '',
+        placeOfResidence: 'Accra',
+        joinedOn: '2026-01-01',
+      },
+    ]);
+
+    expect(response.status).toBe(201);
+
+    const member = await request(app).get('/v1/members/U-1001').set(readHeaders).expect(200);
+    expect(member.body).toMatchObject({
+      memberNo: 'U-1001',
+      firstName: 'New',
+      otherNames: 'Kofi',
+      placeOfResidence: 'Accra',
+      version: 2,
+    });
+    expect(member.body.createdAt).toBe(created.body.createdAt);
+  });
+
+  it('rejects a duplicate member number inside the file and applies nothing', async () => {
+    const response = await importMembers([
+      { memberNo: 'I-3001', firstName: 'First', lastName: 'Row' },
+      { memberNo: 'i-3001', firstName: 'Second', lastName: 'Row' },
+    ]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('I-3001');
+    expect(response.body.detail).toContain('rows 1, 2');
+
+    await request(app).get('/v1/members/I-3001').set(readHeaders).expect(404);
+  });
+
+  it('rejects an archived member', async () => {
+    await create('A-1001');
+    await request(app).delete('/v1/members/A-1001').set(writeHeaders).expect(204);
+
+    const response = await importMembers([
+      { memberNo: 'A-1001', firstName: 'Still', lastName: 'Archived' },
+    ]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('archived');
+
+    const archived = await request(app)
+      .get('/v1/members/A-1001')
+      .query({ includeArchived: 'true' })
+      .set(readHeaders);
+    expect(archived.body.archivedAt).toBeTruthy();
+  });
+
+  it('rejects a purged member', async () => {
+    await create('P-1001');
+    await request(app)
+      .post('/v1/members/P-1001/purge')
+      .set(writeHeaders)
+      .send({ confirm: 'P-1001' })
+      .expect(204);
+
+    const response = await importMembers([
+      { memberNo: 'P-1001', firstName: 'Cannot', lastName: 'Return' },
+    ]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('purged');
+  });
+
+  it('skips an identical contact and rejects one held by another member', async () => {
+    const row = {
+      memberNo: 'D-1001',
+      firstName: 'Dedupe',
+      lastName: 'Phone',
+      joinedOn: '2026-01-04',
+      phone: '09022223333',
+    };
+
+    await importMembers([row]).expect(201);
+    await importMembers([{ ...row, phone: '0902 222 3333' }]).expect(201);
+
+    const owner = await request(app).get('/v1/members/D-1001').set(readHeaders);
+    expect(owner.body.contacts).toEqual([
+      expect.objectContaining({ kind: 'phone', value: '09022223333' }),
+    ]);
+
+    const clash = await importMembers([
+      { memberNo: 'D-1002', firstName: 'Other', lastName: 'Holder', phone: '090 2222 3333' },
+    ]);
+
+    expect(clash.status).toBe(422);
+    expect(clash.body.code).toBe('import_failed');
+    expect(clash.body.detail).toContain('Row 1');
+
+    await request(app).get('/v1/members/D-1002').set(readHeaders).expect(404);
+  });
+
+  it('rolls the whole batch back when a later row fails', async () => {
+    await create('R-ARCH');
+    await request(app).delete('/v1/members/R-ARCH').set(writeHeaders).expect(204);
+
+    const response = await importMembers([
+      { memberNo: 'R-1001', firstName: 'First', lastName: 'Row' },
+      { memberNo: 'R-ARCH', firstName: 'Second', lastName: 'Row' },
+    ]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+
+    await request(app).get('/v1/members/R-1001').set(readHeaders).expect(404);
+  });
+});

@@ -1,4 +1,5 @@
 import request from 'supertest';
+import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
 
@@ -123,55 +124,54 @@ describe('attendance counts', () => {
 });
 
 describe('imports', () => {
-  const events = [
-    { date: '2026-01-04', eventno: 'E-04', eventname: 'Sunday Main English Service' },
-    { date: '2026-01-18', eventno: 'E-18', eventname: 'Sunday Main English Service' },
-    { date: '2026-01-25', eventno: 'E-25', eventname: 'Sunday Main English Service' },
-    { date: '2026-02-01', eventno: 'E-01', eventname: 'Sunday Main English Service' },
-  ];
+  const eventNos = new Map<string, string>();
 
-  it('rejects an unknown series name without applying anything', async () => {
+  function eventNo(date: string): string {
+    const value = eventNos.get(date);
+    if (!value) throw new Error(`No generated event for ${date}`);
+    return value;
+  }
+
+  beforeAll(async () => {
+    const generated = await request(app)
+      .post('/v1/events/generate')
+      .query({ from: '2026-01-01', to: '2026-02-10' })
+      .set(writeHeaders);
+    expect(generated.status).toBe(200);
+
+    const listed = await request(app)
+      .get('/v1/events')
+      .query({ seriesId, from: '2026-01-01', to: '2026-02-10', limit: 100 })
+      .set(readHeaders);
+    expect(listed.status).toBe(200);
+
+    for (const event of listed.body.items as Array<{
+      startDate: string;
+      eventNo: string | null;
+    }>) {
+      if (event.eventNo) eventNos.set(event.startDate, event.eventNo);
+    }
+
+    // 2026-01-11 is cancelled by the attendance-counts suite.
+    expect(eventNos.size).toBe(4);
+  });
+
+  it('retires the event-list import', async () => {
     const response = await request(app)
       .post('/v1/imports/events')
       .set(writeHeaders)
-      .send({ rows: [...events, { date: '2026-02-08', eventno: 'X', eventname: 'Unknown' }] });
+      .send({ rows: [] });
 
-    expect(response.status).toBe(422);
-    expect(response.body.code).toBe('import_failed');
-    expect(response.body.detail).toContain('Unknown');
-
-    const occurrences = await request(app)
-      .get(`/v1/series/${seriesId}/occurrences`)
-      .query({ from: '2026-01-01', to: '2026-02-10' })
-      .set(readHeaders);
-
-    // Unchanged: the whole import rolled back.
-    expect(occurrences.body.dates).toHaveLength(4);
+    expect(response.status).toBe(404);
   });
 
-  it('applies an event list idempotently', async () => {
-    const first = await request(app)
-      .post('/v1/imports/events')
-      .set(writeHeaders)
-      .send({ rows: events });
-    expect(first.status).toBe(201);
-    expect(first.body.rowCount).toBe(4);
-
-    const second = await request(app)
-      .post('/v1/imports/events')
-      .set(writeHeaders)
-      .send({ rows: events });
-    expect(second.status).toBe(201);
-
-    const batch = await request(app).get(`/v1/imports/${second.body.id}`).set(readHeaders);
-    expect(batch.body.checksum).toBe(second.body.checksum);
-  });
-
-  it('rejects attendance rows for unknown event numbers', async () => {
+  it('rejects attendance rows for unknown event numbers, and adds nothing', async () => {
     const response = await request(app)
       .post('/v1/imports/attendance')
       .set(writeHeaders)
-      .send({ rows: [{ memberno: 'M-5001', date: '2026-01-04', eventno: 'NOPE' }] });
+      .send({
+        rows: [{ memberno: 'M-5001', date: '2026-01-25', eventno: 'NOPE' }],
+      });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
@@ -183,9 +183,9 @@ describe('imports', () => {
       .set(writeHeaders)
       .send({
         rows: [
-          { memberno: 'M-5001', date: '2026-01-04', eventno: 'E-04' },
-          { memberno: 'M-5001', date: '2026-01-18', eventno: 'E-18' },
-          { memberno: 'M-5001', date: '2026-01-25', eventno: 'E-25' },
+          { memberno: 'M-5001', date: '2026-01-04', eventno: eventNo('2026-01-04') },
+          { memberno: 'M-5001', date: '2026-01-18', eventno: eventNo('2026-01-18') },
+          { memberno: 'M-5001', date: '2026-01-25', eventno: eventNo('2026-01-25') },
         ],
       });
 
@@ -221,8 +221,8 @@ describe('imports', () => {
       .set(writeHeaders)
       .send({
         rows: [
-          { memberno: 'M-5001', date: '2026-01-25', eventno: 'E-25' },
-          { memberno: 'M-5001', date: '2026-02-01', eventno: 'E-01' },
+          { memberno: 'M-5001', date: '2026-01-25', eventno: eventNo('2026-01-25') },
+          { memberno: 'M-5001', date: '2026-02-01', eventno: eventNo('2026-02-01') },
         ],
       })
       .expect(201);
@@ -233,6 +233,174 @@ describe('imports', () => {
     expect(dates).not.toContain('2026-01-25');
     expect(dates).toContain('2026-02-01');
     expect(after.body.series[0].attended).toBe(3);
+  });
+});
+
+describe('generation backfill', () => {
+  it('assigns an event number to an instance created by manual attendance', async () => {
+    for (const member of [
+      { memberNo: 'M-5101', firstName: 'Manual', lastName: 'First', joinedOn: '2026-12-01' },
+      { memberNo: 'M-5102', firstName: 'Imported', lastName: 'Second', joinedOn: '2026-12-01' },
+    ]) {
+      await request(app).post('/v1/members').set(writeHeaders).send(member).expect(201);
+    }
+
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Backfill Sunday Service',
+        timezone: 'UTC',
+        schedule: {
+          effectiveFrom: '2026-12-06',
+          rrule: 'FREQ=WEEKLY;BYDAY=SU',
+          endsOn: '2026-12-06',
+        },
+      });
+    expect(series.status).toBe(201);
+    const backfillSeriesId = series.body.id as string;
+
+    // The manual entry creates the instance before generation has numbered it.
+    await request(app)
+      .post('/v1/members/M-5101/attendance')
+      .set(writeHeaders)
+      .send({ seriesId: backfillSeriesId, date: '2026-12-06' })
+      .expect(201);
+
+    const [before] = await harness.db.query<{ id: string; event_no: string | null }>(
+      `select id, event_no from event_instances
+       where series_id = $1 and start_date = '2026-12-06'`,
+      [backfillSeriesId],
+    );
+    expect(before!.event_no).toBeNull();
+
+    const generated = await request(app)
+      .post('/v1/events/generate')
+      .query({ from: '2026-12-06', to: '2026-12-06' })
+      .set(writeHeaders);
+    expect(generated.status).toBe(200);
+    expect(generated.body.created).toBe(0);
+    expect(generated.body.skipped).toBe(1);
+
+    const [after] = await harness.db.query<{ id: string; event_no: string | null }>(
+      `select id, event_no from event_instances
+       where series_id = $1 and start_date = '2026-12-06'`,
+      [backfillSeriesId],
+    );
+    expect(after!.event_no).toBeTruthy();
+
+    // The assigned number now lets an attendance import target that instance.
+    await request(app)
+      .post('/v1/imports/attendance')
+      .set(writeHeaders)
+      .send({
+        rows: [{ memberno: 'M-5102', date: '2026-12-06', eventno: after!.event_no }],
+      })
+      .expect(201);
+
+    const report = await request(app)
+      .get(`/v1/events/${before!.id}/attendance`)
+      .query({ date: '2026-12-06' })
+      .set(readHeaders);
+    expect(report.status).toBe(200);
+    expect(report.body.present).toBe(2);
+  });
+});
+
+describe('import formats and templates', () => {
+  it('publishes the column contract for both kinds', async () => {
+    const response = await request(app).get('/v1/imports/formats').set(readHeaders);
+
+    expect(response.status).toBe(200);
+    expect(response.body.formats.map((format: { kind: string }) => format.kind)).toEqual([
+      'members',
+      'attendance',
+    ]);
+
+    const members = response.body.formats.find(
+      (format: { kind: string }) => format.kind === 'members',
+    );
+    expect(members.columns.map((column: { name: string }) => column.name)).toEqual([
+      'memberNo',
+      'firstName',
+      'lastName',
+      'otherNames',
+      'gender',
+      'dob',
+      'joinedOn',
+      'placeOfResidence',
+      'addressLine',
+      'isPresbyter',
+      'phone',
+      'email',
+    ]);
+    expect(
+      members.columns.find((column: { name: string }) => column.name === 'memberNo').required,
+    ).toBe(true);
+
+    const attendance = response.body.formats.find(
+      (format: { kind: string }) => format.kind === 'attendance',
+    );
+    expect(attendance.columns.map((column: { name: string }) => column.name)).toEqual([
+      'memberno',
+      'date',
+      'eventno',
+    ]);
+  });
+
+  it.each(['members', 'attendance'])('serves a real %s workbook', async (kind) => {
+    const formats = await request(app).get('/v1/imports/formats').set(readHeaders);
+    const registry = formats.body.formats.find(
+      (format: { kind: string }) => format.kind === kind,
+    ) as { columns: Array<{ name: string }> };
+
+    const response = await request(app)
+      .get(`/v1/imports/templates/${kind}`)
+      .set(readHeaders)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('spreadsheetml.sheet');
+    expect(response.headers['content-disposition']).toBe(
+      `attachment; filename="${kind}-import-template.xlsx"`,
+    );
+    expect(response.headers['cache-control']).toBe('no-store');
+
+    const body = response.body as Buffer;
+    expect(Buffer.isBuffer(body)).toBe(true);
+    expect(body.subarray(0, 2).toString('latin1')).toBe('PK');
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(body as unknown as ArrayBuffer);
+
+    const sheet = workbook.getWorksheet(kind);
+    expect(sheet).toBeTruthy();
+    const header = (sheet!.getRow(1).values as unknown[]).slice(1);
+    expect(header).toEqual(registry.columns.map((column) => column.name));
+    expect((sheet!.getRow(2).values as unknown[]).slice(1)).toHaveLength(registry.columns.length);
+
+    const notes = workbook.getWorksheet('Notes');
+    expect(notes).toBeTruthy();
+    expect((notes!.getRow(1).values as unknown[]).slice(1)).toEqual([
+      'Column',
+      'Required',
+      'Type',
+      'Example',
+      'Notes',
+    ]);
+    expect(notes!.rowCount).toBe(registry.columns.length + 3);
+  });
+
+  it('returns 404 for an unknown template kind', async () => {
+    const response = await request(app).get('/v1/imports/templates/events').set(readHeaders);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('not_found');
   });
 });
 
