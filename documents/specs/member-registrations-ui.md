@@ -11,13 +11,13 @@ in the bundle. Offerings and USSD are V3 and are specified in
 `member-registrations-events-offerings.md`. The API amendment is in `member-registrations-api.md`;
 implementation is gated by tickets 01–24 plus 11a.
 
-|            |                                                                                        |
-| ---------- | -------------------------------------------------------------------------------------- |
-| Repo       | `MemberRegistrations`, UI as an `ui/` npm workspace                                    |
-| Origin     | Conversational request, 2026-11-03: V2 UI for connect, import and CRUD against the API |
-| Related    | `documents/specs/member-registrations-api.md`, `documents/mockups/v2-shell/`           |
-| Supersedes | The “V2 UI” line in `documents/backlog.md` once this spec is approved                  |
-| Change log | 2026-11-03: gateway env names aligned with ticket 11a (`AUTH_*`, `UI_BASE_URL`).       |
+|            |                                                                                                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo       | `MemberRegistrations`, UI as an `ui/` npm workspace                                                                                                                                                     |
+| Origin     | Conversational request, 2026-11-03: V2 UI for connect, import and CRUD against the API                                                                                                                  |
+| Related    | `documents/specs/member-registrations-api.md`, `documents/mockups/v2-shell/`                                                                                                                            |
+| Supersedes | The “V2 UI” line in `documents/backlog.md` once this spec is approved                                                                                                                                   |
+| Change log | 2026-11-03: gateway env names aligned with ticket 11a (`AUTH_*`, `UI_BASE_URL`). 2026-11-04: two imports (member database, attendance registry) plus Excel templates; the event-list import is retired. |
 
 ---
 
@@ -169,23 +169,24 @@ that signing in as a different officer changes what that officer can see or do (
 
 ### 4.3 Navigation map
 
-| Top-level   | Submenu             | Route                    | Primary API calls                                             | V2 slice |
-| ----------- | ------------------- | ------------------------ | ------------------------------------------------------------- | -------- |
-| Members     | All members         | `#/members`              | `GET /v1/members?status=active&include=attendance&seriesId=…` | 1        |
-| Members     | Add member          | `#/members/new`          | `POST /v1/members`                                            | 1        |
-| Members     | Archived            | `#/members/archived`     | `GET /v1/members?status=archived`                             | 1        |
-| Events      | Events              | `#/events`               | `GET /v1/events`                                              | 5        |
-| Events      | Series              | `#/events/series`        | `GET /v1/series`, `GET /v1/series/:id/occurrences`            | 5        |
-| Events      | Offerings           | `#/events/offerings`     | V3 — not in V2                                                | V3       |
-| Imports     | Event list          | `#/imports/events`       | `POST /v1/imports/events`                                     | 2        |
-| Imports     | Attendance registry | `#/imports/attendance`   | `POST /v1/imports/attendance`                                 | 2        |
-| Imports     | Batch lookup        | `#/imports/batches`      | `GET /v1/imports/:batchId` (session list + lookup; see FR-38) | 2        |
-| Shepherding | Officers            | `#/shepherding/officers` | `GET /v1/shepherding/report` (totals + per-officer rows)      | 4        |
-| Shepherding | Roster              | `#/shepherding/roster`   | `GET /v1/shepherding/officers/:memberNo/members`              | 4        |
-| Shepherding | Church report       | `#/shepherding/report`   | `GET /v1/shepherding/report`                                  | 4        |
-| Admin       | Ministries          | `#/admin/ministries`     | `GET/POST/PUT/DELETE /v1/ministries`                          | 3        |
-| Admin       | API connection      | `#/connect`              | `GET /health` + `GET /v1/ministries` (probe)                  | 0        |
-| Admin       | Settings            | `#/settings`             | local only (appearance, nav, sign out)                        | 0        |
+| Top-level   | Submenu             | Route                                       | Primary API calls                                             | V2 slice |
+| ----------- | ------------------- | ------------------------------------------- | ------------------------------------------------------------- | -------- |
+| Members     | All members         | `#/members`                                 | `GET /v1/members?status=active&include=attendance&seriesId=…` | 1        |
+| Members     | Add member          | `#/members/new`                             | `POST /v1/members`                                            | 1        |
+| Members     | Archived            | `#/members/archived`                        | `GET /v1/members?status=archived`                             | 1        |
+| Events      | Events              | `#/events`                                  | `GET /v1/events`                                              | 5        |
+| Events      | Series              | `#/events/series`                           | `GET /v1/series`, `GET /v1/series/:id/occurrences`            | 5        |
+| Events      | Offerings           | `#/events/offerings`                        | V3 — not in V2                                                | V3       |
+| Imports     | Member database     | `#/imports/members`                         | `POST /v1/imports/members`                                    | 2        |
+| Imports     | Attendance registry | `#/imports/attendance`                      | `POST /v1/imports/attendance`                                 | 2        |
+| Imports     | Template + format   | `#/imports/members`, `#/imports/attendance` | `GET /v1/imports/formats`, `GET /v1/imports/templates/{kind}` | 2        |
+| Imports     | Batch lookup        | `#/imports/batches`                         | `GET /v1/imports/:batchId` (session list + lookup; see FR-38) | 2        |
+| Shepherding | Officers            | `#/shepherding/officers`                    | `GET /v1/shepherding/report` (totals + per-officer rows)      | 4        |
+| Shepherding | Roster              | `#/shepherding/roster`                      | `GET /v1/shepherding/officers/:memberNo/members`              | 4        |
+| Shepherding | Church report       | `#/shepherding/report`                      | `GET /v1/shepherding/report`                                  | 4        |
+| Admin       | Ministries          | `#/admin/ministries`                        | `GET/POST/PUT/DELETE /v1/ministries`                          | 3        |
+| Admin       | API connection      | `#/connect`                                 | `GET /health` + `GET /v1/ministries` (probe)                  | 0        |
+| Admin       | Settings            | `#/settings`                                | local only (appearance, nav, sign out)                        | 0        |
 
 Slices 0–5 are all in V2: the shell and connect gate (0), Members (1), imports (2), attendance and
 reference data (3), shepherding (4), and events with series (5). Offerings is visible only as a V3
@@ -289,24 +290,27 @@ roster detail, not as global sidebar items.
 
 ### 5.4 Imports
 
-- FR-33: V2 MUST accept **CSV** files for the event list and the attendance registry, parse them
-  client-side into the API's JSON row shapes, and show a preview before sending. JSON upload MAY be
-  offered as an advanced option (**Q8**).
+- FR-33: V2 MUST accept **CSV** and the downloaded **Excel template** (`.xlsx`) for the member database
+  and the attendance registry, parse them client-side into the API's JSON row shapes, and show a
+  preview before sending. JSON upload MAY be offered as an advanced option (**Q8**).
 - FR-34: The preview MUST show the parsed row count, the first five rows, and row-level validation
   errors. No request may be sent until the operator confirms.
 - FR-35: The UI MUST enforce the API limits: at most **10,000 rows** and at most **1,048,576 bytes**
   of serialised JSON per request. Larger files MUST be rejected with guidance to split the file. The
   UI MUST NOT chunk automatically, because chunking breaks the API's all-or-nothing guarantee.
-- FR-36: A confirmed import MUST POST to `/v1/imports/events` or `/v1/imports/attendance` and MUST
+- FR-36: A confirmed import MUST POST to `/v1/imports/members` or `/v1/imports/attendance` and MUST
   show the returned batch id, kind, row count, checksum and created time.
-- FR-37: On `import_failed`, the UI MUST show the API message and, when present, the unknown event
-  names with their row numbers. The register MUST remain unchanged (all-or-nothing).
+- FR-37: On `import_failed`, the UI MUST show the API message and, when present, the unknown member or
+  event numbers with their row numbers. The register MUST remain unchanged (all-or-nothing).
 - FR-38: Batch lookup MUST be a session-scoped list of batch ids created by this browser, plus a
   `batch id` lookup via `GET /v1/imports/:batchId`. The API has no list-batches endpoint; the UI MUST
   NOT claim to show server-side history.
 - FR-39: The UI MUST discard file contents and parsed rows after a successful import; only the
   batch id, kind, row count and timestamp may remain in `sessionStorage`.
 - FR-40: Import controls MUST disable while a request is in flight and MUST prevent double submit.
+- FR-41: Each import screen MUST show its expected columns from `GET /v1/imports/formats` and offer a
+  **Download Excel template** action backed by `GET /v1/imports/templates/{kind}`. If the template
+  cannot be fetched, the screen MUST show the same column list inline, not a blank or generic error.
 
 ### 5.5 Reference data
 
@@ -317,8 +321,8 @@ roster detail, not as global sidebar items.
   ministries and other reference data. The retired `Attendance` screens MUST NOT be duplicated.
 - FR-43: Occurrences MUST be requested from `GET /v1/series/:id/occurrences` for a date window; the
   UI MUST NOT recompute RRULEs locally.
-- FR-44: An import MUST NOT create series. Unknown `eventname` values MUST surface as an import
-  error, matching the API contract.
+- FR-44: An import MUST NOT create series. Unknown `eventno` values MUST surface as an import error,
+  matching the API contract.
 
 ### 5.6 Shepherding
 

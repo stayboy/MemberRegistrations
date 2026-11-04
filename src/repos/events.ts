@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db } from '../db/sql.js';
+import type { Db, DbClient } from '../db/sql.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { assertDate } from '../domain/contacts.js';
@@ -581,39 +581,34 @@ export class EventRepository {
 
       for (const row of series) {
         const occurrences = await resolveSeriesOccurrences(tx, row.id, from, to);
-        const existing = new Set(
-          (
-            await tx.query<{ start_date: unknown }>(
-              `select start_date from event_instances
-               where series_id = $1 and start_date between $2::date and $3::date`,
-              [row.id, from, to],
-            )
-          ).map((event) => isoDate(event.start_date)),
+        const existingRows = await tx.query<{
+          id: string;
+          start_date: unknown;
+          event_no: string | null;
+        }>(
+          `select id, start_date, event_no from event_instances
+           where series_id = $1 and start_date between $2::date and $3::date`,
+          [row.id, from, to],
         );
+        const existing = new Map(existingRows.map((event) => [isoDate(event.start_date), event]));
 
         for (const date of occurrences) {
-          if (existing.has(date)) {
+          const current = existing.get(date);
+          if (current) {
+            // A manual attendance entry can create the instance before generation
+            // runs; backfill its number so an attendance import can target it.
+            if (current.event_no == null) {
+              const eventNo = await this.mintEventNo(tx, date);
+              await tx.query(
+                'update event_instances set event_no = $2 where id = $1 and event_no is null',
+                [current.id, eventNo],
+              );
+            }
             skipped += 1;
             continue;
           }
 
-          const year = Number(date.slice(0, 4));
-          let eventNo = '';
-          for (let attempt = 0; attempt < 10; attempt += 1) {
-            const [counter] = await tx.query<{ last_value: number | string }>(NEXT_EVENT_NO_SQL, [
-              year,
-            ]);
-            eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
-            // A manually assigned EVT-YYYY-NNN can outrun the counter; try the next number.
-            const [taken] = await tx.query('select 1 from event_instances where event_no = $1', [
-              eventNo,
-            ]);
-            if (!taken) break;
-            if (attempt === 9) {
-              throw new ConflictError(`Could not mint a unique event number for ${date}`);
-            }
-          }
-
+          const eventNo = await this.mintEventNo(tx, date);
           const [inserted] = await tx.query<{ id: string }>(GENERATE_INSERT_SQL, [
             eventNo,
             row.id,
@@ -633,6 +628,21 @@ export class EventRepository {
 
       return { created, skipped, eventIds };
     });
+  }
+
+  /** Mint `EVT-<year>-<NNN>` from the per-year counter, skipping manual numbers. */
+  private async mintEventNo(tx: DbClient, date: string): Promise<string> {
+    const year = Number(date.slice(0, 4));
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const [counter] = await tx.query<{ last_value: number | string }>(NEXT_EVENT_NO_SQL, [year]);
+      const eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
+      // A manually assigned EVT-YYYY-NNN can outrun the counter; try the next number.
+      const [taken] = await tx.query('select 1 from event_instances where event_no = $1', [
+        eventNo,
+      ]);
+      if (!taken) return eventNo;
+    }
+    throw new ConflictError(`Could not mint a unique event number for ${date}`);
   }
 
   async update(

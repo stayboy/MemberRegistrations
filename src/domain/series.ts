@@ -103,8 +103,10 @@ export interface ResolveOccurrencesInput {
  * 1. Each schedule version owns the range from its effective date until the next
  *    version (or its end date).
  * 2. Cancelled dates are removed, one-off extra dates are added.
- * 3. Where an import covers a range, its dates win: a scheduled date the import
- *    omits was not held, and an imported date off-schedule was.
+ * 3. When `importedDates` is non-empty, its dates win inside the covered range:
+ *    a scheduled date the import omits was not held, and an imported date
+ *    off-schedule was. V2 passes an empty list; the branch is kept for a future
+ *    event-list import.
  */
 export function resolveOccurrences(input: ResolveOccurrencesInput): string[] {
   const schedules = [...input.schedules].sort((left, right) =>

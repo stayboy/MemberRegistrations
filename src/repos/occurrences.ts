@@ -29,10 +29,6 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
     'select occurs_on, kind from series_exceptions where series_id = $1',
     [seriesId],
   );
-  const imported = await db.query<{ occurs_on: string }>(
-    'select start_date as occurs_on from event_instances where series_id = $1 and import_batch_id is not null order by start_date',
-    [seriesId],
-  );
 
   return {
     schedules: schedules.map((row) => ({
@@ -44,7 +40,8 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
       date: isoDate(row.occurs_on),
       kind: row.kind,
     })),
-    importedDates: imported.map((row) => isoDate(row.occurs_on)),
+    // The event-list import is retired; occurrences come from schedules and exceptions only.
+    importedDates: [],
   };
 }
 

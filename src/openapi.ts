@@ -37,7 +37,11 @@ import {
   seriesSchema,
   updateSeriesSchema,
 } from './schemas/reference.js';
-import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
+import {
+  attendanceImportSchema,
+  importBatchSchema,
+  memberImportSchema,
+} from './schemas/imports.js';
 import {
   createEventSchema,
   eventAttendanceEntrySchema,
@@ -191,7 +195,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventAttendanceEntry: toSchema(eventAttendanceEntrySchema, 'output'),
         EventAttendanceInput: toSchema(eventAttendanceInputSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
-        EventImport: toSchema(eventImportSchema, 'input'),
+        MemberImport: toSchema(memberImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
         Assignment: toSchema(assignmentSchema, 'output'),
         AssignmentInput: toSchema(assignmentInputSchema, 'input'),
@@ -1023,13 +1027,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
-      '/v1/imports/events': {
+      '/v1/imports/members': {
         post: {
-          summary: 'Import an event list (all-or-nothing)',
+          summary: 'Import the member register (all-or-nothing)',
+          description:
+            'Upserts by memberNo, case-insensitively. A duplicate memberNo in the file, an archived member or a purged member fails the whole batch.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('EventImport') } },
+            content: { 'application/json': { schema: ref('MemberImport') } },
           },
           responses: {
             201: json('Import applied.', 'ImportBatch'),
@@ -1051,6 +1057,79 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             201: json('Import applied.', 'ImportBatch'),
             401: unauthorized,
             422: problem('The import was rejected; nothing was applied.'),
+          },
+        },
+      },
+
+      '/v1/imports/formats': {
+        get: {
+          summary: 'Column contract for every import kind',
+          description:
+            'The same registry drives the downloadable Excel templates, so the JSON contract and the workbook always describe the same columns.',
+          responses: {
+            200: {
+              description: 'The import formats.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['formats'],
+                    properties: {
+                      formats: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          required: ['kind', 'filename', 'columns'],
+                          properties: {
+                            kind: { type: 'string', enum: ['members', 'attendance'] },
+                            filename: { type: 'string' },
+                            columns: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                required: ['name', 'required', 'type', 'example'],
+                                properties: {
+                                  name: { type: 'string' },
+                                  required: { type: 'boolean' },
+                                  type: {
+                                    type: 'string',
+                                    enum: ['text', 'enum', 'date', 'boolean'],
+                                  },
+                                  example: { type: ['string', 'boolean'] },
+                                  notes: { type: 'string' },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+      },
+
+      '/v1/imports/templates/{kind}': {
+        parameters: [idParam('kind')],
+        get: {
+          summary: 'Download an Excel import template',
+          description:
+            'An .xlsx workbook with a bold header row, one example row, sensible column widths, a frozen header and a Notes sheet. Unknown kinds return 404.',
+          responses: {
+            200: {
+              description: 'The workbook.',
+              content: {
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+                  schema: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
           },
         },
       },
