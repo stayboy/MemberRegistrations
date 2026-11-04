@@ -856,6 +856,19 @@ public contract.
   Drizzle is removed in one revertible commit and the test suite stays green.
 - **Tests.** All series tests pass; new tests cover concurrent version append and exception idempotency.
 
+### ORM gate outcome (ticket 04)
+
+**Adopted.** The Series trial measured the ORM slower on PGlite (p95 ~1.5–1.9× raw), slightly larger,
+and with the same round trips. PGlite is in-process WASM, which over-weights the ORM's per-query
+overhead versus networked Postgres, and the absolute deltas are sub-3 ms. Drizzle stays the CRUD
+repository client, and the gate adds two guards:
+
+- **Drift check:** a test compares the Drizzle schema (`src/db/schema.ts`) to the SQL migrations
+  (columns and nullability) and fails on a deliberate mismatch.
+- **Boundary:** no ORM type or import appears in a route, Zod schema or OpenAPI output.
+
+The rejected alternative — reverting Drizzle and recording why — is in the round doc.
+
 ### Project layout
 
 ```
@@ -943,3 +956,6 @@ sequences.
   transaction operations to Drizzle, keeps the occurrence engine raw per `AGENTS.md` §12, and publishes
   code size, query count, p95 PGlite latency and the kept-raw fragments; the owner decides and ticket
   04 records the ruling.
+- **2026-11-04** — ORM gate (ticket 04): adopted Drizzle for CRUD repositories after the Series trial;
+  added the schema-vs-migrations drift check and the repository boundary test. The trial's PGlite
+  latency finding is recorded and caveated.
