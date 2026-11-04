@@ -28,4 +28,4 @@ live-vs-mock release probe.
 After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
-11a is implemented and accepted on `feat/session-gateway` (2026-11-03); the next ticket is 02.
+11a and 02 are implemented and accepted (2026-11-03); the next ticket is 03 (Series ORM trial).
