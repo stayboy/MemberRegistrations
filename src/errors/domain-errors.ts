@@ -57,3 +57,13 @@ export class ImportError extends DomainError {
     super(message, 'import_failed');
   }
 }
+
+/** The same occurrence and rows were already imported; nothing was applied. */
+export class DuplicateImportError extends ConflictError {
+  constructor(
+    message: string,
+    readonly batchId: string,
+  ) {
+    super(message);
+  }
+}

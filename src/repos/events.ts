@@ -112,6 +112,8 @@ export interface EventAttendanceRow {
   name: string;
   status: 'present';
   source: 'import' | 'manual';
+  /** Wall-clock time the register carried, `HH:MM`; null for a date-only row. */
+  sessionTime: string | null;
 }
 
 export interface EventAttendance {
@@ -708,8 +710,10 @@ export class EventRepository {
       first_name: string | null;
       last_name: string | null;
       source: 'import' | 'manual';
+      session_time: string | null;
     }>(
-      `select m.member_no, m.first_name, m.last_name, a.source
+      `select m.member_no, m.first_name, m.last_name, a.source,
+              to_char(a.session_time, 'HH24:MI') as session_time
        from attendance a
        join members m on m.id = a.member_id
        where a.event_instance_id = $1 and a.session_date = $2
@@ -737,6 +741,7 @@ export class EventRepository {
         name: [row.first_name, row.last_name].filter(Boolean).join(' '),
         status: 'present' as const,
         source: row.source,
+        sessionTime: row.session_time,
       })),
     };
   }

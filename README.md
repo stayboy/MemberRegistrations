@@ -132,11 +132,11 @@ npm run officers:deactivate -- ama@church.org
 
 ### Imports
 
-| Method | Path                     | Result                                                           |
-| ------ | ------------------------ | ---------------------------------------------------------------- |
-| `POST` | `/v1/imports/events`     | Rows `(date, eventno, eventname, ministryName?)`, all-or-nothing |
-| `POST` | `/v1/imports/attendance` | Rows `(memberno, date, eventno)`, all-or-nothing                 |
-| `GET`  | `/v1/imports/{batchId}`  | Batch record (`kind`, `actor`, `rowCount`, `checksum`)           |
+| Method | Path                     | Result                                                                                         |
+| ------ | ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/imports/events`     | Rows `(date, eventno, eventname, ministryName?)`, all-or-nothing                               |
+| `POST` | `/v1/imports/attendance` | `{ eventId, sessionDate, rows: [{ memberNo, datetime? }] }`, all-or-nothing; `409` on a repeat |
+| `GET`  | `/v1/imports/{batchId}`  | Batch record (`kind`, `actor`, `rowCount`, `checksum`)                                         |
 
 ### Shepherding
 

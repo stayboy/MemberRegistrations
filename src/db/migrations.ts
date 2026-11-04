@@ -476,4 +476,22 @@ alter table import_batches add constraint import_batches_kind_check
   check (kind in ('events', 'members', 'attendance'));
 `,
   },
+  {
+    version: '0009_attendance_import_occurrence',
+    sql: `
+-- The clock time the register carried, when the source supplied one. A manual
+-- entry and a date-only import row leave it null; the event session's own
+-- startTime stays untouched.
+alter table attendance add column session_time time;
+
+-- An attendance batch targets one occurrence. Legacy batches stay null; there
+-- is deliberately no unique index on the checksum because historical batches
+-- may legitimately share one and audit rows are never rewritten.
+alter table import_batches
+  add column event_instance_id uuid references event_instances(id),
+  add column session_date date,
+  add column written_count integer,
+  add column skipped_count integer;
+`,
+  },
 ];

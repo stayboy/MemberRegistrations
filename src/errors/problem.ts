@@ -2,6 +2,7 @@ import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 import {
   ConflictError,
+  DuplicateImportError,
   ImportError,
   NotFoundError,
   ReassignmentRequiredError,
@@ -105,6 +106,17 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
       .json({
         ...problemBody(409, 'Conflict', error.message, 'conflict'),
         currentAssignment: error.currentAssignment,
+      });
+    return;
+  }
+
+  if (error instanceof DuplicateImportError) {
+    res
+      .status(409)
+      .type('application/problem+json')
+      .json({
+        ...problemBody(409, 'Conflict', error.message, 'conflict'),
+        batchId: error.batchId,
       });
     return;
   }

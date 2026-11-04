@@ -64,9 +64,9 @@ contracts they will use.
 - **Series**: list and detail with schedule versions, exceptions, generated events, attendance summary
   and attached offerings. Adding a schedule version and adding/removing an exception use the existing
   endpoints; archiving is a soft end.
-- **Attendance import** remains in `Imports`; the import rows `(memberno, date, eventno)` resolve the
-  event by `eventno` and the date to one of its `sessions`. The event/series screen links to the
-  import and invalidates the affected queries after the batch succeeds.
+- **Attendance import** remains in `Imports`; it is scoped to one event session (`eventId` +
+  `sessionDate`), and its rows are `memberNo` plus an optional `datetime` checked against that session.
+  The event/series screen links to the import with the occurrence preselected.
 - **Event stats** require the event aggregate:
   `GET /v1/events?from&to` and `GET /v1/events/{eventId}/attendance?date=`. Until it ships, the event
   screen shows imported-row counts and a clear “attendance report not available” state, never a
@@ -318,7 +318,7 @@ separate Attendance section, that is Q1.
 
 ### AC-28: **Given** an event, **When** it is created or displayed, **Then** `venue_type` is one of `auditorium`, `virtual`, `hybrid` and appears as a badge in the list and detail; `venue_name` is optional; a series-generated event inherits the default unless overridden. (FR-15)
 
-### AC-29: **Given** the Strategic Conference, **When** it is created standalone, **Then** it has no `series_id`, a unique `event_no`, three sessions on the `event_instances` row, and imports resolve its `eventno` and each session date. (FR-16)
+### AC-29: **Given** the Strategic Conference, **When** it is created standalone, **Then** it has no `series_id`, a unique `event_no`, three sessions on the `event_instances` row, and an attendance import targets one of those sessions by `eventId` + `sessionDate`. (FR-16)
 
 ### AC-30: **Given** a visitor, **When** they give, **Then** the contribution records name + phone hash, returns a receipt/reference, creates no member record, and appears only in the separate visitor total. (FR-17)
 
