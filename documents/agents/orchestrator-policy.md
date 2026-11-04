@@ -77,12 +77,24 @@ guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its re
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
 while the repo checks always run.
 
+## Unattended rounds
+
+Adopted 2026-11-04 as a modifier on a round, never a tier. `AGENTS.md` §17 owns the rule. The local
+choices:
+
+- The go-forward `grill-me` round at the end of a round defaults to **auto-accept**; the owner can still
+  run a round attended by saying so.
+- A migration, a wire-contract change, security/auth, tenant isolation, or deleting a public route still
+  parks for the owner unless they pre-authorised that specific round by name. "Go unattended" authorises
+  the round's commit/push/PR/merge, not those gates.
+- The round doc records `Mode: unattended (auto-accept recommendations)`, and every accepted decision is
+  written into the owning **spec** as well as the round doc — a pin never lives only in a round doc.
+
 ## Deliberately not adopted
 
-- **Full Tier 3 and a dedicated UI tester** — deferred; the V2 gate is the minimal Playwright/axe/
+- **Full Tier 3 and a dedicated UI tester** - deferred; the V2 gate is the minimal Playwright/axe/
   live-vs-mock check in ticket 19. Revisit when the UI is stable.
-- **Unattended rounds** — every round is owner-attended.
-- **GitHub issue/triage labels** — use `documents/backlog.md` until a tracker is adopted.
+- **GitHub issue/triage labels** - use `documents/backlog.md` until a tracker is adopted.
 
 ### Superseded: pinned model seats
 
