@@ -39,6 +39,18 @@ independent of it (see the policy). If the tier is genuinely ambiguous, put it i
 not guess. Tier 3 and a dedicated UI tester stay deferred; the V2 UI gate is the minimal check in
 ticket 19.
 
+## 3a. Parallel workers
+
+Parallel work is **opt-in per round**, recorded on round-doc line 1 as `Workers: parallel (tracks: …)`
+or `Workers: parallel (slices: …)`. Eligibility is mechanical: the work partitions into file-disjoint
+tracks/slices with no shared symbols, wire contracts or call-chain seams; a coupled unit merges into
+one. The parent owns git and every shared file (migrations run one at a time); a track that delivers a
+shared file owns it and the other tracks must not touch it. Two building workers by default (concurrent
+full builds/test suites have OOM-killed the process); workers run unit/API tests only, and the parent's
+merged pass is the gate. Each round verifies only its own track; the cross-track integration is a
+post-merge pass on `main`. Full rules:
+`~/.agents/skills/orchestrator/references/parallel-workers.md`.
+
 ## 4. Date and time
 
 - Backend dates are **UTC calendar dates**. Every default and every "today" uses UTC.
@@ -159,5 +171,5 @@ change next to a plausible-looking edit, and the recorded reason is the claim th
 ## 13. Deliberately not adopted
 
 Full Tier 3 and a dedicated UI tester (the V2 gate is the minimal Playwright/axe/live-vs-mock check in
-ticket 19), unattended rounds, parallel workers/worktrees, and GitHub issue/triage labels. Revisit when
+ticket 19), unattended rounds, and GitHub issue/triage labels. Revisit when
 the condition that excluded them changes; do not reintroduce them silently.

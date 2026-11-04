@@ -53,6 +53,17 @@ why (the catalog conflates the 1M context window with the output cap).
 - A hard gate needs the labeled calibration set (≥100 rows, false-pass 0, false-rework ≤10%, ≥3
   rounds) and a protected-doc round.
 
+## Parallel workers
+
+- Opt-in per round, recorded as `Workers: parallel (tracks: …)` or `(slices: …)`.
+- Track map: the events API cluster (tickets 09–11) owns `src/repos/events.ts`, `src/routes/events.ts`,
+  `src/schemas/events.ts` and `src/openapi.ts`; the UI workspace (12–16) owns `ui/**` and its root
+  workspace/scripts/ignores. The two are file-disjoint at `src/` vs `ui/`.
+- The parent owns every shared file and all git; migrations serialize. Two building workers by default;
+  workers run unit/API tests on PGlite only; the parent's merged `verify` is the gate.
+- Each round verifies only its own track; the cross-track integration is a post-merge pass on `main`.
+- Full rules: `~/.agents/skills/orchestrator/references/parallel-workers.md`.
+
 ## Protected documents
 
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/lessons.md`,
@@ -68,7 +79,6 @@ while the repo checks always run.
 - **Full Tier 3 and a dedicated UI tester** — deferred; the V2 gate is the minimal Playwright/axe/
   live-vs-mock check in ticket 19. Revisit when the UI is stable.
 - **Unattended rounds** — every round is owner-attended.
-- **Parallel workers and worktrees** — one writer per working tree; the parent is the only writer.
 - **GitHub issue/triage labels** — use `documents/backlog.md` until a tracker is adopted.
 
 ### Superseded: pinned model seats
