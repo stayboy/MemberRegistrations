@@ -1,5 +1,5 @@
 import { ApiError } from './errors';
-import { gatewayRequest } from './gateway';
+import { gatewayRequest, gatewayRequestWithMeta } from './gateway';
 
 /** Wire types mirror the UI spec's §9.2 DTOs and the ticket-13a list contract. */
 
@@ -124,6 +124,49 @@ export interface MemberListPage {
   readonly nextCursor?: string;
 }
 
+/** Mirrors `createMemberSchema`, minus the contacts and ministries collections. */
+export interface MemberInput {
+  readonly memberNo: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly otherNames?: string | null;
+  readonly maidenName?: string | null;
+  readonly alias?: string | null;
+  readonly dob?: string | null;
+  readonly gender?: Gender;
+  readonly placeOfResidence?: string | null;
+  readonly addressLine?: string | null;
+  readonly joinedOn?: string | null;
+  readonly isPresbyter?: boolean;
+}
+
+type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
+
+/** `memberNo` is immutable, so the update body cannot carry it. */
+export type MemberUpdateInput = Partial<Mutable<Omit<MemberInput, 'memberNo'>>>;
+
+/** Mirrors `contactInputSchema`; the API normalises the value by kind. */
+export interface ContactInput {
+  readonly kind: ContactKind;
+  readonly value: string;
+  readonly displayOrder?: number;
+}
+
+/** Mirrors `subscriptionInputSchema`; coverage is optional and household-only. */
+export interface SubscriptionInput {
+  readonly kind: SubscriptionKind;
+  readonly scope: 'individual' | 'household';
+  readonly reference?: string | null;
+  readonly startedOn?: string;
+  readonly coveredMemberNos?: readonly string[];
+}
+
+export interface MemberDetailResult {
+  readonly member: MemberDetail;
+  /** Wire value such as `"v7"`; `null` only when the gateway did not expose it. */
+  readonly etag: string | null;
+}
+
 export interface ListMembersOptions {
   readonly q?: string;
   readonly status?: MemberStatus;
@@ -147,6 +190,7 @@ interface SeriesListResponse {
 }
 
 const MEMBERS_PATH = '/gateway/v1/members';
+const SUBSCRIPTIONS_PATH = '/gateway/v1/subscriptions';
 const SERIES_PATH = '/gateway/v1/series';
 
 /** Builds the members list query in the order the API documents it. */
@@ -186,20 +230,202 @@ export function memberDetailPath(memberNo: string): string {
   return `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}?includeArchived=true`;
 }
 
+export async function fetchMemberDetail(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  signal?: AbortSignal,
+): Promise<MemberDetailResult> {
+  // The archived view also opens this dialog, so the detail request widens the
+  // set; the flag is harmless for an active member.
+  const result = await gatewayRequestWithMeta<MemberDetail>(baseUrl, memberDetailPath(memberNo), {
+    sessionToken,
+    signal,
+  });
+  if (!result.data) throw new ApiError(500, 'The member response was empty.');
+  return { member: result.data, etag: result.headers.get('ETag') };
+}
+
 export async function getMember(
   baseUrl: string,
   sessionToken: string,
   memberNo: string,
   signal?: AbortSignal,
 ): Promise<MemberDetail> {
-  // The archived view also opens this dialog, so the detail request widens the
-  // set; the flag is harmless for an active member.
-  const member = await gatewayRequest<MemberDetail>(baseUrl, memberDetailPath(memberNo), {
+  return (await fetchMemberDetail(baseUrl, sessionToken, memberNo, signal)).member;
+}
+
+/** Parses the member number out of the API's `Location` header. */
+export function memberNoFromLocation(location: string | null): string | null {
+  if (!location) return null;
+  const match = /\/v1\/members\/([^/?#]+)/.exec(location);
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
+export async function createMember(
+  baseUrl: string,
+  sessionToken: string,
+  input: MemberInput,
+): Promise<MemberDetail> {
+  const result = await gatewayRequestWithMeta<MemberDetail>(baseUrl, MEMBERS_PATH, {
+    method: 'POST',
+    body: input,
     sessionToken,
-    signal,
   });
-  if (!member) throw new ApiError(500, 'The member response was empty.');
+  if (result.data) return result.data;
+
+  // Defensive: the API returns the full DTO with 201. If a proxy strips the
+  // body, the Location header still names the new member.
+  const createdNo = memberNoFromLocation(result.headers.get('Location'));
+  if (createdNo) {
+    return (await fetchMemberDetail(baseUrl, sessionToken, createdNo)).member;
+  }
+  throw new ApiError(500, 'The created member response was empty.');
+}
+
+export async function updateMember(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  input: MemberUpdateInput,
+  etag: string | null,
+): Promise<MemberDetail> {
+  if (!etag) {
+    throw new ApiError(428, 'Reload the member before saving: the server version is unknown.');
+  }
+
+  const result = await gatewayRequestWithMeta<MemberDetail>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}`,
+    { method: 'PUT', body: input, sessionToken, headers: { 'If-Match': etag } },
+  );
+  if (!result.data) throw new ApiError(500, 'The updated member response was empty.');
+  return result.data;
+}
+
+export async function archiveMember(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(baseUrl, `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}`, {
+    method: 'DELETE',
+    sessionToken,
+  });
+}
+
+export async function restoreMember(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<MemberDetail> {
+  const member = await gatewayRequest<MemberDetail>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/restore`,
+    { method: 'POST', sessionToken },
+  );
+  if (!member) throw new ApiError(500, 'The restored member response was empty.');
   return member;
+}
+
+/** Purge is PII erasure; the body must repeat the member number exactly (FR-28). */
+export async function purgeMember(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(baseUrl, `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/purge`, {
+    method: 'POST',
+    body: { confirm: memberNo },
+    sessionToken,
+  });
+}
+
+export async function addContact(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  input: ContactInput,
+): Promise<MemberContact> {
+  const contact = await gatewayRequest<MemberContact>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/contacts`,
+    { method: 'POST', body: input, sessionToken },
+  );
+  if (!contact) throw new ApiError(500, 'The created contact response was empty.');
+  return contact;
+}
+
+export async function removeContact(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  contactId: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/contacts/${encodeURIComponent(contactId)}`,
+    { method: 'DELETE', sessionToken },
+  );
+}
+
+export async function addSubscription(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  input: SubscriptionInput,
+): Promise<MemberSubscription> {
+  const subscription = await gatewayRequest<MemberSubscription>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/subscriptions`,
+    { method: 'POST', body: input, sessionToken },
+  );
+  if (!subscription) throw new ApiError(500, 'The created subscription response was empty.');
+  return subscription;
+}
+
+export async function endSubscription(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  subscriptionId: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/subscriptions/${encodeURIComponent(
+      subscriptionId,
+    )}`,
+    { method: 'DELETE', sessionToken },
+  );
+}
+
+/** Coverage lives at the subscription, not under the policyholder's member path. */
+export async function addCoverage(
+  baseUrl: string,
+  sessionToken: string,
+  subscriptionId: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${SUBSCRIPTIONS_PATH}/${encodeURIComponent(subscriptionId)}/coverage`,
+    { method: 'POST', body: { memberNo }, sessionToken },
+  );
+}
+
+export async function removeCoverage(
+  baseUrl: string,
+  sessionToken: string,
+  subscriptionId: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${SUBSCRIPTIONS_PATH}/${encodeURIComponent(subscriptionId)}/coverage/${encodeURIComponent(
+      memberNo,
+    )}`,
+    { method: 'DELETE', sessionToken },
+  );
 }
 
 export async function listSeries(
