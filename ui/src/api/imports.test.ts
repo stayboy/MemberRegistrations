@@ -2,10 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './errors';
 import {
   downloadImportTemplate,
+  duplicateBlocksCommit,
   filenameFromContentDisposition,
   getImportBatch,
   getImportFormats,
   importProblemRows,
+  isDuplicateImport,
+  postAttendanceImport,
   postMemberImport,
   type ImportBatch,
   type ImportFormat,
@@ -137,6 +140,45 @@ describe('postMemberImport', () => {
   });
 });
 
+describe('postAttendanceImport', () => {
+  it('POSTs the chosen occurrence and rows, and returns the batch', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...BATCH, kind: 'attendance' }, 201));
+    const request = {
+      eventId: 'event-1',
+      sessionDate: '2026-11-01',
+      rows: [{ memberNo: 'M-1', datetime: '2026-11-01 09:00' }, { memberNo: 'M-2' }],
+    };
+
+    const batch = await postAttendanceImport(BASE, TOKEN, request);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/imports/attendance`);
+    const options = requestOptions(0);
+    expect(options.method).toBe('POST');
+    expect(options.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(options.body))).toEqual(request);
+    expect(batch.kind).toBe('attendance');
+  });
+
+  it('surfaces a 409 duplicate with the API message', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        {
+          code: 'conflict',
+          detail: 'This attendance file was already imported (batch b-1).',
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      postAttendanceImport(BASE, TOKEN, { eventId: 'e-1', sessionDate: '2026-11-01', rows: [] }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'This attendance file was already imported (batch b-1).',
+    });
+  });
+});
+
 describe('getImportBatch', () => {
   it('GETs an encoded batch id', async () => {
     fetchMock.mockResolvedValue(jsonResponse(BATCH));
@@ -145,6 +187,22 @@ describe('getImportBatch', () => {
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/imports/batch%2F..%2F1`);
     expect(batch).toEqual(BATCH);
+  });
+});
+
+describe('duplicate import guard', () => {
+  it('recognises a 409 as a duplicate', () => {
+    expect(isDuplicateImport(new ApiError(409, 'Already imported.'))).toBe(true);
+    expect(isDuplicateImport(new ApiError(422, 'Rows failed.'))).toBe(false);
+    expect(isDuplicateImport(new Error('offline'))).toBe(false);
+  });
+
+  it('blocks a commit only while a duplicate still has a preview', () => {
+    const duplicate = new ApiError(409, 'This attendance file was already imported (batch b-1).');
+
+    expect(duplicateBlocksCommit(duplicate, true)).toBe(true);
+    expect(duplicateBlocksCommit(duplicate, false)).toBe(false);
+    expect(duplicateBlocksCommit(new ApiError(422, 'Rows failed.'), true)).toBe(false);
   });
 });
 

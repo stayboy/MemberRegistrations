@@ -7,7 +7,6 @@ import {
   Text,
 } from '@fluentui/react-components';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { readSheet } from 'read-excel-file/browser';
 import { useEffect } from 'react';
 import { isUnauthorized } from '../api/errors';
 import {
@@ -15,46 +14,15 @@ import {
   getImportFormats,
   postMemberImport,
   type ImportBatch,
-  type ImportFormatColumn,
-  type MemberImportRow,
 } from '../api/imports';
 import { recordBatch } from '../app/import-batches';
 import { useSession } from '../auth/SessionProvider';
 import { ImportPanel } from '../components/ImportPanel';
 import { PageFrame } from '../components/PageFrame';
-import { parseMemberCsv, parseMemberMatrix, type ParsedImportRows } from '../format/import-file';
+import { saveBlob } from '../format/download';
+import { parseMemberMatrix, readImportMatrix } from '../format/import-file';
 
 const KIND = 'members' as const;
-
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.rel = 'noopener';
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
-}
-
-/**
- * Reads either the CSV text or the downloaded `.xlsx` workbook into the same
- * member row shapes. Neither parser is imported by the shell or another route.
- */
-async function parseMemberFile(
-  file: File,
-  columns: readonly ImportFormatColumn[],
-): Promise<ParsedImportRows<MemberImportRow>> {
-  if (/\.xlsx$/i.test(file.name)) {
-    const matrix = await readSheet(file);
-    return parseMemberMatrix(matrix, columns);
-  }
-  if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
-    return parseMemberCsv(await file.text(), columns);
-  }
-  throw new Error('Choose a .csv file or the downloaded .xlsx template.');
-}
 
 export function ImportsPage() {
   const { baseUrl, session, signOut } = useSession();
@@ -139,7 +107,9 @@ export function ImportsPage() {
             const template = await downloadImportTemplate(baseUrl, token, KIND, format.filename);
             saveBlob(template.blob, template.filename);
           }}
-          parseFile={(file) => parseMemberFile(file, format.columns)}
+          parseFile={async (file) =>
+            parseMemberMatrix(await readImportMatrix(file), format.columns)
+          }
           commitRows={(rows) => postMemberImport(baseUrl, token, rows)}
           onCommitted={onCommitted}
         />

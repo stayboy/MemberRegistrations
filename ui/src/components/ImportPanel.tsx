@@ -21,7 +21,13 @@ import {
 import { ArrowDownloadRegular, DocumentArrowUpRegular } from '@fluentui/react-icons';
 import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type ChangeEvent } from 'react';
-import { importProblemRows, type ImportBatch, type ImportFormatColumn } from '../api/imports';
+import {
+  duplicateBlocksCommit,
+  importProblemRows,
+  isDuplicateImport,
+  type ImportBatch,
+  type ImportFormatColumn,
+} from '../api/imports';
 import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { checkImportLimits, type ParsedImportRows } from '../format/import-file';
@@ -227,7 +233,20 @@ export function ImportPanel<Row extends object>({
       onCommitted?.(batch);
     },
     onError: (error: unknown) => {
-      if (isUnauthorized(error)) void signOut();
+      if (isUnauthorized(error)) {
+        void signOut();
+        return;
+      }
+      // A duplicate is final: discard the file and the parsed rows so the same
+      // body cannot be re-POSTed, while keeping the API's batch-id message.
+      if (duplicateBlocksCommit(error, parsed !== null)) {
+        parseSequence.current += 1;
+        setParsed(null);
+        setParseError(null);
+        setFileName(null);
+        setIsParsing(false);
+        if (inputRef.current) inputRef.current.value = '';
+      }
     },
   });
 
@@ -290,8 +309,9 @@ export function ImportPanel<Row extends object>({
   const invalidRows = parsed ? new Set(parsed.errors.map((error) => error.row)).size : 0;
   const validRows = parsed ? parsed.rows.length - invalidRows : 0;
   const problemRows = importProblemRows(commit.error);
+  const isDuplicate = isDuplicateImport(commit.error);
   const allValid = parsed !== null && parsed.rows.length > 0 && invalidRows === 0 && !limitMessage;
-  const canCommit = allValid && !commit.isPending && !isParsing;
+  const canCommit = allValid && !commit.isPending && !isParsing && !isDuplicateImport(commit.error);
 
   return (
     <div className={styles.panel}>
@@ -549,7 +569,9 @@ export function ImportPanel<Row extends object>({
       {commit.isError && !isUnauthorized(commit.error) ? (
         <MessageBar intent="error">
           <MessageBarBody>
-            <MessageBarTitle>The import was rejected</MessageBarTitle>
+            <MessageBarTitle>
+              {isDuplicate ? 'This file was already imported' : 'The import was rejected'}
+            </MessageBarTitle>
             {errorMessage(commit.error)}
             {problemRows.length > 0 ? (
               <ul className={styles.errorList}>
@@ -592,6 +614,22 @@ export function ImportPanel<Row extends object>({
                 </TableCell>
                 <TableCell>{result.rowCount}</TableCell>
               </TableRow>
+              {result.written !== undefined && result.written !== null ? (
+                <TableRow>
+                  <TableCell>
+                    <Text weight="semibold">Written</Text>
+                  </TableCell>
+                  <TableCell>{result.written}</TableCell>
+                </TableRow>
+              ) : null}
+              {result.skipped !== undefined && result.skipped !== null ? (
+                <TableRow>
+                  <TableCell>
+                    <Text weight="semibold">Skipped</Text>
+                  </TableCell>
+                  <TableCell>{result.skipped}</TableCell>
+                </TableRow>
+              ) : null}
               <TableRow>
                 <TableCell>
                   <Text weight="semibold">Checksum</Text>
