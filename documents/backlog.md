@@ -21,17 +21,17 @@ scope. Move an item to a GitHub issue only when the tracker is adopted.
 
 ## V2 events, UI and ORM ticket set
 
-`documents/tickets/v2-events-ui/` holds 25 tickets in dependency order. Tickets 01-19 plus 11a deliver
-V2 (specs and ORM gate, events API, session gateway, shell, members, imports, shepherding, events,
-series); tickets 20-24 are the gated V3 offerings/USSD phase. Start at 01. The ORM decision gate is
-03-04, 11a is the magic-link session gateway that blocks the UI shell in 12, and ticket 19 is the
-live-vs-mock release probe.
+`documents/tickets/v2-events-ui/` holds 26 tickets in dependency order. Tickets 01-19 plus 11a and 15a
+deliver V2 (specs and ORM gate, events API, session gateway, shell, members, imports, shepherding,
+events, series); tickets 20-24 are the gated V3 offerings/USSD phase. Start at 01. The ORM decision gate
+is 03-04, 11a is the magic-link session gateway that blocks the UI shell in 12, 15a is the attendance
+import contract that blocks the imports UI in 15, and ticket 19 is the live-vs-mock release probe.
 
 After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
-11a, 02–13a and 12 are implemented and accepted (2026-11-04); the next serial ticket is 14 (Member
-edit, subscriptions and coverage), then 15–19.
+11a, 02-14 and 12 are implemented and accepted (2026-11-04); the next serial ticket is **15a**
+(attendance import contract), then 15 (imports UI), then 16-19.
 
 UI gaps backlogged: the Pages deploy workflow and the ticket-19 browser gate. The CI UI checks and
 route-level code splitting are done (PRs after ticket 14); the `ui` job is advisory until GitHub

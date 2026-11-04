@@ -2,18 +2,22 @@
 
 **Author:** Solomon Owoo
 
-|            |                                                                                                                                                                                    |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Approved 2026-11-03** - v1, shepherding, and the V2/V3 amendment (events, per-session attendance, offerings, session gateway). Implementation is gated by tickets 01-24 plus 11a |
-| Date       | 2026-11-02 (amended 2026-11-03)                                                                                                                                                    |
-| Repo       | `MemberRegistrations` (standalone repository)                                                                                                                                      |
-| Origin     | Conversational feature request, 2026-11-02; V2/V3 amendment 2026-11-03                                                                                                             |
-| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres)                                                                                                       |
+|            |                                                                                                                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Approved 2026-11-03**, amended 2026-11-04 - v1, shepherding, and the V2/V3 amendment (events, per-session attendance, offerings, session gateway). Implementation is gated by tickets 01-24 plus 11a and 15a |
+| Date       | 2026-11-02 (amended 2026-11-03 and 2026-11-04)                                                                                                                                                                 |
+| Repo       | `MemberRegistrations` (standalone repository)                                                                                                                                                                  |
+| Origin     | Conversational feature request, 2026-11-02; V2/V3 amendment 2026-11-03                                                                                                                                         |
+| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres)                                                                                                                                   |
 
 ---
 
 ## Change log
 
+- 2026-11-04: attendance import scoped to a selected session (`eventId` + `sessionDate`) instead of a
+  per-row event number; rows are `(memberNo, datetime?)`; the attendance row gains an optional
+  `sessionTime`; the checksum covers the occurrence; a repeat is a `409` with the existing batch id;
+  the result reports written and suppressed counts.
 - 2026-11-03: added `cors_rejected`; clarified gateway topology, session transport and rate-limit
   storage while implementing ticket 11a.
 
@@ -111,8 +115,14 @@ deployed to Vercel as a single function.
   and MUST honour cancelled and extra exceptions.
 - FR-5: Attendance MUST be recorded per event session; `sessionDate` MUST be one of the event's
   sessions and the database MUST enforce it.
-- FR-6: An attendance import MUST resolve `(eventno, date)` to one event session and MUST be
-  all-or-nothing.
+- FR-6: An attendance import MUST be scoped to **one event session chosen by the operator**
+  (`eventId` + `sessionDate`), not to an event number carried on every row. Each row MUST name a member
+  and MAY repeat the session's date and an optional time; a row whose date does not match the selected
+  session MUST fail the whole batch. The batch MUST record the event and session it targeted.
+- FR-6a: An import MUST be all-or-nothing, and its checksum MUST cover the targeted occurrence as well
+  as the rows, so the same member list against a different session is a different import.
+- FR-6b: A repeat of the same occurrence and rows MUST be refused with `409` carrying the existing batch
+  id, and MUST NOT create a second batch.
 - FR-7: An imported attendance row MUST NOT overwrite a manual row; deleting an imported row MUST
   write a suppression so a later import cannot resurrect it.
 - FR-8: `GET /v1/members` MUST support a list-level attendance aggregate
@@ -357,11 +367,14 @@ An **occurrence** is still a date on which a series actually met:
 A **series occurrence generates at most one event instance**, idempotently on `(seriesId, date)`. A
 cancelled occurrence suppresses generation; an extra exception creates an event.
 
-**Attendance row**: `{ id, memberId, eventInstanceId, sessionDate, source: import | manual }`, unique
-on `(eventInstanceId, sessionDate, memberId)`.
+**Attendance row**: `{ id, memberId, eventInstanceId, sessionDate, sessionTime?, source: import | manual }`,
+unique on `(eventInstanceId, sessionDate, memberId)`.
 
 - `sessionDate` MUST be one of the event's sessions. A database trigger enforces this, so a direct
   write cannot bypass the API.
+- `sessionTime` is optional and recorded **only when the source carried a time** — an import stores the
+  clock time the register supplied. The event session's own `startTime` remains the schedule and MUST
+  NOT be rewritten by an import.
 - A `manual` row shadows an `import` row for the same key; a later import MUST NOT overwrite it.
 - Deleting a `manual` row deletes it. Deleting an `import` row writes a **suppression** keyed on
   `(memberId, eventInstanceId, sessionDate)`.
@@ -406,9 +419,19 @@ the whole batch. A blank optional cell leaves the stored value unchanged. `phone
 contacts: an identical contact is skipped, and a value already held by another member is an error.
 Ministries, relationships and subscriptions are not imported.
 
-An **attendance import** row `(memberno, date, eventno)` resolves `eventno` to the event instance and
-`date` to one of its sessions. A date outside `sessions` fails the whole batch and names the event and
-date; attendance is never written against an unlisted date.
+An **attendance import** is scoped to one session. The request names the occurrence —
+`{ eventId, sessionDate, rows }` — and each row is `(memberNo, datetime?)`. `datetime` is optional and,
+when present, MUST fall on `sessionDate`; a time inside it is stored as the row's `sessionTime`, and its
+absence leaves `sessionTime` null. A row on another date fails the whole batch and names the row and the
+session. The batch records the event and session it targeted, the checksum covers the occurrence plus the
+rows, and repeating the same occurrence with the same rows is refused with `409` and the existing batch
+id. The result reports rows written and rows skipped because a suppression exists, so an operator can
+tell an import that wrote ten rows from one that skipped ten.
+
+Rejected while settling this (2026-11-04): keeping a per-row event number (the occurrence is chosen once,
+so a stray row cannot silently target another event); letting an import rewrite the event session's
+`startTime` (the register is evidence of attendance, the event owns the schedule); and a date-only
+contract with the time discarded (the owner asked to keep a time when the file carries one).
 
 Every import publishes its column contract at `GET /v1/imports/formats` and serves an Excel template at
 `GET /v1/imports/templates/{kind}` (header row, one example row and a notes sheet). The template and
