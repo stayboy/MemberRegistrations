@@ -43,13 +43,13 @@
     },
     {
       "path": "documents/lessons.md",
-      "sha256": "fd7e992bede0dd6ae61edfcea53fb4ea59ccfa50adc14ec6dabbe4c16f0f9cfb",
+      "sha256": "cc703af23df942975c2f6e78b7301f2a144164d1a389a34aa4b65a43fab91548",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds four owner-accepted lessons dated 2026-11-04 (a reused component inherits the narrowest capability of its call sites; a parallel worker verifies with unit/API tests, never a browser harness; an uneven parallel pair is slower than serial; a fresh worktree or freshly merged tree needs `npm ci` first). why: the owner accepted them in the Q126 round on 2026-11-04 after the pilot closed and ticket 14 merged; the acceptance is backed by `documents/rounds/lessons-2026-11-04.md`. rejected: leaving them as session prose, writing them before acceptance, and writing the workspace-gate candidate now (held until the UI CI job lands so its evidence is the final gate).",
+      "reason": "changes: adds the fifth 2026-11-04 lesson, 'A gate that does not name the workspace is not a gate' (root `npm run verify` excluded `ui/**` from ESLint and the root tsconfig and never ran the UI's 87 tests, so CI was green while the UI was never built; fixed by the separate `ui` job in `chore/ui-ci-gate`, `da7e3fa`), and records in the preamble that this entry was accepted in Q126 on condition it be written only once the UI CI job landed. why: the condition was met the same day, so its evidence is the final gate rather than the gap. rejected: writing it before the job landed.",
       "verdict": "ACCEPTED",
-      "attestation": "Every evidence claim in the four 2026-11-04 lessons is supported by `parallel-pilot.md` or `member-detail-edit.md`, the Q126 acceptance is backed by the new `lessons-2026-11-04.md` round doc, and no prior entry regressed.",
+      "attestation": "Reviewed by `deepseek-v4-pro` build `0813`; every factual claim in the workspace-gate entry (87 UI tests, `ui/**` excluded from root ESLint/tsconfig/prettier/vitest, no UI build in CI, the separate `ui` job and commit `da7e3fa`) was checked against the workflow, the ESLint config, the root tsconfig/vitest/prettier configs and the merged history and found accurate, and the entry carries rule, evidence and trigger in the file's established shape.",
       "at": "2026-11-04"
     },
     {
