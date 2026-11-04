@@ -1,4 +1,6 @@
+import { desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/sql.js';
+import { shepherdingCalls } from '../db/schema.js';
 import { assertDate } from '../domain/contacts.js';
 import {
   latestKnownStatus,
@@ -13,6 +15,7 @@ import {
   ReassignmentRequiredError,
   ValidationError,
 } from '../errors/domain-errors.js';
+import { sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
 
 const UTC = 'UTC';
@@ -136,6 +139,19 @@ interface MemberRef {
   lastName: string | null;
 }
 
+/** Snake-case aliases keep `toCall` mapping for both the ORM and the raw join. */
+interface CallRow {
+  id: string;
+  assignment_id: string;
+  called_on: string;
+  outcome: CallOutcome;
+  still_in_church: StillInChurch;
+  feedback: string | null;
+  issue: string | null;
+  recorded_by: string;
+  created_at: Date | string;
+}
+
 function iso(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -153,10 +169,6 @@ function fullName(first: string | null, last: string | null): string {
 function textOrNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (error as { code?: string }).code === '23505';
 }
 
 function normalizeWindow(input?: WindowInput): { from: string | null; to: string | null } {
@@ -256,7 +268,7 @@ export class ShepherdingRepository {
 
       return this.loadAssignment(assignmentId);
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      if (sqlState(error) === '23505') {
         throw new ConflictError('The member already has an active shepherd');
       }
       throw error;
@@ -304,24 +316,18 @@ export class ShepherdingRepository {
       throw new ValidationError('stillInChurch is required when outcome is reached');
     }
 
-    const [row] = await this.db.query<{
-      id: string;
-      created_at: Date | string;
-    }>(
-      `insert into shepherding_calls
-         (assignment_id, called_on, outcome, still_in_church, feedback, issue, recorded_by)
-       values ($1,$2,$3,$4,$5,$6,$7)
-       returning id, created_at`,
-      [
+    const [row] = await this.db.orm
+      .insert(shepherdingCalls)
+      .values({
         assignmentId,
         calledOn,
-        input.outcome,
-        input.stillInChurch ?? 'unknown',
-        textOrNull(input.feedback),
-        textOrNull(input.issue),
-        actor,
-      ],
-    );
+        outcome: input.outcome,
+        stillInChurch: input.stillInChurch ?? 'unknown',
+        feedback: textOrNull(input.feedback),
+        issue: textOrNull(input.issue),
+        recordedBy: actor,
+      })
+      .returning({ id: shepherdingCalls.id, createdAt: shepherdingCalls.createdAt });
 
     return {
       id: row!.id,
@@ -332,7 +338,7 @@ export class ShepherdingRepository {
       feedback: textOrNull(input.feedback),
       issue: textOrNull(input.issue),
       recordedBy: actor,
-      createdAt: isoTimestamp(row!.created_at),
+      createdAt: isoTimestamp(row!.createdAt),
     };
   }
 
@@ -343,26 +349,23 @@ export class ShepherdingRepository {
     );
     if (!assignment) throw new NotFoundError(`Assignment ${assignmentId} was not found`);
 
-    const rows = await this.db.query<{
-      id: string;
-      assignment_id: string;
-      called_on: string;
-      outcome: CallOutcome;
-      still_in_church: StillInChurch;
-      feedback: string | null;
-      issue: string | null;
-      recorded_by: string;
-      created_at: Date | string;
-    }>(
-      `select id, assignment_id, called_on, outcome, still_in_church, feedback, issue,
-              recorded_by, created_at
-       from shepherding_calls
-       where assignment_id = $1
-       order by called_on desc, created_at desc`,
-      [assignmentId],
-    );
+    const rows = await this.db.orm
+      .select({
+        id: shepherdingCalls.id,
+        assignment_id: shepherdingCalls.assignmentId,
+        called_on: shepherdingCalls.calledOn,
+        outcome: shepherdingCalls.outcome,
+        still_in_church: shepherdingCalls.stillInChurch,
+        feedback: shepherdingCalls.feedback,
+        issue: shepherdingCalls.issue,
+        recorded_by: shepherdingCalls.recordedBy,
+        created_at: shepherdingCalls.createdAt,
+      })
+      .from(shepherdingCalls)
+      .where(eq(shepherdingCalls.assignmentId, assignmentId))
+      .orderBy(desc(shepherdingCalls.calledOn), desc(shepherdingCalls.createdAt));
 
-    return rows.map((row) => this.toCall(row));
+    return (rows as unknown as CallRow[]).map((row) => this.toCall(row));
   }
 
   async roster(officerMemberNo: string, window?: WindowInput): Promise<RosterEntryDto[]> {
@@ -708,17 +711,7 @@ export class ShepherdingRepository {
     }));
   }
 
-  private toCall(row: {
-    id: string;
-    assignment_id: string;
-    called_on: string;
-    outcome: CallOutcome;
-    still_in_church: StillInChurch;
-    feedback: string | null;
-    issue: string | null;
-    recorded_by: string;
-    created_at: Date | string;
-  }): CallDto {
+  private toCall(row: CallRow): CallDto {
     return {
       id: row.id,
       assignmentId: row.assignment_id,

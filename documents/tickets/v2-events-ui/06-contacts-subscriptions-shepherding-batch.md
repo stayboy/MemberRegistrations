@@ -10,7 +10,7 @@ explicit contacts action.
 
 **Status:** ready-for-agent
 
-- [ ] Contact search and privacy behaviour is unchanged: no contact values appear in list responses.
+- [ ] Contact search behaviour is unchanged; the existing summary contract (including its contact list) is preserved — this ticket does not change the response shape.
 - [ ] Coverage overlap and subscription rules are unchanged.
 - [ ] Shepherding calls remain append-only: no update or delete route appears.
 - [ ] Shepherding report totals are unchanged on the existing fixture.

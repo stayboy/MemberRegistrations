@@ -4,7 +4,13 @@ import { summariseAttendance, type AttendanceCounts } from '../domain/attendance
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
-import { members } from '../db/schema.js';
+import {
+  memberContactLinks,
+  memberContacts,
+  members,
+  subscriptionCoverage,
+  subscriptions as subscriptionsTable,
+} from '../db/schema.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
 import { loadCalendar, resolveSeriesOccurrences } from './occurrences.js';
@@ -567,11 +573,16 @@ export class MemberRepository {
 
     try {
       await this.db.transaction(async (tx) => {
-        await tx.query(
-          `update member_contacts set kind = $2, value = $3, normalized_value = $4,
-             display_order = $5, updated_at = now() where id = $1`,
-          [contactId, kind, value.trim(), normalized, input.displayOrder ?? existing.display_order],
-        );
+        await tx.orm
+          .update(memberContacts)
+          .set({
+            kind,
+            value: value.trim(),
+            normalizedValue: normalized,
+            displayOrder: input.displayOrder ?? existing.display_order,
+            updatedAt: sql`now()`,
+          })
+          .where(eq(memberContacts.id, contactId));
         await touch(tx, row.id, actor);
       });
     } catch (error) {
@@ -588,10 +599,10 @@ export class MemberRepository {
   async removeContact(memberNo: string, contactId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
-      const deleted = await tx.query(
-        'delete from member_contacts where id = $1 and member_id = $2 returning id',
-        [contactId, row.id],
-      );
+      const deleted = await tx.orm
+        .delete(memberContacts)
+        .where(and(eq(memberContacts.id, contactId), eq(memberContacts.memberId, row.id)))
+        .returning({ id: memberContacts.id });
       if (deleted.length === 0) {
         throw new NotFoundError(`Contact ${contactId} was not found on member ${memberNo}`);
       }
@@ -616,10 +627,11 @@ export class MemberRepository {
           'select coalesce(max(display_order), 0) + 1 as next from member_contact_links where member_id = $1',
           [row.id],
         );
-        await tx.query(
-          'insert into member_contact_links (member_id, contact_id, display_order) values ($1,$2,$3)',
-          [row.id, contactId, next!.next],
-        );
+        await tx.orm.insert(memberContactLinks).values({
+          memberId: row.id,
+          contactId,
+          displayOrder: next!.next,
+        });
         await touch(tx, row.id, actor);
       });
     } catch (error) {
@@ -636,10 +648,12 @@ export class MemberRepository {
   async unlinkContact(memberNo: string, contactId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
-      const deleted = await tx.query(
-        'delete from member_contact_links where member_id = $1 and contact_id = $2 returning id',
-        [row.id, contactId],
-      );
+      const deleted = await tx.orm
+        .delete(memberContactLinks)
+        .where(
+          and(eq(memberContactLinks.memberId, row.id), eq(memberContactLinks.contactId, contactId)),
+        )
+        .returning({ id: memberContactLinks.id });
       if (deleted.length === 0) throw new NotFoundError('This contact is not linked to the member');
       await touch(tx, row.id, actor);
     });
@@ -656,11 +670,17 @@ export class MemberRepository {
     const startedOn = input.startedOn ? assertDate(input.startedOn, 'startedOn') : todayIn('UTC');
 
     const subscriptionId = await this.db.transaction(async (tx) => {
-      const [created] = await tx.query<{ id: string }>(
-        `insert into subscriptions (kind, policyholder_member_id, scope, reference, started_on, created_by)
-         values ($1,$2,$3,$4,$5,$6) returning id`,
-        [input.kind, row.id, input.scope, optionalText(input.reference), startedOn, actor],
-      );
+      const [created] = await tx.orm
+        .insert(subscriptionsTable)
+        .values({
+          kind: input.kind,
+          policyholderMemberId: row.id,
+          scope: input.scope,
+          reference: optionalText(input.reference),
+          startedOn,
+          createdBy: actor,
+        })
+        .returning({ id: subscriptionsTable.id });
 
       const covered = input.scope === 'household' ? (input.coveredMemberNos ?? []) : [];
       for (const memberNoToCover of covered) {
@@ -683,11 +703,20 @@ export class MemberRepository {
   async endSubscription(memberNo: string, subscriptionId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
-      const updated = await tx.query(
-        `update subscriptions set status = 'ended', ended_on = coalesce(ended_on, $3::date)
-         where id = $1 and policyholder_member_id = $2 and status = 'active' returning id`,
-        [subscriptionId, row.id, todayIn('UTC')],
-      );
+      const updated = await tx.orm
+        .update(subscriptionsTable)
+        .set({
+          status: 'ended',
+          endedOn: sql`coalesce(${subscriptionsTable.endedOn}, ${todayIn('UTC')}::date)`,
+        })
+        .where(
+          and(
+            eq(subscriptionsTable.id, subscriptionId),
+            eq(subscriptionsTable.policyholderMemberId, row.id),
+            eq(subscriptionsTable.status, 'active'),
+          ),
+        )
+        .returning({ id: subscriptionsTable.id });
       if (updated.length === 0) throw new NotFoundError('Active subscription was not found');
       await touch(tx, row.id, actor);
     });
@@ -719,11 +748,17 @@ export class MemberRepository {
   async removeCoverage(subscriptionId: string, memberNo: string, actor: string): Promise<void> {
     const covered = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
-      const updated = await tx.query(
-        `update subscription_coverage set removed_on = $3::date
-         where subscription_id = $1 and member_id = $2 and removed_on is null returning id`,
-        [subscriptionId, covered.id, todayIn('UTC')],
-      );
+      const updated = await tx.orm
+        .update(subscriptionCoverage)
+        .set({ removedOn: todayIn('UTC') })
+        .where(
+          and(
+            eq(subscriptionCoverage.subscriptionId, subscriptionId),
+            eq(subscriptionCoverage.memberId, covered.id),
+            isNull(subscriptionCoverage.removedOn),
+          ),
+        )
+        .returning({ id: subscriptionCoverage.id });
       if (updated.length === 0) throw new NotFoundError('Coverage was not found');
       await touch(tx, covered.id, actor);
     });
@@ -1188,11 +1223,16 @@ export class MemberRepository {
       )[0]!.next;
 
     try {
-      const [row] = await tx.query<{ id: string }>(
-        `insert into member_contacts (member_id, kind, value, normalized_value, display_order)
-         values ($1,$2,$3,$4,$5) returning id`,
-        [memberId, input.kind, input.value.trim(), normalized, order],
-      );
+      const [row] = await tx.orm
+        .insert(memberContacts)
+        .values({
+          memberId,
+          kind: input.kind,
+          value: input.value.trim(),
+          normalizedValue: normalized,
+          displayOrder: order,
+        })
+        .returning({ id: memberContacts.id });
       return row!;
     } catch (error) {
       if (sqlState(error) === '23505') {
@@ -1228,9 +1268,6 @@ export class MemberRepository {
     memberId: string,
     addedOn: string,
   ): Promise<void> {
-    await tx.query(
-      'insert into subscription_coverage (subscription_id, member_id, added_on) values ($1,$2,$3)',
-      [subscriptionId, memberId, addedOn],
-    );
+    await tx.orm.insert(subscriptionCoverage).values({ subscriptionId, memberId, addedOn });
   }
 }

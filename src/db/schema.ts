@@ -115,3 +115,100 @@ export const seriesExceptions = pgTable(
   },
   (table) => [primaryKey({ columns: [table.seriesId, table.occursOn] })],
 );
+
+export const memberContacts = pgTable(
+  'member_contacts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    value: text('value').notNull(),
+    normalizedValue: text('normalized_value').notNull(),
+    displayOrder: integer('display_order').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('member_contacts_value').on(table.normalizedValue),
+    uniqueIndex('member_contacts_order').on(table.memberId, table.displayOrder),
+    index('member_contacts_member').on(table.memberId),
+  ],
+);
+
+export const memberContactLinks = pgTable(
+  'member_contact_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => memberContacts.id, { onDelete: 'cascade' }),
+    displayOrder: integer('display_order').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('member_contact_links_pair').on(table.memberId, table.contactId)],
+);
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: text('kind').notNull(),
+    policyholderMemberId: uuid('policyholder_member_id')
+      .notNull()
+      .references(() => members.id),
+    scope: text('scope').notNull(),
+    status: text('status').notNull().default('active'),
+    reference: text('reference'),
+    startedOn: date('started_on').notNull(),
+    endedOn: date('ended_on'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text('created_by').notNull(),
+  },
+  (table) => [index('subscriptions_policyholder').on(table.policyholderMemberId)],
+);
+
+export const subscriptionCoverage = pgTable(
+  'subscription_coverage',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    addedOn: date('added_on').notNull(),
+    removedOn: date('removed_on'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('subscription_coverage_active')
+      .on(table.subscriptionId, table.memberId)
+      .where(sql`${table.removedOn} is null`),
+    index('subscription_coverage_member').on(table.memberId),
+  ],
+);
+
+export const shepherdingCalls = pgTable(
+  'shepherding_calls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assignmentId: uuid('assignment_id').notNull(),
+    calledOn: date('called_on').notNull(),
+    outcome: text('outcome').notNull(),
+    stillInChurch: text('still_in_church').notNull().default('unknown'),
+    feedback: text('feedback'),
+    issue: text('issue'),
+    recordedBy: text('recorded_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('shepherding_calls_assignment').on(table.assignmentId, table.calledOn),
+    index('shepherding_calls_called_on').on(table.calledOn),
+  ],
+);
