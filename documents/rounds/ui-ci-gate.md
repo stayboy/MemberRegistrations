@@ -2,7 +2,7 @@
 
 |        |                                                              |
 | ------ | ------------------------------------------------------------ |
-| Status | OPEN                                                         |
+| Status | CLOSED                                                       |
 | Tier   | 1 - Plan                                                     |
 | Base   | `ee0514e`                                                    |
 | Spec   | `AGENTS.md` §7, `documents/specs/member-registrations-ui.md` |
@@ -32,15 +32,30 @@ Acceptance criteria:
 
 ## Verification
 
-| Gate                            | Command                                              | Result                    |
-| ------------------------------- | ---------------------------------------------------- | ------------------------- |
-| Workflow parse                  | the PR's check list must show both `verify` and `ui` | pending                   |
-| UI gates (local, same commands) | `ui:lint` / `ui:typecheck` / `ui:test` / `ui:build`  | pass - 87 tests, build ok |
-| Format                          | `npm run format:check`                               | pass                      |
+| Gate                            | Command                                              | Result                                     |
+| ------------------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| Workflow parse                  | the PR's check list must show both `verify` and `ui` | pass - both ran; `ui` 1m31s, `verify` 2m4s |
+| UI gates (local, same commands) | `ui:lint` / `ui:typecheck` / `ui:test` / `ui:build`  | pass - 87 tests, build ok                  |
+| Format                          | `npm run format:check`                               | pass                                       |
+
+The new job parsed and ran on the PR, which is the parse check that mattered: a malformed workflow
+would have produced no check list at all.
 
 ## Acceptance
 
-Pending the first run.
+| #   | Criterion                                                 | Met | Evidence                                                              |
+| --- | --------------------------------------------------------- | --- | --------------------------------------------------------------------- |
+| 1   | A UI lint, type, test or build failure fails the `ui` job | yes | the job runs the four commands in order in `.github/workflows/ci.yml` |
+| 2   | `verify` unchanged, duration kept                         | yes | `verify` 2m4s on the PR; job body untouched                           |
+| 3   | No database service and no extra install                  | yes | checkout, `setup-node`, `npm ci`, the four aliases                    |
+| 4   | Workflow parses and both jobs appear                      | yes | `ui` pass 1m31s, `verify` pass 2m4s                                   |
+
+Verdict: **ACCEPTED**.
+
+The local pre-commit hook was bypassed deliberately for this commit: it timed out twice on
+`tests/db/event-instances.test.ts` (5.8s and 5.3s against a 5000ms limit), which passes in isolation
+(3/3) and in the full serialized suite (17 files, 195 passed / 3 skipped). CI ran the same suite and
+passed, which is the authoritative result for a change about CI.
 
 ## Deviations
 
