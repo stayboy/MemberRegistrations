@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Segoe UI',
+    'Segoe UI Web (West European)',
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.mr-app-root {
+  min-height: 100vh;
+  background-color: var(--colorNeutralBackground1);
+  color: var(--colorNeutralForeground1);
+}
+
+.mr-skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 1000;
+  padding: 8px 14px;
+  border-radius: 4px;
+  background-color: var(--colorNeutralBackground1);
+  color: var(--colorNeutralForeground1);
+  box-shadow: var(--shadow16);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+
+.mr-skip-link:focus-visible {
+  top: 12px;
+  outline: 2px solid var(--colorStrokeFocus2);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-skip-link,
+  * {
+    scroll-behavior: auto !important;
+  }
+}
