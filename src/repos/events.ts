@@ -1,5 +1,10 @@
+import { createHash } from 'node:crypto';
 import type { Db } from '../db/sql.js';
-import type { EventListQuery } from '../schemas/events.js';
+import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import { sqlState } from '../errors/sqlstate.js';
+import { assertDate } from '../domain/contacts.js';
+import { todayIn } from '../domain/series.js';
+import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
 export type EventStatus = 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived';
@@ -62,12 +67,26 @@ export interface EventItem {
   stats: EventOfferingStatsItem;
 }
 
+export interface EventDetail {
+  event: EventItem;
+  /** Content-derived validator; quoted on the wire. */
+  etag: string;
+}
+
 interface StoredSession {
   date?: unknown;
   startTime?: string | null;
   endTime?: string | null;
   status?: string;
   venueType?: string;
+}
+
+interface WrittenSession {
+  date: string;
+  startTime?: string;
+  endTime?: string | null;
+  status?: EventSessionStatus;
+  venueType?: VenueType;
 }
 
 interface SessionCount {
@@ -97,33 +116,67 @@ type EventRow = {
   session_counts: unknown;
 };
 
+/** The event_instances row without the joined ministry or attendance aggregate. */
+type EventRowCore = Omit<EventRow, 'session_counts' | 'ministry_code' | 'ministry_name'>;
+
+const EVENT_COLUMNS = `
+  e.id,
+  e.event_no,
+  e.name,
+  e.series_id,
+  e.timezone,
+  e.start_date,
+  e.end_date,
+  e.start_time,
+  e.end_time,
+  e.venue_type,
+  e.venue_name,
+  e.description,
+  e.status,
+  e.source,
+  e.sessions,
+  m.code as ministry_code,
+  m.name as ministry_name`;
+
+const EVENT_FROM = `
+  from event_instances e
+  left join event_series s on s.id = e.series_id
+  left join ministries m on m.id = s.ministry_id`;
+
+/**
+ * Attendance per session for the rows in scope. Correlated on the event id so
+ * neither the list nor the detail issues a query per event or per session.
+ */
+function sessionCounts(alias: string): string {
+  return `
+  left join lateral (
+    select jsonb_agg(
+             jsonb_build_object(
+               'date', c.session_date,
+               'present', c.present,
+               'importedRows', c.imported_rows
+             )
+             order by c.session_date
+           ) as session_counts
+    from (
+      select a.session_date,
+             count(*)::int as present,
+             count(*) filter (where a.source = 'import')::int as imported_rows
+      from attendance a
+      where a.event_instance_id = ${alias}.id
+      group by a.session_date
+    ) c
+  ) counts on true`;
+}
+
 /**
  * One page query: the page CTE applies the filters, stable order and limit, then
- * a lateral aggregate counts attendance per session for just those rows. No
- * follow-up query is issued per event or per session.
+ * a lateral aggregate counts attendance per session for just those rows.
  */
 const LIST_SQL = `
 with page as (
-  select e.id,
-         e.event_no,
-         e.name,
-         e.series_id,
-         e.timezone,
-         e.start_date,
-         e.end_date,
-         e.start_time,
-         e.end_time,
-         e.venue_type,
-         e.venue_name,
-         e.description,
-         e.status,
-         e.source,
-         e.sessions,
-         m.code as ministry_code,
-         m.name as ministry_name
-  from event_instances e
-  left join event_series s on s.id = e.series_id
-  left join ministries m on m.id = s.ministry_id
+  select ${EVENT_COLUMNS}
+  ${EVENT_FROM}
   where ($1::date is null or e.end_date >= $1::date)
     and ($2::date is null or e.start_date <= $2::date)
     and ($3::uuid is null or e.series_id = $3::uuid)
@@ -139,25 +192,59 @@ with page as (
 select p.*,
        coalesce(counts.session_counts, '[]'::jsonb) as session_counts
 from page p
-left join lateral (
-  select jsonb_agg(
-           jsonb_build_object(
-             'date', c.session_date,
-             'present', c.present,
-             'importedRows', c.imported_rows
-           )
-           order by c.session_date
-         ) as session_counts
-  from (
-    select a.session_date,
-           count(*)::int as present,
-           count(*) filter (where a.source = 'import')::int as imported_rows
-    from attendance a
-    where a.event_instance_id = p.id
-    group by a.session_date
-  ) c
-) counts on true
+${sessionCounts('p')}
 order by p.start_date, p.id
+`;
+
+const DETAIL_SQL = `
+select ${EVENT_COLUMNS},
+       coalesce(counts.session_counts, '[]'::jsonb) as session_counts
+${EVENT_FROM}
+${sessionCounts('e')}
+where e.id = $1
+`;
+
+const ROW_SQL = `
+select e.id,
+       e.event_no,
+       e.name,
+       e.series_id,
+       e.timezone,
+       e.start_date,
+       e.end_date,
+       e.start_time,
+       e.end_time,
+       e.venue_type,
+       e.venue_name,
+       e.description,
+       e.status,
+       e.source,
+       e.sessions
+from event_instances e
+where e.id = $1
+`;
+
+const INSERT_SQL = `
+insert into event_instances (
+  event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
+  venue_type, venue_name, description, status, source, sessions
+) values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual', $11::jsonb)
+returning id
+`;
+
+const UPDATE_SQL = `
+update event_instances
+set name = $2,
+    timezone = $3,
+    start_date = $4,
+    end_date = $5,
+    start_time = $6,
+    end_time = $7,
+    venue_type = $8,
+    venue_name = $9,
+    description = $10,
+    sessions = $11::jsonb
+where id = $1
 `;
 
 const VENUE_TYPES: readonly VenueType[] = ['auditorium', 'virtual', 'hybrid'];
@@ -232,6 +319,81 @@ function asVenueType(value: string): VenueType {
   return VENUE_TYPES.includes(value as VenueType) ? (value as VenueType) : 'auditorium';
 }
 
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * A written session inherits the event's start and end time unless it overrides
+ * them; a session is scheduled until an attendance flow marks it otherwise.
+ */
+function normalizeSessions(
+  sessions: WrittenSession[],
+  startTime: string,
+  endTime: string | null,
+): StoredSession[] {
+  return sessions.map((session) => ({
+    date: session.date,
+    startTime: session.startTime ?? startTime,
+    endTime: session.endTime === undefined ? endTime : session.endTime,
+    status: session.status ?? 'scheduled',
+    ...(session.venueType ? { venueType: session.venueType } : {}),
+  }));
+}
+
+/** Cross-field rules that need the merged event, so Zod cannot own them alone. */
+function validateEventShape(input: {
+  startDate: string;
+  endDate: string;
+  sessions: Array<{ date?: unknown }>;
+}): void {
+  assertDate(input.startDate, 'startDate');
+  assertDate(input.endDate, 'endDate');
+  if (input.endDate < input.startDate) {
+    throw new ValidationError('endDate must not be before startDate');
+  }
+  if (input.sessions.length === 0) {
+    throw new ValidationError('sessions must not be empty');
+  }
+
+  const seen = new Set<string>();
+  for (const session of input.sessions) {
+    const date = assertDate(isoDate(session.date), 'session.date');
+    if (date < input.startDate || date > input.endDate) {
+      throw new ValidationError(
+        `Session date ${date} is outside the event range ${input.startDate}..${input.endDate}`,
+      );
+    }
+    if (seen.has(date)) {
+      throw new ValidationError(`Duplicate session date ${date}`);
+    }
+    seen.add(date);
+  }
+}
+
+/**
+ * Event rows have no version column, so the validator is a digest of the
+ * mutable content. Any edit changes it; a stale If-Match therefore fails.
+ */
+function etagFor(row: EventRowCore): string {
+  const payload = JSON.stringify([
+    row.event_no,
+    row.name,
+    row.timezone,
+    isoDate(row.start_date),
+    isoDate(row.end_date),
+    row.start_time,
+    row.end_time,
+    row.venue_type,
+    row.venue_name,
+    row.description,
+    row.status,
+    row.source,
+    parseJsonArray(row.sessions),
+  ]);
+  return `"e${createHash('sha256').update(payload).digest('hex').slice(0, 24)}"`;
+}
+
 export class EventRepository {
   constructor(private readonly db: Db) {}
 
@@ -245,9 +407,105 @@ export class EventRepository {
       query.limit,
       query.offset,
     ]);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayUtc();
 
     return rows.map((row) => this.toItem(row, today));
+  }
+
+  async get(id: string): Promise<EventDetail | null> {
+    const [row] = await this.db.query<EventRow>(DETAIL_SQL, [id]);
+    if (!row) return null;
+    return { event: this.toItem(row, todayUtc()), etag: etagFor(row) };
+  }
+
+  async create(input: CreateEventInput): Promise<EventDetail> {
+    const eventNo = input.eventNo.trim();
+    if (!eventNo) throw new ValidationError('eventNo is required');
+    const name = input.name.trim();
+    if (!name) throw new ValidationError('name is required');
+    const timezone = input.timezone ?? 'UTC';
+    todayIn(timezone);
+
+    const startDate = assertDate(input.startDate, 'startDate');
+    const endDate = assertDate(input.endDate, 'endDate');
+    const sessions = normalizeSessions(input.sessions, input.startTime, input.endTime ?? null);
+    validateEventShape({ startDate, endDate, sessions });
+
+    let id: string;
+    try {
+      const [row] = await this.db.query<{ id: string }>(INSERT_SQL, [
+        eventNo,
+        name,
+        timezone,
+        startDate,
+        endDate,
+        input.startTime,
+        input.endTime ?? null,
+        input.venueType,
+        input.venueName ?? null,
+        input.description ?? null,
+        JSON.stringify(sessions),
+      ]);
+      id = row!.id;
+    } catch (error) {
+      if (sqlState(error) === '23505') {
+        throw new ConflictError(`Event number ${eventNo} is already in use`);
+      }
+      throw error;
+    }
+
+    return (await this.get(id))!;
+  }
+
+  async update(
+    id: string,
+    input: UpdateEventInput,
+    expectedEtag: string | null,
+  ): Promise<EventDetail> {
+    const current = await this.loadRow(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'cancelled' || current.status === 'archived') {
+      throw new ConflictError('A cancelled or archived event is read-only');
+    }
+    if (expectedEtag && expectedEtag !== etagFor(current)) {
+      throw new ConflictError('The event has changed since it was read; refetch it and retry');
+    }
+
+    const timezone = input.timezone ?? current.timezone;
+    if (input.timezone !== undefined) todayIn(input.timezone);
+
+    const startDate = input.startDate ?? isoDate(current.start_date);
+    const endDate = input.endDate ?? isoDate(current.end_date);
+    const startTime = input.startTime ?? current.start_time ?? '';
+    const endTime = input.endTime === undefined ? current.end_time : input.endTime;
+    const sessions: Array<{ date?: unknown }> = input.sessions
+      ? normalizeSessions(input.sessions, startTime, endTime)
+      : (parseJsonArray(current.sessions) as Array<{ date?: unknown }>);
+    validateEventShape({ startDate, endDate, sessions });
+
+    const name = input.name !== undefined ? input.name.trim() : current.name;
+    if (!name) throw new ValidationError('name is required');
+
+    await this.db.query(UPDATE_SQL, [
+      id,
+      name,
+      timezone,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      input.venueType ?? asVenueType(current.venue_type),
+      input.venueName !== undefined ? input.venueName : current.venue_name,
+      input.description !== undefined ? input.description : current.description,
+      JSON.stringify(sessions),
+    ]);
+
+    return (await this.get(id))!;
+  }
+
+  private async loadRow(id: string): Promise<EventRowCore | null> {
+    const [row] = await this.db.query<EventRowCore>(ROW_SQL, [id]);
+    return row ?? null;
   }
 
   private toItem(row: EventRow, today: string): EventItem {

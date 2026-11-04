@@ -38,7 +38,12 @@ import {
   updateSeriesSchema,
 } from './schemas/reference.js';
 import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
-import { eventListSchema, eventSchema } from './schemas/events.js';
+import {
+  createEventSchema,
+  eventListSchema,
+  eventSchema,
+  updateEventSchema,
+} from './schemas/events.js';
 import {
   assignmentInputSchema,
   assignmentSchema,
@@ -175,6 +180,8 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OccurrenceList: toSchema(occurrenceListSchema, 'output'),
         Event: toSchema(eventSchema, 'output'),
         EventList: toSchema(eventListSchema, 'output'),
+        CreateEvent: toSchema(createEventSchema, 'input'),
+        UpdateEvent: toSchema(updateEventSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         EventImport: toSchema(eventImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -874,6 +881,51 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             200: json('A page of events with per-session attendance counts.', 'EventList'),
             401: unauthorized,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Create a standalone event with its sessions',
+          description:
+            'Creates a manual event with no series. The session dates must be unique and inside the event range.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CreateEvent') } },
+          },
+          responses: {
+            201: json('Event created; Location names the new detail URL.', 'Event'),
+            401: unauthorized,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'Read an event with its sessions, offerings and statistics',
+          responses: {
+            200: json('The event detail.', 'Event'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Update an event; a stale If-Match returns 409',
+          description:
+            'A cancelled or archived event is read-only. The event number is immutable; sessions may be replaced as a set.',
+          parameters: [actorHeader, ifMatchHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('UpdateEvent') } },
+          },
+          responses: {
+            200: json('Event updated.', 'Event'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
             422: validation,
           },
         },
