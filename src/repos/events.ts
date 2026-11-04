@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-
 import { sqlState } from '../errors/sqlstate.js';
 import { assertDate } from '../domain/contacts.js';
 import { todayIn } from '../domain/series.js';
+import { resolveSeriesOccurrences } from './occurrences.js';
 import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
@@ -71,6 +72,12 @@ export interface EventDetail {
   event: EventItem;
   /** Content-derived validator; quoted on the wire. */
   etag: string;
+}
+
+export interface GenerateEventsResult {
+  created: number;
+  skipped: number;
+  eventIds: string[];
 }
 
 interface StoredSession {
@@ -284,6 +291,31 @@ insert into event_instances (
   venue_type, venue_name, description, status, source, sessions
 ) values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual', $11::jsonb)
 returning id
+`;
+
+const GENERATE_INSERT_SQL = `
+insert into event_instances (
+  event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
+  venue_type, venue_name, description, status, source, sessions
+) values (
+  $1, $2, $3, $4, $5, $5, '00:00', null,
+  'auditorium', null, null, 'scheduled', 'series',
+  jsonb_build_array(jsonb_build_object(
+    'date', $5::date,
+    'startTime', '00:00',
+    'endTime', null,
+    'status', 'scheduled'
+  ))
+)
+on conflict (series_id, start_date) do nothing
+returning id
+`;
+
+const NEXT_EVENT_NO_SQL = `
+insert into event_no_counters (year, last_value)
+values ($1::int, 1)
+on conflict (year) do update set last_value = event_no_counters.last_value + 1
+returning last_value
 `;
 
 const UPDATE_SQL = `
@@ -522,6 +554,85 @@ export class EventRepository {
     }
 
     return (await this.get(id))!;
+  }
+
+  /**
+   * Mint one event per resolved series occurrence in [from, to]. Existing
+   * (series, date) pairs are skipped and never rewritten, so re-running is a
+   * no-op.
+   */
+  async generate(from: string, to: string, actor: string): Promise<GenerateEventsResult> {
+    // event_instances has no created_by column, so the actor is accepted for
+    // route consistency and deliberately not persisted.
+    void actor;
+
+    assertDate(from, 'from');
+    assertDate(to, 'to');
+    if (from > to) throw new ValidationError('from must not be after to');
+
+    return this.db.transaction(async (tx) => {
+      const series = await tx.query<{ id: string; name: string; timezone: string }>(
+        'select id, name, timezone from event_series where archived_at is null order by id',
+      );
+
+      const eventIds: string[] = [];
+      let created = 0;
+      let skipped = 0;
+
+      for (const row of series) {
+        const occurrences = await resolveSeriesOccurrences(tx, row.id, from, to);
+        const existing = new Set(
+          (
+            await tx.query<{ start_date: unknown }>(
+              `select start_date from event_instances
+               where series_id = $1 and start_date between $2::date and $3::date`,
+              [row.id, from, to],
+            )
+          ).map((event) => isoDate(event.start_date)),
+        );
+
+        for (const date of occurrences) {
+          if (existing.has(date)) {
+            skipped += 1;
+            continue;
+          }
+
+          const year = Number(date.slice(0, 4));
+          let eventNo = '';
+          for (let attempt = 0; attempt < 10; attempt += 1) {
+            const [counter] = await tx.query<{ last_value: number | string }>(NEXT_EVENT_NO_SQL, [
+              year,
+            ]);
+            eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
+            // A manually assigned EVT-YYYY-NNN can outrun the counter; try the next number.
+            const [taken] = await tx.query('select 1 from event_instances where event_no = $1', [
+              eventNo,
+            ]);
+            if (!taken) break;
+            if (attempt === 9) {
+              throw new ConflictError(`Could not mint a unique event number for ${date}`);
+            }
+          }
+
+          const [inserted] = await tx.query<{ id: string }>(GENERATE_INSERT_SQL, [
+            eventNo,
+            row.id,
+            row.name,
+            row.timezone,
+            date,
+          ]);
+
+          if (inserted) {
+            created += 1;
+            eventIds.push(inserted.id);
+          } else {
+            skipped += 1;
+          }
+        }
+      }
+
+      return { created, skipped, eventIds };
+    });
   }
 
   async update(

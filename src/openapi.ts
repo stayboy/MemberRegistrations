@@ -43,6 +43,7 @@ import {
   eventAttendanceEntrySchema,
   eventAttendanceInputSchema,
   eventAttendanceSchema,
+  eventGenerationSchema,
   eventListSchema,
   eventSchema,
   updateEventSchema,
@@ -183,6 +184,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OccurrenceList: toSchema(occurrenceListSchema, 'output'),
         Event: toSchema(eventSchema, 'output'),
         EventList: toSchema(eventListSchema, 'output'),
+        EventGeneration: toSchema(eventGenerationSchema, 'output'),
         CreateEvent: toSchema(createEventSchema, 'input'),
         UpdateEvent: toSchema(updateEventSchema, 'input'),
         EventAttendance: toSchema(eventAttendanceSchema, 'output'),
@@ -903,6 +905,34 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             201: json('Event created; Location names the new detail URL.', 'Event'),
             401: unauthorized,
             409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/generate': {
+        post: {
+          summary: 'Generate events from resolved series occurrences',
+          description:
+            'Idempotent: an event already present for a series date is skipped and never overwritten. Cancelled and extra exceptions are honoured.',
+          parameters: [
+            actorHeader,
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            {
+              name: 'to',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            200: json('Generation counts and the new event ids.', 'EventGeneration'),
+            401: unauthorized,
             422: validation,
           },
         },

@@ -331,6 +331,10 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
   archived event is read-only.
 - A generated event inherits the series name, ministry, timezone and default venue; an explicit
   override is allowed.
+- Generation runs over a `from`/`to` window for every non-archived series. A generated event is
+  single-session (its occurrence date), `source = series`, `startTime '00:00'`, `venueType
+'auditorium'`, and gets a unique `eventNo` of the form `EVT-<year>-<NNN>` from a per-year counter.
+  Re-running adds nothing and never overwrites an existing event.
 - `event_instances` is the evolved `event_occurrences` table: the primary key moves from
   `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
 
@@ -1031,3 +1035,7 @@ sequences.
   only stored rows as `present` and never fabricates absences; a manual post shadows an import row and
   a second manual post is `409`; writes are rejected on a cancelled or archived event and a cancelled
   session is read-only. A database trigger enforces `session_date ∈ sessions`.
+- **2026-11-04** — Spec-first for ticket 11: generation covers a `from`/`to` window for every
+  non-archived series, inherits the series name/ministry/timezone with the default `auditorium` venue
+  and `00:00` start, is idempotent on `(seriesId, startDate)`, and mints `EVT-<year>-<NNN>` from a
+  per-year counter.

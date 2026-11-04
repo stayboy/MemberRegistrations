@@ -28,7 +28,7 @@ live-vs-mock release probe.
 After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
-11a, 02–10 and 12 are implemented and accepted (2026-11-04); the next round is the members import and
-Excel templates amendment (Q107–Q110), then 11 (Series-to-event generation), then 13–19.
+11a, 02–11 and 12 are implemented and accepted (2026-11-04); the next round is the members import and
+Excel templates amendment (Q107–Q110, which also retires the event-list import), then 13–19.
 
 UI gaps backlogged: the Pages deploy workflow, CI UI checks (`ui:lint`/`ui:typecheck`/`ui:test`/`ui:build`), route-level code splitting, and the ticket-19 browser gate.

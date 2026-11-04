@@ -447,4 +447,23 @@ before insert or update of event_instance_id, session_date on attendance
 for each row execute function attendance_session_guard();
 `,
   },
+  {
+    version: '0007_event_no_counters',
+    sql: `
+-- Per-year counter behind generated event numbers (EVT-<year>-<NNN>).
+create table event_no_counters (
+  year integer primary key,
+  last_value integer not null
+);
+
+-- Start each year from the highest number already in use, ignoring other formats.
+insert into event_no_counters (year, last_value)
+select (regexp_match(event_no, '^EVT-([0-9]{4})-[0-9]+$'))[1]::int as year,
+       max(regexp_replace(event_no, '^EVT-[0-9]{4}-', '')::int) as last_value
+from event_instances
+where event_no ~ '^EVT-[0-9]{4}-[0-9]+$'
+group by 1
+on conflict (year) do nothing;
+`,
+  },
 ];
