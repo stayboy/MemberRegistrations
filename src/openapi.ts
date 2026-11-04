@@ -38,6 +38,7 @@ import {
   updateSeriesSchema,
 } from './schemas/reference.js';
 import { attendanceImportSchema, eventImportSchema, importBatchSchema } from './schemas/imports.js';
+import { eventListSchema, eventSchema } from './schemas/events.js';
 import {
   assignmentInputSchema,
   assignmentSchema,
@@ -172,6 +173,8 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         ScheduleInput: toSchema(scheduleInputSchema, 'input'),
         SeriesExceptionInput: toSchema(seriesExceptionInputSchema, 'input'),
         OccurrenceList: toSchema(occurrenceListSchema, 'output'),
+        Event: toSchema(eventSchema, 'output'),
+        EventList: toSchema(eventListSchema, 'output'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         EventImport: toSchema(eventImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -847,6 +850,30 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             200: json('Resolved occurrences.', 'OccurrenceList'),
             401: unauthorized,
             404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events': {
+        get: {
+          summary: 'List events in a date window, standalone and series-generated',
+          parameters: [
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'seriesId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+            { name: 'ministry', in: 'query', schema: { type: 'string' } },
+            {
+              name: 'venueType',
+              in: 'query',
+              schema: { type: 'string', enum: ['auditorium', 'virtual', 'hybrid'] },
+            },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
+            { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 } },
+          ],
+          responses: {
+            200: json('A page of events with per-session attendance counts.', 'EventList'),
+            401: unauthorized,
             422: validation,
           },
         },
