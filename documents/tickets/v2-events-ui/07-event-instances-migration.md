@@ -10,11 +10,11 @@ conference becomes representable without a dummy series.
 
 **Blocked by:** 01 (Freeze specs and boundaries), 04 (Gate outcome and drift check).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] Every existing occurrence becomes an event instance with one session and its original `event_no`.
-- [ ] Attendance and suppression rows keep their member and date and resolve through the new event instance.
-- [ ] A standalone event with no series and a three-session event are both accepted; a non-null `series_id` still enforces its foreign key.
-- [ ] Re-running the migration is safe; a half-applied migration is not left behind.
-- [ ] Import resolution by `eventno` + date still works against seeded rows.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] Every existing occurrence becomes an event instance with one session and its original `event_no`.
+- [x] Attendance and suppression rows keep their member and date and resolve through the new event instance.
+- [x] A standalone event with no series and a three-session event are both accepted; a non-null `series_id` still enforces its foreign key.
+- [x] Re-running the migration is safe; a half-applied migration is not left behind.
+- [x] Import resolution by `eventno` + date still works against seeded rows.
+- [x] `npm run verify` and `npm run smoke` pass.
