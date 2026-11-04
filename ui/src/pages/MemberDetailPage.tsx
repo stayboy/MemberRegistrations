@@ -44,7 +44,9 @@ import {
   type RelationshipInput,
   type SubscriptionInput,
 } from '../api/members';
+import { endAssignment } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
+import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
@@ -81,6 +83,8 @@ export function MemberDetailPage() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [purgeConfirm, setPurgeConfirm] = useState('');
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [endAssignmentOpen, setEndAssignmentOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const detailQuery = useQuery({
@@ -115,6 +119,12 @@ export function MemberDetailPage() {
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['member', baseUrl, memberNo] });
     void queryClient.invalidateQueries({ queryKey: ['members', baseUrl] });
+  }, [queryClient, baseUrl, memberNo]);
+
+  const invalidateShepherding = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['member', baseUrl, memberNo] });
+    void queryClient.invalidateQueries({ queryKey: ['members', baseUrl] });
+    void queryClient.invalidateQueries({ queryKey: ['shepherding', baseUrl] });
   }, [queryClient, baseUrl, memberNo]);
 
   const archiveMutation = useMutation({
@@ -166,6 +176,10 @@ export function MemberDetailPage() {
       removeMemberRelationship(baseUrl, token, memberNo, relationshipId),
   });
 
+  const endAssignmentMutation = useMutation({
+    mutationFn: (assignmentId: string) => endAssignment(baseUrl, token, assignmentId),
+  });
+
   const member = detailQuery.data?.member;
   const isArchived = Boolean(member?.archivedAt);
 
@@ -212,6 +226,23 @@ export function MemberDetailPage() {
       },
       onError: (error: unknown) => {
         setPurgeOpen(false);
+        failAction(error);
+      },
+    });
+  }
+
+  function confirmEndAssignment(): void {
+    const assignmentId = shepherdingQuery.data?.shepherd?.assignmentId;
+    if (!assignmentId || endAssignmentMutation.isPending) return;
+
+    setActionError(null);
+    endAssignmentMutation.mutate(assignmentId, {
+      onSuccess: () => {
+        setEndAssignmentOpen(false);
+        invalidateShepherding();
+      },
+      onError: (error: unknown) => {
+        setEndAssignmentOpen(false);
         failAction(error);
       },
     });
@@ -368,12 +399,54 @@ export function MemberDetailPage() {
               onRetry={() => {
                 void shepherdingQuery.refetch();
               }}
+              isArchived={isArchived}
+              onAssign={() => {
+                setActionError(null);
+                setAssignOpen(true);
+              }}
+              onReassign={() => {
+                setActionError(null);
+                setAssignOpen(true);
+              }}
+              onEnd={() => {
+                setActionError(null);
+                setEndAssignmentOpen(true);
+              }}
             />
           ) : null}
         </div>
       </div>
 
       <ContactsDialog member={member} open={contactsOpen} onOpenChange={setContactsOpen} editable />
+
+      {assignOpen ? (
+        <AssignShepherdDialog
+          memberNo={member.memberNo}
+          memberName={memberName(member)}
+          currentAssignment={
+            shepherdingQuery.data?.shepherd
+              ? {
+                  assignmentId: shepherdingQuery.data.shepherd.assignmentId,
+                  officerMemberNo: shepherdingQuery.data.shepherd.memberNo,
+                  officerName: shepherdingQuery.data.shepherd.name,
+                  assignedOn: shepherdingQuery.data.shepherd.assignedOn,
+                }
+              : null
+          }
+          onClose={() => setAssignOpen(false)}
+          onAssigned={invalidateShepherding}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={endAssignmentOpen}
+        title={`End the assignment for ${member.memberNo}?`}
+        message="The assignment ends now. The assignment history and every logged call stay readable; the pastoral record is not deleted."
+        confirmLabel="End assignment"
+        busy={endAssignmentMutation.isPending}
+        onConfirm={confirmEndAssignment}
+        onCancel={() => setEndAssignmentOpen(false)}
+      />
 
       <ConfirmDialog
         open={archiveOpen}

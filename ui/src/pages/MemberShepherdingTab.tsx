@@ -8,8 +8,9 @@ import {
   Text,
 } from '@fluentui/react-components';
 import { Link } from 'react-router-dom';
-import type { CallOutcome, MemberShepherding, StillInChurch } from '../api/members';
+import type { MemberShepherding } from '../api/members';
 import { formatDateLong } from '../format/member';
+import { outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { errorMessage } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 
@@ -19,25 +20,17 @@ export interface MemberShepherdingTabProps {
   readonly isError: boolean;
   readonly error: unknown;
   readonly onRetry: () => void;
+  readonly isArchived: boolean;
+  readonly onAssign: () => void;
+  readonly onReassign: () => void;
+  readonly onEnd: () => void;
 }
-
-const OUTCOME_LABELS: Record<CallOutcome, string> = {
-  reached: 'Reached',
-  no_answer: 'No answer',
-  wrong_number: 'Wrong number',
-};
-
-const STILL_IN_CHURCH_LABELS: Record<StillInChurch, string> = {
-  yes: 'Still in church',
-  no: 'No longer in church',
-  unknown: 'Unknown',
-};
 
 /**
  * Member-detail **Shepherding** tab (FR-66): the current shepherd, assignment
  * history, recent calls and current `stillInChurch` from
- * `GET /v1/members/:memberNo/shepherding`. Read-only here; logging calls is the
- * shepherding roster's job (ticket 16). MemberDetailPage owns the query.
+ * `GET /v1/members/:memberNo/shepherding`. The call history is read-only because
+ * calls are append-only; assignment actions are owned by MemberDetailPage.
  */
 export function MemberShepherdingTab({
   summary,
@@ -45,6 +38,10 @@ export function MemberShepherdingTab({
   isError,
   error,
   onRetry,
+  isArchived,
+  onAssign,
+  onReassign,
+  onEnd,
 }: MemberShepherdingTabProps) {
   const styles = useMemberDetailStyles();
 
@@ -54,6 +51,26 @@ export function MemberShepherdingTab({
         <h2 id="member-shepherding-heading" className={styles.sectionTitle}>
           Shepherding
         </h2>
+        {isArchived ? (
+          <Text size={200} className={styles.muted}>
+            Archived members cannot be assigned a shepherd. Restore the member first.
+          </Text>
+        ) : summary && !isPending && !isError ? (
+          summary.shepherd ? (
+            <div className={styles.pills}>
+              <Button size="small" appearance="secondary" onClick={onReassign}>
+                Reassign
+              </Button>
+              <Button size="small" appearance="secondary" onClick={onEnd}>
+                End assignment
+              </Button>
+            </div>
+          ) : (
+            <Button size="small" appearance="primary" onClick={onAssign}>
+              Assign shepherd
+            </Button>
+          )
+        ) : null}
       </div>
 
       {isPending ? (
@@ -87,7 +104,7 @@ export function MemberShepherdingTab({
                   }
                   size="small"
                 >
-                  {STILL_IN_CHURCH_LABELS[summary.stillInChurch]}
+                  {stillInChurchLabel(summary.stillInChurch)}
                 </Badge>
               ) : null}
             </div>
@@ -169,10 +186,10 @@ export function MemberShepherdingTab({
                       <Text weight="semibold">{formatDateLong(call.calledOn)}</Text>
                       <div className={styles.pills}>
                         <Badge appearance="outline" size="small">
-                          {OUTCOME_LABELS[call.outcome]}
+                          {outcomeLabel(call.outcome)}
                         </Badge>
                         <Badge appearance="outline" color="informative" size="small">
-                          {STILL_IN_CHURCH_LABELS[call.stillInChurch]}
+                          {stillInChurchLabel(call.stillInChurch)}
                         </Badge>
                       </div>
                     </div>

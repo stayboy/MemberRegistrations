@@ -1,0 +1,233 @@
+import type { CallOutcome, StillInChurch } from '../api/members';
+import type { ShepherdingWindow } from '../api/shepherding';
+import { ApiError } from '../api/errors';
+import { utcToday } from './member-form';
+
+/**
+ * Pure shepherding helpers: labels, the UTC date window, the follow-up
+ * predicate (FR-60), call validation (FR-61/FR-67) and reassignment conflict
+ * detection (FR-63). The browser rejects the same input the API would reject.
+ */
+
+export const OUTCOME_LABELS: Record<CallOutcome, string> = {
+  reached: 'Reached',
+  no_answer: 'No answer',
+  wrong_number: 'Wrong number',
+};
+
+export const STILL_IN_CHURCH_LABELS: Record<StillInChurch, string> = {
+  yes: 'Still in church',
+  no: 'No longer in church',
+  unknown: 'Unknown',
+};
+
+export const CALL_OUTCOME_OPTIONS: readonly {
+  readonly value: CallOutcome;
+  readonly label: string;
+}[] = [
+  { value: 'reached', label: OUTCOME_LABELS.reached },
+  { value: 'no_answer', label: OUTCOME_LABELS.no_answer },
+  { value: 'wrong_number', label: OUTCOME_LABELS.wrong_number },
+];
+
+export const STILL_IN_CHURCH_OPTIONS: readonly {
+  readonly value: StillInChurch;
+  readonly label: string;
+}[] = [
+  { value: 'yes', label: STILL_IN_CHURCH_LABELS.yes },
+  { value: 'no', label: STILL_IN_CHURCH_LABELS.no },
+  { value: 'unknown', label: STILL_IN_CHURCH_LABELS.unknown },
+];
+
+export function outcomeLabel(outcome: CallOutcome | null | undefined): string {
+  return outcome ? OUTCOME_LABELS[outcome] : '—';
+}
+
+export function stillInChurchLabel(status: StillInChurch | null | undefined): string {
+  return status ? STILL_IN_CHURCH_LABELS[status] : 'Never reported';
+}
+
+export const WINDOW_DAYS = 90;
+export const FOLLOW_UP_DAYS = 30;
+export const REASON_MIN_LENGTH = 3;
+export const REASON_MAX_LENGTH = 500;
+export const TEXT_MAX_LENGTH = 2000;
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 86_400_000;
+
+function parseUtcDate(value: string | null | undefined): Date | null {
+  const trimmed = value?.trim() ?? '';
+  if (!ISO_DATE_PATTERN.test(trimmed)) return null;
+
+  const [year, month, day] = trimmed.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+    ? date
+    : null;
+}
+
+function formatUtcDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** Shifts a UTC calendar date by whole days; an invalid input returns `null`. */
+export function shiftUtcDate(value: string, days: number): string | null {
+  const date = parseUtcDate(value);
+  if (!date) return null;
+  return formatUtcDate(new Date(date.getTime() + days * DAY_MS));
+}
+
+/** The default window: the last 90 UTC calendar days, inclusive of today. */
+export function defaultShepherdingWindow(today: string = utcToday()): ShepherdingWindow {
+  const from = shiftUtcDate(today, -WINDOW_DAYS);
+  return { from: from ?? today, to: today };
+}
+
+/**
+ * Resolves the URL's `from`/`to`. Missing or invalid values fall back to the
+ * defaults; a reversed range also falls back rather than querying the API with
+ * a window it would reject (FR-67).
+ */
+export function resolveShepherdingWindow(
+  from: string | null | undefined,
+  to: string | null | undefined,
+  today: string = utcToday(),
+): ShepherdingWindow {
+  const fallback = defaultShepherdingWindow(today);
+  const resolvedFrom = parseUtcDate(from) ? from!.trim() : fallback.from;
+  const resolvedTo = parseUtcDate(to) ? to!.trim() : fallback.to;
+  return resolvedFrom <= resolvedTo ? { from: resolvedFrom, to: resolvedTo } : fallback;
+}
+
+/**
+ * Follow-up means never called, or last called more than 30 UTC days ago.
+ * Exactly 30 days is not a follow-up; 31 is (FR-60).
+ */
+export function isFollowUp(
+  entry: { readonly lastCalledOn: string | null },
+  today: string = utcToday(),
+): boolean {
+  if (!entry.lastCalledOn) return true;
+
+  const last = parseUtcDate(entry.lastCalledOn);
+  const now = parseUtcDate(today);
+  if (!last || !now) return true;
+
+  return Math.floor((now.getTime() - last.getTime()) / DAY_MS) > FOLLOW_UP_DAYS;
+}
+
+export interface CallFormValues {
+  readonly calledOn: string;
+  readonly outcome: CallOutcome | '';
+  readonly stillInChurch: StillInChurch | '';
+  readonly feedback: string;
+  readonly issue: string;
+}
+
+export type CallFormField = 'calledOn' | 'outcome' | 'stillInChurch' | 'feedback' | 'issue';
+
+export type CallFormErrors = Partial<Record<CallFormField, string>>;
+
+/** A fresh log-call form; `calledOn` defaults to today in UTC (FR-67). */
+export function createEmptyCallForm(calledOn: string = utcToday()): CallFormValues {
+  return {
+    calledOn,
+    outcome: '',
+    stillInChurch: '',
+    feedback: '',
+    issue: '',
+  };
+}
+
+/**
+ * Mirrors `callInputSchema` plus the API's date rules: `calledOn` must be a real
+ * UTC date, not in the future, and not before the assignment's `assignedOn`;
+ * `stillInChurch` is required when the outcome is `reached`.
+ */
+export function validateCall(
+  values: CallFormValues,
+  assignedOn: string,
+  today: string = utcToday(),
+): CallFormErrors {
+  const errors: CallFormErrors = {};
+  const calledOn = values.calledOn.trim();
+
+  if (calledOn.length === 0) {
+    errors.calledOn = 'Called on is required.';
+  } else if (!parseUtcDate(calledOn)) {
+    errors.calledOn = 'Called on must be a real date in YYYY-MM-DD form.';
+  } else if (calledOn > today) {
+    errors.calledOn = 'Called on must not be in the future.';
+  } else if (calledOn < assignedOn) {
+    errors.calledOn = 'Called on must not be before the assignment started.';
+  }
+
+  if (!values.outcome) errors.outcome = 'Outcome is required.';
+
+  if (values.outcome === 'reached' && !values.stillInChurch) {
+    errors.stillInChurch = 'Still in church is required when the outcome is reached.';
+  }
+
+  if (values.feedback.trim().length > TEXT_MAX_LENGTH) {
+    errors.feedback = `Feedback must be ${TEXT_MAX_LENGTH} characters or fewer.`;
+  }
+  if (values.issue.trim().length > TEXT_MAX_LENGTH) {
+    errors.issue = `Issue must be ${TEXT_MAX_LENGTH} characters or fewer.`;
+  }
+
+  return errors;
+}
+
+/** Mirrors the API's 3–500 character reason rule for assignments (FR-63). */
+export function validateReason(reason: string): string | null {
+  const trimmed = reason.trim();
+  if (trimmed.length === 0) return 'Reason is required.';
+  if (trimmed.length < REASON_MIN_LENGTH || trimmed.length > REASON_MAX_LENGTH) {
+    return `Reason must be ${REASON_MIN_LENGTH}–${REASON_MAX_LENGTH} characters.`;
+  }
+  return null;
+}
+
+/** The `currentAssignment` extension on a reassignment `409` (FR-63). */
+export interface CurrentAssignment {
+  readonly id: string;
+  readonly officerMemberNo: string;
+  readonly assignedOn: string;
+}
+
+/**
+ * Reads the `currentAssignment` extension off a `409`. Only a well-formed
+ * extension counts; any other conflict keeps the inline error path.
+ */
+export function currentAssignmentOf(error: unknown): CurrentAssignment | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+
+  const raw = error.problem?.currentAssignment;
+  if (typeof raw !== 'object' || raw === null) return null;
+
+  const candidate = raw as Record<string, unknown>;
+  if (
+    typeof candidate.id !== 'string' ||
+    typeof candidate.officerMemberNo !== 'string' ||
+    typeof candidate.assignedOn !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    officerMemberNo: candidate.officerMemberNo,
+    assignedOn: candidate.assignedOn,
+  };
+}
+
+/** True only for the reassignment-consent `409`, not every conflict. */
+export function isStaleAssignment(error: unknown): boolean {
+  return currentAssignmentOf(error) !== null;
+}

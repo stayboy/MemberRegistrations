@@ -125,7 +125,24 @@ export interface ContactsDialogMember {
   firstName: string;
   lastName: string;
   otherNames?: string | null;
-  isPresbyter: boolean;
+  /** A roster's composed name replaces the first/last composition when present. */
+  displayName?: string | null;
+  isPresbyter?: boolean;
+}
+
+function contactDisplayName(member: ContactsDialogMember): string {
+  const displayName = member.displayName?.trim();
+  return displayName && displayName.length > 0 ? displayName : memberName(member);
+}
+
+function contactInitials(member: ContactsDialogMember): string {
+  const displayName = member.displayName?.trim();
+  if (!displayName) return memberInitials(member);
+
+  const parts = displayName.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.charAt(0) ?? '') : '';
+  return `${first}${last}`.toUpperCase() || '?';
 }
 
 function errorMessage(error: unknown): string {
@@ -299,11 +316,13 @@ function ContactRemoveDialog({
 }
 
 /**
- * Call sites: MembersPage (contacts action, read-only) and MemberDetailPage
- * (contacts action, editable). The list dialog shows grouped values and their
- * owner/linked status but cannot add or remove them (FR-78, AC-47); the detail
- * dialog is editable because opening the member is already an explicit action
- * (FR-29). Both call sites share the `['member', baseUrl, memberNo]` cache key.
+ * Call sites: MembersPage (contacts action, read-only), MemberDetailPage
+ * (contacts action, editable) and ShepherdingRosterPage (contacts action,
+ * read-only; the roster passes `displayName` because it has no name split). The
+ * list dialog shows grouped values and their owner/linked status but cannot add
+ * or remove them (FR-78, AC-47); the detail dialog is editable because opening
+ * the member is already an explicit action (FR-29). All call sites share the
+ * `['member', baseUrl, memberNo]` cache key.
  */
 export function ContactsDialog({
   member,
@@ -366,14 +385,14 @@ export function ContactsDialog({
                 <DialogContent className={styles.dialogContent}>
                   <div className={styles.dialogMember}>
                     <Avatar
-                      name={memberName(member)}
-                      initials={memberInitials(member)}
+                      name={contactDisplayName(member)}
+                      initials={contactInitials(member)}
                       color="colorful"
                       size={40}
                     />
                     <div>
                       <div className={styles.nameRow}>
-                        <Text weight="semibold">{memberName(member)}</Text>
+                        <Text weight="semibold">{contactDisplayName(member)}</Text>
                         {member.isPresbyter ? (
                           <Badge appearance="tint" color="informative" size="small">
                             Presbyter
