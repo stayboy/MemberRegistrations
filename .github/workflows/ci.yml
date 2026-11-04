@@ -43,3 +43,24 @@ jobs:
       - run: npm run verify
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+  # The UI is a workspace with its own ESLint/tsconfig/Vitest, and the root
+  # `verify` job deliberately excludes `ui/**`; without this job a UI change
+  # could be green while none of its tests or its build ever ran.
+  ui:
+    name: ui
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run ui:lint
+      - run: npm run ui:typecheck
+      - run: npm run ui:test
+      - run: npm run ui:build
