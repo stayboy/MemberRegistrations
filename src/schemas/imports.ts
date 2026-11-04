@@ -36,12 +36,14 @@ export const memberImportSchema = z.object({
 });
 
 export const attendanceImportSchema = z.object({
+  eventId: z.string().uuid(),
+  sessionDate: dateStringSchema,
   rows: z
     .array(
       z.object({
-        memberno: z.string().min(1).max(32),
-        date: dateStringSchema,
-        eventno: z.string().min(1).max(64),
+        memberNo: importMemberNoSchema,
+        /** `YYYY-MM-DD` or a date plus a time, parsed by the repository. */
+        datetime: z.string().trim().max(64).optional(),
       }),
     )
     .min(1)
@@ -54,6 +56,10 @@ export const importBatchSchema = z.object({
   actor: z.string(),
   rowCount: z.number().int(),
   checksum: z.string(),
+  eventInstanceId: z.string().nullable(),
+  sessionDate: z.string().nullable(),
+  written: z.number().int().nullable(),
+  skipped: z.number().int().nullable(),
   createdAt: z.string(),
 });
 

@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
-import { ImportError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import {
+  ImportError,
+  DuplicateImportError,
+  NotFoundError,
+  ValidationError,
+} from '../errors/domain-errors.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { GENDERS, type Gender } from './members.js';
 import type { Db, DbClient } from '../db/sql.js';
@@ -21,9 +26,15 @@ export interface MemberImportRow {
 }
 
 export interface AttendanceImportRow {
-  memberno: string;
-  date: string;
-  eventno: string;
+  memberNo: string;
+  /** `YYYY-MM-DD` or a date plus a time; the date MUST match the session. */
+  datetime?: string;
+}
+
+export interface AttendanceImportRequest {
+  eventId: string;
+  sessionDate: string;
+  rows: AttendanceImportRow[];
 }
 
 export type ImportKind = 'members' | 'attendance';
@@ -35,6 +46,10 @@ export interface ImportBatchDto {
   actor: string;
   rowCount: number;
   checksum: string;
+  eventInstanceId: string | null;
+  sessionDate: string | null;
+  written: number | null;
+  skipped: number | null;
   createdAt: string;
 }
 
@@ -121,25 +136,18 @@ export const IMPORT_FORMATS: ImportFormat[] = [
     filename: 'attendance-import-template.xlsx',
     columns: [
       {
-        name: 'memberno',
+        name: 'memberNo',
         required: true,
         type: 'text',
         example: 'M-1001',
         notes: 'The member number from the member import.',
       },
       {
-        name: 'date',
-        required: true,
+        name: 'datetime',
+        required: false,
         type: 'date',
-        example: '2026-01-04',
-        notes: 'A session date of the event; YYYY-MM-DD.',
-      },
-      {
-        name: 'eventno',
-        required: true,
-        type: 'text',
-        example: 'EVT-2026-001',
-        notes: 'The event number assigned by generation or created manually.',
+        example: '2026-01-04T09:00',
+        notes: "The selected session's date; a time is kept when present.",
       },
     ],
   },
@@ -198,19 +206,32 @@ function isoDate(value: unknown): string {
 }
 
 /** `sessions` is JSONB: PGlite returns an array, `pg` may return the raw text. */
-function sessionDates(value: unknown): string[] {
-  let entries: unknown[] = [];
-  if (Array.isArray(value)) {
-    entries = value;
-  } else if (typeof value === 'string') {
+function sessionEntries(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
     try {
       const parsed: unknown = JSON.parse(value);
-      entries = Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      entries = [];
+      return [];
     }
   }
-  return entries.map((entry) => isoDate((entry as { date?: unknown })?.date));
+  return [];
+}
+
+function sessionDates(value: unknown): string[] {
+  return sessionEntries(value).map((entry) => isoDate((entry as { date?: unknown })?.date));
+}
+
+/** The listed session's status, or null when the date is not one of the event's sessions. */
+function sessionStatus(value: unknown, date: string): string | null {
+  for (const entry of sessionEntries(value)) {
+    const session = entry as { date?: unknown; status?: unknown };
+    if (isoDate(session.date) === date) {
+      return typeof session.status === 'string' ? session.status : 'scheduled';
+    }
+  }
+  return null;
 }
 
 function isoTimestamp(value: unknown): string {
@@ -289,7 +310,7 @@ function prepareMemberRow(row: MemberImportRow, rowNumber: number): PreparedMemb
   };
 }
 
-function duplicateMemberNos(rows: PreparedMemberRow[]): string | null {
+function duplicateMemberNos(rows: Array<{ memberNo: string; rowNumber: number }>): string | null {
   const seen = new Map<string, { memberNo: string; rows: number[] }>();
   for (const row of rows) {
     const key = row.memberNo.toLowerCase();
@@ -301,6 +322,62 @@ function duplicateMemberNos(rows: PreparedMemberRow[]): string | null {
   const duplicates = [...seen.values()].filter((entry) => entry.rows.length > 1);
   if (duplicates.length === 0) return null;
   return duplicates.map((entry) => `${entry.memberNo} (rows ${entry.rows.join(', ')})`).join('; ');
+}
+
+interface PreparedAttendanceRow {
+  memberNo: string;
+  /** Wall-clock time the register carried, or null when only a date was given. */
+  sessionTime: string | null;
+  /** 1-based row number for error reports. */
+  rowNumber: number;
+}
+
+/** `YYYY-MM-DD`, optionally followed by `T`, a lowercase `t`, or a space and `HH:MM[:SS]`. */
+const IMPORT_DATETIME_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:[Tt ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+/**
+ * Parse a row's optional datetime by hand. No timezone conversion: the stored
+ * `session_time` is the wall-clock time the register carried, and the date part
+ * must be the occurrence the operator selected.
+ */
+function prepareAttendanceRow(
+  row: AttendanceImportRow,
+  rowNumber: number,
+  sessionDate: string,
+): PreparedAttendanceRow {
+  const memberNo = requiredImportText(row.memberNo, 'memberNo', rowNumber);
+  const raw = textOrNull(row.datetime);
+  if (raw === null) return { memberNo, sessionTime: null, rowNumber };
+
+  const match = IMPORT_DATETIME_PATTERN.exec(raw);
+  if (!match) {
+    throw new ImportError(
+      `Row ${rowNumber}: datetime "${raw}" must be YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]`,
+    );
+  }
+
+  const date = match[1]!;
+  try {
+    assertDate(date, 'datetime');
+  } catch (error) {
+    throw new ImportError(`Row ${rowNumber}: ${(error as Error).message}`);
+  }
+  if (date !== sessionDate) {
+    throw new ImportError(
+      `Row ${rowNumber}: datetime ${raw} is on ${date}, but the selected session is ${sessionDate}`,
+    );
+  }
+
+  const hours = match[2];
+  if (hours === undefined) return { memberNo, sessionTime: null, rowNumber };
+
+  const minutes = match[3]!;
+  const seconds = match[4] ?? '00';
+  if (Number(hours) > 23 || Number(minutes) > 59 || Number(seconds) > 59) {
+    throw new ImportError(`Row ${rowNumber}: datetime ${raw} has a time outside 00:00:00-23:59:59`);
+  }
+
+  return { memberNo, sessionTime: `${hours}:${minutes}:${seconds}`, rowNumber };
 }
 
 type ExistingMember = {
@@ -355,25 +432,65 @@ export class ImportRepository {
     });
   }
 
-  async importAttendance(rows: AttendanceImportRow[], actor: string): Promise<ImportBatchDto> {
-    assertRows(rows, 'rows');
+  async importAttendance(request: AttendanceImportRequest, actor: string): Promise<ImportBatchDto> {
+    assertRows(request.rows, 'rows');
+
+    const sessionDate = assertDate(request.sessionDate, 'sessionDate');
+    // The checksum covers the targeted occurrence as well as the rows, so the
+    // same member list against a different session is a different import.
+    const batchChecksum = checksum({
+      eventId: request.eventId,
+      sessionDate,
+      rows: request.rows,
+    });
 
     return this.db.transaction(async (tx) => {
-      const batch = await this.createBatch(tx, 'attendance', rows, actor);
-
-      const eventNos = [...new Set(rows.map((row) => row.eventno.trim()))];
-      const events = await tx.query<{
-        event_no: string;
+      const [event] = await tx.query<{
+        event_no: string | null;
         name: string;
-        id: string;
+        status: string;
         sessions: unknown;
-      }>(
-        'select event_no, name, id, sessions from event_instances where event_no = any($1::text[])',
-        [eventNos],
-      );
-      const eventMap = new Map(events.map((event) => [event.event_no, event]));
+      }>('select event_no, name, status, sessions from event_instances where id = $1', [
+        request.eventId,
+      ]);
+      if (!event) {
+        throw new ImportError(`Unknown event id: ${request.eventId}`);
+      }
+      const eventLabel = event.event_no
+        ? `Event ${event.event_no} (${event.name})`
+        : `Event ${event.name}`;
+      if (event.status === 'cancelled' || event.status === 'archived') {
+        throw new ImportError(
+          `${eventLabel} is ${event.status} and cannot accept an attendance import`,
+        );
+      }
+      if (!sessionDates(event.sessions).includes(sessionDate)) {
+        throw new ImportError(`${eventLabel} has no session on ${sessionDate}`);
+      }
+      if (sessionStatus(event.sessions, sessionDate) === 'cancelled') {
+        throw new ImportError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
 
-      const memberNos = [...new Set(rows.map((row) => row.memberno.trim().toLowerCase()))];
+      const [duplicate] = await tx.query<{ id: string }>(
+        "select id from import_batches where kind = 'attendance' and checksum = $1",
+        [batchChecksum],
+      );
+      if (duplicate) {
+        throw new DuplicateImportError(
+          `This attendance file was already imported (batch ${duplicate.id}).`,
+          duplicate.id,
+        );
+      }
+
+      const prepared = request.rows.map((row, index) =>
+        prepareAttendanceRow(row, index + 1, sessionDate),
+      );
+      const duplicates = duplicateMemberNos(prepared);
+      if (duplicates) {
+        throw new ImportError(`Duplicate memberNo in the file: ${duplicates}`);
+      }
+
+      const memberNos = [...new Set(prepared.map((row) => row.memberNo.toLowerCase()))];
       const members = await tx.query<{ id: string; member_no: string }>(
         'select id, member_no from members where lower(member_no) = any($1::text[]) and purged_at is null',
         [memberNos],
@@ -382,51 +499,67 @@ export class ImportRepository {
         members.map((member) => [member.member_no.toLowerCase(), member.id]),
       );
 
-      const unknownEvents = new Set<string>();
       const unknownMembers = new Set<string>();
+      for (const row of prepared) {
+        if (!memberMap.has(row.memberNo.toLowerCase())) unknownMembers.add(row.memberNo);
+      }
+      if (unknownMembers.size > 0) {
+        throw new ImportError(`Unknown member numbers: ${[...unknownMembers].sort().join(', ')}`);
+      }
 
-      for (const [index, row] of rows.entries()) {
-        const sessionDate = assertDate(row.date, `rows[${index}].date`);
-        const event = eventMap.get(row.eventno.trim());
-        if (!event) {
-          unknownEvents.add(row.eventno);
-          continue;
-        }
-        const memberId = memberMap.get(row.memberno.trim().toLowerCase());
-        if (!memberId) {
-          unknownMembers.add(row.memberno);
-          continue;
-        }
-        if (!sessionDates(event.sessions).includes(sessionDate)) {
-          throw new ImportError(
-            `Event ${event.event_no} (${event.name}) has no session on ${sessionDate}`,
-          );
-        }
+      const [batchRow] = await tx.query<{ id: string; created_at: Date | string }>(
+        `insert into import_batches (
+           kind, actor, row_count, checksum, event_instance_id, session_date
+         )
+         values ('attendance',$1,$2,$3,$4,$5) returning id, created_at`,
+        [actor, request.rows.length, batchChecksum, request.eventId, sessionDate],
+      );
+      const batchId = batchRow!.id;
 
-        await tx.query(
-          `insert into attendance (member_id, event_instance_id, session_date, source, import_batch_id, created_by)
-           select $1,$2,$3,'import',$4,$5
+      let written = 0;
+      let skipped = 0;
+      for (const row of prepared) {
+        const memberId = memberMap.get(row.memberNo.toLowerCase())!;
+        const inserted = await tx.query<{ id: string }>(
+          `insert into attendance (
+             member_id, event_instance_id, session_date, session_time,
+             source, import_batch_id, created_by
+           )
+           select $1,$2,$3,$4::time,'import',$5,$6
            where not exists (
              select 1 from attendance_suppressions s
              where s.member_id = $1 and s.event_instance_id = $2 and s.session_date = $3
            )
            on conflict (event_instance_id, session_date, member_id) do update
              set source = 'import',
+                 session_time = excluded.session_time,
                  import_batch_id = excluded.import_batch_id,
                  created_by = excluded.created_by
-             where attendance.source <> 'manual'`,
-          [memberId, event.id, sessionDate, batch.id, actor],
+             where attendance.source <> 'manual'
+           returning id`,
+          [memberId, request.eventId, sessionDate, row.sessionTime, batchId, actor],
         );
+        if (inserted.length > 0) written += 1;
+        else skipped += 1;
       }
 
-      if (unknownEvents.size > 0) {
-        throw new ImportError(`Unknown event numbers: ${[...unknownEvents].sort().join(', ')}`);
-      }
-      if (unknownMembers.size > 0) {
-        throw new ImportError(`Unknown member numbers: ${[...unknownMembers].sort().join(', ')}`);
-      }
+      await tx.query(
+        'update import_batches set written_count = $2, skipped_count = $3 where id = $1',
+        [batchId, written, skipped],
+      );
 
-      return batch;
+      return {
+        id: batchId,
+        kind: 'attendance',
+        actor,
+        rowCount: request.rows.length,
+        checksum: batchChecksum,
+        eventInstanceId: request.eventId,
+        sessionDate,
+        written,
+        skipped,
+        createdAt: isoTimestamp(batchRow!.created_at),
+      };
     });
   }
 
@@ -437,9 +570,15 @@ export class ImportRepository {
       actor: string;
       row_count: number;
       checksum: string;
+      event_instance_id: string | null;
+      session_date: Date | string | null;
+      written_count: number | null;
+      skipped_count: number | null;
       created_at: Date | string;
     }>(
-      'select id, kind, actor, row_count, checksum, created_at from import_batches where id = $1',
+      `select id, kind, actor, row_count, checksum, event_instance_id, session_date,
+              written_count, skipped_count, created_at
+       from import_batches where id = $1`,
       [id],
     );
 
@@ -451,6 +590,10 @@ export class ImportRepository {
       actor: row.actor,
       rowCount: row.row_count,
       checksum: row.checksum,
+      eventInstanceId: row.event_instance_id,
+      sessionDate: row.session_date === null ? null : isoDate(row.session_date),
+      written: row.written_count === null ? null : Number(row.written_count),
+      skipped: row.skipped_count === null ? null : Number(row.skipped_count),
       createdAt: isoTimestamp(row.created_at),
     };
   }
@@ -476,6 +619,10 @@ export class ImportRepository {
       actor,
       rowCount: rows.length,
       checksum: checksum(rows),
+      eventInstanceId: null,
+      sessionDate: null,
+      written: null,
+      skipped: null,
       createdAt: isoTimestamp(row!.created_at),
     };
   }

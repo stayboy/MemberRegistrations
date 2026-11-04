@@ -330,7 +330,8 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   ministries and other reference data. The retired `Attendance` screens MUST NOT be duplicated.
 - FR-43: Occurrences MUST be requested from `GET /v1/series/:id/occurrences` for a date window; the
   UI MUST NOT recompute RRULEs locally.
-- FR-44: An import MUST NOT create series. Unknown `eventno` values MUST surface as an import error,
+- FR-44: An import MUST NOT create or modify series, events, sessions or members — it writes attendance
+  against an existing session only. An unknown event, member or session surfaces as an import error
   matching the API contract.
 
 ### 5.6 Shepherding
@@ -601,6 +602,7 @@ Each criterion is testable and references at least one requirement.
 | FR-7        | AC-5                | FR-36       | AC-19                                   |
 | FR-8        | AC-23               | FR-36a      | AC-20                                   |
 |             |                     | FR-37       | AC-20                                   |
+|             |                     | FR-44       | AC-19, AC-20                            |
 | FR-9        | AC-3                | FR-38       | AC-21                                   |
 | FR-10       | AC-29               | FR-39       | AC-19                                   |
 | FR-11       | AC-6                | FR-40       | AC-19, AC-30                            |
@@ -892,31 +894,27 @@ export interface MemberList {
 
 export interface ImportBatch {
   id: string;
-  kind: 'events' | 'attendance';
+  kind: 'members' | 'attendance' | 'events'; // 'events' stays readable for legacy batches
   actor: string;
   rowCount: number;
   checksum: string;
   createdAt: string;
-}
-
-export interface EventImportRow {
-  date: string;
-  eventno: string;
-  eventname: string;
-  ministryName?: string | null;
+  /** Attendance batches only: the occurrence the import targeted. */
+  eventInstanceId?: string | null;
+  sessionDate?: string | null;
+  written?: number | null;
+  skipped?: number | null;
 }
 
 export interface AttendanceImportRow {
-  memberno: string;
-  date: string;
-  eventno: string;
-}
-
-export interface EventImport {
-  rows: EventImportRow[];
+  memberNo: string;
+  /** The selected session's date, optionally with a wall-clock time; checked against it. */
+  datetime?: string;
 }
 
 export interface AttendanceImport {
+  eventId: string;
+  sessionDate: string;
   rows: AttendanceImportRow[];
 }
 

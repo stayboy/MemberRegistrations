@@ -62,7 +62,7 @@ export const createEventSchema = z.object({
   sessions: z.array(eventSessionInputSchema).min(1),
 });
 
-/** `eventNo` is the import key and is never reused, so it is not mutable. */
+/** `eventNo` is unique and is never reused, so it is not mutable. */
 export const updateEventSchema = createEventSchema.omit({ eventNo: true }).partial();
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
@@ -153,6 +153,7 @@ export const eventAttendanceRowSchema = z.object({
   name: z.string(),
   status: z.literal('present'),
   source: z.enum(['import', 'manual']),
+  sessionTime: z.string().nullable(),
 });
 
 export const eventAttendanceSchema = z.object({

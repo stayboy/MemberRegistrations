@@ -124,12 +124,21 @@ describe('attendance counts', () => {
 });
 
 describe('imports', () => {
-  const eventNos = new Map<string, string>();
+  const events = new Map<string, { id: string; eventNo: string }>();
+  let cancelledEventId: string;
 
-  function eventNo(date: string): string {
-    const value = eventNos.get(date);
+  function event(date: string): { id: string; eventNo: string } {
+    const value = events.get(date);
     if (!value) throw new Error(`No generated event for ${date}`);
     return value;
+  }
+
+  function importAttendance(body: {
+    eventId: string;
+    sessionDate: string;
+    rows: Array<{ memberNo: string; datetime?: string }>;
+  }) {
+    return request(app).post('/v1/imports/attendance').set(writeHeaders).send(body);
   }
 
   beforeAll(async () => {
@@ -145,15 +154,27 @@ describe('imports', () => {
       .set(readHeaders);
     expect(listed.status).toBe(200);
 
-    for (const event of listed.body.items as Array<{
+    for (const entry of listed.body.items as Array<{
+      id: string;
       startDate: string;
       eventNo: string | null;
     }>) {
-      if (event.eventNo) eventNos.set(event.startDate, event.eventNo);
+      if (entry.eventNo) events.set(entry.startDate, { id: entry.id, eventNo: entry.eventNo });
     }
 
     // 2026-01-11 is cancelled by the attendance-counts suite.
-    expect(eventNos.size).toBe(4);
+    expect(events.size).toBe(4);
+
+    const [cancelled] = await harness.db.query<{ id: string }>(
+      `insert into event_instances (
+         event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions
+       )
+       values ('EVT-2026-090','Cancelled Import Event','UTC','2026-02-08','2026-02-08',
+               '09:00','auditorium','cancelled','manual',
+               '[{"date":"2026-02-08","status":"scheduled"}]'::jsonb)
+       returning id`,
+    );
+    cancelledEventId = cancelled!.id;
   });
 
   it('retires the event-list import', async () => {
@@ -165,74 +186,310 @@ describe('imports', () => {
     expect(response.status).toBe(404);
   });
 
-  it('rejects attendance rows for unknown event numbers, and adds nothing', async () => {
-    const response = await request(app)
-      .post('/v1/imports/attendance')
-      .set(writeHeaders)
-      .send({
-        rows: [{ memberno: 'M-5001', date: '2026-01-25', eventno: 'NOPE' }],
-      });
+  it('rejects an unknown event id, and adds nothing', async () => {
+    const unknownId = '00000000-0000-4000-8000-000000000000';
+    const response = await importAttendance({
+      eventId: unknownId,
+      sessionDate: '2026-01-25',
+      rows: [{ memberNo: 'M-5001' }],
+    });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain(unknownId);
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [unknownId],
+    );
+    expect(Number(row!.count)).toBe(0);
   });
 
-  it('does not overwrite a manual entry, and adds the missing ones', async () => {
-    const response = await request(app)
-      .post('/v1/imports/attendance')
-      .set(writeHeaders)
-      .send({
-        rows: [
-          { memberno: 'M-5001', date: '2026-01-04', eventno: eventNo('2026-01-04') },
-          { memberno: 'M-5001', date: '2026-01-18', eventno: eventNo('2026-01-18') },
-          { memberno: 'M-5001', date: '2026-01-25', eventno: eventNo('2026-01-25') },
-        ],
-      });
+  it('does not overwrite a manual entry, and counts the manual row as skipped', async () => {
+    const target = event('2026-01-04');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-04',
+      rows: [{ memberNo: 'M-5001' }],
+    });
 
     expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      kind: 'attendance',
+      rowCount: 1,
+      eventInstanceId: target.id,
+      sessionDate: '2026-01-04',
+      written: 0,
+      skipped: 1,
+    });
+
+    const stored = await request(app).get(`/v1/imports/${response.body.id}`).set(readHeaders);
+    expect(stored.status).toBe(200);
+    expect(stored.body).toMatchObject({
+      eventInstanceId: target.id,
+      sessionDate: '2026-01-04',
+      written: 0,
+      skipped: 1,
+    });
 
     const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
-    const byDate = new Map(
-      attendance.body.series[0].entries.map((entry: { date: string; source: string }) => [
-        entry.date,
-        entry.source,
-      ]),
+    const entry = attendance.body.series[0].entries.find(
+      (row: { date: string }) => row.date === '2026-01-04',
     );
-
-    expect(byDate.get('2026-01-04')).toBe('manual');
-    expect(byDate.get('2026-01-18')).toBe('manual');
-    expect(byDate.get('2026-01-25')).toBe('import');
-    expect(attendance.body.series[0].attended).toBe(3);
+    expect(entry.source).toBe('manual');
   });
 
-  it('suppresses a deleted imported entry against the next import', async () => {
-    const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
-    const imported = attendance.body.series[0].entries.find(
-      (entry: { date: string }) => entry.date === '2026-01-25',
+  it('imports a date-only file, leaves sessionTime null, and records the occurrence', async () => {
+    const target = event('2026-01-25');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-25',
+      rows: [{ memberNo: 'M-5001' }],
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      eventInstanceId: target.id,
+      sessionDate: '2026-01-25',
+      written: 1,
+      skipped: 0,
+    });
+
+    const report = await request(app)
+      .get(`/v1/events/${target.id}/attendance`)
+      .query({ date: '2026-01-25' })
+      .set(readHeaders);
+
+    expect(report.status).toBe(200);
+    expect(report.body.rows).toEqual([
+      {
+        memberNo: 'M-5001',
+        name: 'Ama Mensah',
+        status: 'present',
+        source: 'import',
+        sessionTime: null,
+      },
+    ]);
+  });
+
+  it('serves the targeted occurrence and counts on the batch record', async () => {
+    const target = event('2026-02-01');
+    const created = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-02-01',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01T12:00' }],
+    });
+    expect(created.status).toBe(201);
+
+    const response = await request(app).get(`/v1/imports/${created.body.id}`).set(readHeaders);
+
+    expect(response.status).toBe(200);
+    expect(response.body.eventInstanceId).toBe(target.id);
+    expect(response.body.sessionDate).toBe('2026-02-01');
+    expect(response.body.written).toBe(1);
+    expect(response.body.skipped).toBe(0);
+  });
+
+  it('stores a time from the datetime and exposes it in the event report', async () => {
+    const target = event('2026-02-01');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-02-01',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01 09:15:30' }],
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ written: 1, skipped: 0 });
+
+    const report = await request(app)
+      .get(`/v1/events/${target.id}/attendance`)
+      .query({ date: '2026-02-01' })
+      .set(readHeaders);
+
+    expect(report.body.rows).toEqual([
+      {
+        memberNo: 'M-5001',
+        name: 'Ama Mensah',
+        status: 'present',
+        source: 'import',
+        sessionTime: '09:15',
+      },
+    ]);
+  });
+
+  it('imports a lowercase-t datetime and stores the time', async () => {
+    const target = event('2026-02-01');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-02-01',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01t11:45' }],
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ written: 1, skipped: 0 });
+
+    const report = await request(app)
+      .get(`/v1/events/${target.id}/attendance`)
+      .query({ date: '2026-02-01' })
+      .set(readHeaders);
+
+    expect(report.body.rows[0].sessionTime).toBe('11:45');
+  });
+
+  it('rejects a datetime on another date, names the row, and writes nothing', async () => {
+    const target = event('2026-01-18');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-18',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-01-25T09:00' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('Row 1');
+    expect(response.body.detail).toContain('2026-01-25');
+    expect(response.body.detail).toContain('2026-01-18');
+
+    const [batch] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [target.id],
+    );
+    expect(Number(batch!.count)).toBe(0);
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from attendance where event_instance_id = $1',
+      [target.id],
+    );
+    // The manual row from the attendance-counts suite is untouched.
+    expect(Number(attendance!.count)).toBe(1);
+  });
+
+  it('rejects a cancelled event, and writes nothing', async () => {
+    const response = await importAttendance({
+      eventId: cancelledEventId,
+      sessionDate: '2026-02-08',
+      rows: [{ memberNo: 'M-5001' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('cancelled');
+
+    const [batch] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [cancelledEventId],
+    );
+    expect(Number(batch!.count)).toBe(0);
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from attendance where event_instance_id = $1',
+      [cancelledEventId],
+    );
+    expect(Number(attendance!.count)).toBe(0);
+  });
+
+  it('rejects an unknown member and adds nothing', async () => {
+    const target = event('2026-01-25');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-25',
+      rows: [{ memberNo: 'M-9999' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('M-9999');
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance
+       where event_instance_id = $1 and session_date = '2026-01-25'`,
+      [target.id],
+    );
+    expect(Number(attendance!.count)).toBe(1);
+  });
+
+  it('rejects a duplicate memberNo in one file and writes nothing', async () => {
+    const target = event('2026-01-18');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-18',
+      rows: [{ memberNo: 'M-5001' }, { memberNo: 'M-5001' }],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('M-5001');
+    expect(response.body.detail).toContain('rows 1, 2');
+
+    const [batch] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [target.id],
+    );
+    expect(Number(batch!.count)).toBe(0);
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from attendance where event_instance_id = $1',
+      [target.id],
+    );
+    // Only the manual row from the attendance-counts suite remains.
+    expect(Number(attendance!.count)).toBe(1);
+  });
+
+  it('refuses the same occurrence and rows twice with the first batch id', async () => {
+    const target = event('2026-02-01');
+    const body = {
+      eventId: target.id,
+      sessionDate: '2026-02-01',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01T10:30' }],
+    };
+
+    const first = await importAttendance(body);
+    expect(first.status).toBe(201);
+
+    const second = await importAttendance(body);
+    expect(second.status).toBe(409);
+    expect(second.headers['content-type']).toContain('application/problem+json');
+    expect(second.body.code).toBe('conflict');
+    expect(second.body.batchId).toBe(first.body.id);
+    expect(second.body.detail).toContain(first.body.id);
+
+    const [rows] = await harness.db.query<{ count: number | string }>(
+      "select count(*)::int as count from import_batches where kind = 'attendance' and checksum = $1",
+      [first.body.checksum],
+    );
+    expect(Number(rows!.count)).toBe(1);
+  });
+
+  it('honours a deleted imported row suppression on a later import', async () => {
+    const target = event('2026-01-25');
+    const [imported] = await harness.db.query<{ id: string }>(
+      `select a.id from attendance a
+       join members m on m.id = a.member_id
+       where m.member_no = 'M-5001' and a.event_instance_id = $1 and a.session_date = '2026-01-25'`,
+      [target.id],
     );
 
     await request(app)
-      .delete(`/v1/members/M-5001/attendance/${imported.id}`)
+      .delete(`/v1/events/${target.id}/attendance/${imported!.id}`)
       .set(writeHeaders)
       .expect(204);
 
-    await request(app)
-      .post('/v1/imports/attendance')
-      .set(writeHeaders)
-      .send({
-        rows: [
-          { memberno: 'M-5001', date: '2026-01-25', eventno: eventNo('2026-01-25') },
-          { memberno: 'M-5001', date: '2026-02-01', eventno: eventNo('2026-02-01') },
-        ],
-      })
-      .expect(201);
+    // A different row set has a different checksum, so the duplicate-batch
+    // guard does not fire; the deletion's suppression is what stops the row.
+    const again = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-25',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-01-25T10:00' }],
+    });
+    expect(again.status).toBe(201);
+    expect(again.body).toMatchObject({ written: 0, skipped: 1 });
 
-    const after = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
-    const dates = after.body.series[0].entries.map((entry: { date: string }) => entry.date);
-
-    expect(dates).not.toContain('2026-01-25');
-    expect(dates).toContain('2026-02-01');
-    expect(after.body.series[0].attended).toBe(3);
+    const after = await request(app)
+      .get(`/v1/events/${target.id}/attendance`)
+      .query({ date: '2026-01-25' })
+      .set(readHeaders);
+    expect(after.body.present).toBe(0);
+    expect(after.body.rows).toEqual([]);
   });
 });
 
@@ -294,7 +551,9 @@ describe('generation backfill', () => {
       .post('/v1/imports/attendance')
       .set(writeHeaders)
       .send({
-        rows: [{ memberno: 'M-5102', date: '2026-12-06', eventno: after!.event_no }],
+        eventId: before!.id,
+        sessionDate: '2026-12-06',
+        rows: [{ memberNo: 'M-5102' }],
       })
       .expect(201);
 
@@ -342,10 +601,20 @@ describe('import formats and templates', () => {
       (format: { kind: string }) => format.kind === 'attendance',
     );
     expect(attendance.columns.map((column: { name: string }) => column.name)).toEqual([
-      'memberno',
-      'date',
-      'eventno',
+      'memberNo',
+      'datetime',
     ]);
+    expect(
+      attendance.columns.find((column: { name: string }) => column.name === 'memberNo').required,
+    ).toBe(true);
+    expect(
+      attendance.columns.find((column: { name: string }) => column.name === 'datetime').required,
+    ).toBe(false);
+    expect(
+      attendance.columns.some(
+        (column: { name: string }) => column.name === 'eventno' || column.name === 'date',
+      ),
+    ).toBe(false);
   });
 
   it.each(['members', 'attendance'])('serves a real %s workbook', async (kind) => {
@@ -396,6 +665,19 @@ describe('import formats and templates', () => {
     expect(notes!.rowCount).toBe(registry.columns.length + 3);
   });
 
+  it('publishes the batch occurrence fields in the generated OpenAPI', async () => {
+    const response = await request(app).get('/openapi.json');
+
+    expect(response.status).toBe(200);
+    const properties = response.body.components.schemas.ImportBatch.properties as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(properties)).toEqual(
+      expect.arrayContaining(['eventInstanceId', 'sessionDate', 'written', 'skipped']),
+    );
+  });
+
   it('returns 404 for an unknown template kind', async () => {
     const response = await request(app).get('/v1/imports/templates/events').set(readHeaders);
 
@@ -412,8 +694,17 @@ describe('event attendance per session', () => {
   let cancelledSessionEventId: string;
   const memberIds: Record<string, string> = {};
 
-  function importRows(rows: Array<{ memberno: string; date: string; eventno: string }>) {
-    return request(app).post('/v1/imports/attendance').set(writeHeaders).send({ rows });
+  let duplicateImportBatchId: string;
+
+  function importRows(
+    eventId: string,
+    sessionDate: string,
+    rows: Array<{ memberNo: string; datetime?: string }>,
+  ) {
+    return request(app)
+      .post('/v1/imports/attendance')
+      .set(writeHeaders)
+      .send({ eventId, sessionDate, rows });
   }
 
   function readReport(id: string, date: string) {
@@ -521,9 +812,7 @@ describe('event attendance per session', () => {
   });
 
   it('stores an import row on the session date, not the event start date', async () => {
-    const response = await importRows([
-      { memberno: 'M-7001', date: '2026-10-14', eventno: EVENT_NO },
-    ]);
+    const response = await importRows(eventId, '2026-10-14', [{ memberNo: 'M-7001' }]);
 
     expect(response.status).toBe(201);
 
@@ -540,10 +829,10 @@ describe('event attendance per session', () => {
     expect(rows[0]!.source).toBe('import');
   });
 
-  it('rejects a date outside the sessions and rolls back the whole batch', async () => {
-    const response = await importRows([
-      { memberno: 'M-7001', date: '2026-10-15', eventno: EVENT_NO },
-      { memberno: 'M-7002', date: '2026-10-16', eventno: EVENT_NO },
+  it('rejects a session date outside the event and rolls back the whole batch', async () => {
+    const response = await importRows(eventId, '2026-10-16', [
+      { memberNo: 'M-7001' },
+      { memberNo: 'M-7002' },
     ]);
 
     expect(response.status).toBe(422);
@@ -598,8 +887,20 @@ describe('event attendance per session', () => {
       expected: 3,
       importedRows: 1,
       rows: [
-        { memberNo: 'M-7001', name: 'Ada Bello', status: 'present', source: 'import' },
-        { memberNo: 'M-7002', name: 'Chika Okafor', status: 'present', source: 'manual' },
+        {
+          memberNo: 'M-7001',
+          name: 'Ada Bello',
+          status: 'present',
+          source: 'import',
+          sessionTime: null,
+        },
+        {
+          memberNo: 'M-7002',
+          name: 'Chika Okafor',
+          status: 'present',
+          source: 'manual',
+          sessionTime: null,
+        },
       ],
     });
   });
@@ -658,10 +959,8 @@ describe('event attendance per session', () => {
     expect(report.body.rows).toEqual([]);
   });
 
-  it('suppresses a deleted import row against a re-import', async () => {
-    const imported = await importRows([
-      { memberno: 'M-7003', date: '2026-10-15', eventno: EVENT_NO },
-    ]);
+  it('suppresses a deleted import row against a later import', async () => {
+    const imported = await importRows(eventId, '2026-10-15', [{ memberNo: 'M-7003' }]);
     expect(imported.status).toBe(201);
 
     const [row] = await harness.db.query<{ id: string }>(
@@ -683,11 +982,27 @@ describe('event attendance per session', () => {
     );
     expect(Number(suppression!.count)).toBe(1);
 
-    const again = await importRows([{ memberno: 'M-7003', date: '2026-10-15', eventno: EVENT_NO }]);
+    // A different row set has a different checksum, so the duplicate-batch
+    // guard does not fire; the suppression is what stops the deleted member.
+    const again = await importRows(eventId, '2026-10-15', [
+      { memberNo: 'M-7003' },
+      { memberNo: 'M-7001' },
+    ]);
     expect(again.status).toBe(201);
+    expect(again.body).toMatchObject({ written: 1, skipped: 1 });
+    duplicateImportBatchId = again.body.id as string;
 
     const report = await readReport(eventId, '2026-10-15');
-    expect(report.body.present).toBe(0);
+    expect(report.body.present).toBe(1);
+    expect(report.body.rows).toEqual([
+      {
+        memberNo: 'M-7001',
+        name: 'Ada Bello',
+        status: 'present',
+        source: 'import',
+        sessionTime: null,
+      },
+    ]);
   });
 
   it('removes a row only when it belongs to the event', async () => {
@@ -704,27 +1019,47 @@ describe('event attendance per session', () => {
       .expect(404);
   });
 
-  it('re-importing the same member and session is idempotent', async () => {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await importRows([
-        { memberno: 'M-7001', date: '2026-10-15', eventno: EVENT_NO },
-      ]);
-      expect(response.status).toBe(201);
-    }
+  it('refuses a repeat of the same occurrence and rows, and creates no second batch', async () => {
+    const response = await importRows(eventId, '2026-10-15', [
+      { memberNo: 'M-7003' },
+      { memberNo: 'M-7001' },
+    ]);
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('conflict');
+    expect(response.body.batchId).toBe(duplicateImportBatchId);
+    expect(response.body.detail).toContain(duplicateImportBatchId);
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from attendance
-       where event_instance_id = $1 and session_date = '2026-10-15' and member_id = $2`,
-      [eventId, memberIds['M-7001']],
+      `select count(*)::int as count from import_batches
+       where event_instance_id = $1 and session_date = '2026-10-15'`,
+      [eventId],
     );
-    expect(Number(row!.count)).toBe(1);
+    expect(Number(row!.count)).toBe(2);
+  });
 
-    const report = await readReport(eventId, '2026-10-15');
-    expect(report.body.present).toBe(1);
-    expect(report.body.importedRows).toBe(1);
-    expect(report.body.rows).toEqual([
-      { memberNo: 'M-7001', name: 'Ada Bello', status: 'present', source: 'import' },
+  it('rejects an import against a cancelled session, and writes nothing', async () => {
+    const response = await importRows(cancelledSessionEventId, '2026-11-11', [
+      { memberNo: 'M-7001' },
     ]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toContain('2026-11-11');
+    expect(response.body.detail).toContain('cancelled');
+
+    const [batch] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [cancelledSessionEventId],
+    );
+    expect(Number(batch!.count)).toBe(0);
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance
+       where event_instance_id = $1 and session_date = '2026-11-11'`,
+      [cancelledSessionEventId],
+    );
+    expect(Number(attendance!.count)).toBe(0);
   });
 
   it('rejects writes to a cancelled event but still serves the report', async () => {

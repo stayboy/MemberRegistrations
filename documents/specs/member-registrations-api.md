@@ -17,7 +17,7 @@
 - 2026-11-04: attendance import scoped to a selected session (`eventId` + `sessionDate`) instead of a
   per-row event number; rows are `(memberNo, datetime?)`; the attendance row gains an optional
   `sessionTime`; the checksum covers the occurrence; a repeat is a `409` with the existing batch id;
-  the result reports written and suppressed counts.
+  the result reports written and skipped counts (suppression or manual shadow).
 - 2026-11-03: added `cors_rejected`; clarified gateway topology, session transport and rate-limit
   storage while implementing ticket 11a.
 
@@ -339,7 +339,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 - An **event instance** is one dated event. It is generated from a series occurrence (`source = series`,
   `seriesId` set) or created directly (`source = manual`, `seriesId` null). The Strategic Conference is
   a standalone three-day event with no series.
-- `eventNo` is unique, is the key used by imports, and is never reused; a series-minted instance may have none until ticket 11 assigns one.
+- `eventNo` is unique and is never reused; a series-minted instance may have none until ticket 11 assigns one.
 - `venueType` is required and is `auditorium | virtual | hybrid`; `venueName` is optional free text such
   as "Main Auditorium" or "Auditorium + Zoom".
 - `sessions` is a JSONB array of `{ date, startTime, endTime, status, venueType? }`. The array is
@@ -425,8 +425,9 @@ when present, MUST fall on `sessionDate`; a time inside it is stored as the row'
 absence leaves `sessionTime` null. A row on another date fails the whole batch and names the row and the
 session. The batch records the event and session it targeted, the checksum covers the occurrence plus the
 rows, and repeating the same occurrence with the same rows is refused with `409` and the existing batch
-id. The result reports rows written and rows skipped because a suppression exists, so an operator can
-tell an import that wrote ten rows from one that skipped ten.
+id. The result reports rows written and rows skipped — skipped because a suppression exists or because a
+manual row already holds that session — so an operator can tell an import that wrote ten rows from one
+that skipped ten.
 
 Rejected while settling this (2026-11-04): keeping a per-row event number (the occurrence is chosen once,
 so a stray row cannot silently target another event); letting an import rewrite the event session's
@@ -612,20 +613,21 @@ export interface Event {
 
 ### Imports
 
-| Method | Path                           | Result                                                    |
-| ------ | ------------------------------ | --------------------------------------------------------- |
-| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing |
-| `POST` | `/v1/imports/attendance`       | Rows `(memberno, date, eventno)`, all-or-nothing          |
-| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                     |
-| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`            |
-| `GET`  | `/v1/imports/{batchId}`        | Batch record                                              |
+| Method | Path                           | Result                                                                                              |
+| ------ | ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                           |
+| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }] }`, all-or-nothing; `409` on a repeat |
+| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                               |
+| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                      |
+| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                        |
 
 - JSON rows, 1 MB cap (~10k rows); larger files are chunked by the caller. The UI parses CSV or the
   downloaded `.xlsx` into these rows.
 - Idempotent by natural key: members on `memberNo`, attendance on
   `(eventInstanceId, sessionDate, memberId)`.
-- An unknown `eventno` or a date outside the event's `sessions` fails the attendance import. Series are
-  created by an administrator or by generation, never by an import.
+- An attendance import fails as a whole when the `eventId` is unknown, the event is `cancelled` or
+  `archived`, the `sessionDate` is unlisted or its session is cancelled, or a row's `datetime` falls on
+  another date. Series are created by an administrator or by generation, never by an import.
 
 ### Offerings and giving
 
@@ -1016,7 +1018,7 @@ src/
    and OpenAPI coverage.
 4. **Event and attendance tests**: standalone and multi-session events, venue enum rejection, session
    uniqueness and range, idempotent generation with exceptions, the session-date trigger, and import
-   resolution by `eventno` + date.
+   resolution by `eventId` + `sessionDate` with a `409` for a repeated file.
 5. **Offering tests**: terms immutability, attach/detach, expiry versus a pending pledge, a visitor
    receipt with a hashed phone, contribution idempotency, pledge officer resolution and reminder
    deduplication.

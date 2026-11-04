@@ -39,8 +39,8 @@ export function importsRouter(repo: ImportRepository): Router {
   });
 
   router.post('/attendance', async (req, res) => {
-    const { rows } = attendanceImportSchema.parse(req.body);
-    const batch = await repo.importAttendance(rows, actorOf(req));
+    const request = attendanceImportSchema.parse(req.body);
+    const batch = await repo.importAttendance(request, actorOf(req));
     res.status(201).json(batch);
   });
 
