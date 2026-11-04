@@ -7,7 +7,24 @@ Propose an entry in the reply; it reaches this file only when the owner accepts 
 
 Owner acceptance is recorded with the entry. The 2026-11-02 entry was accepted with the workflow
 adoption on 2026-11-02 (grill Q16: "all as recommended"). The 2026-11-04 entries were accepted in the
-Q126 round (2026-11-04, "all as recommended").
+Q126 round (2026-11-04, "all as recommended"); the workspace-gate entry was accepted there on condition
+that it be written only once the UI CI job landed, which it did the same day.
+
+---
+
+## 2026-11-04 — A gate that does not name the workspace is not a gate
+
+**Rule.** A verification gate must name every workspace it claims to cover. A root command that
+silently excludes a workspace proves nothing about it, and a green run is not evidence for the part of
+the tree the command never reached.
+
+**Evidence.** Root `npm run verify` excluded `ui/**` from ESLint and the root tsconfig and never ran the
+UI's tests: 87 UI tests existed while CI covered none of them, and the entry bundle was never built in
+CI. The gap was invisible because the required check was green. Fixed by a separate `ui` job running
+`ui:lint`, `ui:typecheck`, `ui:test` and `ui:build` (`chore/ui-ci-gate`, 2026-11-04).
+
+**Trigger.** A repo with a workspace or sub-project carrying its own lint, tsconfig or test config; any
+"the build is green" claim about code the gate does not name.
 
 ---
 
