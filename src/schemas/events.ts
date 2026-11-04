@@ -28,6 +28,13 @@ export const eventListQuerySchema = z.object({
 
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 
+export const eventGenerateQuerySchema = z.object({
+  from: dateStringSchema,
+  to: dateStringSchema,
+});
+
+export type EventGenerateQuery = z.infer<typeof eventGenerateQuerySchema>;
+
 /**
  * A written session inherits the event start/end time when it omits them. The
  * cross-field rules (range, unique dates) need the merged event, so they live
@@ -124,6 +131,12 @@ export const eventSchema = z.object({
 
 export const eventListSchema = z.object({
   items: z.array(eventSchema),
+});
+
+export const eventGenerationSchema = z.object({
+  created: z.number().int(),
+  skipped: z.number().int(),
+  eventIds: z.array(z.string()),
 });
 
 export const eventAttendanceQuerySchema = z.object({

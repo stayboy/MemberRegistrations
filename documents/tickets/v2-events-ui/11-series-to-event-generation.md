@@ -8,10 +8,10 @@ detail links each occurrence to its event.
 
 **Blocked by:** 09 (Event detail, create and update).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] Upcoming series occurrences produce event instances with inherited fields.
-- [ ] A cancelled exception produces no event; an extra exception produces one.
-- [ ] Re-running generation adds nothing and never overwrites an existing event.
-- [ ] Series detail shows the generated event for each occurrence.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] Upcoming series occurrences produce event instances with inherited fields.
+- [x] A cancelled exception produces no event; an extra exception produces one.
+- [x] Re-running generation adds nothing and never overwrites an existing event.
+- [x] Series detail shows the generated event for each occurrence.
+- [x] `npm run verify` and `npm run smoke` pass.

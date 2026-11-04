@@ -6,6 +6,7 @@ import {
   createEventSchema,
   eventAttendanceInputSchema,
   eventAttendanceQuerySchema,
+  eventGenerateQuerySchema,
   eventListQuerySchema,
   updateEventSchema,
 } from '../schemas/events.js';
@@ -42,6 +43,14 @@ export function eventsRouter(repo: EventRepository): Router {
     const detail = await repo.create(input);
     res.setHeader('Location', `/v1/events/${encodeURIComponent(detail.event.id)}`);
     sendEvent(res, detail, 201);
+  });
+
+  // Defined before /:id so the generation path can never be shadowed.
+  router.post('/generate', async (req, res) => {
+    const query = eventGenerateQuerySchema.parse(req.query);
+    const result = await repo.generate(query.from, query.to, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(result);
   });
 
   // Defined before /:id so the nested attendance paths can never be shadowed.

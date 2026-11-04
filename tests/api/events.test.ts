@@ -699,3 +699,223 @@ describe('PUT /v1/events/{eventId}', () => {
     expect(response.body.code).toBe('not_found');
   });
 });
+
+function generateEvents(query: Record<string, string> = {}) {
+  return request(harness.app).post('/v1/events/generate').query(query).set(writeHeaders);
+}
+
+function createSeries(body: Record<string, unknown>) {
+  return request(harness.app).post('/v1/series').set(writeHeaders).send(body);
+}
+
+describe('POST /v1/events/generate', () => {
+  let generatedSeriesId: string;
+  let generatedIds: string[];
+
+  it('generates one event per weekly occurrence with inherited fields', async () => {
+    const created = await createSeries({
+      name: 'Generation Sunday Service',
+      ministryCode: 'CHOIR',
+      schedule: {
+        effectiveFrom: '2026-02-01',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2026-02-15',
+      },
+    });
+    expect(created.status).toBe(201);
+    generatedSeriesId = created.body.id as string;
+
+    const response = await generateEvents({ from: '2026-02-01', to: '2026-02-15' });
+
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toMatchObject({ created: 3, skipped: 0 });
+    expect(response.body.eventIds).toHaveLength(3);
+    generatedIds = response.body.eventIds as string[];
+
+    const listed = await listEvents({
+      seriesId: generatedSeriesId,
+      from: '2026-02-01',
+      to: '2026-02-15',
+      limit: 100,
+    });
+    expect(listed.status).toBe(200);
+    expect(listed.body.items).toHaveLength(3);
+    expect(listed.body.items.map((event: { id: string }) => event.id).sort()).toEqual(
+      [...generatedIds].sort(),
+    );
+    expect(listed.body.items.map((event: { startDate: string }) => event.startDate)).toEqual([
+      '2026-02-01',
+      '2026-02-08',
+      '2026-02-15',
+    ]);
+
+    const eventNos = new Set<string>();
+    for (const event of listed.body.items) {
+      expect(event).toMatchObject({
+        name: 'Generation Sunday Service',
+        seriesId: generatedSeriesId,
+        ministry: { code: 'CHOIR', name: 'Choir' },
+        timezone: 'UTC',
+        startDate: event.startDate,
+        endDate: event.startDate,
+        startTime: '00:00',
+        endTime: null,
+        venueType: 'auditorium',
+        venueName: null,
+        description: null,
+        source: 'series',
+      });
+      expect(event.eventNo).toMatch(/^EVT-2026-\d{3}$/);
+      eventNos.add(event.eventNo as string);
+
+      expect(event.sessions).toHaveLength(1);
+      expect(event.sessions[0]).toMatchObject({
+        date: event.startDate,
+        startTime: '00:00',
+        endTime: null,
+        status: 'scheduled',
+      });
+    }
+    expect(eventNos.size).toBe(3);
+  });
+
+  it('is idempotent and never overwrites an existing event', async () => {
+    const renamed = await updateEvent(generatedIds[0]!, { name: 'Renamed Generation Service' });
+    expect(renamed.status).toBe(200);
+
+    const again = await generateEvents({ from: '2026-02-01', to: '2026-02-15' });
+
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual({ created: 0, skipped: 3, eventIds: [] });
+
+    const reread = await readEvent(generatedIds[0]!);
+    expect(reread.body.name).toBe('Renamed Generation Service');
+  });
+
+  it('honours cancelled and extra exceptions', async () => {
+    const created = await createSeries({
+      name: 'Exception Generation Service',
+      timezone: 'Africa/Lagos',
+      schedule: {
+        effectiveFrom: '2026-03-01',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2026-03-15',
+      },
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+
+    const cancelled = await request(harness.app)
+      .post(`/v1/series/${id}/exceptions`)
+      .set(writeHeaders)
+      .send({ date: '2026-03-08', kind: 'cancelled' });
+    expect(cancelled.status).toBe(201);
+
+    const extra = await request(harness.app)
+      .post(`/v1/series/${id}/exceptions`)
+      .set(writeHeaders)
+      .send({ date: '2026-03-11', kind: 'extra' });
+    expect(extra.status).toBe(201);
+
+    const response = await generateEvents({ from: '2026-03-01', to: '2026-03-15' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ created: 3, skipped: 0 });
+
+    const listed = await listEvents({
+      seriesId: id,
+      from: '2026-03-01',
+      to: '2026-03-15',
+      limit: 100,
+    });
+    expect(listed.body.items.map((event: { startDate: string }) => event.startDate)).toEqual([
+      '2026-03-01',
+      '2026-03-11',
+      '2026-03-15',
+    ]);
+    expect(listed.body.items.map((event: { timezone: string }) => event.timezone)).toEqual([
+      'Africa/Lagos',
+      'Africa/Lagos',
+      'Africa/Lagos',
+    ]);
+  });
+
+  it('does not generate for an archived series', async () => {
+    const created = await createSeries({
+      name: 'Archived Generation Service',
+      schedule: {
+        effectiveFrom: '2026-04-05',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2026-04-19',
+      },
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+
+    const archived = await request(harness.app)
+      .put(`/v1/series/${id}`)
+      .set(writeHeaders)
+      .send({ archived: true });
+    expect(archived.status).toBe(200);
+    expect(archived.body.archivedAt).not.toBeNull();
+
+    const response = await generateEvents({ from: '2026-04-05', to: '2026-04-19' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ created: 0, skipped: 0, eventIds: [] });
+
+    const listed = await listEvents({ seriesId: id, from: '2026-04-05', to: '2026-04-19' });
+    expect(listed.body.items).toEqual([]);
+  });
+
+  it('rejects an inverted window and missing dates with 422', async () => {
+    const inverted = await generateEvents({ from: '2026-05-10', to: '2026-05-01' });
+    expect(inverted.status).toBe(422);
+    expect(inverted.body.code).toBe('validation_error');
+
+    const missing = await generateEvents({ from: '2026-05-01' });
+    expect(missing.status).toBe(422);
+    expect(missing.body.code).toBe('validation_error');
+  });
+
+  it('skips a manually assigned event number that outruns the counter', async () => {
+    const created = await createSeries({
+      name: 'Collision Generation Service',
+      schedule: {
+        effectiveFrom: '2026-06-07',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2026-06-07',
+      },
+    });
+    expect(created.status).toBe(201);
+    const seriesId = created.body.id as string;
+
+    const manual = await request(harness.app)
+      .post('/v1/events')
+      .set(writeHeaders)
+      .send({
+        eventNo: 'EVT-2026-777',
+        name: 'Manual Collision Event',
+        timezone: 'UTC',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        startTime: '17:00',
+        venueType: 'auditorium',
+        sessions: [{ date: '2026-06-01' }],
+      });
+    expect(manual.status).toBe(201);
+
+    await harness.db.query(
+      `insert into event_no_counters (year, last_value) values (2026, 776)
+       on conflict (year) do update set last_value = 776`,
+    );
+
+    const response = await generateEvents({ from: '2026-06-07', to: '2026-06-07' });
+    expect(response.status).toBe(200);
+    expect(response.body.created).toBe(1);
+
+    const listed = await listEvents({ seriesId, from: '2026-06-07', to: '2026-06-07' });
+    expect(listed.body.items[0].eventNo).toBe('EVT-2026-778');
+  });
+});
