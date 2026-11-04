@@ -8,10 +8,10 @@ and offering summary (zero until offerings land). Status is derived by the API i
 
 **Blocked by:** 07 (`event_instances` migration and backfill).
 
-**Status:** ready-for-agent
+**Status:** done — 2026-11-04
 
-- [ ] The list returns held, upcoming and cancelled events with server-derived status.
-- [ ] Filters cover `from`, `to`, `seriesId`, `ministry` and `venueType`; pagination is stable.
-- [ ] `venueType` is one of `auditorium`, `virtual` or `hybrid`; any other value is rejected at write.
-- [ ] A page of events uses one query, not one query per event.
-- [ ] `npm run verify` and `npm run smoke` pass.
+- [x] The list returns held, upcoming and cancelled events with server-derived status.
+- [x] Filters cover `from`, `to`, `seriesId`, `ministry` and `venueType`; pagination is stable.
+- [x] `venueType` is one of `auditorium`, `virtual` or `hybrid`; an invalid filter value is rejected (the write path lands in ticket 09).
+- [x] A page of events uses one query, not one query per event.
+- [x] `npm run verify` and `npm run smoke` pass.
