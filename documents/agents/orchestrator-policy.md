@@ -9,7 +9,7 @@ delta: what this repository enables, the gates it runs, and what it deliberately
 
 - **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0. The
   parent implements, self-reviews and self-accepts; the commit body is the record.
-- **Tier 1 (Plan)** — a behavioural change. Approved spec + implementation + written acceptance.
+- **Tier 1 (Plan)** - a behavioural change. Approved spec + parent implements + written acceptance.
 - **Tier 2 (Reviewed)** — multi-file behaviour, migrations, auth, wire contracts or risk. Tier 1 plus
   an independent reviewer (`code-review` Standards + Spec; fallback: the read-only `reviewer` agent).
 - **Tier 3 and a dedicated UI tester are not adopted here.** The V2 UI gate is the minimal
@@ -17,12 +17,22 @@ delta: what this repository enables, the gates it runs, and what it deliberately
 
 The skill catalogues the Tier 3 seats for repos that enable them; this policy disables the tier.
 
+**Spec review (all tiers).** Every behavioural spec, new or amended, is reviewed by a **separate**
+`ollama-cloud/deepseek-v4-pro:0813` session - never the author - **before the implementer builds
+against it** (the parent at Tier 0-1, the worker at Tier 2). The procedure is the canonical skill's
+Procedure step 1b; this paragraph records the repo's model choice and record. `glm-5.3` is admissible
+only when no provider answers 0813, with the reason recorded. The verdict and the reviewed revision go
+in the spec's status line plus the round doc, or the commit body at Tier 0. A typo, formatting or
+clarifying edit keeps only its changelog line. This is separate from the plan gate and the code review:
+the spec is the contract the implementer reads, so it is reviewed before the work starts, not after it
+lands.
+
 ## Seats
 
-| Seat                                          | Model                                   |
-| --------------------------------------------- | --------------------------------------- |
-| Worker (Tier 2+ implementer)                  | `ollama-cloud/deepseek-v4.1-flash:1017` |
-| Reviewer / plan gate / acceptance (all tiers) | `ollama-cloud/deepseek-v4-pro:0813`     |
+| Seat                                                        | Model                                   |
+| ----------------------------------------------------------- | --------------------------------------- |
+| Worker (Tier 2+ implementer)                                | `ollama-cloud/deepseek-v4.1-flash:1017` |
+| Reviewer / plan gate / spec review / acceptance (all tiers) | `ollama-cloud/deepseek-v4-pro:0813`     |
 
 The reviewer is `deepseek-v4-pro:0813` in every tier. The gate must not be the author, so at Tier 2+
 the flash worker implements and the pro session reviews; a pro session does not both implement and
