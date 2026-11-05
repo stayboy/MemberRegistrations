@@ -14,15 +14,21 @@
 
 ## Change log
 
+- 2026-11-05: presbyter ranks, membership cards and verification are settled. `presbyterRank` is an
+  admin-set integer (1 = most senior) valid only with `isPresbyter`; any non-null rank is a senior
+  presbyter for clocking, ties are allowed, and clearing the flag clears the rank. `membershipCardNo`
+  is 1–32 trimmed characters, unique case-insensitively when present. `verifiedAt` is a nullable
+  officer-set timestamp with no expiry, refreshed on re-verification; the write payload takes
+  `verified: boolean`. All three are on `MemberDetail` only; card and verification are independent.
 - 2026-11-05: member references render a shared `FullName (Gender, Ny)` identity label. `MemberSummary`
   and `MemberDetail` gain a derived `age`; the relationship, shepherding and event-attendance DTOs gain
   `gender` and `age`; `dob` stays detail-only. Age is completed years at today (UTC), null when `dob`
   is null or in the future, and always the current age, never the age at a historical record's date.
   The UI spec owns the label rule and the USSD spec owns the short display glossary.
-- 2026-11-05: welfare products gain a payer (`member`/`church`/`either`), a cover period, and
-  dependent rules (`covers`, `maxDependents`, `allowedRelationships`); subscriptions record `paidBy`,
-  `periodStart`/`periodEnd` and a per-period `subscription_payments` row for member-paid cover, while
-  church-paid cover is started or renewed by the back office. See the USSD spec.
+- 2026-11-05: welfare products gain a payer mode (`paymentMode`: `member`/`church`/`either`), a cover
+  period, and dependent rules (`covers`, `maxDependents`, `allowedRelationships`); subscriptions record
+  `paidBy`, `periodStart`/`periodEnd` and a per-period `subscription_payments` row for member-paid cover,
+  while church-paid cover is started or renewed by the back office. See the USSD spec.
 - 2026-11-05: the aggregator-facing USSD entry is `POST /ussd/session`, outside the bearer namespace;
   `/v1/ussd/*` is removed, and the attendance/giving/subscription flow is specified in
   `member-registrations-ussd.md`. The payment-group commit, pledge settle and member attendance/payment
@@ -235,20 +241,23 @@ deployed to Vercel as a single function.
 
 ### Member
 
-| Field                             | Notes                                                                                   |
-| --------------------------------- | --------------------------------------------------------------------------------------- |
-| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                |
-| `firstName`, `lastName`           | Required.                                                                               |
-| `otherNames`                      | Single free-text field.                                                                 |
-| `maidenName`, `alias`             | Optional free text.                                                                     |
-| `dob`                             | Date, nullable.                                                                         |
-| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                         |
-| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored. |
-| `placeOfResidence`, `addressLine` | Free text.                                                                              |
-| `joinedOn`                        | Date; defaults to the registration date when omitted.                                   |
-| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                          |
-| `archivedAt`                      | Set by archive, cleared by restore.                                                     |
-| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                          |
+| Field                             | Notes                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                         |
+| `firstName`, `lastName`           | Required.                                                                                        |
+| `otherNames`                      | Single free-text field.                                                                          |
+| `maidenName`, `alias`             | Optional free text.                                                                              |
+| `dob`                             | Date, nullable.                                                                                  |
+| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                  |
+| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.          |
+| `placeOfResidence`, `addressLine` | Free text.                                                                                       |
+| `joinedOn`                        | Date; defaults to the registration date when omitted.                                            |
+| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                   |
+| `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior. |
+| `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.           |
+| `verifiedAt`                      | Timestamp, nullable; null means unverified, no expiry, refreshed on re-verification.             |
+| `archivedAt`                      | Set by archive, cleared by restore.                                                              |
+| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                   |
 
 Invariants: `memberNo` never changes; a purged member is read-only and invisible; an archived member
 is invisible to default reads but readable with `includeArchived=true`.
@@ -256,6 +265,18 @@ is invisible to default reads but readable with `includeArchived=true`.
 `age` is derived, never stored: completed years at today (UTC), with a 29 February birthday reached on
 1 March in a non-leap year. Every member DTO reports the member's **current** age, never the age at a
 historical record's date. The members list carries `age` but not `dob`; the detail carries both.
+
+`presbyterRank`, `membershipCardNo` and `verifiedAt` are **detail-only** back-office fields; the list
+stays lean. A rank is valid only with `isPresbyter = true` (otherwise `422 validation_error`), must be a
+positive integer (0 and negatives are `422`), and clearing the flag clears the rank in the same update.
+Ranks need not be unique: a tie is allowed, and
+any non-null rank counts as a senior presbyter for clocking. `membershipCardNo` is trimmed, 1–32
+characters, and unique case-insensitively when present (a partial unique index), so a second member
+claiming the same card is `409 conflict`; reissuing a card is two
+edits (clear, then set). `verifiedAt` is set by an officer: the write payload takes `verified: boolean`,
+which sets the timestamp to now or clears it; a repeated verification refreshes the timestamp. Card and
+verification are independent, and neither is required for the other. `requires_card` and
+`requires_verified` (welfare products) test only that the card is present and the timestamp is non-null.
 
 ### Contact
 
@@ -312,7 +333,9 @@ periodStart, periodEnd }`
 
 A **presbyter** is any member with `isPresbyter = true`. Presbyter is a flag, not a ministry: it grants
 officer eligibility without implying a ministry assignment, and it is set through the ordinary member
-create/update payloads.
+create/update payloads. A presbyter may also carry `presbyterRank` (1 = most senior): any non-null rank
+is a **senior presbyter**, ranks order display and delegation choice, ties are allowed, and the rank is
+cleared when `isPresbyter` is cleared.
 
 An **assignment** puts one member on one officer's shepherding list:
 
@@ -610,10 +633,10 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 | `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                        |
 | `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                        |
 | `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                   |
-| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                  | ticket 24 |
-| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                    | ticket 24 |
-| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                               | ticket 24 |
-| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                     | ticket 24 |
+| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                  | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                    | ticket 24a |
+| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                               | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                     | ticket 24c |
 | `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held or headcount-only |
 | `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                            |
 | `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                      |
@@ -760,20 +783,20 @@ export interface Event {
 | `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                   |
 | `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                        |
 | `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                        |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)              | ticket 21 |
-| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)          | ticket 24 |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                        | ticket 21 |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                    | ticket 21 |
-| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                 | ticket 22 |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                 | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                    | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                    | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason             | ticket 22 |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                        | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`          | ticket 24 |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)              | ticket 21  |
+| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)          | ticket 24a |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                        | ticket 21  |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                    | ticket 21  |
+| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                 | ticket 22  |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                 | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                    | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                    | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason             | ticket 22  |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                        | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`          | ticket 24a |
 | `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                    |
-| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec | ticket 24 |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                    | ticket 24 |
+| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec | ticket 24a |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                    | ticket 24a |
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
@@ -952,11 +975,18 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 | `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                      |
 | `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                    |
 | `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                           | 3-minute idle TTL; no raw phone; defined in the USSD spec                                                                                                                                                                             |
-| `payment_intents`          | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                         | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                      |
+| `ussd_nonces`              | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                            | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                       |
+| `payment_groups`           | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `created_at`, `created_by`                                                                                                         | one gateway charge per group; never partially paid; defined in the USSD spec                                                                                                                                                          |
+| `payment_intents`          | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                             | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                      |
 | `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                                                                                      |
 | `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                                                                                                 |
 | `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                                                                                                   |
 | `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                        | atomic upsert; no in-memory authority                                                                                                                                                                                                 |
+
+The 24b and 24c tables (`attendance_codes`, `registration_requests`, `clocking_delegations`,
+`event_session_expected`, `subscription_products`, `subscription_payments`, `subscription_claims`) and
+the `members.presbyter_rank`, `membership_card_no` and `verified_at` columns are defined in the USSD
+spec and migrations 0014/0015.
 
 ## Acceptance Criteria
 

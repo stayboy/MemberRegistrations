@@ -118,7 +118,8 @@ code. No raw phone number is stored or logged.
 - No match means an anonymous session. An archived or purged member is treated as anonymous for giving
   and registration but cannot be clocked in.
 - Session creation is rate-limited per phone hash (10 per minute) and per client address (30 per
-  minute).
+  minute). The counters use the shared `auth_rate_limits` table, keyed `ussd:phone:<hash>` and
+  `ussd:ip:<address>`, so no instance holds them in memory.
 
 ### USSD session and menu tree
 
@@ -167,9 +168,10 @@ fits.
   missing key, an exceeded budget, or a changed fixed key. The screen registry is the state list in
   `USSD session and menu tree` plus the flows below; the test iterates it.
 - **Maintenance.** English only in V3; keys are stable so a later locale can add variants. Wording
-  changes are spec-first. This initial table is the 24a set; 24b and 24c add their own keys, and the
-  completeness test covers every key the shipped screens use. An admin-editable glossary is a backlog
-  item, not V3.
+  changes are spec-first. The table lists the shared keys; 24a uses the giving, navigation and shared
+  menu keys, 24b adds the attendance and profile keys it renders, and 24c adds the welfare keys. The
+  completeness test covers every key the shipped screens use, and a key no shipped screen uses is
+  allowed until its part lands. An admin-editable glossary is a backlog item, not V3.
 
 | Key                      | Full                | Short           |
 | ------------------------ | ------------------- | --------------- |
@@ -281,12 +283,16 @@ fits.
 ### Pledges and redemption
 
 - A pledge is made on one existing offering of the chosen event, with an amount and an expected date.
-  A pledge is never an offering and never creates one.
+  A pledge is never an offering and never creates one. If the caller selected more than one offering,
+  the pledge path does not split: it re-prompts with "Choose one offering" and keeps the selection
+  screen. The confirmation reference is the USSD-generated idempotency key, shown as the reference; no
+  separate pledge reference is stored.
 - The follow-up officer is the member's active shepherd, or an active presbyter the back office supplies
   with a reason; otherwise the pledge is refused with the existing `officer_required` code.
 - "Redeem later": the member lists pending pledges and pays one. Settling creates a contribution and
   appends the `honored` event in one transaction; a pledge may be honored after the offering's expiry,
-  as the existing pledge contract allows.
+  as the existing pledge contract allows. A pledge settles at most once; a second settle is `409
+pledge_already_terminal`.
 - The expected date is prompted as a date and confirmed in lay terms; a past date is refused before any
   write.
 
@@ -408,10 +414,23 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
 ### Payments and the gateway stub
 
 - A payment group is created for every USSD money commit: one total, one currency, one idempotency key,
-  and the contributions underneath it. The gateway receives the terms payload — payer (member number or
-  phone hash), total, currency, reference, and each offering with name, amount and terms version — and
-  returns initiated. A callback verifies the shared secret, is idempotent by gateway reference, and
-  marks the group and its contributions paid.
+  and the contributions underneath it. The group is `pending` until the callback marks it `paid`, or
+  `failed` from the gateway; a group is never partially paid. Its reference is the confirmation code.
+  A split commit writes all child contributions in one transaction under the group, so the rows are
+  all-or-nothing; they start `initiated`.
+- The gateway receives the terms payload — payer (member number or phone hash), total, currency,
+  reference, and each offering with name, amount and terms version — as one intent per group (status
+  `initiated`, `paid` or `failed`), and returns initiated. The callback body is
+  `{ reference, status: 'paid' | 'failed', amountMinor, currency, occurredAt }`, signed with the shared
+  secret over the raw body.
+- **Callback results.** An invalid or missing signature is `401 unauthorized`; a malformed body is `422
+validation_error`; an unknown gateway reference is `404 not_found`; an amount or currency that differs
+  from the group is `422 validation_error` and writes nothing. A `paid` callback marks the intent, the
+  group and every child contribution `paid` in one transaction and answers `200 { status: 'paid',
+duplicate: false }`; a repeated `paid` callback answers `200 { status: 'paid', duplicate: true }`
+  without a second write. A `failed` callback marks the intent and group `failed` and every child
+  contribution `failed`, and is idempotent the same way. A terminal intent never moves to another
+  status.
 - The stub gateway is an in-process adapter behind a `PaymentGateway` port: it records an intent and can
   be driven from the simulator. The callback is a **new** route at `/v1/payments/callback`, signature-
   verified and idempotent by gateway reference. No card data is stored, ever.
@@ -425,14 +444,15 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
 | `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                                                                                                 |
 | `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                                                                                                 |
 | `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                                          | 3-minute idle TTL; no raw phone                                                                                                   |
+| `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                         | replay guard; pruned after 10 minutes                                                                                             |
 | `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                                                                                                        |
 | `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                                                                                                          |
 | `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `ended_at`                                                                                                                                                      | one active per session; ends with the session                                                                                     |
 | `event_session_expected`          | `event_instance_id`, `session_date`, `male`, `female`, `children`, `recorded_by`, `recorded_at`                                                                                                                                                                      | unique `(event_instance_id, session_date)`; counts ≥ 0                                                                            |
-| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status`, `created_at`, `created_by`                                                                                                                                                  | one gateway charge per group                                                                                                      |
-| `payment_intents`                 | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                      | unique gateway reference; one per group                                                                                           |
+| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `created_at`, `created_by`                                                                                                                      | one gateway charge per group; never partially paid                                                                                |
+| `payment_intents`                 | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                          | unique gateway reference; one per group                                                                                           |
 | `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                      | FK to `payment_groups`                                                                                                            |
-| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | set when settled by USSD                                                                                                          |
+| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | unique when present; set once when settled by USSD                                                                                |
 | `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age` | rules evaluated server-side                                                                                                       |
 | `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                      | existing rows stay valid                                                                                                          |
 | `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                    | null for a church-paid period                                                                                                     |
@@ -446,7 +466,7 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
 ## Testing Decisions
 
 - **Good tests** assert external behaviour only: the exact menu text and next state from
-  `POST /v1/ussd/session`, the persisted rows behind it, HTTP status and problem codes, and the
+  `POST /ussd/session`, the persisted rows behind it, HTTP status and problem codes, and the
   confirmation code. No test reaches into the state machine's internals.
 - **Seams.** One new seam at the USSD router — `POST /ussd/session` — covering identity, menus, giving,
   pledges, attendance, codes and subscriptions end to end. Behind it the shipped repository rules are
@@ -486,11 +506,15 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
 
 - **Ticket split.** 24a — USSD core (identity, session, events/offerings, splits, lay text, payment
   group, pledge and redemption, confirmation code, stub gateway, display glossary). 24b — attendance
-  (check, summaries, one-time codes, anonymous registration, clocking/delegation, expected headcounts).
-  24c — subscriptions (products, eligibility, member card/verified fields, claims, USSD flows). 24d —
-  the simulator and back-office mocks for review. 24e — complaints and the admin complaint queue,
-  deferred to the last round after 24d and 23. 24a is the only ticket that must land before the
-  simulator can be exercised against the real API.
+  (check, summaries, one-time codes, anonymous registration, clocking/delegation, expected headcounts)
+  and the profile aggregate. 24c — subscriptions (products, eligibility, member card/verified fields,
+  claims, USSD flows). 24d — the **real** USSD section of the operator app (Codes, Registrations,
+  Clocking, Expected headcounts, Products, Claims, and Complaints once 24e lands) plus the dev-only
+  simulator page and `/dev/ussd/session`, never a mock for acceptance. 24e — complaints and the admin
+  complaint queue, deferred to the last round after 24d and 23. 24a is the only ticket that must land
+  before the simulator can be exercised against the real API. The menu arrives incrementally: 24a ships
+  Offerings, Register (anonymous) and Exit, 24b adds Activities, Attendance and My Profile, and 24c adds
+  Welfare & Services; the anonymous and member menus above are the completed 24c shape.
 - **V5 candidates** (identified, not in the USSD app): a mobile app with the full event calendar,
   offering browse beyond five, recurring gifts, family/group giving, profile editing, subscription
   claim history and uploads, notifications, pledge reminders, and richer attendance analytics. The
@@ -498,3 +522,21 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
   V5 reuses them.
 - **The mock index** in `mockups/ussd/` shows the simulator and the back-office surfaces; the committed
   durable record is this spec and the round docs, never the mock files.
+
+## Change log
+
+- 2026-11-05: the portal and simulator decision is settled. 24d builds the real **USSD** section of the
+  operator app (Codes, Registrations, Clocking, Expected headcounts, Products, Claims, and Complaints
+  once 24e lands) plus a dev-only `POST /dev/ussd/session` and Simulator page; the static mock is a
+  review artifact only, and the gateway secret never reaches the browser. The profile aggregate and its
+  screen move to 24b.
+- 2026-11-05: presbyter ranks, membership cards and verification are settled. Any non-null
+  `presbyterRank` is a senior presbyter, ties are allowed, and clearing `isPresbyter` clears the rank.
+  `membershipCardNo` is 1–32 trimmed characters and unique case-insensitively when present.
+  `verifiedAt` is a nullable officer-set timestamp with no expiry and refreshes on re-verification; card
+  and verification are independent. All three are detail-only fields.
+- 2026-11-05: a USSD pledge takes exactly one offering (multiple selected re-prompts), shows the
+  USSD-generated idempotency key as its reference, and settles at most once. Payment groups and intents
+  carry explicit statuses; a group is never partially paid.
+- 2026-11-05: the display-glossary table is shared across 24a–24c; each part ships the keys its screens
+  use and the completeness test covers the shipped set.

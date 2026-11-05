@@ -29,12 +29,13 @@ the settled grill record, not yet authorised for build.
 - **Data.** `complaints`: `id`, `reference` unique (`CMP-000123`), `member_id`, `type`
   (`profile_change`/`general`/`event`/`offering`), nullable `event_instance_id`, `session_date`,
   `offering_id`, `message` (80), `status` (`open`/`in_review`/`resolved`/`rejected`, default `open`),
-  `resolution_note` (max 500), `handled_by`, `handled_at`, timestamps. Migration **0013**.
+  `resolution_note` (max 500), `handled_by`, `handled_at`, timestamps. Migration: **the next free number
+  when the round starts (expected 0016)**.
 - **Admin.** `GET /v1/complaints` (filter by type, status, member, date), `GET /v1/complaints/{id}` and
-  `PATCH /v1/complaints/{id}` (status + resolution note). The queue extends the 24d back office with a
-  list, filter, detail and resolve action. The member record is changed only through the existing
-  `PATCH /v1/members/{memberNo}`.
-- **Gates.** The migration (0013) and the wire-contract additions need their own explicit owner
+  `PATCH /v1/complaints/{id}` (status + resolution note). The queue adds the **Complaints** page to the
+  24d USSD section with a list, filter, detail and resolve action. The member record is changed only
+  through the existing `PATCH /v1/members/{memberNo}`.
+- **Gates.** The migration (expected 0016) and the wire-contract additions need their own explicit owner
   authorisation when this round starts; this deferred ticket does not pre-authorise them.
 
 **Blocked by:** 22, 24a, 24b, 24c, 24d and 23 (the basic V3 features).

@@ -1,18 +1,18 @@
-# 24: USSD flow and gateway stub
+# 24: USSD flow and gateway stub — index
 
-**Tier:** 2
+Ticket 24 is split into four build parts plus the deferred complaints round. The durable contract is
+`documents/specs/member-registrations-ussd.md`; each part has its own ticket with the checklist and its
+authorised migration.
 
-**What to build:** A simulated USSD session that identifies a member or visitor, shows the current or
-next event, lists at most five offerings plus `0 More`, accepts a multi-select, and completes a payment
-or a pledge with a confirmation code. Produce the gateway terms payload and reconcile a callback
-idempotently. Not enabled in production until a real aggregator and gateway are chosen.
+| Part | Scope                                                                                                       | Migration |
+| ---- | ----------------------------------------------------------------------------------------------------------- | --------- |
+| 24a  | identity and HMAC entry, session/menu tree, glossary, events/offerings, splits, payments, pledge/redemption | 0013      |
+| 24b  | attendance, one-time codes, registration requests, clocking/delegation, expected headcounts, profile        | 0014      |
+| 24c  | welfare products, eligibility, card/verified, subscriptions, inherited cover, claims                        | 0015      |
+| 24d  | the USSD admin portal section and the dev-only simulator                                                    | none      |
+| 24e  | member complaints and the admin complaint queue (deferred, last V3 round)                                   | next free |
 
-**Blocked by:** 21 (Contributions and visitors), 22 (Pledges and reminders). Deferred to V3.
+Order: 24a → 24b → 24c → 24d → 23 → 24e. 24a is the only part that must land before the simulator can
+be exercised against the real API.
 
-**Status:** ready-for-agent
-
-- [ ] A session identifies a member or visitor, shows the current or next event, and lists at most five offerings plus `0 More`.
-- [ ] A multi-select produces one combined total and a confirmation code for pay or pledge.
-- [ ] An expired session is rejected, and no raw phone number appears in logs.
-- [ ] The gateway terms payload is produced, and a repeated callback reconciles to the same contribution.
-- [ ] The flow is disabled in production by configuration.
+**Status:** 22 complete; 24a ready-for-agent.
