@@ -584,8 +584,10 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 - Status is `pending | honored | dishonored | overdue`; `overdue` is derived from `expectedOn`, never
   stored. Honor is appended on payment; dishonor requires a reason.
 - A pending pledge survives offering expiry and can still be honored.
-- Reminders are unique per pledge, scheduled date and channel and stay `pending` in V3; delivery and the
-  member opt-out are deferred (OS-5).
+- Reminders are unique per pledge, scheduled date and channel. The three auto-created reminders are
+  `pending`, except one dated before today (UTC) at creation, which is `cancelled`; a manually scheduled
+  reminder before today is `422 invalid_reminder_date`. Delivery and the member opt-out are deferred
+  (OS-5).
 
 ## API Contracts
 
@@ -921,8 +923,8 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `import_failed`, `event_not_active`, `session_not_in_event`, `offering_already_attached`,
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
 `headcount_only`,
-`idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `officer_required`,
-`pledge_already_terminal`, `payment_failed`, `cors_rejected`.
+`idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
+`officer_required`, `pledge_already_terminal`, `payment_failed`, `cors_rejected`.
 
 ### Concurrency and caching
 
@@ -948,7 +950,7 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 | `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                        |
 | `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                        |
 | `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                      |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status stays `pending` in V3 (no delivery)                                                                                                                                              |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                    |
 | `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                           | 3-minute idle TTL; no raw phone; defined in the USSD spec                                                                                                                                                                             |
 | `payment_intents`          | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                         | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                      |
 | `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                                                                                      |
