@@ -15,3 +15,8 @@ edit its identity, and archive or restore it. Schedule versions and exceptions a
 - [ ] Validation: a required name, a non-empty `rrule`, an `effectiveFrom` on or before `endsOn`, and a timezone from the existing set.
 - [ ] Mutations invalidate the series list and detail; no hard delete is offered anywhere.
 - [ ] The screens match the local `mockups/v2-events/03-series-list.png` and `04-series-detail.png` at the recorded viewport (git-ignored; regenerate locally).
+
+**Timezone decision:** the timezone `Dropdown` offers a short practical list plus an **Other** free-text
+path, so a church outside that list can submit an off-list IANA zone and have it round-trip unchanged.
+The create form defaults to the church's local zone (`Africa/Lagos`); the API's default when
+`timezone` is omitted is `UTC`.

@@ -17,9 +17,12 @@ import {
 } from '@fluentui/react-components';
 import {
   AddRegular,
+  ArchiveRegular,
   ArrowClockwiseRegular,
   ArrowLeftRegular,
+  ArrowUndoRegular,
   DeleteRegular,
+  EditRegular,
 } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
@@ -29,6 +32,7 @@ import {
   getSeries,
   getSeriesOccurrences,
   removeSeriesException,
+  updateSeries,
   type SeriesExceptionDto,
   type SeriesExceptionKind,
 } from '../api/series';
@@ -83,6 +87,8 @@ export function SeriesDetailPage() {
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
   const [removing, setRemoving] = useState<SeriesExceptionDto | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<boolean | null>(null);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const seriesQuery = useQuery({
     queryKey: ['series', baseUrl, 'detail', id],
@@ -103,6 +109,10 @@ export function SeriesDetailPage() {
 
   const removeMutation = useMutation({
     mutationFn: (date: string) => removeSeriesException(baseUrl, token, id, date),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (archived: boolean) => updateSeries(baseUrl, token, id, { archived }),
   });
 
   useEffect(() => {
@@ -144,6 +154,26 @@ export function SeriesDetailPage() {
   const occurrences = occurrencesQuery.data?.dates ?? [];
   const exceptionByDate = new Map(exceptions.map((exception) => [exception.date, exception]));
 
+  function confirmArchive(): void {
+    if (archiveTarget === null) return;
+
+    setArchiveError(null);
+    archiveMutation.mutate(archiveTarget, {
+      onSuccess: () => {
+        setArchiveTarget(null);
+        invalidateSeries();
+      },
+      onError: (error: unknown) => {
+        setArchiveTarget(null);
+        if (isUnauthorized(error)) {
+          void signOut();
+          return;
+        }
+        setArchiveError(errorMessage(error));
+      },
+    });
+  }
+
   return (
     <PageFrame
       sectionId="events"
@@ -159,6 +189,35 @@ export function SeriesDetailPage() {
           >
             Back to series
           </Button>
+          {archived ? null : (
+            <Button
+              icon={<EditRegular />}
+              onClick={() => navigate(`/events/series/${encodeURIComponent(id)}/edit`)}
+            >
+              Edit
+            </Button>
+          )}
+          {archived ? (
+            <Button
+              icon={<ArrowUndoRegular />}
+              onClick={() => {
+                setArchiveError(null);
+                setArchiveTarget(false);
+              }}
+            >
+              Restore
+            </Button>
+          ) : (
+            <Button
+              icon={<ArchiveRegular />}
+              onClick={() => {
+                setArchiveError(null);
+                setArchiveTarget(true);
+              }}
+            >
+              Archive
+            </Button>
+          )}
           <Button
             icon={<ArrowClockwiseRegular />}
             onClick={() => {
@@ -187,6 +246,17 @@ export function SeriesDetailPage() {
               >
                 Retry
               </Button>
+            </MessageBarBody>
+          </MessageBar>
+        ) : null}
+
+        {archiveError ? (
+          <MessageBar intent="error">
+            <MessageBarBody>
+              <MessageBarTitle>
+                The series was not {archived ? 'restored' : 'archived'}
+              </MessageBarTitle>
+              {archiveError}
             </MessageBarBody>
           </MessageBar>
         ) : null}
@@ -496,6 +566,22 @@ export function SeriesDetailPage() {
           onSaved={invalidateSeries}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={archiveTarget !== null}
+        title={archiveTarget ? 'Archive this series?' : 'Restore this series?'}
+        message={
+          archiveTarget
+            ? 'The series leaves the active list and becomes read-only. Its schedule versions, exceptions and history are kept, and you can restore it at any time. Nothing is deleted.'
+            : 'The series returns to the active list, and schedule versions and exceptions can be added again. Nothing was deleted while it was archived.'
+        }
+        confirmLabel={archiveTarget ? 'Archive series' : 'Restore series'}
+        busy={archiveMutation.isPending}
+        onConfirm={confirmArchive}
+        onCancel={() => {
+          if (!archiveMutation.isPending) setArchiveTarget(null);
+        }}
+      />
 
       <ConfirmDialog
         open={removing !== null}

@@ -14,10 +14,10 @@ import {
   TableRow,
   Text,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular } from '@fluentui/react-icons';
+import { AddRegular, ArrowClockwiseRegular } from '@fluentui/react-icons';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   getSeriesOccurrences,
@@ -70,6 +70,7 @@ function statusColor(archivedAt: string | null): BadgeColor {
  */
 export function SeriesListPage() {
   const styles = useEventStyles();
+  const navigate = useNavigate();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -114,18 +115,27 @@ export function SeriesListPage() {
       submenu="Series"
       description="Recurring series, their current schedule and the dates the API generates. Schedule versions and exceptions are append-only history."
       actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
-            void seriesQuery.refetch();
-            occurrenceQueries.forEach((query) => {
-              void query.refetch();
-            });
-          }}
-          disabled={seriesQuery.isFetching}
-        >
-          Refresh
-        </Button>
+        <>
+          <Button
+            icon={<AddRegular />}
+            appearance="primary"
+            onClick={() => navigate('/events/series/new')}
+          >
+            New series
+          </Button>
+          <Button
+            icon={<ArrowClockwiseRegular />}
+            onClick={() => {
+              void seriesQuery.refetch();
+              occurrenceQueries.forEach((query) => {
+                void query.refetch();
+              });
+            }}
+            disabled={seriesQuery.isFetching}
+          >
+            Refresh
+          </Button>
+        </>
       }
     >
       <div className={styles.page}>
