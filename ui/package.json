@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "capture": "playwright test --config playwright.capture.config.ts"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.75.1",

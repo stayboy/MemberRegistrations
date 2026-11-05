@@ -29,6 +29,7 @@
     "ui:lint": "npm --prefix ui run lint",
     "ui:typecheck": "npm --prefix ui run typecheck",
     "ui:e2e": "npm --prefix ui run e2e",
+    "ui:capture": "npm --prefix ui run capture",
     "db:migrate": "tsx src/db/migrate-cli.ts",
     "officers:add": "tsx src/authn/cli.ts add",
     "officers:deactivate": "tsx src/authn/cli.ts deactivate",

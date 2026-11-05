@@ -55,5 +55,8 @@ ticket.
 
 ## Deploy
 
-The Pages workflow builds with `npm run ui:build` and uploads `ui/dist`. The production base path is
-`/MemberRegistrations/`; keep `VITE_GATEWAY_URL` aligned with the gateway's CORS allowlist.
+`.github/workflows/deploy-pages.yml` deploys the built UI to GitHub Pages on every push to `main`.
+
+The one-time owner step is **Settings → Pages → Source: GitHub Actions**. Until it is enabled, the
+deploy step fails after the build succeeds (the build itself is fine). The production base path is
+`/MemberRegistrations/`. No CORS change is needed: the gateway echoes the request origin.

@@ -12,6 +12,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 export default defineConfig({
   testDir: './e2e',
+  // The baseline capture writes committed screenshots and has its own config;
+  // keep it out of the assertion suite.
+  testIgnore: '**/capture.spec.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
