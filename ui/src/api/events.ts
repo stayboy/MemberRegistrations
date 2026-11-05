@@ -45,7 +45,7 @@ export interface OfferingTermsItem {
   readonly version: number;
   readonly name: string | null;
   readonly purpose: string;
-  readonly kind: 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
+  readonly kind: 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
   readonly currency: string;
   readonly targetMinor: number | null;
   readonly defaultAmountMinor: number | null;

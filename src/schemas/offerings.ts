@@ -1,14 +1,7 @@
 import { z } from 'zod';
 import { dateStringSchema } from './common.js';
 
-export const OFFERING_KINDS = [
-  'freewill',
-  'tithe',
-  'pledge',
-  'building',
-  'missions',
-  'other',
-] as const;
+export const OFFERING_KINDS = ['freewill', 'tithe', 'building', 'missions', 'other'] as const;
 
 export const offeringKindSchema = z.enum(OFFERING_KINDS);
 

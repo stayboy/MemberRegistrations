@@ -15,6 +15,7 @@ import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
 import { MinistryRepository } from './repos/ministries.js';
 import { OfferingRepository } from './repos/offerings.js';
+import { PledgeRepository } from './repos/pledges.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
 import { contributionsRouter } from './routes/contributions.js';
@@ -23,6 +24,7 @@ import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
 import { ministriesRouter } from './routes/ministries.js';
 import { offeringsRouter } from './routes/offerings.js';
+import { pledgesRouter } from './routes/pledges.js';
 import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
@@ -58,6 +60,7 @@ export function createApp(options: AppOptions): Express {
     options.db,
     options.visitorPhonePepper ?? DEFAULT_VISITOR_PHONE_PEPPER,
   );
+  const pledges = new PledgeRepository(options.db);
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -129,6 +132,7 @@ export function createApp(options: AppOptions): Express {
   // attachment paths without a second router for each parent.
   v1.use(offeringsRouter(offerings));
   v1.use('/contributions', contributionsRouter(contributions));
+  v1.use('/pledges', pledgesRouter(pledges));
   v1.use('/members', membersRouter(members));
   v1.use('/members', memberShepherdingRouter(shepherding));
   v1.use('/subscriptions', subscriptionsRouter(members));

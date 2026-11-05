@@ -74,6 +74,18 @@ import {
   createContributionSchema,
 } from './schemas/contributions.js';
 import {
+  addReminderSchema,
+  createPledgeSchema,
+  dishonorSchema,
+  honorSchema,
+  pledgeEventSchema,
+  pledgeListSchema,
+  pledgeSchema,
+  reassignSchema,
+  reminderListSchema,
+  reminderSchema,
+} from './schemas/pledges.js';
+import {
   assignmentInputSchema,
   assignmentSchema,
   callInputSchema,
@@ -232,6 +244,16 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         ContributionList: toSchema(contributionListSchema, 'output'),
         ContributionSummary: toSchema(contributionSummarySchema, 'output'),
         ContributionCreate: toSchema(createContributionSchema, 'input'),
+        Pledge: toSchema(pledgeSchema, 'output'),
+        PledgeList: toSchema(pledgeListSchema, 'output'),
+        PledgeCreate: toSchema(createPledgeSchema, 'input'),
+        PledgeEvent: toSchema(pledgeEventSchema, 'output'),
+        PledgeHonor: toSchema(honorSchema, 'input'),
+        PledgeDishonor: toSchema(dishonorSchema, 'input'),
+        PledgeReassign: toSchema(reassignSchema, 'input'),
+        Reminder: toSchema(reminderSchema, 'output'),
+        ReminderList: toSchema(reminderListSchema, 'output'),
+        ReminderCreate: toSchema(addReminderSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         MemberImport: toSchema(memberImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -1413,6 +1435,179 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               content: { 'application/json': { schema: ref('ContributionSummary') } },
             },
             401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/pledges': {
+        get: {
+          summary: 'List pledges, newest first',
+          description:
+            '`overdue` is derived from expectedOn (pending and before today, UTC) and is never stored. from/to filter expectedOn inclusively. Responses carry Cache-Control: no-store.',
+          parameters: [
+            {
+              name: 'status',
+              in: 'query',
+              schema: {
+                type: 'string',
+                enum: ['pending', 'honored', 'dishonored', 'overdue'],
+              },
+            },
+            { name: 'memberNo', in: 'query', schema: { type: 'string' } },
+            { name: 'officerMemberNo', in: 'query', schema: { type: 'string' } },
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200 } },
+            { name: 'cursor', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            200: {
+              description: 'A page of pledges with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('PledgeList') } },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Create a pledge with exactly one follow-up officer',
+          description:
+            'The officer is the member’s active shepherd, or an active presbyter supplied as followUpOfficerMemberNo with officerReason; otherwise 422 officer_required. Idempotent by idempotencyKey: an identical canonical payload returns 200 with the stored pledge; a different payload is 409 idempotency_conflict. Three sms reminders are created in the same transaction; one dated before today (UTC) is cancelled. Responses carry Cache-Control: no-store.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PledgeCreate') } },
+          },
+          responses: {
+            201: {
+              description: 'Pledge created with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('Pledge') } },
+            },
+            200: {
+              description:
+                'Identical repeat of the idempotency key; the stored pledge, with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('Pledge') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/pledges/{id}': {
+        get: {
+          summary: 'Read one pledge',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: {
+            200: {
+              description: 'The pledge with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('Pledge') } },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/pledges/{id}/honor': {
+        post: {
+          summary: 'Append an honor event',
+          description:
+            'A pending pledge may be honored after the offering expired. A terminal pledge rejects the transition with 409 pledge_already_terminal.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            actorHeader,
+          ],
+          requestBody: {
+            required: false,
+            content: { 'application/json': { schema: ref('PledgeHonor') } },
+          },
+          responses: {
+            200: json('The honored pledge.', 'Pledge'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The pledge is already honored or dishonored.'),
+          },
+        },
+      },
+
+      '/v1/pledges/{id}/dishonor': {
+        post: {
+          summary: 'Append a dishonor event with a reason',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            actorHeader,
+          ],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PledgeDishonor') } },
+          },
+          responses: {
+            200: json('The dishonored pledge.', 'Pledge'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The pledge is already honored or dishonored.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/pledges/{id}/reassign': {
+        post: {
+          summary: 'Assign or reassign the follow-up officer with a reason',
+          description:
+            'The new officer must be an active presbyter. The event records both the from and to officer, so both stay in history.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            actorHeader,
+          ],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PledgeReassign') } },
+          },
+          responses: {
+            200: json('The reassigned pledge.', 'Pledge'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The pledge is already honored or dishonored.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/pledges/{id}/reminders': {
+        get: {
+          summary: 'List reminder records, newest first',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: {
+            200: {
+              description: 'Reminder records with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('ReminderList') } },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Schedule a reminder record',
+          description:
+            'Only a pending or overdue pledge accepts reminders. A date before today (UTC) is 422 invalid_reminder_date; a duplicate (pledge, date, channel) is 409.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            actorHeader,
+          ],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ReminderCreate') } },
+          },
+          responses: {
+            201: json('Reminder recorded.', 'Reminder'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
             422: validation,
           },
         },

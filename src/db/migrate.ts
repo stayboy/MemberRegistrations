@@ -24,6 +24,14 @@ export async function migrate(db: Db): Promise<string[]> {
     if (applied.has(migration.version)) continue;
 
     await db.transaction(async (tx) => {
+      for (const statement of migration.logged ?? []) {
+        const [row] = await tx.query<{ count: number | string }>(statement.sql);
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(
+            `${migration.version}: ${statement.label}: ${Number(row?.count ?? 0)} row(s)`,
+          );
+        }
+      }
       await tx.exec(migration.sql);
       await tx.query('insert into schema_migrations (version) values ($1)', [migration.version]);
     });
