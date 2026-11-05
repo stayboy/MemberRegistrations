@@ -97,6 +97,8 @@ code. No raw phone number is stored or logged.
     events for the year, so that I know how much I have given.
 40. As a member, I want to see my profile — gender, age, ministries, attendance regularity and my
     shepherd — so that I can check my record at a glance.
+41. As a covered dependent, I want to see the welfare plan I inherit from my spouse or parent, labelled
+    by the relationship, so that I know I am covered.
 
 ## Implementation Decisions
 
@@ -226,14 +228,37 @@ code. No raw phone number is stored or logged.
   file, a verified member, gender, and age from `dob`.
 - Members gain `membership_card_no` and `verified_at` (null = unverified); both are back-office fields
   and appear in the member DTO.
-- A member subscription keeps the existing `kind` (`life_insurance`/`credit_union`) as the accounting
-  category and adds a nullable `productId`, its premium and `expiresOn`; existing subscriptions without a
-  product remain valid. `endedOn` stays the explicit end and `expiresOn` the cover date.
+- A product also carries **how it is paid and who is covered**: `paymentMode` (`member`, `church` or
+  `either`), `periodMonths` (1, 3, 6 or 12), `covers` (`individual` or `household`), `maxDependents`
+  and `allowedRelationships` (a subset of `spouse`, `child`, `parent`, `guardian`, `other`).
+- A subscription records the **payer** (`paidBy`: `member` or `church`), the covered period
+  (`periodStart`, `periodEnd`) and the premium (`premiumMinor`, null for a church-paid period).
+  `startedOn` is when the relationship began and `endedOn` the explicit end; `periodEnd` is when cover
+  lapses unless renewed. A product priced `either` chooses the payer per subscription.
+- **Church-paid** cover is started or renewed by the back office for a period; there is no member
+  payment. **Member-paid** cover has one `subscription_payments` row per period (amount, period,
+  channel, reference, paid on, recorded by); paying advances `periodEnd`. An unpaid period leaves the
+  subscription expired at `periodEnd`, and the USSD "My services" shows it as expired.
+- **Coverage.** A household product covers the member plus up to `maxDependents` active members joined by
+  an allowed relationship (an existing explicit relationship edge, never derived). Adding a dependent
+  beyond the cap, with a disallowed relationship, or a non-active member is `422 validation_error`. An
+  individual product covers the member only. Coverage is explicit `subscription_coverage` rows — a
+  financial fact, never inferred from the household.
+- USSD lists **only eligible products** for the caller and shows the premium, period, payer and cover in
+  lay terms. A household product asks "Cover dependents? 1 Yes 2 No" and lists the eligible dependents
+  up to the cap; a church-paid product says "Paid by the church" and takes no payment. "My services"
+  shows status, paid by, period and expiry. An ineligible product is hidden, never refused after entry.
+- **Inherited cover.** A member covered by another member's subscription sees it in "My services" as
+  inherited, labelled with the relationship from the covered member to the policyholder: `spouse`
+  renders Husband or Wife from gender, otherwise the relationship type — for example
+  "Life Cover (Husband · Solomon)". Inherited rows are read-only in USSD (the policyholder manages the
+  plan); the list and detail show status, payer, period and total claimed. The member subscription read
+  (`GET /v1/members/{memberNo}/subscriptions`) returns owned and inherited rows with `source: 'owned' |
+'inherited'`, `policyholder: { memberNo, name } | null` and `relationship: string | null`.
 - Claims are back-office records (`subscription_claims`): amount, reason, status, recorded by and
   decided by. "Total claimed" is the sum of approved/paid claims for the subscription.
-- USSD lists **only eligible products** for the caller, shows the premium and cover in lay terms,
-  subscribes on acceptance, and can report the member's active/expired subscriptions and total claimed.
-  An ineligible product is hidden, never refused after entry.
+
+### My profile
 
 - **My profile.** The member menu's last entry shows a compact profile: name (`first + last`, the DTO
   convention) and member number, gender and age (from `dob`; `age` is null when `dob` is unknown), up to
@@ -263,25 +288,29 @@ window: 5, lastAttendedOn: string | null } }`. `attendance` uses the member's **
 
 ## Data model additions
 
-| Table / column                    | Shape                                                                                                                                                                             | Constraints                                            |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                | admin-set; requires `is_presbyter`                     |
-| `members.membership_card_no`      | `text` nullable                                                                                                                                                                   | back-office field                                      |
-| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                            | null = unverified                                      |
-| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                       | 3-minute idle TTL; no raw phone                        |
-| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at` | hash only; single use; TTL                             |
-| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`             | no member until approved                               |
-| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `ended_at`                                                                   | one active per session; ends with the session          |
-| `event_session_expected`          | `event_instance_id`, `session_date`, `male`, `female`, `children`, `recorded_by`, `recorded_at`                                                                                   | unique `(event_instance_id, session_date)`; counts ≥ 0 |
-| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status`, `created_at`, `created_by`                                                               | one gateway charge per group                           |
-| `payment_intents`                 | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                   | unique gateway reference; one per group                |
-| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                   | FK to `payment_groups`                                 |
-| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                   | set when settled by USSD                               |
-| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age`    | rules evaluated server-side                            |
-| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                   | existing rows stay valid                               |
-| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                 |                                                        |
-| `subscriptions.expires_on`        | `date` nullable                                                                                                                                                                   | cover end, separate from `ended_on`                    |
-| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status`, `recorded_by`, `recorded_at`, `decided_by`, `decided_at`                                                | approved + paid sum to "total claimed"                 |
+| Table / column                    | Shape                                                                                                                                                                                                                                                                | Constraints                                            |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                   | admin-set; requires `is_presbyter`                     |
+| `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                      |
+| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                      |
+| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                                          | 3-minute idle TTL; no raw phone                        |
+| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                             |
+| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                               |
+| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `ended_at`                                                                                                                                                      | one active per session; ends with the session          |
+| `event_session_expected`          | `event_instance_id`, `session_date`, `male`, `female`, `children`, `recorded_by`, `recorded_at`                                                                                                                                                                      | unique `(event_instance_id, session_date)`; counts ≥ 0 |
+| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status`, `created_at`, `created_by`                                                                                                                                                  | one gateway charge per group                           |
+| `payment_intents`                 | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                      | unique gateway reference; one per group                |
+| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                      | FK to `payment_groups`                                 |
+| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | set when settled by USSD                               |
+| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age` | rules evaluated server-side                            |
+| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                      | existing rows stay valid                               |
+| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                    | null for a church-paid period                          |
+| `subscriptions.paid_by`           | `text` (`member` / `church`)                                                                                                                                                                                                                                         | chosen per subscription                                |
+| `subscriptions.period_start`      | `date` not null                                                                                                                                                                                                                                                      | cover period start                                     |
+| `subscriptions.period_end`        | `date` not null                                                                                                                                                                                                                                                      | cover lapses here unless renewed                       |
+| `subscription_payments`           | `id`, `subscription_id`, `period_start`, `period_end`, `amount_minor`, `currency`, `channel`, `reference`, `paid_at`, `recorded_by`, `status`                                                                                                                        | member-paid periods; one row per paid period           |
+| `subscription_coverage`           | `subscription_id`, `member_id`                                                                                                                                                                                                                                       | existing: explicit covered members, never derived      |
+| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status`, `recorded_by`, `recorded_at`, `decided_by`, `decided_at`                                                                                                                                   | approved + paid sum to "total claimed"                 |
 
 ## Testing Decisions
 

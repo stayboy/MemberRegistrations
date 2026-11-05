@@ -14,6 +14,10 @@
 
 ## Change log
 
+- 2026-11-05: welfare products gain a payer (`member`/`church`/`either`), a cover period, and
+  dependent rules (`covers`, `maxDependents`, `allowedRelationships`); subscriptions record `paidBy`,
+  `periodStart`/`periodEnd` and a per-period `subscription_payments` row for member-paid cover, while
+  church-paid cover is started or renewed by the back office. See the USSD spec.
 - 2026-11-05: the aggregator-facing USSD entry is `POST /ussd/session`, outside the bearer namespace;
   `/v1/ussd/*` is removed, and the attendance/giving/subscription flow is specified in
   `member-registrations-ussd.md`. The payment-group commit, pledge settle and member attendance/payment
@@ -256,12 +260,20 @@ preference.
 ### Subscription
 
 `{ id, kind: life_insurance | credit_union, policyholderMemberId, scope: individual | household,
-status, reference?, startedOn, endedOn? }`
+status, reference?, startedOn, endedOn?, productId?, premiumMinor?, paidBy: member | church,
+periodStart, periodEnd }`
 
 - `individual`: coverage is the policyholder.
 - `household`: explicit `subscription_coverage` rows. Coverage is a financial fact, never derived from
   the relationship graph and never auto-extended when a dependent is linked.
 - Coverage removal writes `removedOn`; it does not delete history.
+- `productId` is the welfare product when the subscription came from a product; `paidBy` is `member` or
+  `church`, and `premiumMinor` is null for a church-paid period. `periodStart`/`periodEnd` are the paid
+  cover period; `endedOn` stays the explicit end. A household product allows at most its
+  `maxDependents` active members joined by an allowed relationship.
+- The member subscription read returns owned and inherited rows; an inherited row carries
+  `source: 'inherited'`, the policyholder's member number and name, and the relationship label from the
+  covered member to the policyholder (spouse renders Husband/Wife by gender).
 
 ### Ministry
 
@@ -579,6 +591,7 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 | `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                               | ticket 24 |
 | `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                 | ticket 24 |
 | `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                            | ticket 24 |
+| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                  | ticket 24 |
 | `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held                |
 | `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                         |
 | `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                   |
