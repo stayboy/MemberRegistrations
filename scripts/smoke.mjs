@@ -252,6 +252,47 @@ async function runScenario() {
     JSON.stringify(contributionSummary.body),
   );
 
+  const pledge = await request('/v1/pledges', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      memberNo: 'M-9002',
+      offeringId: offering.body.id,
+      eventId: smokeEvent.body.id,
+      amountMinor: 7000,
+      expectedOn: '2999-02-01',
+      idempotencyKey: 'smoke-pledge-1',
+    }),
+  });
+  check(
+    'pledge created with the shepherd as officer',
+    pledge.status === 201 &&
+      pledge.body.status === 'pending' &&
+      pledge.body.followUpOfficerMemberNo === 'P-9001' &&
+      pledge.body.termsVersion === 2,
+    JSON.stringify(pledge.body),
+  );
+
+  const reminder = await request(`/v1/pledges/${pledge.body.id}/reminders`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ scheduledFor: '2999-02-05', channel: 'sms' }),
+  });
+  check(
+    'pledge reminder recorded',
+    reminder.status === 201 &&
+      reminder.body.status === 'pending' &&
+      reminder.body.scheduledFor === '2999-02-05',
+    JSON.stringify(reminder.body),
+  );
+
+  const honored = await request(`/v1/pledges/${pledge.body.id}/honor`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({}),
+  });
+  check('pledge honored', honored.status === 200 && honored.body.status === 'honored');
+
   const openapi = await request('/openapi.json');
   check(
     'openapi is served',

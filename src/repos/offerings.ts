@@ -81,7 +81,6 @@ export type ExceptionKind = 'event' | 'series';
 const KIND_LABELS: Record<OfferingKind, string> = {
   freewill: 'Freewill',
   tithe: 'Tithe',
-  pledge: 'Pledge',
   building: 'Building',
   missions: 'Missions',
   other: 'Other',

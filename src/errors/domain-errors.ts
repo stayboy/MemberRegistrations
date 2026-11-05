@@ -77,6 +77,34 @@ export class OfferingExpiredError extends ValidationError {
   }
 }
 
+/** No active presbyter can follow this pledge up. */
+export class OfficerRequiredError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'officer_required');
+  }
+}
+
+/** A pledge expected date cannot be in the past at creation. */
+export class InvalidExpectedDateError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'invalid_expected_date');
+  }
+}
+
+/** A manually scheduled reminder cannot be dated in the past. */
+export class InvalidReminderDateError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'invalid_reminder_date');
+  }
+}
+
+/** An honored or dishonored pledge accepts no further transition. */
+export class PledgeAlreadyTerminalError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'pledge_already_terminal');
+  }
+}
+
 /** The idempotency key was first used for a different canonical payload. */
 export class IdempotencyConflictError extends ConflictError {
   constructor(message: string) {

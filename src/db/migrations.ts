@@ -5,6 +5,12 @@
  */
 export interface Migration {
   version: string;
+  /**
+   * Data statements that must run before `sql` and whose affected row count is
+   * worth logging (for example a reclassification). They run in the same
+   * transaction, before the schema change.
+   */
+  logged?: Array<{ label: string; sql: string }>;
   sql: string;
 }
 
@@ -593,6 +599,79 @@ create index contributions_session_page
   on contributions (session_date, created_at desc, id desc);
 create index contributions_cursor on contributions (created_at desc, id desc);
 create index contributions_member on contributions (member_id);
+`,
+  },
+  {
+    version: '0012_pledges',
+    // A pledge is a payment mode, not an offering kind. Reclassify (never
+    // delete) existing rows before the check drops the value.
+    logged: [
+      {
+        label: 'offering_terms kind pledge reclassified to other',
+        sql: `
+with reclassified as (
+  update offering_terms set kind = 'other' where kind = 'pledge' returning 1
+)
+select count(*)::int as count from reclassified`,
+      },
+    ],
+    sql: `
+-- A pledge always targets an existing offering attached to the event. It is
+-- append-only; honor, dishonor and reassignment are pledge_events rows.
+create table pledges (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id),
+  offering_id uuid not null references offerings(id),
+  event_instance_id uuid not null references event_instances(id),
+  session_date date,
+  amount_minor bigint not null check (amount_minor > 0),
+  currency text not null,
+  expected_on date not null,
+  officer_member_id uuid not null references members(id),
+  status text not null check (status in ('pending', 'honored', 'dishonored')),
+  reason text,
+  terms_version integer not null,
+  idempotency_key text not null unique,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  foreign key (offering_id, terms_version) references offering_terms (offering_id, version)
+);
+create index pledges_expected_page on pledges (expected_on, created_at desc, id desc);
+create index pledges_cursor on pledges (created_at desc, id desc);
+create index pledges_member on pledges (member_id);
+create index pledges_officer on pledges (officer_member_id);
+
+-- Append-only transitions; the from and to officers are set on a reassignment.
+create table pledge_events (
+  id uuid primary key default gen_random_uuid(),
+  pledge_id uuid not null references pledges(id),
+  kind text not null check (kind in ('created', 'honored', 'dishonored', 'reassigned')),
+  actor text not null,
+  reason text,
+  from_officer_member_id uuid references members(id),
+  to_officer_member_id uuid references members(id),
+  at timestamptz not null default now()
+);
+create index pledge_events_pledge on pledge_events (pledge_id, at desc, id desc);
+
+-- Reminder records; delivery is out of scope in V1. An auto-created date that
+-- is already past is written cancelled and never sent.
+create table reminders (
+  id uuid primary key default gen_random_uuid(),
+  pledge_id uuid not null references pledges(id),
+  scheduled_for date not null,
+  channel text not null check (channel in ('sms', 'whatsapp', 'ussd', 'email')),
+  status text not null default 'pending'
+    check (status in ('pending', 'sent', 'failed', 'cancelled')),
+  sent_at timestamptz,
+  unique (pledge_id, scheduled_for, channel)
+);
+create index reminders_pledge on reminders (pledge_id, scheduled_for desc, id desc);
+
+-- A pledge is a payment mode on an existing offering, never an offering kind.
+alter table offering_terms drop constraint if exists offering_terms_kind_check;
+alter table offering_terms add constraint offering_terms_kind_check
+  check (kind in ('freewill', 'tithe', 'building', 'missions', 'other'));
 `,
   },
 ];
