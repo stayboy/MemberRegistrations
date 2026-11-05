@@ -45,6 +45,10 @@ function postPledge(body: Record<string, unknown>) {
   return request(harness.app).post('/v1/pledges').set(writeHeaders).send(body);
 }
 
+function postContribution(body: Record<string, unknown>) {
+  return request(harness.app).post('/v1/contributions').set(writeHeaders).send(body);
+}
+
 function getPledge(id: string) {
   return request(harness.app).get(`/v1/pledges/${id}`).set(readHeaders);
 }
@@ -752,6 +756,125 @@ describe('GET /v1/pledges', () => {
     const detail = await getPledge(second.id);
     expect(detail.status).toBe(200);
     expect(detail.body.status).toBe('overdue');
+  });
+});
+
+describe('POST /v1/pledges/:id/settle', () => {
+  let settleOfferingId: string;
+
+  beforeAll(async () => {
+    const offering = await createOffering({
+      purpose: 'Settlement appeal',
+      kind: 'freewill',
+      availableUntil: '2999-12-31',
+    });
+    expect(offering.status).toBe(201);
+    settleOfferingId = offering.body.id;
+    expect((await attach(eventId, settleOfferingId)).status).toBe(201);
+  });
+
+  function contributionBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      memberNo: 'PL-1001',
+      offeringId: ghsOfferingId,
+      eventId,
+      sessionDate: '2999-01-01',
+      amountMinor: 5000,
+      channel: 'manual',
+      idempotencyKey: nextKey('settle-contribution'),
+      ...overrides,
+    };
+  }
+
+  function settle(pledgeId: string, contributionId: string) {
+    return request(harness.app)
+      .post(`/v1/pledges/${pledgeId}/settle`)
+      .set(writeHeaders)
+      .send({ contributionId });
+  }
+
+  it('settles with a matching paid contribution and reconciles an identical repeat', async () => {
+    const pledge = await makePledge({ idempotencyKey: nextKey('settle') });
+    const contribution = await postContribution(contributionBody());
+    expect(contribution.status).toBe(201);
+
+    const settled = await settle(pledge.id, contribution.body.id);
+    expect(settled.status).toBe(200);
+    expect(settled.headers['cache-control']).toBe('no-store');
+    expect(settled.body.status).toBe('honored');
+    expect(settled.body.settledContributionId).toBe(contribution.body.id);
+
+    const [row] = await harness.db.query<{ settled_contribution_id: string }>(
+      'select settled_contribution_id from pledges where id = $1',
+      [pledge.id],
+    );
+    expect(row!.settled_contribution_id).toBe(contribution.body.id);
+
+    const events = await harness.db.query<{ actor: string }>(
+      `select actor from pledge_events where pledge_id = $1 and kind = 'honored'`,
+      [pledge.id],
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.actor).toBe('test-admin');
+
+    const repeat = await settle(pledge.id, contribution.body.id);
+    expect(repeat.status).toBe(200);
+    const after = await harness.db.query<{ count: number | string }>(
+      `select count(*) as count from pledge_events where pledge_id = $1 and kind = 'honored'`,
+      [pledge.id],
+    );
+    expect(Number(after[0]!.count)).toBe(1);
+  });
+
+  it('rejects a different contribution on an already-settled pledge', async () => {
+    const pledge = await makePledge({ idempotencyKey: nextKey('settle-different') });
+    const first = await postContribution(contributionBody());
+    const second = await postContribution(contributionBody());
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    expect((await settle(pledge.id, first.body.id)).status).toBe(200);
+    const different = await settle(pledge.id, second.body.id);
+    expect(different.status).toBe(409);
+    expect(different.body.code).toBe('pledge_already_terminal');
+
+    const [row] = await harness.db.query<{ settled_contribution_id: string }>(
+      'select settled_contribution_id from pledges where id = $1',
+      [pledge.id],
+    );
+    expect(row!.settled_contribution_id).toBe(first.body.id);
+  });
+
+  it('rejects a contribution that is not paid', async () => {
+    const pledge = await makePledge({ idempotencyKey: nextKey('settle-pending') });
+    const contribution = await postContribution(contributionBody({ status: 'initiated' }));
+    expect(contribution.status).toBe(201);
+
+    const response = await settle(pledge.id, contribution.body.id);
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+  });
+
+  it('rejects a contribution for another member, offering or amount', async () => {
+    const pledge = await makePledge({ idempotencyKey: nextKey('settle-mismatch') });
+
+    const otherMember = await postContribution(contributionBody({ memberNo: 'PL-1002' }));
+    expect(otherMember.status).toBe(201);
+    expect((await settle(pledge.id, otherMember.body.id)).status).toBe(422);
+
+    const otherOffering = await postContribution(
+      contributionBody({ offeringId: settleOfferingId }),
+    );
+    expect(otherOffering.status).toBe(201);
+    expect((await settle(pledge.id, otherOffering.body.id)).status).toBe(422);
+
+    const otherAmount = await postContribution(contributionBody({ amountMinor: 5001 }));
+    expect(otherAmount.status).toBe(201);
+    expect((await settle(pledge.id, otherAmount.body.id)).status).toBe(422);
+
+    const missing = await settle(pledge.id, '00000000-0000-4000-8000-000000000001');
+    expect(missing.status).toBe(422);
+    expect(missing.body.code).toBe('validation_error');
   });
 });
 

@@ -8,9 +8,10 @@ in lay terms, one payment group per commit with the stub gateway, a USSD pledge 
 member's payment summary. Attendance, subscriptions, the admin portal and complaints stay in 24b–24e.
 
 **Blocked by:** 21 (Contributions and visitors), 22 (Pledges and reminders). Migration **0013**
-(`ussd_sessions`, `ussd_nonces`, `payment_groups`, `payment_intents`, `contributions.payment_group_id`,
-`pledges.settled_contribution_id`), the HMAC `POST /ussd/session` entry and the signature-verified
-`/v1/payments/callback` are authorised for this round by the owner (2026-11-05).
+(`ussd_sessions`, `ussd_nonces`, `payment_groups` including `pledge_id`, `payment_intents`,
+`contributions.payment_group_id`, `pledges.settled_contribution_id`), the HMAC `POST /ussd/session`
+entry and the signature-verified `/v1/payments/callback` are authorised for this round by the owner
+(2026-11-05).
 
 **Status:** ready-for-agent
 
@@ -21,9 +22,9 @@ member's payment summary. Attendance, subscriptions, the admin portal and compla
       contact matches, treats a linked-only match as anonymous, and idle-expires after 3 minutes.
 - [ ] A repeated `seq` returns the same prompt without advancing; an expired or unknown session restarts
       from the main menu with "Session expired".
-- [ ] The menu tree ships Offerings, Register (anonymous) and Exit in this part; every entry opens its
-      primary content, with `9` back, `0` more and `00` main. Activities, Attendance and My Profile
-      arrive with 24b, and Welfare & Services with 24c.
+- [ ] The menu tree ships Offerings and Exit in this part; every entry opens its primary content, with
+      `9` back, `0` more and `00` main. Register, Activities, Attendance and My Profile arrive with 24b,
+      and Welfare & Services with 24c.
 - [ ] Every static string comes from the code-owned display glossary (`full`/`short`), dynamic values are
       truncated only by the per-kind widths, and the budget test enforces 16/60/182 characters.
 - [ ] The current or next event lists at most five offerings plus `0 More`, using the active attachment
@@ -38,8 +39,11 @@ member's payment summary. Attendance, subscriptions, the admin portal and compla
       contributions paid; a repeated callback reconciles to the same rows.
 - [ ] A USSD pledge targets exactly one offering, takes an expected date, reuses the officer-resolution
       rules, and shows the USSD idempotency key as its reference.
-- [ ] "My pledges" lists pending pledges and redeems one by creating a contribution and appending
-      `honored` in one transaction; a pledge can be honoured after the offering expires.
+- [ ] "My pledges" lists pending pledges and redeems one by creating a single-offering payment group
+      that carries the pledge; the callback marks it paid, sets `settled_contribution_id` and appends
+      `honored` in one transaction. A failed callback leaves the pledge pending, and a second settlement
+      is `409 pledge_already_terminal`. The bearer `POST /v1/pledges/{id}/settle` applies an existing
+      paid contribution idempotently.
 - [ ] "My payments" shows the week-to-date, quarter-to-date and year-to-date paid totals and the top
       three events from one member-scoped aggregate; visitor gifts never appear.
 - [ ] USSD is disabled in production by configuration, and `/ussd/session` is the only non-bearer route.

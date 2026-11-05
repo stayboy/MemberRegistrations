@@ -88,6 +88,20 @@ export interface MemberSubscriptionSummary {
   coveredCount: number;
 }
 
+export interface MemberContributionWindow {
+  from: string;
+  to: string;
+  paidMinor: number;
+}
+
+export interface MemberContributionSummary {
+  currency: string;
+  week: MemberContributionWindow;
+  quarter: MemberContributionWindow;
+  year: MemberContributionWindow;
+  topEvents: Array<{ eventId: string; name: string; paidMinor: number }>;
+}
+
 export interface MemberSummary {
   memberNo: string;
   firstName: string;
@@ -250,6 +264,19 @@ function isoTimestamp(value: unknown): string | null {
   return String(value);
 }
 
+function parseJsonArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function requiredText(value: string | null | undefined, field: string): string {
   const trimmed = value?.trim();
   if (!trimmed) throw new ValidationError(`${field} is required`);
@@ -375,6 +402,133 @@ export class MemberRepository {
   async get(memberNo: string, includeArchived = false): Promise<MemberDetail | null> {
     const row = await this.findRow(memberNo, includeArchived);
     return row ? this.toDetail(row) : null;
+  }
+
+  /**
+   * One member-scoped aggregate for the USSD "My payments" screen: paid member
+   * gifts only (visitor gifts never appear), UTC calendar windows ending today,
+   * and the three events with the highest paid amount this year.
+   */
+  async contributionsSummary(memberNo: string): Promise<MemberContributionSummary> {
+    await this.requireRow(memberNo);
+    const today = todayIn('UTC');
+
+    const [row] = await this.db.query<{
+      week_from: unknown;
+      quarter_from: unknown;
+      year_from: unknown;
+      to_date: unknown;
+      week_paid: number | string;
+      quarter_paid: number | string;
+      year_paid: number | string;
+      currency: string;
+      top_events: unknown;
+    }>(
+      `with bounds as (
+         select $1::date as to_date,
+                date_trunc('week', $1::date)::date as week_from,
+                date_trunc('quarter', $1::date)::date as quarter_from,
+                date_trunc('year', $1::date)::date as year_from
+       ),
+       chosen as (
+         -- One currency per summary (no FX); the member's largest paid currency wins.
+         select coalesce((
+           select c2.currency
+             from contributions c2
+             join members m2 on m2.id = c2.member_id
+            where lower(m2.member_no) = lower($2)
+              and c2.status = 'paid'
+            group by c2.currency
+            order by sum(c2.amount_minor) desc, c2.currency asc
+            limit 1
+         ), 'GHS') as currency
+       ),
+       totals as (
+         select
+           coalesce(sum(c.amount_minor) filter (where c.session_date >= b.week_from), 0)
+             as week_paid,
+           coalesce(sum(c.amount_minor) filter (where c.session_date >= b.quarter_from), 0)
+             as quarter_paid,
+           coalesce(sum(c.amount_minor) filter (where c.session_date >= b.year_from), 0)
+             as year_paid
+         from contributions c
+         join members m on m.id = c.member_id
+         cross join bounds b
+         cross join chosen ch
+         where lower(m.member_no) = lower($2)
+           and c.status = 'paid'
+           and c.currency = ch.currency
+       ),
+       top as (
+         select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'eventId', t.event_id,
+               'name', t.name,
+               'paidMinor', t.paid
+             )
+             order by t.paid desc, t.name asc, t.event_id asc
+           ),
+           '[]'::jsonb
+         ) as items
+         from (
+           select e.id as event_id, e.name, sum(c.amount_minor)::bigint as paid
+             from contributions c
+             join members m on m.id = c.member_id
+             join event_instances e on e.id = c.event_instance_id
+             cross join bounds b
+             cross join chosen ch
+            where lower(m.member_no) = lower($2)
+              and c.status = 'paid'
+              and c.session_date >= b.year_from
+              and c.currency = ch.currency
+            group by e.id, e.name
+            order by paid desc, e.name asc, e.id asc
+            limit 3
+         ) t
+       )
+       select b.week_from, b.quarter_from, b.year_from, b.to_date,
+              totals.week_paid, totals.quarter_paid, totals.year_paid, chosen.currency,
+              top.items as top_events
+         from bounds b
+         cross join chosen
+         cross join totals
+         cross join top`,
+      [today, memberNo],
+    );
+
+    const to = isoDate(row!.to_date)!;
+    const topEvents = (
+      parseJsonArray(row!.top_events) as Array<{
+        eventId: string;
+        name: string;
+        paidMinor: number | string;
+      }>
+    ).map((event) => ({
+      eventId: event.eventId,
+      name: event.name,
+      paidMinor: Number(event.paidMinor),
+    }));
+
+    return {
+      currency: row!.currency,
+      week: {
+        from: isoDate(row!.week_from)!,
+        to,
+        paidMinor: Number(row!.week_paid),
+      },
+      quarter: {
+        from: isoDate(row!.quarter_from)!,
+        to,
+        paidMinor: Number(row!.quarter_paid),
+      },
+      year: {
+        from: isoDate(row!.year_from)!,
+        to,
+        paidMinor: Number(row!.year_paid),
+      },
+      topEvents,
+    };
   }
 
   async create(input: CreateMemberInput, actor: string): Promise<MemberDetail> {

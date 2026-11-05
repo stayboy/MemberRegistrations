@@ -100,6 +100,12 @@ export function membersRouter(repo: MemberRepository): Router {
     res.json({ memberNo: req.params.memberNo, series });
   });
 
+  router.get('/:memberNo/contributions/summary', async (req, res) => {
+    const summary = await repo.contributionsSummary(memberNo(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(summary);
+  });
+
   router.post('/:memberNo/attendance', async (req, res) => {
     const input = attendanceInputSchema.parse(req.body);
     const entry = await repo.recordAttendance(memberNo(req), input, actorOf(req));

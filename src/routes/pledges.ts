@@ -10,6 +10,7 @@ import {
   honorSchema,
   listPledgesQuerySchema,
   reassignSchema,
+  settleSchema,
 } from '../schemas/pledges.js';
 
 const idSchema = z.string().uuid();
@@ -56,6 +57,13 @@ export function pledgesRouter(repo: PledgeRepository): Router {
     honorSchema.parse(req.body ?? {});
     noStore(res);
     res.json(await repo.honor(id, actor(req)));
+  });
+
+  router.post('/:id/settle', async (req, res) => {
+    const id = idSchema.parse(req.params.id);
+    const input = settleSchema.parse(req.body);
+    noStore(res);
+    res.json(await repo.settle(id, input.contributionId, actor(req)));
   });
 
   router.post('/:id/dishonor', async (req, res) => {

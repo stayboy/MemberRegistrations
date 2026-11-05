@@ -238,6 +238,26 @@ export const memberListSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
+export const memberContributionWindowSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  paidMinor: z.number().int(),
+});
+
+export const memberContributionsSummarySchema = z.object({
+  currency: z.string(),
+  week: memberContributionWindowSchema,
+  quarter: memberContributionWindowSchema,
+  year: memberContributionWindowSchema,
+  topEvents: z.array(
+    z.object({
+      eventId: z.string(),
+      name: z.string(),
+      paidMinor: z.number().int(),
+    }),
+  ),
+});
+
 export const attendanceListSchema = z.object({
   memberNo: z.string(),
   series: z.array(attendanceSeriesSchema),

@@ -33,6 +33,13 @@ const app = createApp({
     .map((origin) => origin.trim())
     .filter(Boolean),
   visitorPhonePepper: env.VISITOR_PHONE_PEPPER,
+  paymentGatewaySecret: env.PAYMENT_GATEWAY_SECRET,
+  ussd: {
+    enabled: env.USSD_ENABLED,
+    gatewaySecret: env.USSD_GATEWAY_SECRET,
+    phonePepper: env.USSD_PHONE_PEPPER,
+    codePepper: env.USSD_CODE_PEPPER,
+  },
 });
 
 if (process.env.VERCEL !== '1') {

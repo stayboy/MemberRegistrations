@@ -112,6 +112,13 @@ export class IdempotencyConflictError extends ConflictError {
   }
 }
 
+/** The gateway could not accept a payment group; the whole commit rolled back. */
+export class PaymentFailedError extends DomainError {
+  constructor(message: string) {
+    super(message, 'payment_failed');
+  }
+}
+
 /** Missing, invalid, expired or revoked credentials. */
 export class UnauthorizedError extends DomainError {
   constructor(message = 'Authentication is required.') {

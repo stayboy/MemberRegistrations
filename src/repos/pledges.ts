@@ -41,6 +41,7 @@ type PledgeRow = {
   officer_member_no: string;
   status: string;
   reason: string | null;
+  settled_contribution_id: string | null;
   terms_version: number | string;
   idempotency_key: string;
   created_at: unknown;
@@ -111,6 +112,7 @@ const PLEDGE_COLUMNS = `
   o.member_no as officer_member_no,
   p.status,
   p.reason,
+  p.settled_contribution_id,
   p.terms_version,
   p.idempotency_key,
   p.created_at`;
@@ -203,6 +205,7 @@ function pledgeFromRow(row: PledgeRow, todayUtc: string): PledgeItem {
         ? 'overdue'
         : (row.status as PledgeItem['status']),
     reason: row.reason,
+    settledContributionId: row.settled_contribution_id,
     termsVersion: Number(row.terms_version),
     idempotencyKey: row.idempotency_key,
     createdAt: isoTimestamp(row.created_at)!,
@@ -446,6 +449,85 @@ export class PledgeRepository {
         [pledge.id, actor],
       );
     });
+    return this.getById(id);
+  }
+
+  /**
+   * Applies an existing paid contribution to a pledge. An identical repeat
+   * returns the stored settlement and appends no second event.
+   */
+  async settle(id: string, contributionId: string, actor: string): Promise<PledgeItem> {
+    await this.db.transaction(async (tx) => {
+      const [pledge] = await tx.query<{
+        id: string;
+        member_id: string;
+        offering_id: string;
+        amount_minor: number | string;
+        currency: string;
+        status: string;
+        settled_contribution_id: string | null;
+      }>(
+        `select id, member_id, offering_id, amount_minor, currency, status,
+                settled_contribution_id
+           from pledges
+          where id = $1
+          for update`,
+        [id],
+      );
+      if (!pledge) throw new NotFoundError(`Pledge ${id} was not found`);
+
+      if (pledge.status === 'honored' && pledge.settled_contribution_id === contributionId) {
+        return;
+      }
+      if (pledge.status !== 'pending') {
+        throw new PledgeAlreadyTerminalError(
+          `Pledge ${id} is ${pledge.status} with a different settlement`,
+        );
+      }
+
+      const [contribution] = await tx.query<{
+        id: string;
+        member_id: string | null;
+        offering_id: string;
+        amount_minor: number | string;
+        currency: string;
+        status: string;
+      }>(
+        `select id, member_id, offering_id, amount_minor, currency, status
+           from contributions
+          where id = $1`,
+        [contributionId],
+      );
+      if (!contribution) {
+        throw new ValidationError(`Contribution ${contributionId} was not found`);
+      }
+      if (contribution.status !== 'paid') {
+        throw new ValidationError(
+          `Contribution ${contributionId} is ${contribution.status}, not paid`,
+        );
+      }
+      if (
+        contribution.member_id !== pledge.member_id ||
+        contribution.offering_id !== pledge.offering_id ||
+        contribution.currency !== pledge.currency ||
+        Number(contribution.amount_minor) !== Number(pledge.amount_minor)
+      ) {
+        throw new ValidationError(`Contribution ${contributionId} does not match pledge ${id}`);
+      }
+
+      await tx.query(
+        `update pledges
+            set status = 'honored', settled_contribution_id = $2
+          where id = $1`,
+        [id, contributionId],
+      );
+      await tx.query(
+        `insert into pledge_events (pledge_id, kind, actor)
+         values ($1, 'honored', $2)`,
+        [id, actor],
+      );
+    });
+
     return this.getById(id);
   }
 
