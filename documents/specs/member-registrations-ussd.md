@@ -193,7 +193,9 @@ code. No raw phone number is stored or logged.
 ### Attendance: check, punch, clock, delegate, expected counts
 
 - A member checks attendance for today, a specific day, or a period (month, quarter, year). The answer
-  is a count and a per-event list, never fabricated absences.
+  is a count and a per-event list, never fabricated absences. Checks, codes and clock-ins apply only to
+  member-trackable events; a headcount-only event (`tracksMembers = false`) is listed in Activities with
+  its expected headcount and takes no per-member attendance.
 - Attendance is normally recorded by the back office, by an import, or by a presbyter clocking the
   member in. USSD clock-in is a USSD-authenticated act attributed to the presbyter's member identity.
 - **One-time codes.** An admin issues a **six-digit** code from a CSPRNG against one event session with a
@@ -265,14 +267,20 @@ code. No raw phone number is stored or logged.
   three ministry names, the attendance line and the shepherd. The API returns one aggregate: `GET
 /v1/members/{memberNo}/profile` → `{ memberNo, name, gender, age: number | null, ministries: [name],
 shepherd: { memberNo, name } | null, attendance: { status: 'regular' | 'non_regular', attended,
-window: 5, lastAttendedOn: string | null } }`. `attendance` uses the member's **primary attendance
-  series** — the series with the most attendance rows for that member — and its last five **held**
-  sessions ending today (UTC, with the series timezone governing "today" when set): `regular` when at
-  least four were attended, `non_regular` otherwise, including when fewer than five sessions have been
-  held. `lastAttendedOn` is the most recent present date. A member with no attendance rows is
-  `non_regular` with `attended: 0` and a null date, and the screen says "No attendance yet".
-  Standalone-event attendance (no series) never counts toward the primary series. The shepherd is the
-  active shepherding assignment's officer, or null ("Not assigned"). One request, `no-store`.
+expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the member's **tracked** attendance
+  across the events that apply to them: every **general** event (its series has no ministry, or it has no
+  series) and every event whose ministry the member belongs to — a `member_ministries` row to an active
+  ministry, with the member active (not archived or purged) — and only where the event is
+  **member-trackable**
+  (`tracksMembers = true`). The window is the last five **held** scoped sessions ending today: a session
+  is held when its date is on or before the event's today in the event's timezone and the session is not
+  cancelled; sessions are ordered by date, then event start time, then event id. `regular` when
+  `attended / expected >= 0.6` (60%), otherwise `non_regular`; `expected` is the window size (up to 5)
+  and `attended` is the number present. `lastAttendedOn` is the most recent attended date in scope. A
+  headcount-only event never counts, and neither does attendance at an event whose ministry the member
+  does not belong to. With no scoped sessions the status is `non_regular`, `attended` and `expected` are
+  `0`, the date is null, and the screen says "No attendance yet". The shepherd is the active shepherding
+  assignment's officer, or null ("Not assigned"). One request, `no-store`.
 
 ### Payments and the gateway stub
 
