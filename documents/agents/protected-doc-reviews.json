@@ -43,13 +43,13 @@
     },
     {
       "path": "documents/lessons.md",
-      "sha256": "42b4de33dcfe905f8395a28ffd64ef4675a0227a4ec3de36de336e49bfa1c8d1",
+      "sha256": "a03a45a25afa1ff45e43a8e35bcb58b28682cd06c1c9647d2c15159284c28106",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds the 2026-11-05 lesson 'Screen a proposed mock against the approved one before asking for approval' — run the mock-parity screen on the pair with a closed claim list derived from the approved artifact, confirm each flagged atom rather than treating it as a verdict (spec-required miss → rework, mock-only → mock correction), record the `## Mock parity` table and `DM:` in the round doc, and note that the probe accepts images alone while the hosted endpoint needs a non-empty state. why: the owner asked for a durable lesson after the settings-mock round, where the screen caught an extra header control, an un-pinned footer, a missing toolbar and a missing date/time block, and the rebuilt mock flipped the load-bearing atoms. rejected: treating the screen as a gate or an acceptance; inventing claims author-side; routing holistic judgements through it.",
+      "reason": "changes: adds two 2026-11-05 lessons - 'A screenshot baseline must pin the clock' (19b: member-add and series-list drifted on the capture date until page.clock.setFixedTime was added before navigation) and 'A contrast fix must keep the Fluent ramp monotonic' (19a: patching Ocean 70/80, Meadow 70 and Plum 100 inverted the derived hover/pressed tokens; the ramps were re-derived and are guarded by ui/src/theme/brand.test.ts) - and records their acceptance in the Q200 round (2026-11-05, 'all as recommended'); the existing 2026-11-05 mock-parity entry moves beside them so the file is actually newest-first. why: both are evidenced by this session's rounds, the owner accepted them in Q200, and the lessons are the durable record before the V3 phase starts. rejected: the third candidate, 'a mock with no capture hides a missing feature', which stays an observation rather than a rule.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-reviewed the 2026-11-05 mock-parity entry against `documents/specs/mock-parity-screen.md`: the state claim is now attributed to the hosted endpoint (400 on image-only), the rule correctly frames a flagged atom as a question to confirm with spec-required→rework and mock-only→correction arbitration pointing at the spec rather than restating thresholds, the record is the round-doc `## Mock parity`/`DM:`, and the trigger is scoped to atomic claims (label/region/control/column) excluding holistic judgements — no contradictions and no new error introduced.",
+      "attestation": "Re-read the final text of documents/lessons.md: the only change since the prior review is the added separator between the workspace-gate entry's trigger and the 'A reused component' entry, which makes that boundary symmetric; the two new lessons and the Q200 preamble are unchanged from the accepted text, the timestamp milliseconds quote and the 'colour' spelling remain deliberately as written, the facts were verified against capture.spec.ts, member-form.ts, SeriesListPage.tsx, brand.ts and brand.test.ts, and the file is newest-first.",
       "at": "2026-11-05"
     },
     {

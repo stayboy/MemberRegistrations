@@ -8,23 +8,41 @@ Propose an entry in the reply; it reaches this file only when the owner accepts 
 Owner acceptance is recorded with the entry. The 2026-11-02 entry was accepted with the workflow
 adoption on 2026-11-02 (grill Q16: "all as recommended"). The 2026-11-04 entries were accepted in the
 Q126 round (2026-11-04, "all as recommended"); the workspace-gate entry was accepted there on condition
-that it be written only once the UI CI job landed, which it did the same day.
+that it be written only once the UI CI job landed, which it did the same day. The 2026-11-05 capture
+and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as recommended").
 
 ---
 
-## 2026-11-04 — A gate that does not name the workspace is not a gate
+## 2026-11-05 — A screenshot baseline must pin the clock
 
-**Rule.** A verification gate must name every workspace it claims to cover. A root command that
-silently excludes a workspace proves nothing about it, and a green run is not evidence for the part of
-the tree the command never reached.
+**Rule.** A committed screenshot baseline fixes the browser clock as well as the data, the locale, the
+timezone and the motion. Any screen that derives a date from "today" — a default joined date, a
+next-occurrence window — drifts on the next capture run, and the artifact stops proving what the build
+looks like.
 
-**Evidence.** Root `npm run verify` excluded `ui/**` from ESLint and the root tsconfig and never ran the
-UI's tests: 87 UI tests existed while CI covered none of them, and the entry bundle was never built in
-CI. The gap was invisible because the required check was green. Fixed by a separate `ui` job running
-`ui:lint`, `ui:typecheck`, `ui:test` and `ui:build` (`chore/ui-ci-gate`, 2026-11-04).
+**Evidence.** Ticket 19b's first capture used real time: `member-add.png` showed the run's date in
+"Joined on", and `series-list.png` asked the API for a window starting on it, so a regenerated baseline
+differed in content, not only in pixels. `page.clock.setFixedTime(new Date('2026-01-05T12:00:00Z'))`
+before every navigation made both screens byte-identical across runs.
 
-**Trigger.** A repo with a workspace or sub-project carrying its own lint, tsconfig or test config; any
-"the build is green" claim about code the gate does not name.
+**Trigger.** Any capture or visual test whose screen renders a date derived from the current clock.
+
+---
+
+## 2026-11-05 — A contrast fix must keep the Fluent ramp monotonic
+
+**Rule.** Fix a failing accent contrast by re-deriving the whole ramp, never by patching the stops the
+audit named. Fluent derives hover and pressed tokens from a stop's position in the ramp, so a stop that
+is darker than its neighbour inverts those states and can create new failures while the audited stop
+passes. Guard the ramp with a unit test that asserts monotonic luminance and the white-text ratio on
+every background stop.
+
+**Evidence.** Ticket 19a's first fix darkened only the failing stops (Ocean 70/80, Meadow 70, Plum 100);
+Ocean 70 became darker than 60, so the derived hover and pressed tokens inverted. The re-review caught
+it. The ramps were re-derived as monotonic families with white at ≥4.5:1, and `ui/src/theme/brand.test.ts`
+now fails on a dip or a low-contrast background stop.
+
+**Trigger.** Any edit to a theme's colour stops, especially a fix aimed at one failing axe rule.
 
 ---
 
@@ -48,6 +66,24 @@ accepts `--images` on its own, but the hosted endpoint refused an image-only req
 **Trigger.** Any atomic claim about whether a proposed mock or built screenshot matches an approved
 mock — a label, a region, a control, a column. Not a holistic "does this feel like the mock?"
 judgement, which the screen is weak at.
+
+---
+
+## 2026-11-04 — A gate that does not name the workspace is not a gate
+
+**Rule.** A verification gate must name every workspace it claims to cover. A root command that
+silently excludes a workspace proves nothing about it, and a green run is not evidence for the part of
+the tree the command never reached.
+
+**Evidence.** Root `npm run verify` excluded `ui/**` from ESLint and the root tsconfig and never ran the
+UI's tests: 87 UI tests existed while CI covered none of them, and the entry bundle was never built in
+CI. The gap was invisible because the required check was green. Fixed by a separate `ui` job running
+`ui:lint`, `ui:typecheck`, `ui:test` and `ui:build` (`chore/ui-ci-gate`, 2026-11-04).
+
+**Trigger.** A repo with a workspace or sub-project carrying its own lint, tsconfig or test config; any
+"the build is green" claim about code the gate does not name.
+
+---
 
 ## 2026-11-04 — A reused component inherits the narrowest capability of its call sites
 
