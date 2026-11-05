@@ -19,6 +19,12 @@ export const useMemberDetailStyles = makeStyles({
     gap: tokens.spacingVerticalL,
     paddingTop: tokens.spacingVerticalM,
   },
+  // Six tabs do not fit the 360 px content column; wrapping keeps every tab
+  // visible and keeps the column's scrollWidth inside its clientWidth.
+  tabs: {
+    flexWrap: 'wrap',
+    rowGap: tokens.spacingVerticalXS,
+  },
   state: {
     display: 'flex',
     justifyContent: 'center',

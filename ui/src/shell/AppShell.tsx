@@ -137,13 +137,13 @@ export function AppShell() {
         <Link
           to="/members"
           className={styles.brand}
-          aria-label="Church Register, go to Members"
+          aria-label="Church Register, Member Registrations, go to Members"
           style={{ width: isNarrow ? 'auto' : collapsed ? '56px' : '260px' }}
         >
           <BRAND_ICON className={styles.brandIcon} aria-hidden="true" />
           {collapsed && !isNarrow ? null : (
             <span className={styles.brandText}>
-              <span className={styles.brandTitle}>Church Register</span>
+              <span className={styles.brandTitle}>Church Register</span>{' '}
               <span className={styles.brandSubtitle}>Member Registrations</span>
             </span>
           )}

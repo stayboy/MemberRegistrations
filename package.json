@@ -28,6 +28,7 @@
     "ui:test": "npm --prefix ui run test",
     "ui:lint": "npm --prefix ui run lint",
     "ui:typecheck": "npm --prefix ui run typecheck",
+    "ui:e2e": "npm --prefix ui run e2e",
     "db:migrate": "tsx src/db/migrate-cli.ts",
     "officers:add": "tsx src/authn/cli.ts add",
     "officers:deactivate": "tsx src/authn/cli.ts deactivate",
@@ -48,6 +49,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@electric-sql/pglite": "^0.5.14",
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
@@ -58,6 +60,7 @@
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "pino-pretty": "^13.2.0",
+    "playwright": "1.64.1",
     "prettier": "^3.9.10",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",

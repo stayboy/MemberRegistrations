@@ -64,3 +64,21 @@ jobs:
       - run: npm run ui:typecheck
       - run: npm run ui:test
       - run: npm run ui:build
+
+  # The browser harness runs the production build against stubbed gateway routes.
+  # It needs no database and no secrets: the session is seeded in sessionStorage.
+  ui-e2e:
+    name: ui-e2e
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run ui:e2e

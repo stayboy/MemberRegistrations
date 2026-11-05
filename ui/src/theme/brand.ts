@@ -30,70 +30,84 @@ export function isAccentId(value: unknown): value is AccentId {
  * Accent ramps. Fluent's own light/dark themes are used for `fluent`; the other
  * three are brand ramps consumed by createLightTheme/createDarkTheme so every
  * surface, stroke and focus token derives from the single ramp.
+ *
+ * Each ramp runs darkest (10) to lightest (160) with strictly increasing
+ * relative luminance. Fluent maps hover/pressed/selected tokens by index, so a
+ * dip would invert the interaction states. Stop 80 is the light-scheme primary
+ * and stop 70 the dark-scheme primary; both carry white text, and stops 90-110
+ * carry the dark-scheme brand text, so those stops are held to WCAG AA
+ * (FR-49). `brand.test.ts` guards both properties.
  */
 const ocean: BrandVariants = {
-  10: '#001A26',
-  20: '#00303F',
-  30: '#00475C',
-  40: '#005E79',
-  50: '#007696',
-  60: '#008EB4',
-  70: '#00A7D3',
-  80: '#0DBFE9',
-  90: '#3FD0F2',
-  100: '#67DCF7',
-  110: '#8AE6FA',
-  120: '#ABEDFB',
-  130: '#C7F2FD',
-  140: '#DEF7FE',
-  150: '#EEFAFE',
-  160: '#F6FDFF',
+  10: '#001219',
+  20: '#001F2B',
+  30: '#002B3D',
+  40: '#00384F',
+  50: '#004561',
+  60: '#005173',
+  70: '#005E85',
+  80: '#006994',
+  90: '#009BDB',
+  100: '#00B5FF',
+  110: '#2EC2FF',
+  120: '#57CEFF',
+  130: '#80DAFF',
+  140: '#A3E4FF',
+  150: '#C7EFFF',
+  160: '#E5F8FF',
 };
 
 const meadow: BrandVariants = {
-  10: '#041A0C',
-  20: '#0A2B14',
-  30: '#103D1C',
-  40: '#155025',
-  50: '#19642D',
-  60: '#1C7936',
-  70: '#1E8E3E',
-  80: '#20A447',
-  90: '#23BA50',
-  100: '#3BCB63',
-  110: '#58D87B',
-  120: '#77E294',
-  130: '#98EBAD',
-  140: '#B8F2C7',
-  150: '#D6F8DF',
-  160: '#EDFCF1',
+  10: '#051509',
+  20: '#082310',
+  30: '#0B3216',
+  40: '#0F401D',
+  50: '#124F23',
+  60: '#155E2A',
+  70: '#196C30',
+  80: '#1C7B37',
+  90: '#29B350',
+  100: '#33D160',
+  110: '#55D87A',
+  120: '#76E094',
+  130: '#97E7AE',
+  140: '#B4EEC5',
+  150: '#D1F5DB',
+  160: '#EAFAEF',
 };
 
 const plum: BrandVariants = {
-  10: '#1A0417',
-  20: '#2D0727',
-  30: '#410B38',
-  40: '#550E4A',
-  50: '#6A125C',
-  60: '#7F166E',
-  70: '#951A81',
-  80: '#AB1E94',
-  90: '#C223A8',
-  100: '#D53DBA',
-  110: '#E05EC9',
-  120: '#E980D6',
-  130: '#F0A2E2',
-  140: '#F6C2EC',
-  150: '#FBDEF5',
-  160: '#FEF4FC',
+  10: '#160413',
+  20: '#270722',
+  30: '#3B0A33',
+  40: '#4E0E44',
+  50: '#621155',
+  60: '#751567',
+  70: '#891878',
+  80: '#9C1C89',
+  90: '#E25ACE',
+  100: '#E56CD3',
+  110: '#E981D9',
+  120: '#ED97E0',
+  130: '#F1B1E8',
+  140: '#F5C7EE',
+  150: '#F9DCF5',
+  160: '#FCEEFA',
 };
 
-const ramps: Record<Exclude<AccentId, 'fluent'>, BrandVariants> = { ocean, meadow, plum };
+/** Exposed so the palette test can guard monotonicity and AA contrast. */
+export const BRAND_RAMPS: Readonly<Record<Exclude<AccentId, 'fluent'>, BrandVariants>> = {
+  ocean,
+  meadow,
+  plum,
+};
 
 export function themeFor(accent: AccentId, scheme: Scheme): Theme {
   if (accent === 'fluent') {
     return scheme === 'dark' ? webDarkTheme : webLightTheme;
   }
 
-  return scheme === 'dark' ? createDarkTheme(ramps[accent]) : createLightTheme(ramps[accent]);
+  return scheme === 'dark'
+    ? createDarkTheme(BRAND_RAMPS[accent])
+    : createLightTheme(BRAND_RAMPS[accent]);
 }

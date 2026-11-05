@@ -55,6 +55,14 @@ const useStyles = makeStyles({
   },
 });
 
+/** First and last initial, matching the label and the avatar's visible text. */
+function accountInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.charAt(0) ?? '') : '';
+  return `${first}${last}`.toUpperCase() || '?';
+}
+
 export function AccountMenu({ isNarrow }: { isNarrow: boolean }) {
   const styles = useStyles();
   const navigate = useNavigate();
@@ -72,6 +80,10 @@ export function AccountMenu({ isNarrow }: { isNarrow: boolean }) {
 
   const name = officer?.name ?? 'Signed-in officer';
   const email = officer?.email ?? '';
+  // The avatar's initials are rendered text, so WCAG 2.5.3 requires them inside
+  // the button's accessible name. Passing `initials` makes the visible text and
+  // the label derive from the same value.
+  const initials = accountInitials(name);
 
   return (
     <div className={styles.container}>
@@ -80,9 +92,9 @@ export function AccountMenu({ isNarrow }: { isNarrow: boolean }) {
           <Button
             appearance="subtle"
             className={styles.trigger}
-            aria-label={`Account menu for ${name}`}
+            aria-label={`Account menu: ${initials} ${name}`}
           >
-            <Avatar name={name} size={28} aria-hidden="true" />
+            <Avatar name={name} initials={initials} size={28} aria-hidden="true" />{' '}
             {isNarrow ? null : <span className={styles.name}>{name}</span>}
           </Button>
         </MenuTrigger>
