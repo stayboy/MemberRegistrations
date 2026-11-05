@@ -10,25 +10,25 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "c4ca7510cb8ed86dc9cd4e23d7aacc459a97816c17e9041b1bbbe248bd8b110b",
+      "sha256": "bee3307e4b0ffee204504cb200ea04f4b29183e9ce6aa4daeab465c896ac743c",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: unattended rounds leave §13 and become §17 — the end-of-round go-forward grill is auto-accepted, accepted decisions are written into the owning spec and recorded as `Mode: unattended (auto-accept recommendations)`, migrations/wire contracts/security/tenant isolation/deleting a public route still park unless pre-authorised for that named round, and `go unattended` pre-authorises only that round's commit/push/PR/merge. §2 and §9 gain cross-references. why: the owner adopted the mode on 2026-11-04 so rounds do not stall waiting for a go-forward approval. rejected: keeping unattended rounds out of scope; letting silence imply consent; letting auto-accept cover the hard gates.",
+      "reason": "changes: §2 is reduced to the non-negotiable (a separate higher-model session reviews a behavioural spec before the implementer, at every tier; the author's own reading never counts) plus pointers to skill Procedure step 1b and the policy; §17 lists spec review among the gates that stay unchanged in unattended rounds. why: placement ruling — the procedure lives in the skill, the model and Tier 0 record in the policy. rejected: keeping the full rule in AGENTS.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-reviewed the amended AGENTS.md; §17 now owns the unattended-round rule with the two authorisation triggers contrasted, the auto-accepted decision destination named (the spec), the change-set rule handled via `git show --stat`, and §2/§9 cross-referencing §17, with no contradiction or regression against orchestrator-policy.md or the canonical skill.",
-      "at": "2026-11-04"
+      "attestation": "§2 is now a two-sentence non-negotiable plus pointer to skill step 1b and the policy, and §17 lists spec review among the gates that stay unchanged in unattended rounds.",
+      "at": "2026-11-05"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "74c5a7f0d4c2230c0c13310ec75b29e720f5a77786b659f6c00cf5eb0563cd88",
+      "sha256": "0f256d45fa5e8200ab4e6afdae3c8d6ec771c365ad1fdcc06a3476d84aa5a7f9",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: unattended rounds leave `Deliberately not adopted` and gain a local section — auto-accept is the default for the end-of-round go-forward grill, the hard gates still park unless a named round is pre-authorised, the round doc records the mode, and accepted decisions are written into the owning spec. why: `AGENTS.md` §17 now adopts the mode and this file is the repo delta the skill defers to. rejected: leaving a live contradiction that every round is owner-attended.",
+      "reason": "changes: the spec-review paragraph points at skill step 1b, names `ollama-cloud/deepseek-v4-pro:0813`, keeps the `glm-5.3` fallback and the Tier 0 commit-body record; the seats row adds spec review; Tier 1 restores 'parent implements'. why: the model is a repo choice outside the skill. rejected: a model id inside the skill.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-reviewed the amended orchestrator-policy.md; the new Unattended rounds section and the removal from Deliberately not adopted are correct and consistent with AGENTS.md §17 and the canonical orchestrator skill — no P1/P2 findings.",
-      "at": "2026-11-04"
+      "attestation": "The policy uses the `ollama-cloud/deepseek-v4-pro:0813` spelling in prose, restores 'parent implements' to Tier 1, and the spec-review paragraph names the same model and records, consistent with the skill and AGENTS.md.",
+      "at": "2026-11-05"
     },
     {
       "path": "documents/agents/component-first.md",
@@ -76,14 +76,14 @@
     },
     {
       "path": "canonical/SKILL.md",
-      "sha256": "4e1c7e543e39464132a47db3e6546a7884fab8a8208de388a76b6761afd9fae5",
+      "sha256": "2917877f3def0e132ac9e3a5152041674b50c794b9f33babb785f957e0459189",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the entry point already points to the reference and the lessons file. rejected: duplicating the pilot rules in SKILL.md.",
+      "reason": "changes: Procedure step 1b adds the every-tier spec-review gate — a separate reviewer-seat session, never the spec's author, before the implementer starts, with the verdict and reviewed revision in the spec status line plus the round doc (the commit body at Tier 0). The Reviewer role scopes its inline pass to the code-review gate and dispatches a second session when the author is on the reviewer model; the frontmatter version and the default seat row are updated. why: the owner moved the rule from AGENTS/policy into the shared procedure and kept the model outside the skill. rejected: keeping the whole rule in AGENTS; naming a model inside the skill.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
-      "at": "2026-11-04"
+      "attestation": "The Reviewer role now scopes 'never spawned a second time' to the code-review gate and routes the author-on-reviewer-model case to a second session for the spec gate, the frontmatter is version 2026-11-05, and the default seat row reads 'Reviewer, plan gate, spec review, acceptance'.",
+      "at": "2026-11-05"
     },
     {
       "path": "canonical/references/models.md",
@@ -131,14 +131,14 @@
     },
     {
       "path": "canonical/CHANGELOG.md",
-      "sha256": "1c04e04c42a381de686db5c3be0985e080faa6c42a18a37f1f43c00bc0450ca6",
+      "sha256": "5c3a30e1d20e073ba32788147572842e39541f28111d63c0212407f9c37b00c4",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the 2026-11-04 parallel-pilot rules entry. why: record the amendment and its evidence pointer. rejected: appending to the earlier opt-in entry.",
+      "reason": "changes: a 2026-11-05 entry records Procedure step 1b and the Reviewer-role note. why: a version-worthy procedural change. rejected: shipping the change with no changelog entry.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the parallel-pilot rules amendment against Q99/Q100: the size-parity, persistent-slot, no-browser and memory-guard rules are faithful in the reference and policy, the 09–11 ‖ 12–16 track map is removed without stale governing references, and the lessons pointer is correct in all three files; no P1.",
-      "at": "2026-11-04"
+      "attestation": "The 2026-11-05 entry accurately records the added Procedure step 1b and the Reviewer-role note that the same seat reviews the spec but never its own text, consistent with the skill's current wording.",
+      "at": "2026-11-05"
     }
   ]
 }

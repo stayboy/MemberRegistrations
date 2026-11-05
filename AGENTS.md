@@ -19,6 +19,10 @@ delta is `documents/agents/orchestrator-policy.md`. This file owns the non-negot
   the amended spec**. Approval is a separate, explicit step. In an unattended round (§17) the end-of-round
   go-forward grill is auto-accepted, but the spec is still amended and recorded before any code.
 - Record every settled decision in the spec, including the ones that were rejected.
+- **A behavioural spec is reviewed by a separate higher-model session before the implementer builds
+  against it, at every tier; the author's own reading never counts** (owner, 2026-11-05). Procedure:
+  the canonical skill's Procedure step 1b. Reviewer model and the Tier 0 record:
+  `documents/agents/orchestrator-policy.md`.
 - After approval, a behavioural change to a spec needs re-approval. Typo, formatting and clarifying
   edits are allowed with a changelog line in the spec and a note in the ticket or round doc.
 
@@ -237,10 +241,10 @@ reintroduce them silently.
   isolation, or deleting a public route still parks for the owner unless they pre-authorised **that
   specific round by name**. "Go unattended" is not that authorisation: it covers the round's mechanics
   and its commit/push/PR/merge, not those gates.
-- **The gates are unchanged.** Tier, plan review, the worker/reviewer split, tests and the PR flow all
-  still run. "Unattended" is a modifier on a round, never a tier and never a reason to skip a check. The
-  owner cannot see the change set before the commit, so the completion report carries it instead
-  (`git show --stat` per commit); §9's "show before committing" applies to attended rounds.
+- **The gates are unchanged.** Tier, plan review, spec review, the worker/reviewer split, tests and the
+  PR flow all still run. "Unattended" is a modifier on a round, never a tier and never a reason to skip a
+  check. The owner cannot see the change set before the commit, so the completion report carries it
+  instead (`git show --stat` per commit); §9's "show before committing" applies to attended rounds.
 - **Pre-authorisation.** The owner may also pre-authorise a named round's hard gate in advance (for
   example "unattended, and the migration is approved"). That must name the round and the gate.
 - `documents/rounds/README.md` owns the round-doc shape; this section owns when the mode applies.
