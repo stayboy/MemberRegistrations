@@ -13,12 +13,14 @@ import { EventRepository } from './repos/events.js';
 import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
 import { MinistryRepository } from './repos/ministries.js';
+import { OfferingRepository } from './repos/offerings.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
 import { eventsRouter } from './routes/events.js';
 import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
 import { ministriesRouter } from './routes/ministries.js';
+import { offeringsRouter } from './routes/offerings.js';
 import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
@@ -48,6 +50,7 @@ export function createApp(options: AppOptions): Express {
   const imports = new ImportRepository(options.db);
   const shepherding = new ShepherdingRepository(options.db);
   const events = new EventRepository(options.db);
+  const offerings = new OfferingRepository(options.db);
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -115,6 +118,9 @@ export function createApp(options: AppOptions): Express {
     : (_req, _res, next) => next();
 
   const v1 = Router();
+  // Mounted at the root so it owns both /offerings and the event/series
+  // attachment paths without a second router for each parent.
+  v1.use(offeringsRouter(offerings));
   v1.use('/members', membersRouter(members));
   v1.use('/members', memberShepherdingRouter(shepherding));
   v1.use('/subscriptions', subscriptionsRouter(members));

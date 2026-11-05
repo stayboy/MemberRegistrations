@@ -11,8 +11,8 @@ export class DomainError extends Error {
 }
 
 export class ValidationError extends DomainError {
-  constructor(message: string) {
-    super(message, 'validation_error');
+  constructor(message: string, code = 'validation_error') {
+    super(message, code);
   }
 }
 
@@ -23,8 +23,36 @@ export class NotFoundError extends DomainError {
 }
 
 export class ConflictError extends DomainError {
+  constructor(message: string, code = 'conflict') {
+    super(message, code);
+  }
+}
+
+/** The terms body was built from a version that is no longer current. */
+export class TermsVersionConflictError extends ConflictError {
   constructor(message: string) {
-    super(message, 'conflict');
+    super(message, 'terms_version_conflict');
+  }
+}
+
+/** The offering already has an active attachment on this event or series. */
+export class OfferingAlreadyAttachedError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'offering_already_attached');
+  }
+}
+
+/** A cancelled, archived, past event or an archived series cannot take attachments. */
+export class EventNotActiveError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'event_not_active');
+  }
+}
+
+/** An exception date the event or series does not support for that kind. */
+export class InvalidExceptionDateError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'invalid_exception_date');
   }
 }
 

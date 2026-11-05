@@ -5,6 +5,12 @@ import { sqlState } from '../errors/sqlstate.js';
 import { assertDate } from '../domain/contacts.js';
 import { todayIn } from '../domain/series.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
+import {
+  emptyOfferingStats,
+  eventOfferingsFor,
+  type EventOfferingItem,
+  type OfferingStatsItem,
+} from './offerings.js';
 import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
@@ -26,25 +32,6 @@ export interface EventSessionItem {
   source: SessionSource;
 }
 
-export interface EventOfferingStatsItem {
-  attachedEvents: number;
-  pledgedMinor: number;
-  paidMinor: number;
-  pendingMinor: number;
-  honorRate: number;
-  contributionCount: number;
-}
-
-export interface EventOfferingItem {
-  offeringId: string;
-  name: string;
-  kind: 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
-  currency: string;
-  availableUntil: string | null;
-  exceptions: Array<{ date: string; kind: 'skip' | 'opt_in'; note: string | null }>;
-  stats: EventOfferingStatsItem;
-}
-
 export interface EventItem {
   id: string;
   /** Null while a series-minted instance has not been assigned an event number yet. */
@@ -63,9 +50,8 @@ export interface EventItem {
   status: EventStatus;
   source: EventSource;
   sessions: EventSessionItem[];
-  /** Offerings arrive in ticket 20; the list keeps the contract shape. */
   offerings: EventOfferingItem[];
-  stats: EventOfferingStatsItem;
+  stats: OfferingStatsItem;
 }
 
 export interface EventDetail {
@@ -365,17 +351,6 @@ function parseJsonArray(value: unknown): unknown[] {
   return [];
 }
 
-function emptyStats(): EventOfferingStatsItem {
-  return {
-    attachedEvents: 0,
-    pledgedMinor: 0,
-    paidMinor: 0,
-    pendingMinor: 0,
-    honorRate: 0,
-    contributionCount: 0,
-  };
-}
-
 function deriveStatus(
   stored: EventStatus,
   startDate: string,
@@ -511,14 +486,24 @@ export class EventRepository {
       query.offset,
     ]);
     const today = todayUtc();
+    const offeringsByEvent = await eventOfferingsFor(
+      this.db,
+      rows.map((row) => row.id),
+      today,
+    );
 
-    return rows.map((row) => this.toItem(row, today));
+    return rows.map((row) => this.toItem(row, today, offeringsByEvent.get(row.id) ?? []));
   }
 
   async get(id: string): Promise<EventDetail | null> {
     const [row] = await this.db.query<EventRow>(DETAIL_SQL, [id]);
     if (!row) return null;
-    return { event: this.toItem(row, todayUtc()), etag: etagFor(row) };
+    const today = todayUtc();
+    const offeringsByEvent = await eventOfferingsFor(this.db, [id], today);
+    return {
+      event: this.toItem(row, today, offeringsByEvent.get(id) ?? []),
+      etag: etagFor(row),
+    };
   }
 
   async create(input: CreateEventInput): Promise<EventDetail> {
@@ -885,7 +870,7 @@ export class EventRepository {
     return row ?? null;
   }
 
-  private toItem(row: EventRow, today: string): EventItem {
+  private toItem(row: EventRow, today: string, offerings: EventOfferingItem[]): EventItem {
     const startDate = isoDate(row.start_date);
     const endDate = isoDate(row.end_date);
     const status = deriveStatus(asStatus(row.status), startDate, endDate, today);
@@ -953,8 +938,8 @@ export class EventRepository {
       status,
       source: row.source as EventSource,
       sessions,
-      offerings: [],
-      stats: emptyStats(),
+      offerings,
+      stats: { ...emptyOfferingStats(), attachedEvents: offerings.length },
     };
   }
 }

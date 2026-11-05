@@ -494,4 +494,73 @@ alter table import_batches
   add column skipped_count integer;
 `,
   },
+  {
+    version: '0010_offerings_core',
+    sql: `
+-- An offering is archived by flag, never deleted, and its appeal is versioned.
+create table offerings (
+  id uuid primary key default gen_random_uuid(),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+-- A published version is immutable; a change publishes the next version.
+create table offering_terms (
+  offering_id uuid not null references offerings(id),
+  version integer not null check (version > 0),
+  name text,
+  purpose text not null,
+  kind text not null check (kind in ('freewill', 'tithe', 'pledge', 'building', 'missions', 'other')),
+  currency text not null,
+  target_minor bigint,
+  default_amount_minor bigint,
+  starts_on date,
+  ends_on date,
+  available_until date,
+  scripture text,
+  gateway_account text,
+  gateway_metadata jsonb,
+  reason text,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  primary key (offering_id, version)
+);
+
+-- One attachment targets exactly one of an event instance or a series. Detaching
+-- sets detached_on and keeps the row for history.
+create table event_instance_offerings (
+  id uuid primary key default gen_random_uuid(),
+  event_instance_id uuid references event_instances(id),
+  series_id uuid references event_series(id),
+  offering_id uuid not null references offerings(id),
+  available_until date,
+  attached_on timestamptz not null default now(),
+  attached_by text not null,
+  detached_on timestamptz,
+  detached_by text,
+  check ((event_instance_id is null) <> (series_id is null))
+);
+create unique index event_instance_offerings_active_event
+  on event_instance_offerings (offering_id, event_instance_id)
+  where detached_on is null and event_instance_id is not null;
+create unique index event_instance_offerings_active_series
+  on event_instance_offerings (offering_id, series_id)
+  where detached_on is null and series_id is not null;
+
+-- Append-only: the newest row per (attachment_id, date) is the effective exception.
+create table offering_exceptions (
+  id uuid primary key default gen_random_uuid(),
+  attachment_id uuid not null references event_instance_offerings(id),
+  date date not null,
+  kind text not null check (kind in ('skip', 'opt_in')),
+  note text,
+  created_at timestamptz not null default now(),
+  created_by text not null
+);
+create index offering_exceptions_lookup
+  on offering_exceptions (attachment_id, date, created_at desc);
+`,
+  },
 ];

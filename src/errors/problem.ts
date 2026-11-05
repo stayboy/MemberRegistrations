@@ -132,7 +132,7 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   }
 
   if (error instanceof ConflictError) {
-    sendProblem(res, 409, 'Conflict', error.message, 'conflict');
+    sendProblem(res, 409, 'Conflict', error.message, error.code);
     return;
   }
 
