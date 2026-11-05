@@ -1,9 +1,9 @@
 import { makeStyles, shorthands, tokens } from '@fluentui/react-components';
 
 /**
- * Shared styling for the two events screens. Styles are not components: the
- * list and the detail use the same panel, table and metadata shapes, so one
- * module keeps Fluent tokens consistent without duplicating Griffel rules.
+ * Shared styling for the events and series screens. Styles are not components:
+ * the list and detail screens use the same panel, table and metadata shapes, so
+ * one module keeps Fluent tokens consistent without duplicating Griffel rules.
  */
 export const useEventStyles = makeStyles({
   page: {
@@ -11,6 +11,15 @@ export const useEventStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalL,
     width: '100%',
+  },
+  toolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+  seriesFilter: {
+    minWidth: '220px',
   },
   panel: {
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
@@ -23,6 +32,15 @@ export const useEventStyles = makeStyles({
   },
   table: {
     minWidth: '1040px',
+  },
+  sectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke2),
   },
   sessionTable: {
     minWidth: '980px',

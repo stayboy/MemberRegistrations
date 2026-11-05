@@ -114,6 +114,8 @@ interface EventListResponse {
 export interface ListEventsOptions {
   readonly from: string;
   readonly to: string;
+  /** Limits the list to one series; the series occurrence link seeds it (FR-43). */
+  readonly seriesId?: string;
   /** The API caps the window at 100; the screens ask for one page of that size. */
   readonly limit?: number;
   /** The stable `(start_date, id)` page offset; omitted on the first page. */
@@ -129,6 +131,7 @@ export function eventsListPath(options: ListEventsOptions): string {
   const params = new URLSearchParams();
   params.set('from', options.from);
   params.set('to', options.to);
+  if (options.seriesId) params.set('seriesId', options.seriesId);
   params.set('limit', String(options.limit ?? DEFAULT_EVENT_LIMIT));
   if (options.offset !== undefined) params.set('offset', String(options.offset));
   return `${EVENTS_PATH}?${params.toString()}`;

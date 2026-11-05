@@ -22,10 +22,11 @@ const useStyles = makeStyles({
 
 /**
  * Call sites: ShepherdingOfficersPage, ShepherdingRosterPage and
- * ShepherdingReportPage (FR-58, FR-59, FR-67), and EventsListPage (events
- * FR-2). The one UTC date-window control shared by the three shepherding screens
- * and the events list. It owns no state: the page keeps `from`/`to` (in the URL
- * where the surface is linkable) and passes them back.
+ * ShepherdingReportPage (FR-58, FR-59, FR-67), EventsListPage (events FR-2) and
+ * SeriesDetailPage (FR-6). The one UTC date-window control shared by the three
+ * shepherding screens, the events list and the series occurrence list. It owns no
+ * state: the page keeps `from`/`to` (in the URL where the surface is linkable) and
+ * passes them back.
  */
 export function DateWindowControl({
   value,

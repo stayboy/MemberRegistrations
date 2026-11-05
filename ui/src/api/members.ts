@@ -241,18 +241,8 @@ export interface ListMembersOptions {
   readonly signal?: AbortSignal;
 }
 
-export interface SeriesOption {
-  readonly id: string;
-  readonly name: string;
-}
-
-interface SeriesListResponse {
-  readonly items: readonly { readonly id: string; readonly name: string }[];
-}
-
 const MEMBERS_PATH = '/gateway/v1/members';
 const SUBSCRIPTIONS_PATH = '/gateway/v1/subscriptions';
-const SERIES_PATH = '/gateway/v1/series';
 const MINISTRIES_PATH = '/gateway/v1/ministries';
 
 /** Builds the members list query in the order the API documents it. */
@@ -612,16 +602,4 @@ export async function getMemberShepherding(
   );
   if (!result) throw new ApiError(500, 'The shepherding response was empty.');
   return result;
-}
-
-export async function listSeries(
-  baseUrl: string,
-  sessionToken: string,
-  signal?: AbortSignal,
-): Promise<SeriesOption[]> {
-  const result = await gatewayRequest<SeriesListResponse>(baseUrl, SERIES_PATH, {
-    sessionToken,
-    signal,
-  });
-  return (result?.items ?? []).map((series) => ({ id: series.id, name: series.name }));
 }
