@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SERIES_PATH,
   addScheduleVersion,
+  createSeries,
   getSeries,
   getSeriesOccurrences,
   listSeries,
@@ -12,6 +13,7 @@ import {
   seriesOccurrencesPath,
   seriesSchedulePath,
   setSeriesException,
+  updateSeries,
   type SeriesDto,
 } from './series';
 
@@ -117,6 +119,122 @@ describe('series detail', () => {
     await expect(getSeries(BASE, TOKEN, 'series-1')).rejects.toMatchObject({
       status: 500,
       message: 'The series response was empty.',
+    });
+  });
+});
+
+describe('series authoring', () => {
+  it('POSTs the create body, including the first schedule version, to the series path', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
+
+    const created = await createSeries(BASE, TOKEN, {
+      name: 'Sunday service',
+      ministryCode: 'CHOIR',
+      timezone: 'Africa/Lagos',
+      description: 'Weekly worship',
+      schedule: {
+        effectiveFrom: '2026-11-08',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2027-11-08',
+      },
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series`);
+    expect(requestOptions(0).method).toBe('POST');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      name: 'Sunday service',
+      ministryCode: 'CHOIR',
+      timezone: 'Africa/Lagos',
+      description: 'Weekly worship',
+      schedule: {
+        effectiveFrom: '2026-11-08',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: '2027-11-08',
+      },
+    });
+    expect(created).toEqual(SERIES);
+  });
+
+  it('sends null for an omitted optional field and schedule end date on create', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
+
+    await createSeries(BASE, TOKEN, {
+      name: 'Sunday service',
+      timezone: 'UTC',
+      schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
+    });
+
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      name: 'Sunday service',
+      ministryCode: null,
+      timezone: 'UTC',
+      description: null,
+      schedule: {
+        effectiveFrom: '2026-11-08',
+        rrule: 'FREQ=WEEKLY;BYDAY=SU',
+        endsOn: null,
+      },
+    });
+  });
+
+  it('rejects an empty create response body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null, 201));
+
+    await expect(
+      createSeries(BASE, TOKEN, {
+        name: 'Sunday service',
+        timezone: 'UTC',
+        schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: 'The created series response was empty.',
+    });
+  });
+
+  it('PUTs identity fields to the detail path and never a schedule', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(SERIES));
+
+    const updated = await updateSeries(BASE, TOKEN, 'series/1', {
+      name: 'Sunday service',
+      ministryCode: null,
+      timezone: 'Europe/London',
+      description: null,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series/series%2F1`);
+    expect(requestOptions(0).method).toBe('PUT');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    const body = JSON.parse(String(requestOptions(0).body));
+    expect(body).toEqual({
+      name: 'Sunday service',
+      ministryCode: null,
+      timezone: 'Europe/London',
+      description: null,
+    });
+    expect(body).not.toHaveProperty('schedule');
+    expect(updated).toEqual(SERIES);
+  });
+
+  it('sends the archive flag on update', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ ...SERIES, archivedAt: '2026-11-05T10:00:00.000Z' })),
+    );
+
+    await updateSeries(BASE, TOKEN, 'series-1', { archived: true });
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({ archived: true });
+
+    await updateSeries(BASE, TOKEN, 'series-1', { archived: false });
+    expect(JSON.parse(String(requestOptions(1).body))).toEqual({ archived: false });
+  });
+
+  it('rejects an empty update response body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null));
+
+    await expect(updateSeries(BASE, TOKEN, 'series-1', { archived: true })).rejects.toMatchObject({
+      status: 500,
+      message: 'The updated series response was empty.',
     });
   });
 });

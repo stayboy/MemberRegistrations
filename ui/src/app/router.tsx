@@ -60,6 +60,9 @@ const SeriesListPage = lazy(() =>
 const SeriesDetailPage = lazy(() =>
   import('../pages/SeriesDetailPage').then(({ SeriesDetailPage: page }) => ({ default: page })),
 );
+const SeriesFormPage = lazy(() =>
+  import('../pages/SeriesFormPage').then(({ SeriesFormPage: page }) => ({ default: page })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -97,7 +100,9 @@ export const router = createHashRouter([
           { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
           { path: 'events', element: <EventsListPage /> },
           { path: 'events/series', element: <SeriesListPage /> },
+          { path: 'events/series/new', element: <SeriesFormPage /> },
           { path: 'events/series/:id', element: <SeriesDetailPage /> },
+          { path: 'events/series/:id/edit', element: <SeriesFormPage /> },
           { path: 'events/:id', element: <EventDetailPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: <ImportsAttendancePage /> },

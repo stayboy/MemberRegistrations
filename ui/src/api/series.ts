@@ -51,6 +51,31 @@ export interface AddScheduleVersionInput {
   readonly endsOn?: string | null;
 }
 
+/** Mirrors `scheduleInputSchema`; the create series body carries this object. */
+export interface SeriesScheduleInput {
+  readonly effectiveFrom: string;
+  readonly rrule: string;
+  readonly endsOn?: string | null;
+}
+
+/** Mirrors `createSeriesSchema` (FR-42). */
+export interface CreateSeriesInput {
+  readonly name: string;
+  readonly ministryCode?: string | null;
+  readonly timezone?: string;
+  readonly description?: string | null;
+  readonly schedule: SeriesScheduleInput;
+}
+
+/** Mirrors `updateSeriesSchema`; schedule versions are appended, never edited here. */
+export interface UpdateSeriesInput {
+  readonly name?: string;
+  readonly ministryCode?: string | null;
+  readonly timezone?: string;
+  readonly description?: string | null;
+  readonly archived?: boolean;
+}
+
 export interface SetSeriesExceptionInput {
   readonly date: string;
   readonly kind: SeriesExceptionKind;
@@ -99,6 +124,59 @@ export async function getSeries(
     signal,
   });
   if (!result) throw new ApiError(500, 'The series response was empty.');
+  return result;
+}
+
+/**
+ * `POST /v1/series`: creates the series and its first schedule version in one
+ * transaction. The API answers `201` with the new detail DTO (FR-42).
+ */
+export async function createSeries(
+  baseUrl: string,
+  sessionToken: string,
+  input: CreateSeriesInput,
+): Promise<SeriesDto> {
+  const result = await gatewayRequest<SeriesDto>(baseUrl, SERIES_PATH, {
+    method: 'POST',
+    sessionToken,
+    body: {
+      name: input.name,
+      ministryCode: input.ministryCode ?? null,
+      timezone: input.timezone,
+      description: input.description ?? null,
+      schedule: {
+        effectiveFrom: input.schedule.effectiveFrom,
+        rrule: input.schedule.rrule,
+        endsOn: input.schedule.endsOn ?? null,
+      },
+    },
+  });
+  if (!result) throw new ApiError(500, 'The created series response was empty.');
+  return result;
+}
+
+/**
+ * `PUT /v1/series/:id`: identity fields and the archive flag. Schedule versions
+ * and exceptions have their own append-only routes (FR-42).
+ */
+export async function updateSeries(
+  baseUrl: string,
+  sessionToken: string,
+  seriesId: string,
+  input: UpdateSeriesInput,
+): Promise<SeriesDto> {
+  const result = await gatewayRequest<SeriesDto>(baseUrl, seriesDetailPath(seriesId), {
+    method: 'PUT',
+    sessionToken,
+    body: {
+      name: input.name,
+      ministryCode: input.ministryCode,
+      timezone: input.timezone,
+      description: input.description,
+      archived: input.archived,
+    },
+  });
+  if (!result) throw new ApiError(500, 'The updated series response was empty.');
   return result;
 }
 
