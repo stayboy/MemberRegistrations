@@ -1,5 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import { ageInYears } from '../domain/age.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
@@ -52,6 +53,8 @@ export interface RelationshipDto {
   isDependent: boolean;
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   archived: boolean;
 }
 
@@ -91,6 +94,8 @@ export interface MemberSummary {
   lastName: string;
   otherNames: string | null;
   gender: Gender;
+  /** Derived current age, or null when `dob` is missing or in the future. */
+  age: number | null;
   placeOfResidence: string | null;
   joinedOn: string | null;
   isPresbyter: boolean;
@@ -1080,6 +1085,7 @@ export class MemberRepository {
       lastName: row.last_name ?? '',
       otherNames: row.other_names,
       gender: row.gender,
+      age: ageInYears(isoDate(row.dob)),
       placeOfResidence: row.place_of_residence,
       joinedOn: isoDate(row.joined_on),
       isPresbyter: row.is_presbyter,
@@ -1358,10 +1364,12 @@ export class MemberRepository {
       other_member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
       archived_at: Date | string | null;
     }>(
       `select r.id, r.type, r.is_dependent, other.member_no as other_member_no,
-              other.first_name, other.last_name, other.archived_at
+              other.first_name, other.last_name, other.gender, other.dob, other.archived_at
        from member_relationships r
        join members other
          on other.id = case when r.member_id = $1 then r.related_member_id else r.member_id end
@@ -1376,6 +1384,8 @@ export class MemberRepository {
       isDependent: row.is_dependent,
       memberNo: row.other_member_no,
       name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+      gender: row.gender,
+      age: ageInYears(isoDate(row.dob)),
       archived: row.archived_at !== null,
     }));
   }

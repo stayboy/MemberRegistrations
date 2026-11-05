@@ -9,18 +9,27 @@ beforeAll(async () => {
   harness = await createTestApp();
   app = harness.app;
 
-  for (const [memberNo, isPresbyter] of [
-    ['P-1001', true],
-    ['P-1002', true],
-    ['P-1003', true],
-    ['P-1004', true],
-  ] as const) {
-    await create(memberNo, { firstName: 'Presbyter', lastName: memberNo, isPresbyter });
+  const presbyters = [
+    ['P-1001', 'male', 40],
+    ['P-1002', 'male', 45],
+    ['P-1003', 'male', 38],
+    ['P-1004', 'male', 50],
+  ] as const;
+  for (const [memberNo, gender, years] of presbyters) {
+    await create(memberNo, {
+      firstName: 'Presbyter',
+      lastName: memberNo,
+      isPresbyter: true,
+      gender,
+      dob: dobYearsAgo(years),
+    });
   }
 
   await create('M-2001', {
     firstName: 'Ama',
     lastName: 'Mensah',
+    gender: 'female',
+    dob: dobYearsAgo(30),
     contacts: [{ kind: 'phone', value: '0801 234 5678' }],
   });
   await create('M-2002', { firstName: 'Kofi', lastName: 'Mensah' });
@@ -46,6 +55,11 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
     });
   expect(response.status).toBe(201);
   return response.body as Record<string, unknown>;
+}
+
+/** 1 January `years` ago: exactly `years` completed years on any later date. */
+function dobYearsAgo(years: number): string {
+  return `${new Date().getUTCFullYear() - years}-01-01`;
 }
 
 async function assign(body: Record<string, unknown>) {
@@ -81,16 +95,26 @@ describe('assignments', () => {
     });
 
     expect(created.status).toBe(201);
-    expect(created.body.officerMemberNo).toBe('P-1001');
-    expect(created.body.memberNo).toBe('M-2001');
+    expect(created.body).toMatchObject({
+      officerMemberNo: 'P-1001',
+      officerGender: 'male',
+      officerAge: 40,
+      memberNo: 'M-2001',
+      memberGender: 'female',
+      memberAge: 30,
+    });
 
     const view = await request(app).get('/v1/members/M-2001/shepherding').set(readHeaders);
     expect(view.status).toBe(200);
+    expect(view.body).toMatchObject({ gender: 'female', age: 30 });
     expect(view.body.shepherd).toMatchObject({
       assignmentId: created.body.id,
       memberNo: 'P-1001',
+      gender: 'male',
+      age: 40,
     });
     expect(view.body.history).toHaveLength(1);
+    expect(view.body.history[0]).toMatchObject({ officerGender: 'male', officerAge: 40 });
   });
 
   it('refuses assigning the same officer twice', async () => {
@@ -148,7 +172,11 @@ describe('assignments', () => {
       .get('/v1/shepherding/officers/P-1002/members')
       .set(readHeaders);
     expect(newRoster.body.items).toHaveLength(1);
-    expect(newRoster.body.items[0].memberNo).toBe('M-2001');
+    expect(newRoster.body.items[0]).toMatchObject({
+      memberNo: 'M-2001',
+      gender: 'female',
+      age: 30,
+    });
     expect(newRoster.body.items[0].contacts[0].value).toBe('0801 234 5678');
   });
 });
@@ -259,6 +287,8 @@ describe('reporting', () => {
       (item: { memberNo: string }) => item.memberNo === 'P-1002',
     );
     expect(officer).toMatchObject({
+      gender: 'male',
+      age: 45,
       assignedMembers: 1,
       attempts: 3,
       conversations: 1,

@@ -128,7 +128,9 @@ test('members list', async ({ page }) => {
 
 test('member detail', async ({ page }) => {
   await openScreen(page, '/members/M-1001', { width: 1440, height: 900 });
-  await expect(page.getByRole('heading', { level: 1, name: 'Kwame Asante' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Kwame Asante (Male, 41y)' }),
+  ).toBeVisible();
   await expect(page.getByRole('tablist', { name: 'Member record sections' })).toBeVisible();
   // The member-detail mock shows the household-coverage surface.
   await page.getByRole('tab', { name: 'Subscriptions' }).click();
@@ -165,7 +167,7 @@ test('attendance dialog', async ({ page }) => {
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('table', { name: 'Attendance rows' })).toBeVisible();
-  await expect(dialog.getByText('Kwame Asante')).toBeVisible();
+  await expect(dialog.getByText('Kwame Asante (Male, 41y)')).toBeVisible();
   await capture(page, 'event-attendance-dialog');
 });
 
@@ -207,7 +209,7 @@ test('shepherding report', async ({ page }) => {
 
 test('contacts dialog', async ({ page }) => {
   await openScreen(page, '/members', { width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante' }).click();
+  await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante (Male, 41y)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();

@@ -11,8 +11,8 @@ test('the members list renders the fixture rows', async ({ page }) => {
   await expect(table).toBeVisible();
   // One header row plus the two fixture members.
   await expect(table.getByRole('row')).toHaveCount(3);
-  await expect(table.getByRole('link', { name: 'Kwame Asante' })).toBeVisible();
-  await expect(table.getByRole('link', { name: 'Ama Mensah' })).toBeVisible();
+  await expect(table.getByRole('link', { name: 'Kwame Asante (Male, 41y)' })).toBeVisible();
+  await expect(table.getByRole('link', { name: 'Ama Mensah (Female)' })).toBeVisible();
   await expect(table.getByText('M-1001', { exact: true })).toBeVisible();
   await expect(table.getByText('M-1002', { exact: true })).toBeVisible();
   // The list carries counts only, never contact values (FR-78).
@@ -21,7 +21,7 @@ test('the members list renders the fixture rows', async ({ page }) => {
 
 test('the Contacts action opens the grouped contacts dialog', async ({ page }) => {
   await open(page, '/members');
-  await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante' }).click();
+  await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante (Male, 41y)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();

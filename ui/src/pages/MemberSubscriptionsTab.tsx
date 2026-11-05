@@ -24,7 +24,7 @@ import type { MemberDetail, MemberSubscription, SubscriptionInput } from '../api
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { MemberPicker } from '../components/MemberPicker';
-import { memberName } from '../format/member';
+import { memberLabel } from '../format/member';
 import {
   SUBSCRIPTION_KIND_OPTIONS,
   SUBSCRIPTION_SCOPE_OPTIONS,
@@ -392,9 +392,9 @@ export function MemberSubscriptionsTab({
             <DialogTitle>Add subscription</DialogTitle>
             <DialogContent className={styles.dialogContent}>
               <Text size={200}>
-                The policyholder is {memberName(member)} ({member.memberNo}). A subscription is
-                created on the policyholder and ended, never deleted. Household coverage can be
-                selected here or added explicitly after creation; an individual policy offers none.
+                The policyholder is {memberLabel(member)}. A subscription is created on the
+                policyholder and ended, never deleted. Household coverage can be selected here or
+                added explicitly after creation; an individual policy offers none.
               </Text>
               {subscriptionError ? (
                 <MessageBar intent="error">

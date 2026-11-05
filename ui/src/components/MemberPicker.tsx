@@ -36,7 +36,7 @@ export interface MemberPickerProps {
  * member search and its cache; the caller owns the selected member number.
  *
  * The search is `GET /v1/members?q=…` limited to ten rows and shows
- * `memberNo — name` (Q156).
+ * `memberNo — label` using the shared identity label (Q156, FR-22a).
  */
 export function MemberPicker({
   value,

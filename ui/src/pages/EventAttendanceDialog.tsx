@@ -31,6 +31,7 @@ import {
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { memberLabelFromName } from '../format/member';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
 
@@ -197,42 +198,47 @@ export function EventAttendanceDialog({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {report.rows.map((row) => (
-                            <TableRow key={row.id}>
-                              <TableCell>
-                                <div className={styles.identity}>
-                                  <Text weight="semibold">{row.name || row.memberNo}</Text>
-                                  <Text size={200} className={styles.muted}>
-                                    {row.memberNo}
-                                  </Text>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {row.sessionTime ? formatTime(row.sessionTime) : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge appearance="outline" size="small">
-                                  {row.source === 'import' ? 'Import' : 'Manual'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  size="small"
-                                  appearance="subtle"
-                                  icon={<DeleteRegular />}
-                                  aria-label={`Remove attendance for ${
-                                    row.name || row.memberNo
-                                  }`}
-                                  onClick={() => {
-                                    setActionError(null);
-                                    setRemoveTarget(row);
-                                  }}
-                                >
-                                  Remove
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {report.rows.map((row) => {
+                            const label = memberLabelFromName(
+                              row.name || row.memberNo,
+                              row.gender,
+                              row.age,
+                            );
+                            return (
+                              <TableRow key={row.id}>
+                                <TableCell>
+                                  <div className={styles.identity}>
+                                    <Text weight="semibold">{label}</Text>
+                                    <Text size={200} className={styles.muted}>
+                                      {row.memberNo}
+                                    </Text>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {row.sessionTime ? formatTime(row.sessionTime) : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge appearance="outline" size="small">
+                                    {row.source === 'import' ? 'Import' : 'Manual'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    icon={<DeleteRegular />}
+                                    aria-label={`Remove attendance for ${label}`}
+                                    onClick={() => {
+                                      setActionError(null);
+                                      setRemoveTarget(row);
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
@@ -253,7 +259,11 @@ export function EventAttendanceDialog({
         open={removeTarget !== null}
         title={
           removeTarget
-            ? `Remove ${removeTarget.name || removeTarget.memberNo}?`
+            ? `Remove ${memberLabelFromName(
+                removeTarget.name || removeTarget.memberNo,
+                removeTarget.gender,
+                removeTarget.age,
+              )}?`
             : 'Remove attendance row?'
         }
         message="The row disappears from this report. An imported row is suppressed, so a later import of this session cannot resurrect it. This is not a hard delete of the register."

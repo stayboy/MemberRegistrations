@@ -31,7 +31,7 @@ import { ApiError, isUnauthorized } from '../api/errors';
 import { listMembers, type MemberSummary } from '../api/members';
 import { useSession } from '../auth/SessionProvider';
 import { ContactsDialog } from '../components/ContactsDialog';
-import { contactLabel, memberInitials, memberName } from '../format/member';
+import { contactLabel, memberInitials, memberLabel, memberName } from '../format/member';
 
 const MIN_CONTACT_LENGTH = 3;
 
@@ -235,6 +235,7 @@ export function FindByContactDialog({
                     <TableBody>
                       {results.map((member) => {
                         const name = memberName(member);
+                        const label = memberLabel(member);
                         return (
                           <TableRow key={member.memberNo}>
                             <TableCell>
@@ -245,7 +246,7 @@ export function FindByContactDialog({
                                   color="colorful"
                                   size={28}
                                 />
-                                <Text weight="semibold">{name}</Text>
+                                <Text weight="semibold">{label}</Text>
                               </div>
                             </TableCell>
                             <TableCell>{member.memberNo}</TableCell>
@@ -253,7 +254,7 @@ export function FindByContactDialog({
                               <Button
                                 size="small"
                                 appearance="transparent"
-                                aria-label={`${contactLabel(member.contactCount)} for ${name}`}
+                                aria-label={`${contactLabel(member.contactCount)} for ${label}`}
                                 onClick={() => setContactsFor(member)}
                               >
                                 {contactLabel(member.contactCount)}

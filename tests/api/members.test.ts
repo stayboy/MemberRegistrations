@@ -30,6 +30,11 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
   return response;
 }
 
+/** 1 January `years` ago: exactly `years` completed years on any later date. */
+function dobYearsAgo(years: number): string {
+  return `${new Date().getUTCFullYear() - years}-01-01`;
+}
+
 describe('authentication and attribution', () => {
   it('rejects requests without a bearer token', async () => {
     const response = await request(app).get('/v1/members');
@@ -90,6 +95,21 @@ describe('member lifecycle', () => {
     expect(item).not.toHaveProperty('contacts');
     expect(JSON.stringify(response.body)).not.toContain('0801 234 5678');
     expect(JSON.stringify(response.body)).not.toContain('08012345678');
+  });
+
+  it('derives the current age from dob and omits it for unknown or future dates', async () => {
+    const aged = await create('M-1010', { dob: dobYearsAgo(30), gender: 'male' });
+    expect(aged.body).toMatchObject({ gender: 'male', age: 30 });
+
+    const list = await request(app).get('/v1/members').query({ q: 'M-1010' }).set(readHeaders);
+    expect(list.body.items[0]).toMatchObject({ age: 30 });
+    expect(list.body.items[0]).not.toHaveProperty('dob');
+
+    const unknown = await create('M-1011');
+    expect(unknown.body.age).toBeNull();
+
+    const future = await create('M-1012', { dob: `${new Date().getUTCFullYear() + 1}-01-01` });
+    expect(future.body.age).toBeNull();
   });
 
   it('rejects a stale If-Match', async () => {
@@ -190,7 +210,7 @@ describe('contacts', () => {
 describe('relationships', () => {
   it('creates one spouse edge and refuses a second', async () => {
     await create('M-3001');
-    await create('M-3002');
+    await create('M-3002', { gender: 'male', dob: dobYearsAgo(25) });
     await create('M-3003');
 
     await request(app)
@@ -211,8 +231,19 @@ describe('relationships', () => {
     const response = await request(app).get('/v1/members/M-3002/relationships').set(readHeaders);
 
     expect(response.body.items).toHaveLength(1);
-    expect(response.body.items[0].memberNo).toBe('M-3001');
-    expect(response.body.items[0].type).toBe('spouse');
+    expect(response.body.items[0]).toMatchObject({
+      memberNo: 'M-3001',
+      type: 'spouse',
+      gender: 'female',
+      age: null,
+    });
+
+    const holder = await request(app).get('/v1/members/M-3001/relationships').set(readHeaders);
+    expect(holder.body.items[0]).toMatchObject({
+      memberNo: 'M-3002',
+      gender: 'male',
+      age: 25,
+    });
   });
 
   it('refuses a self relationship', async () => {

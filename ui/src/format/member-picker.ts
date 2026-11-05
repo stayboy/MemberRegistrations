@@ -1,9 +1,10 @@
 import { MEMBER_PICKER_LIMIT } from '../api/members';
-import { memberName } from './member';
+import type { Gender } from '../api/members';
+import { memberLabel, memberName } from './member';
 
 /**
  * Pure result mapping for `MemberPicker`. The component owns the debounce and
- * the query; this function turns a list page into `memberNo — name` options so
+ * the query; this function turns a list page into `memberNo — label` options so
  * it can be tested without a DOM.
  */
 
@@ -12,16 +13,18 @@ export interface MemberPickerCandidate {
   readonly firstName: string;
   readonly lastName: string;
   readonly otherNames?: string | null;
+  readonly gender?: Gender;
+  readonly age?: number | null;
 }
 
 export interface MemberPickerOption {
   readonly memberNo: string;
   readonly name: string;
-  /** The visible and accessible `memberNo — name` label. */
+  /** The visible and accessible `memberNo — label` label. */
   readonly label: string;
 }
 
-/** Maps the list page to at most ten `memberNo — name` options. */
+/** Maps the list page to at most ten `memberNo — label` options. */
 export function toMemberPickerOptions(
   members: readonly MemberPickerCandidate[],
   excludeMemberNo?: string,
@@ -31,10 +34,11 @@ export function toMemberPickerOptions(
     .slice(0, MEMBER_PICKER_LIMIT)
     .map((member) => {
       const name = memberName(member);
+      const label = memberLabel(member);
       return {
         memberNo: member.memberNo,
         name,
-        label: name ? `${member.memberNo} — ${name}` : member.memberNo,
+        label: label ? `${member.memberNo} — ${label}` : member.memberNo,
       };
     });
 }

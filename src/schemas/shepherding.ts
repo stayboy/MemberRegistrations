@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CALL_OUTCOMES, STILL_IN_CHURCH } from '../domain/shepherding.js';
+import { GENDERS } from '../repos/members.js';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
 import { contactResponseSchema } from './members.js';
 
@@ -33,8 +34,12 @@ export const assignmentSchema = z.object({
   id: z.string(),
   officerMemberNo: z.string(),
   officerName: z.string(),
+  officerGender: z.enum(GENDERS),
+  officerAge: z.number().int().nullable(),
   memberNo: z.string(),
   memberName: z.string(),
+  memberGender: z.enum(GENDERS),
+  memberAge: z.number().int().nullable(),
   assignedOn: z.string(),
   endedOn: z.string().nullable(),
   reason: z.string().nullable(),
@@ -63,6 +68,8 @@ export const rosterEntrySchema = z.object({
   assignedOn: z.string(),
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   placeOfResidence: z.string().nullable(),
   contacts: z.array(contactResponseSchema),
   attempts: z.number().int(),
@@ -84,6 +91,8 @@ export const rosterSchema = z.object({
 export const officerSchema = z.object({
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   assignedMembers: z.number().int(),
   attempts: z.number().int(),
   conversations: z.number().int(),
@@ -98,11 +107,15 @@ export const officerListSchema = z.object({
 export const memberShepherdingSchema = z.object({
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   shepherd: z
     .object({
       assignmentId: z.string(),
       memberNo: z.string(),
       name: z.string(),
+      gender: z.enum(GENDERS),
+      age: z.number().int().nullable(),
       assignedOn: z.string(),
     })
     .nullable(),
@@ -111,6 +124,8 @@ export const memberShepherdingSchema = z.object({
       assignmentId: z.string(),
       officerMemberNo: z.string(),
       officerName: z.string(),
+      officerGender: z.enum(GENDERS),
+      officerAge: z.number().int().nullable(),
       assignedOn: z.string(),
       endedOn: z.string().nullable(),
       reason: z.string().nullable(),

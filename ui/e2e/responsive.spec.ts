@@ -5,7 +5,7 @@ const SCREENS = [
   { route: '/events', heading: 'Events', ready: 'table' },
   { route: '/events/series', heading: 'Series', ready: 'table' },
   { route: '/members/new', heading: 'Add member', ready: 'form' },
-  { route: '/members/M-1001', heading: 'Kwame Asante', ready: 'detail' },
+  { route: '/members/M-1001', heading: 'Kwame Asante (Male, 41y)', ready: 'detail' },
   { route: '/events/event-1', heading: 'Sunday Service', ready: 'table' },
   { route: '/events/series/series-1', heading: 'Sunday Service', ready: 'table' },
 ] as const;

@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto';
 import type { Db, DbClient } from '../db/sql.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
+import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
 import { todayIn } from '../domain/series.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
+import type { Gender } from './members.js';
 import {
   emptyOfferingStats,
   eventOfferingsFor,
@@ -98,6 +100,9 @@ export interface EventAttendanceRow {
   id: string;
   memberNo: string;
   name: string;
+  /** Current identity label parts; age is null when dob is unknown or in the future. */
+  gender: Gender;
+  age: number | null;
   status: 'present';
   source: 'import' | 'manual';
   /** Wall-clock time the register carried, `HH:MM`; null for a date-only row. */
@@ -117,6 +122,8 @@ export interface EventAttendanceEntry {
   id: string;
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   sessionDate: string;
   source: 'import' | 'manual';
 }
@@ -336,6 +343,11 @@ const SESSION_STATUSES: readonly EventSessionStatus[] = ['scheduled', 'held', 'c
 function isoDate(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value);
+}
+
+function isoOptionalDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return isoDate(value);
 }
 
 function parseJsonArray(value: unknown): unknown[] {
@@ -697,10 +709,12 @@ export class EventRepository {
       member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
       source: 'import' | 'manual';
       session_time: string | null;
     }>(
-      `select a.id, m.member_no, m.first_name, m.last_name, a.source,
+      `select a.id, m.member_no, m.first_name, m.last_name, m.gender, m.dob, a.source,
               to_char(a.session_time, 'HH24:MI') as session_time
        from attendance a
        join members m on m.id = a.member_id
@@ -728,6 +742,8 @@ export class EventRepository {
         id: row.id,
         memberNo: row.member_no,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        gender: row.gender,
+        age: ageInYears(isoOptionalDate(row.dob)),
         status: 'present' as const,
         source: row.source,
         sessionTime: row.session_time,
@@ -766,8 +782,10 @@ export class EventRepository {
         member_no: string;
         first_name: string | null;
         last_name: string | null;
+        gender: Gender;
+        dob: string | Date | null;
       }>(
-        `select id, member_no, first_name, last_name
+        `select id, member_no, first_name, last_name, gender, dob
          from members
          where lower(member_no) = lower($1) and purged_at is null and archived_at is null`,
         [memberNo],
@@ -818,6 +836,8 @@ export class EventRepository {
         id: row.id,
         memberNo: member.member_no,
         name: [member.first_name, member.last_name].filter(Boolean).join(' '),
+        gender: member.gender,
+        age: ageInYears(isoOptionalDate(member.dob)),
         sessionDate,
         source: row.source,
       };

@@ -263,7 +263,7 @@ describe('memberPickerPath and searchMembers', () => {
   it('searches through the gateway with the session credential', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        items: [{ memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah' }],
+        items: [{ memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 }],
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -339,6 +339,8 @@ describe('addMemberRelationship and removeMemberRelationship', () => {
           isDependent: false,
           memberNo: 'M-1002',
           name: 'Kofi Mensah',
+          gender: 'male',
+          age: 34,
           archived: false,
         },
         201,
@@ -384,6 +386,8 @@ describe('getMemberShepherding', () => {
     const summary = {
       memberNo: 'M 1/2',
       name: 'Ama Mensah',
+      gender: 'female',
+      age: 32,
       shepherd: null,
       history: [],
       calls: { attempts: 0, conversations: 0, lastCalledOn: null },

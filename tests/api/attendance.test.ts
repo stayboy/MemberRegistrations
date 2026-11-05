@@ -7,17 +7,26 @@ let harness: TestApp;
 let app: TestApp['app'];
 let seriesId: string;
 
+/** 1 January `years` ago: exactly `years` completed years on any later date. */
+function dobYearsAgo(years: number): string {
+  return `${new Date().getUTCFullYear() - years}-01-01`;
+}
+
 beforeAll(async () => {
   harness = await createTestApp();
   app = harness.app;
 
-  const created = await request(app).post('/v1/members').set(writeHeaders).send({
-    memberNo: 'M-5001',
-    firstName: 'Ama',
-    lastName: 'Mensah',
-    gender: 'female',
-    joinedOn: '2026-01-01',
-  });
+  const created = await request(app)
+    .post('/v1/members')
+    .set(writeHeaders)
+    .send({
+      memberNo: 'M-5001',
+      firstName: 'Ama',
+      lastName: 'Mensah',
+      gender: 'female',
+      dob: dobYearsAgo(30),
+      joinedOn: '2026-01-01',
+    });
   expect(created.status).toBe(201);
 
   const series = await request(app)
@@ -271,6 +280,8 @@ describe('imports', () => {
         id: row!.id,
         memberNo: 'M-5001',
         name: 'Ama Mensah',
+        gender: 'female',
+        age: 30,
         status: 'present',
         source: 'import',
         sessionTime: null,
@@ -321,6 +332,8 @@ describe('imports', () => {
         id: row!.id,
         memberNo: 'M-5001',
         name: 'Ama Mensah',
+        gender: 'female',
+        age: 30,
         status: 'present',
         source: 'import',
         sessionTime: '09:15',
@@ -803,8 +816,22 @@ describe('event attendance per session', () => {
 
   beforeAll(async () => {
     const members = [
-      { memberNo: 'M-7001', firstName: 'Ada', lastName: 'Bello', joinedOn: '2026-01-01' },
-      { memberNo: 'M-7002', firstName: 'Chika', lastName: 'Okafor', joinedOn: '2026-10-14' },
+      {
+        memberNo: 'M-7001',
+        firstName: 'Ada',
+        lastName: 'Bello',
+        gender: 'female',
+        dob: dobYearsAgo(30),
+        joinedOn: '2026-01-01',
+      },
+      {
+        memberNo: 'M-7002',
+        firstName: 'Chika',
+        lastName: 'Okafor',
+        gender: 'female',
+        dob: dobYearsAgo(25),
+        joinedOn: '2026-10-14',
+      },
       { memberNo: 'M-7003', firstName: 'Bisi', lastName: 'Adeyemi', joinedOn: '2026-10-20' },
     ];
     for (const member of members) {
@@ -928,6 +955,8 @@ describe('event attendance per session', () => {
     expect(manual.body).toMatchObject({
       memberNo: 'M-7002',
       name: 'Chika Okafor',
+      gender: 'female',
+      age: 25,
       sessionDate: '2026-10-14',
       source: 'manual',
     });
@@ -954,6 +983,8 @@ describe('event attendance per session', () => {
           id: importedRow!.id,
           memberNo: 'M-7001',
           name: 'Ada Bello',
+          gender: 'female',
+          age: 30,
           status: 'present',
           source: 'import',
           sessionTime: null,
@@ -962,6 +993,8 @@ describe('event attendance per session', () => {
           id: manual.body.id,
           memberNo: 'M-7002',
           name: 'Chika Okafor',
+          gender: 'female',
+          age: 25,
           status: 'present',
           source: 'manual',
           sessionTime: null,
@@ -1088,6 +1121,8 @@ describe('event attendance per session', () => {
         id: surviving!.id,
         memberNo: 'M-7001',
         name: 'Ada Bello',
+        gender: 'female',
+        age: 30,
         status: 'present',
         source: 'import',
         sessionTime: null,

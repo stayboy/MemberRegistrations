@@ -4,6 +4,9 @@
  * exception: FR-76/AC-41 and the date/time spec keep it compact and fixed.
  */
 
+import type { Gender } from '../api/members';
+import { genderLabel } from './member-form';
+
 const ATTENDANCE_MONTHS_SHORT = [
   'Jan',
   'Feb',
@@ -136,6 +139,38 @@ export function memberInitials(member: MemberNameParts): string {
   const first = member.firstName.trim().charAt(0);
   const last = member.lastName.trim().charAt(0);
   return `${first}${last}`.toUpperCase() || '?';
+}
+
+export interface MemberLabelParts extends MemberNameParts {
+  readonly gender?: Gender;
+  readonly age?: number | null;
+}
+
+/**
+ * The shared identity label (FR-22a): `FullName (Gender, Ny)`. An undisclosed
+ * or missing gender is omitted, a null age is omitted, and both missing leaves
+ * the plain name. `otherNames`, `alias` and `maidenName` never enter the label.
+ */
+export function memberLabel(member: MemberLabelParts): string {
+  const name = memberName(member);
+  if (!name) return '';
+
+  const parts: string[] = [];
+  if (member.gender && member.gender !== 'undisclosed') parts.push(genderLabel(member.gender));
+  if (member.age !== null && member.age !== undefined) parts.push(`${member.age}y`);
+  return parts.length > 0 ? `${name} (${parts.join(', ')})` : name;
+}
+
+/**
+ * The label for DTOs that carry a composed `name` (relationships, officers,
+ * roster rows, shepherding history) rather than the name parts.
+ */
+export function memberLabelFromName(
+  name: string,
+  gender?: Gender,
+  age?: number | null,
+): string {
+  return memberLabel({ firstName: name, lastName: '', gender, age });
 }
 
 export type SubscriptionKind = 'life_insurance' | 'credit_union';

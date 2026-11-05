@@ -21,6 +21,7 @@ import { listOfficers } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { memberLabelFromName } from '../format/member';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
@@ -129,49 +130,56 @@ export function ShepherdingOfficersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {officers.map((officer) => (
-                      <TableRow key={officer.memberNo}>
-                        <TableCell>
-                          <div className={styles.identity}>
+                    {officers.map((officer) => {
+                      const label = memberLabelFromName(
+                        officer.name || officer.memberNo,
+                        officer.gender,
+                        officer.age,
+                      );
+                      return (
+                        <TableRow key={officer.memberNo}>
+                          <TableCell>
+                            <div className={styles.identity}>
+                              <Link
+                                className={styles.link}
+                                to={rosterHref(officer.memberNo, window.from, window.to)}
+                              >
+                                {label}
+                              </Link>
+                              <Text size={200} className={styles.muted}>
+                                {officer.memberNo}
+                              </Text>
+                            </div>
+                          </TableCell>
+                          <TableCell>{officer.assignedMembers}</TableCell>
+                          <TableCell>{officer.attempts}</TableCell>
+                          <TableCell>{officer.conversations}</TableCell>
+                          <TableCell>
+                            {officer.lastCalledOn ? (
+                              formatDate(officer.lastCalledOn)
+                            ) : (
+                              <Text className={styles.muted}>Never called</Text>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {officer.membersNeverCalled > 0 ? (
+                              officer.membersNeverCalled
+                            ) : (
+                              <Text className={styles.muted}>0</Text>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <Link
                               className={styles.link}
                               to={rosterHref(officer.memberNo, window.from, window.to)}
+                              aria-label={`Open the roster for ${label}`}
                             >
-                              {officer.name || officer.memberNo}
+                              Open roster
                             </Link>
-                            <Text size={200} className={styles.muted}>
-                              {officer.memberNo}
-                            </Text>
-                          </div>
-                        </TableCell>
-                        <TableCell>{officer.assignedMembers}</TableCell>
-                        <TableCell>{officer.attempts}</TableCell>
-                        <TableCell>{officer.conversations}</TableCell>
-                        <TableCell>
-                          {officer.lastCalledOn ? (
-                            formatDate(officer.lastCalledOn)
-                          ) : (
-                            <Text className={styles.muted}>Never called</Text>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {officer.membersNeverCalled > 0 ? (
-                            officer.membersNeverCalled
-                          ) : (
-                            <Text className={styles.muted}>0</Text>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Link
-                            className={styles.link}
-                            to={rosterHref(officer.memberNo, window.from, window.to)}
-                            aria-label={`Open the roster for ${officer.name || officer.memberNo}`}
-                          >
-                            Open roster
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
