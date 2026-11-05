@@ -266,7 +266,8 @@ code. No raw phone number is stored or logged.
   convention) and member number, gender and age (from `dob`; `age` is null when `dob` is unknown), up to
   three ministry names, the attendance line and the shepherd. The API returns one aggregate: `GET
 /v1/members/{memberNo}/profile` → `{ memberNo, name, gender, age: number | null, ministries: [name],
-shepherd: { memberNo, name } | null, attendance: { status: 'regular' | 'non_regular', attended,
+shepherd: { memberNo, name } | null, attendance: { status: 'regular' | 'non_regular' |
+'not_enough_data', attended,
 expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the member's **tracked** attendance
   across the events that apply to them: every **general** event (its series has no ministry, or it has no
   series) and every event whose ministry the member belongs to — a `member_ministries` row to an active
@@ -274,12 +275,22 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
   **member-trackable**
   (`tracksMembers = true`). The window is the last five **held** scoped sessions ending today: a session
   is held when its date is on or before the event's today in the event's timezone and the session is not
-  cancelled; sessions are ordered by date, then event start time, then event id. `regular` when
-  `attended / expected >= 0.6` (60%), otherwise `non_regular`; `expected` is the window size (up to 5)
-  and `attended` is the number present. `lastAttendedOn` is the most recent attended date in scope. A
+  cancelled; sessions are ordered by date, then event `start_time`, then event id. **Floors:** a session
+  before the member's `joined_on` never counts (a null `joined_on` imposes no floor), and a ministry-event
+  session before that membership's `assigned_on` never counts. The floors apply to this regularity
+  calculation only; the day, period and per-event views keep showing the actual records. Removing a
+  ministry membership drops that ministry's events from the scope retroactively (the current-affiliation
+  limitation recorded in Q4). With **fewer
+  than three** held scoped sessions the status is `not_enough_data`; otherwise `regular` when
+  `attended / expected >= 0.6` (60%) and `non_regular` when below it. `expected` is the window size (up
+  to 5) and `attended` is the number present, both reported in every status. `lastAttendedOn` is the most recent attended date in scope. A
   headcount-only event never counts, and neither does attendance at an event whose ministry the member
-  does not belong to. With no scoped sessions the status is `non_regular`, `attended` and `expected` are
-  `0`, the date is null, and the screen says "No attendance yet". The shepherd is the active shepherding
+  does not belong to. With no scoped sessions the status is `not_enough_data`, `attended` and `expected`
+  are `0`, the date is null, and the screen says "No attendance yet"; with one or two it shows "Not
+  enough data" with the ratio and, when `lastAttendedOn` is set, the date (for example, "Not enough
+  data · 2 of 2 · 5 Oct 2026"); when nothing was attended it shows "Not enough data · 0 of 1". A
+  floored session is dropped from the held-session window entirely, so it is neither an `expected` nor
+  an `attended` session. The shepherd is the active shepherding
   assignment's officer, or null ("Not assigned"). One request, `no-store`.
 
 ### Payments and the gateway stub
