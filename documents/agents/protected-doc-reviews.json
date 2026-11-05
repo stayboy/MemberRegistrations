@@ -43,14 +43,14 @@
     },
     {
       "path": "documents/lessons.md",
-      "sha256": "cc703af23df942975c2f6e78b7301f2a144164d1a389a34aa4b65a43fab91548",
+      "sha256": "42b4de33dcfe905f8395a28ffd64ef4675a0227a4ec3de36de336e49bfa1c8d1",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds the fifth 2026-11-04 lesson, 'A gate that does not name the workspace is not a gate' (root `npm run verify` excluded `ui/**` from ESLint and the root tsconfig and never ran the UI's 87 tests, so CI was green while the UI was never built; fixed by the separate `ui` job in `chore/ui-ci-gate`, `da7e3fa`), and records in the preamble that this entry was accepted in Q126 on condition it be written only once the UI CI job landed. why: the condition was met the same day, so its evidence is the final gate rather than the gap. rejected: writing it before the job landed.",
+      "reason": "changes: adds the 2026-11-05 lesson 'Screen a proposed mock against the approved one before asking for approval' — run the mock-parity screen on the pair with a closed claim list derived from the approved artifact, confirm each flagged atom rather than treating it as a verdict (spec-required miss → rework, mock-only → mock correction), record the `## Mock parity` table and `DM:` in the round doc, and note that the probe accepts images alone while the hosted endpoint needs a non-empty state. why: the owner asked for a durable lesson after the settings-mock round, where the screen caught an extra header control, an un-pinned footer, a missing toolbar and a missing date/time block, and the rebuilt mock flipped the load-bearing atoms. rejected: treating the screen as a gate or an acceptance; inventing claims author-side; routing holistic judgements through it.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed by `deepseek-v4-pro` build `0813`; every factual claim in the workspace-gate entry (87 UI tests, `ui/**` excluded from root ESLint/tsconfig/prettier/vitest, no UI build in CI, the separate `ui` job and commit `da7e3fa`) was checked against the workflow, the ESLint config, the root tsconfig/vitest/prettier configs and the merged history and found accurate, and the entry carries rule, evidence and trigger in the file's established shape.",
-      "at": "2026-11-04"
+      "attestation": "Re-reviewed the 2026-11-05 mock-parity entry against `documents/specs/mock-parity-screen.md`: the state claim is now attributed to the hosted endpoint (400 on image-only), the rule correctly frames a flagged atom as a question to confirm with spec-required→rework and mock-only→correction arbitration pointing at the spec rather than restating thresholds, the record is the round-doc `## Mock parity`/`DM:`, and the trigger is scoped to atomic claims (label/region/control/column) excluding holistic judgements — no contradictions and no new error introduced.",
+      "at": "2026-11-05"
     },
     {
       "path": "documents/rounds/README.md",
