@@ -237,12 +237,15 @@ idempotency_conflict`; a concurrent duplicate resolves through the unique index 
 - **List.** `GET /v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor` returns
   `{ items, nextCursor? }`, newest first, with `Cache-Control: no-store`. `from`/`to` filter
   `expectedOn` (inclusive).
-- **Reminders.** Creation automatically writes three `pending` reminders on channel `sms` inside the
-  same transaction: 7 days before `expectedOn`, on it, and 7 days after. `POST
+- **Reminders.** Creation automatically writes three `sms` reminders inside the same transaction: 7
+  days before `expectedOn`, on it, and 7 days after. A reminder whose date is before today (UTC) at
+  creation is written `cancelled` and is never sent; the others are `pending`. `POST
 /v1/pledges/{id}/reminders` adds `{ scheduledFor, channel }` (both required); a duplicate
-  `(pledge, scheduledFor, channel)` is `409 conflict`. `GET /v1/pledges/{id}/reminders` lists them.
-  Reminders are records only and stay `pending` in V3; delivery is out of scope (OS-5), and the
-  member-level opt-out preference is deferred to the delivery round.
+  `(pledge, scheduledFor, channel)` is `409 conflict`, and a `scheduledFor` before today (UTC) is `422
+invalid_reminder_date`. `GET /v1/pledges/{id}/reminders` lists them.
+  Reminders are records only: the pending ones stay `pending` in V3 and cancelled ones never send.
+  Delivery is out of scope (OS-5), and the member-level opt-out preference is deferred to the delivery
+  round.
 - **Append-only.** Pledges are never deleted; every transition is a `pledge_events` row with actor,
   timestamp and reason.
 
@@ -830,6 +833,7 @@ export interface ChurchOfferingSummary {
 | 422     | `officer_required`          | Assign an active presbyter          |
 | 422     | `invalid_amount`            | Inline amount error                 |
 | 422     | `invalid_expected_date`     | Inline date error                   |
+| 422     | `invalid_reminder_date`     | Inline reminder date error          |
 | 402/409 | `payment_failed`            | Keep `initiated`, allow retry       |
 
 ## Data Models
@@ -847,7 +851,7 @@ All money is `bigint` minor units plus an ISO currency. All history tables are a
 | `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                                                       | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                  |
 | `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                                                       | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                  |
 | `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                                                       | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                         | unique `(pledge_id, scheduled_for, channel)`; status stays `pending` in V3 (no delivery)                                                                                                        |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                         | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                              |
 | `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                                                     | short TTL; no raw phone in logs                                                                                                                                                                 |
 | `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                                             | unique gateway reference                                                                                                                                                                        |
 
