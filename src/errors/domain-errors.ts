@@ -56,6 +56,34 @@ export class InvalidExceptionDateError extends ValidationError {
   }
 }
 
+/** A gift's session date is not one of the event's live sessions. */
+export class SessionNotInEventError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'session_not_in_event');
+  }
+}
+
+/** The offering is not actively attached to the event or its series. */
+export class OfferingNotOnEventError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'offering_not_on_event');
+  }
+}
+
+/** A gift is dated after the offering's effective expiry for that event. */
+export class OfferingExpiredError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'offering_expired');
+  }
+}
+
+/** The idempotency key was first used for a different canonical payload. */
+export class IdempotencyConflictError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'idempotency_conflict');
+  }
+}
+
 /** Missing, invalid, expired or revoked credentials. */
 export class UnauthorizedError extends DomainError {
   constructor(message = 'Authentication is required.') {

@@ -32,6 +32,7 @@ const app = createApp({
   corsOrigins: env.CORS_ALLOWED_ORIGINS.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  visitorPhonePepper: env.VISITOR_PHONE_PEPPER,
 });
 
 if (process.env.VERCEL !== '1') {

@@ -14,6 +14,13 @@
 
 ## Change log
 
+- 2026-11-05: contributions specified for ticket 21 — idempotent by a globally unique key (identical
+  repeat `200`, different payload `409 idempotency_conflict`), accepted only for an active attached
+  offering on one of the event's session dates and not after expiry (`422 offering_expired`), recording
+  the `termsVersion` and a server-generated `MR-…` reference; visitor phones are HMAC-SHA-256 hashed
+  under `VISITOR_PHONE_PEPPER` and never returned; `GET /v1/contributions` is `no-store` and
+  `GET /v1/contributions/summary` splits member and visitor totals by currency. The full detail is in
+  `member-registrations-events-offerings.md`.
 - 2026-11-05: offerings routes reconciled with the ticket-20 phase-1 contract — terms publish via
   `POST /v1/offerings/{id}/terms` with a required `baseVersion` and `reason` (NFR-3 audit), `PUT`
   toggles only `active` and records `updated_by`, attach and
@@ -499,13 +506,24 @@ terms_version_conflict`. `PUT /v1/offerings/{id}` changes only `{ active }`; the
 
 ### Contribution
 
-- A member contribution carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`,
-  amount, currency, channel (`app | ussd | manual`), status (`initiated | paid | failed`), reference and
-  a unique idempotency key.
-- A visitor contribution carries `visitorName` and a hashed phone instead of `memberNo`; it returns a
-  receipt or reference and creates no member.
-- Exactly one of member or visitor is present.
-- Amounts are positive integer minor units.
+- A member contribution carries `memberNo`, `offeringId`, `eventId`, `sessionDate`, amount, currency,
+  channel (`app | ussd | manual`), status, reference, a unique idempotency key and the `termsVersion`
+  it was recorded under.
+- A visitor contribution carries `visitorName` and an HMAC-SHA-256 phone hash (under
+  `VISITOR_PHONE_PEPPER`) instead of `memberNo`; it returns a receipt reference and creates no member.
+  The raw phone is never stored, returned or logged.
+- Exactly one of member or visitor is present. Amounts are positive integer minor units; the currency
+  defaults to the offering's current terms currency and must equal it.
+- `POST /v1/contributions` is idempotent by `idempotencyKey`: an identical canonical payload returns
+  `200` with the same record and reference, and a different payload under the same key is `409
+idempotency_conflict`. An unknown event or offering is `404`; an inactive offering is `422`.
+- A gift's `sessionDate` must be one of the event's session dates (`422 session_not_in_event`) and on
+  or before the effective expiry; a later date is `422 offering_expired`. A backdated manual gift
+  within the window stays recordable, and honoring a pending pledge after expiry stays allowed.
+- The server generates the unique `reference` (`MR-` plus ten uppercase base32 characters). Reads send
+  `Cache-Control: no-store`.
+- Member and visitor totals are reported separately, grouped by currency, counting only `paid`
+  contribution rows (not distinct givers), with no names or contact values.
 
 ### Pledge
 
@@ -673,30 +691,31 @@ export interface Event {
 
 ### Offerings and giving
 
-| Method       | Path                                                     | Result                                                |
-| ------------ | -------------------------------------------------------- | ----------------------------------------------------- |
-| `GET`/`POST` | `/v1/offerings`                                          | List (default active) or create with terms v1         |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                     | Read the offering; update the active flag only        |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                               | List versions or publish one (`baseVersion`)          |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                         | List active attachments or attach                     |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`            | Detach (end, not delete)                              |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                              | List active attachments or attach for all occurrences |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                 | Detach                                                |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions` | List rows or append a skip/opt-in                     |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`      | List rows or append a skip/opt-in                     |
-| `POST`       | `/v1/contributions`                                      | Member or visitor contribution (idempotent)           |
-| `GET`        | `/v1/contributions?memberNo&offeringId&from&to`          | Contribution history                                  |
-| `POST`       | `/v1/pledges`                                            | Create a pledge with a follow-up officer              |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`            | Pledge list                                           |
-| `POST`       | `/v1/pledges/{id}/honor`                                 | Append an honor event                                 |
-| `POST`       | `/v1/pledges/{id}/dishonor`                              | Append a dishonor event with a reason                 |
-| `POST`       | `/v1/pledges/{id}/reassign`                              | Assign or reassign the officer with a reason          |
-| `POST`       | `/v1/pledges/{id}/reminders`                             | Schedule a reminder                                   |
-| `GET`        | `/v1/offerings/summary?from&to`                          | Church landing totals                                 |
-| `POST`       | `/v1/ussd/session`                                       | Start a USSD session (future)                         |
-| `POST`       | `/v1/ussd/session/{id}/select`                           | Select offerings (future)                             |
-| `POST`       | `/v1/ussd/session/{id}/commit`                           | Pay or pledge (future)                                |
-| `POST`       | `/v1/payments/callback`                                  | Gateway callback (future)                             |
+| Method       | Path                                                                 | Result                                                |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1         |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only        |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)          |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                     |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                              |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                     |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                     |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)           | ticket 21 |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                     | ticket 21 |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                 | ticket 21 |
+| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer              |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`                        | Pledge list                                           |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                 |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                 |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason          |
+| `POST`       | `/v1/pledges/{id}/reminders`                                         | Schedule a reminder                                   |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                 |
+| `POST`       | `/v1/ussd/session`                                                   | Start a USSD session (future)                         |
+| `POST`       | `/v1/ussd/session/{id}/select`                                       | Select offerings (future)                             |
+| `POST`       | `/v1/ussd/session/{id}/commit`                                       | Pay or pledge (future)                                |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback (future)                             |
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
@@ -757,6 +776,20 @@ export interface Contribution {
   status: 'initiated' | 'paid' | 'failed';
   reference: string;
   idempotencyKey: string;
+  termsVersion: number;
+  createdAt: string;
+}
+
+export interface ContributionSummary {
+  from: string;
+  to: string;
+  items: Array<{
+    currency: string;
+    memberCount: number;
+    memberPaidMinor: number;
+    visitorCount: number;
+    visitorPaidMinor: number;
+  }>;
 }
 
 export interface Pledge {
@@ -807,9 +840,9 @@ an HTTP hop.
 RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `not_found`, `conflict`,
 `unauthorized`, `invalid_json`, `payload_too_large`, `route_not_found`, `internal_error`,
 `import_failed`, `event_not_active`, `session_not_in_event`, `offering_already_attached`,
-`offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `invalid_amount`,
-`invalid_expected_date`, `officer_required`, `pledge_already_terminal`, `payment_failed`,
-`cors_rejected`.
+`offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
+`idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `officer_required`,
+`pledge_already_terminal`, `payment_failed`, `cors_rejected`.
 
 ### Concurrency and caching
 
@@ -832,7 +865,7 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 | `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by` | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                     |
 | `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null |
 | `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                              |
-| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`                                                 | unique `idempotency_key`; amount > 0; member XOR visitor                                                                                                        |
+| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                  |
 | `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                                                    | amount > 0; expected date not past at create                                                                                                                    |
 | `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                      | append-only                                                                                                                                                     |
 | `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`                                                                                                                    |
@@ -1084,6 +1117,8 @@ sequences.
 - Neon Postgres via the Vercel Marketplace integration; `DATABASE_URL` is injected as an environment
   variable. Use the **pooled** connection string.
 - `API_BEARER_TOKEN` is required in production.
+- `VISITOR_PHONE_PEPPER` (at least 16 characters) is required in production for the visitor-phone
+  HMAC; development and tests may use a local default, and rotating it changes every stored hash.
 - Migrations run as an explicit step (`npm run db:migrate`), never automatically on request.
 - Vercel's 4.5 MB body limit still applies; the app caps JSON at 1 MB, so imports are chunked.
 

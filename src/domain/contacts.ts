@@ -6,7 +6,14 @@ export type ContactKind = (typeof CONTACT_KINDS)[number];
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function assertDate(value: string, field = 'date'): string {
-  if (!DATE_PATTERN.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+  const parsed = DATE_PATTERN.test(value) ? new Date(`${value}T00:00:00Z`) : null;
+  // A round-trip catches calendar-invalid dates such as 2026-02-30, which
+  // Date.parse normalises to the next month instead of rejecting.
+  if (
+    parsed === null ||
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== value
+  ) {
     throw new ValidationError(`${field} must be an ISO date (YYYY-MM-DD)`);
   }
   return value;

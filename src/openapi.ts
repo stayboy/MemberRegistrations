@@ -68,6 +68,12 @@ import {
   termsSchema,
 } from './schemas/offerings.js';
 import {
+  contributionListSchema,
+  contributionSchema,
+  contributionSummarySchema,
+  createContributionSchema,
+} from './schemas/contributions.js';
+import {
   assignmentInputSchema,
   assignmentSchema,
   callInputSchema,
@@ -222,6 +228,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OfferingException: toSchema(exceptionRowSchema, 'output'),
         OfferingExceptionList: toSchema(exceptionListSchema, 'output'),
         OfferingExceptionInput: toSchema(exceptionInputSchema, 'input'),
+        Contribution: toSchema(contributionSchema, 'output'),
+        ContributionList: toSchema(contributionListSchema, 'output'),
+        ContributionSummary: toSchema(contributionSummarySchema, 'output'),
+        ContributionCreate: toSchema(createContributionSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         MemberImport: toSchema(memberImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -1328,6 +1338,81 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             201: json('Exception appended.', 'OfferingException'),
             401: unauthorized,
             404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/contributions': {
+        get: {
+          summary: 'List contributions, newest first',
+          description:
+            'Visitor rows expose visitorName only; the phone and its hash are never returned. Responses carry Cache-Control: no-store.',
+          parameters: [
+            { name: 'memberNo', in: 'query', schema: { type: 'string' } },
+            { name: 'offeringId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+            { name: 'eventId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200 } },
+            { name: 'cursor', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            200: {
+              description: 'A page of contributions with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('ContributionList') } },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Record a member or visitor contribution',
+          description:
+            'Idempotent by idempotencyKey: an identical canonical payload returns 200 with the same record and reference; a different payload is 409 idempotency_conflict. The server generates the receipt reference. A visitor phone is hashed and never returned. Responses carry Cache-Control: no-store.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ContributionCreate') } },
+          },
+          responses: {
+            201: {
+              description: 'Contribution created with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('Contribution') } },
+            },
+            200: {
+              description:
+                'Identical repeat of the idempotency key; the stored record and reference, with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('Contribution') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem('The idempotency key was already used for a different contribution.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/contributions/summary': {
+        get: {
+          summary: 'Member and visitor totals by currency',
+          description:
+            'Both bounds are required. Counts only paid contributions grouped by currency, with no names or contact values. Responses carry Cache-Control: no-store.',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: {
+              description: 'Totals with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('ContributionSummary') } },
+            },
+            401: unauthorized,
             422: validation,
           },
         },

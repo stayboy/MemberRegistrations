@@ -5,10 +5,11 @@ import { bearerAuth } from './auth.js';
 import { createMailer, type Mailer } from './authn/mailer.js';
 import { authRouter, corsMiddleware, gatewayAuth } from './authn/router.js';
 import { AuthService, DEFAULT_AUTH_CONFIG, type AuthConfig } from './authn/service.js';
-import { DEFAULT_CORS_ORIGINS } from './config/env.js';
+import { DEFAULT_CORS_ORIGINS, DEFAULT_VISITOR_PHONE_PEPPER } from './config/env.js';
 import { errorHandler, notFoundHandler, sendProblem } from './errors/problem.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { AuthRepository } from './repos/auth.js';
+import { ContributionRepository } from './repos/contributions.js';
 import { EventRepository } from './repos/events.js';
 import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
@@ -16,6 +17,7 @@ import { MinistryRepository } from './repos/ministries.js';
 import { OfferingRepository } from './repos/offerings.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
+import { contributionsRouter } from './routes/contributions.js';
 import { eventsRouter } from './routes/events.js';
 import { importsRouter } from './routes/imports.js';
 import { membersRouter } from './routes/members.js';
@@ -34,6 +36,7 @@ export interface AppOptions {
   mailer?: Mailer;
   authConfig?: Partial<AuthConfig>;
   corsOrigins?: string[];
+  visitorPhonePepper?: string;
 }
 
 /**
@@ -51,6 +54,10 @@ export function createApp(options: AppOptions): Express {
   const shepherding = new ShepherdingRepository(options.db);
   const events = new EventRepository(options.db);
   const offerings = new OfferingRepository(options.db);
+  const contributions = new ContributionRepository(
+    options.db,
+    options.visitorPhonePepper ?? DEFAULT_VISITOR_PHONE_PEPPER,
+  );
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -121,6 +128,7 @@ export function createApp(options: AppOptions): Express {
   // Mounted at the root so it owns both /offerings and the event/series
   // attachment paths without a second router for each parent.
   v1.use(offeringsRouter(offerings));
+  v1.use('/contributions', contributionsRouter(contributions));
   v1.use('/members', membersRouter(members));
   v1.use('/members', memberShepherdingRouter(shepherding));
   v1.use('/subscriptions', subscriptionsRouter(members));

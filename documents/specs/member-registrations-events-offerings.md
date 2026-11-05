@@ -134,10 +134,11 @@ validation_error`. Detaching is `DELETE /v1/events/{eventId}/offerings/{offering
   offering's `terms.availableUntil`, else the event's `endDate` — for a series attachment, the
   occurrence's end date. An attachment-level `availableUntil` is allowed only on an event attachment
   and MUST be on or after that event's `endDate` (`422 validation_error` otherwise); a series
-  attachment MUST omit it. After the effective date the offering is expired: a new contribution MUST
-  be rejected and honoring a pending pledge MUST still succeed. Ticket 20 exposes the resolved date and
-  an `expired` flag on the event aggregate and the predicate behind them; ticket 21 enforces the
-  rejection on the contribution route.
+  attachment MUST omit it. The `expired` flag is true when today (UTC) is after the effective date and
+  tells the UI and USSD not to offer the offering. A contribution whose `sessionDate` falls after the
+  effective date MUST be rejected, while a backdated manual gift dated within the window stays
+  recordable; honoring a pending pledge MUST still succeed. Ticket 20 exposes the resolved date, the
+  `expired` flag and the predicate; ticket 21 enforces the rejection on the contribution route.
 - **Exceptions.** A `skip` or `opt_in` is recorded against one attachment row through `POST
 /v1/events/{eventId}/offerings/{offeringId}/exceptions` or the series equivalent, body `{ date, kind:
 'skip' | 'opt_in', note? }`, returning `201`; `GET` on the same path returns
@@ -152,6 +153,52 @@ validation_error`. Detaching is `DELETE /v1/events/{eventId}/offerings/{offering
   exception per date that falls on one of the event's session dates, and stats. `stats` is
   `OfferingStats`; before contributions exist, `attachedEvents` counts the offering's active **event**
   attachments (a series-only attachment counts `0`), every money field is `0` and `honorRate` is `0`.
+
+### V3 phase 2 — contributions and visitor gifts (ticket 21)
+
+Ticket 21 records gifts; pledges, reminders, the landing and the USSD/gateway flows are tickets 22–24.
+A contribution is append-only and has no update or delete route.
+
+- **Create.** `POST /v1/contributions` takes `{ memberNo? | visitorName? + visitorPhone?, offeringId,
+eventId, sessionDate, amountMinor, currency?, channel, status?, idempotencyKey }`. Exactly one of the
+  member and the visitor pair is present. An unknown event or offering is `404`; an inactive offering is
+  `422 validation_error`. `amountMinor` is a positive integer. `currency` defaults to the offering's
+  current terms currency and MUST equal it (`422 validation_error` otherwise). `channel` is `app | ussd
+| manual`. `status` is `paid` (the default) or `initiated`; `failed` is rejected on create because
+  only a gateway callback may fail a gift. `idempotencyKey` is required, 1–128 characters.
+- **Gift target.** A gift is recorded against the offering only when it is actively attached to the
+  event, directly or through the event's series; otherwise `422 offering_not_on_event`. The
+  `sessionDate` MUST be one of the event's session dates and not a cancelled one
+  (`422 session_not_in_event`). A cancelled or archived event is `409 event_not_active`. These checks
+  apply to member and visitor gifts alike.
+- **Member.** The member MUST exist, not be archived and not be purged (`404` otherwise).
+- **Expiry.** A gift's `sessionDate` MUST be on or before the offering's effective expiry for that event
+  (see below); a later date is `422 offering_expired`. The `expired` flag (today past the date) only
+  tells the UI and USSD not to offer the offering; a manual, backdated gift dated within the window is
+  still recordable for audit. When an offering is attached both directly and through the event's
+  series, the earliest active attachment's effective expiry governs. Honoring a pending pledge after
+  expiry stays allowed (ticket 22).
+- **Terms snapshot.** The contribution records the offering's current `termsVersion`, so a later terms
+  publish does not rewrite history (FR-33).
+- **Visitor.** `visitorName` is 1–128 characters. `visitorPhone` is normalised by the phone contact
+  rule (digits only) and hashed with HMAC-SHA-256 under `VISITOR_PHONE_PEPPER`; only the hash is
+  stored. The raw phone MUST NOT be stored, returned, logged or cached, and no member row is created.
+- **Idempotency.** `idempotencyKey` is globally unique. The "identical payload" test compares the
+  canonical request: the member number or the visitor name plus the phone hash, `offeringId`, `eventId`,
+  `sessionDate`, `amountMinor`, the currency after defaulting, `channel`, and the status after
+  defaulting. An identical repeat returns the stored contribution with `200` and the same `reference`; a
+  different payload under the same key is `409 idempotency_conflict`. A concurrent duplicate resolves
+  through the unique index and the same re-read.
+- **Reference.** The server generates a unique `reference` (`MR-` plus ten uppercase base32 characters)
+  on creation and returns it as the visitor's receipt. It is never client-supplied.
+- **Read.** `GET /v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` lists
+  contributions newest first as `{ items, nextCursor? }` with `Cache-Control: no-store`. Visitor rows
+  expose `visitorName` only — never the phone or its hash.
+- **Totals.** `GET /v1/contributions/summary?from&to` requires both bounds and returns
+  `{ from, to, items: [{ currency, memberCount, memberPaidMinor, visitorCount, visitorPaidMinor }] }`,
+  counting only `status = 'paid'` and grouping by currency. `memberCount`/`visitorCount` are the number
+  of paid contribution rows, not distinct givers. Member and visitor totals are separate and no member
+  name, contact value or phone hash appears.
 
 ### Navigation
 
@@ -342,7 +389,7 @@ separate Attendance section, that is Q1.
 
 ### AC-12: **Given** an active event, **When** two or more offerings are attached, **Then** the event displays all of them; an offering MAY be skipped on a specific series day via an exception. (FR-22, FR-23, FR-39)
 
-### AC-13: **Given** an active member, **When** they give to an offering, **Then** the contribution records amount in minor units, currency, event, channel, status and idempotency reference. (FR-21, FR-25)
+### AC-13: **Given** an active member, **When** they give to an offering, **Then** the contribution records amount in minor units, currency, event, session date, channel, status, terms version and idempotency reference. (FR-21, FR-25)
 
 ### AC-14: **Given** a member chooses to pledge, **When** the pledge is created without an active presbyter, **Then** it is rejected; with one, it is `pending` with an expected date. (FR-26)
 
@@ -366,7 +413,7 @@ separate Attendance section, that is Q1.
 
 ### AC-24: **Given** an events/series request, **When** it returns 401/404/409/422, **Then** the shell’s connection/not-found/conflict/validation states are applied and no fabricated data is shown. (FR-14)
 
-### AC-25: **Given** an archived or purged member, **When** a contribution or pledge is attempted, **Then** the API rejects it and historical records remain readable. (FR-24)
+### AC-25: **Given** an archived or purged member, **When** a contribution or pledge is attempted, **Then** the API rejects it (a contribution with `404`) and historical records remain readable. (FR-24)
 
 ### AC-26: **Given** a pledge with an expected date in the past, **When** it is submitted, **Then** it is rejected with an inline date error before any gateway call. (FR-37)
 
@@ -592,7 +639,21 @@ export interface Contribution {
   status: ContributionStatus;
   reference: string;
   idempotencyKey: string;
+  /** The terms version the gift was recorded under (FR-33). */
+  termsVersion: number;
   createdAt: string;
+}
+
+export interface ContributionSummary {
+  from: string;
+  to: string;
+  items: Array<{
+    currency: string;
+    memberCount: number;
+    memberPaidMinor: number;
+    visitorCount: number;
+    visitorPaidMinor: number;
+  }>;
 }
 
 export interface Pledge {
@@ -657,66 +718,70 @@ export interface ChurchOfferingSummary {
 
 ### Endpoints
 
-| Method       | Path                                                     | Purpose                                                                   | Status    |
-| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------- | --------- |
-| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`         | Event list + attendance/offering summaries                                | proposed  |
-| `GET`        | `/v1/events/{eventId}`                                   | Event detail with sessions and offerings                                  | proposed  |
-| `GET`        | `/v1/events/{eventId}/attendance?date=`                  | Attendance rows for one event date                                        | proposed  |
-| `GET`/`POST` | `/v1/offerings`                                          | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20 |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                     | Read the offering; update the active flag only                            | ticket 20 |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                               | List versions, newest first, or publish one (`baseVersion`)               | ticket 20 |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                         | List active attachments, or attach                                        | ticket 20 |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`            | Detach (end the attachment)                                               | ticket 20 |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                              | List active attachments, or attach for every occurrence                   | ticket 20 |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                 | Detach                                                                    | ticket 20 |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions` | List rows, or append a skip/opt-in                                        | ticket 20 |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`      | List rows, or append a skip/opt-in                                        | ticket 20 |
-| `POST`       | `/v1/contributions`                                      | Member or visitor contribution (idempotent)                               | proposed  |
-| `GET`        | `/v1/contributions?memberNo&offeringId&from&to`          | Contribution history                                                      | proposed  |
-| `POST`       | `/v1/pledges`                                            | Create pledge with follow-up officer                                      | proposed  |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`            | Pledge list                                                               | proposed  |
-| `POST`       | `/v1/pledges/{id}/honor`                                 | Append honor event                                                        | proposed  |
-| `POST`       | `/v1/pledges/{id}/dishonor`                              | Append dishonor event with reason                                         | proposed  |
-| `POST`       | `/v1/pledges/{id}/reassign`                              | Admin assigns/reassigns follow-up officer + reason                        | proposed  |
-| `POST`       | `/v1/pledges/{id}/reminders`                             | Schedule reminder                                                         | proposed  |
-| `GET`        | `/v1/offerings/summary?from&to`                          | Church landing totals                                                     | proposed  |
-| `POST`       | `/v1/ussd/session`                                       | Start USSD session                                                        | future    |
-| `POST`       | `/v1/ussd/session/{id}/select`                           | Select offerings                                                          | future    |
-| `POST`       | `/v1/ussd/session/{id}/commit`                           | Pay or pledge                                                             | future    |
-| `POST`       | `/v1/payments/callback`                                  | Gateway callback                                                          | future    |
+| Method       | Path                                                                 | Purpose                                                                   | Status    |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------- |
+| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed  |
+| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed  |
+| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed  |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20 |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20 |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20 |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20 |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20 |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20 |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20 |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20 |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20 |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21 |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21 |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21 |
+| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | proposed  |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`                        | Pledge list                                                               | proposed  |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | proposed  |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | proposed  |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | proposed  |
+| `POST`       | `/v1/pledges/{id}/reminders`                                         | Schedule reminder                                                         | proposed  |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed  |
+| `POST`       | `/v1/ussd/session`                                                   | Start USSD session                                                        | future    |
+| `POST`       | `/v1/ussd/session/{id}/select`                                       | Select offerings                                                          | future    |
+| `POST`       | `/v1/ussd/session/{id}/commit`                                       | Pay or pledge                                                             | future    |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback                                                          | future    |
 
 ### Error mapping additions
 
-| Status  | Code                        | UI response                     |
-| ------- | --------------------------- | ------------------------------- |
-| 409     | `offering_already_attached` | Show the existing attachment    |
-| 409     | `terms_version_conflict`    | Reload the offering; base stale |
-| 409     | `pledge_already_terminal`   | Refresh; no duplicate event     |
-| 409     | `event_not_active`          | Disable attachment/contribution |
-| 422     | `offering_not_on_event`     | Show valid offerings            |
-| 422     | `invalid_exception_date`    | Inline date error               |
-| 422     | `invalid_amount`            | Inline amount error             |
-| 422     | `invalid_expected_date`     | Inline date error               |
-| 402/409 | `payment_failed`            | Keep `initiated`, allow retry   |
+| Status  | Code                        | UI response                      |
+| ------- | --------------------------- | -------------------------------- |
+| 409     | `offering_already_attached` | Show the existing attachment     |
+| 409     | `terms_version_conflict`    | Reload the offering; base stale  |
+| 409     | `idempotency_conflict`      | Reload by idempotency key        |
+| 409     | `pledge_already_terminal`   | Refresh; no duplicate event      |
+| 409     | `event_not_active`          | Disable attachment/contribution  |
+| 422     | `offering_not_on_event`     | Show valid offerings             |
+| 422     | `session_not_in_event`      | Pick one of the event's sessions |
+| 422     | `offering_expired`          | Show the closed offering         |
+| 422     | `invalid_exception_date`    | Inline date error                |
+| 422     | `invalid_amount`            | Inline amount error              |
+| 422     | `invalid_expected_date`     | Inline date error                |
+| 402/409 | `payment_failed`            | Keep `initiated`, allow retry    |
 
 ## Data Models
 
 All money is `bigint` minor units plus an ISO currency. All history tables are append-only.
 
-| Table                      | Key fields                                                                                                                                                                                                                                                                                                        | Constraints                                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `ministry_code`, `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `sessions` (JSONB `{date,startTime,endTime,status,venueType?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range                                                          |
-| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_no`, `source` (`import`/`manual`)                                                                                                                                                                                                                              | unique `(event_instance_id, session_date, member_no)`; session_date in sessions                                                         |
-| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                          | soft archive; no hard delete; `updated_by` records the last active-flag change                                                          |
-| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                           | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                             |
-| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                        | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null |
-| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                       | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                      |
-| `contributions`            | `id`, `member_no` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`                                                                                                           | unique `idempotency_key`; amount > 0; member XOR visitor                                                                                |
-| `pledges`                  | `id`, `member_no`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_no`, `status`, `reason`                                                                                                                                              | amount > 0; expected date not past at create                                                                                            |
-| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                                                                                | append-only                                                                                                                             |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                | unique `(pledge_id, scheduled_for, channel)`                                                                                            |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_no` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                            | short TTL; no raw phone in logs                                                                                                         |
-| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                    | unique gateway reference                                                                                                                |
+| Table                      | Key fields                                                                                                                                                                                                                                                                                                        | Constraints                                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `ministry_code`, `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `sessions` (JSONB `{date,startTime,endTime,status,venueType?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range                                                                 |
+| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source` (`import`/`manual`)                                                                                                                                                                                                                              | unique `(event_instance_id, session_date, member_id)`; session_date in sessions                                                                |
+| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                          | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                 |
+| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                           | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                    |
+| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                        | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null        |
+| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                       | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                             |
+| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                              | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms |
+| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                                                                                                              | amount > 0; expected date not past at create                                                                                                   |
+| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                                                                                | append-only                                                                                                                                    |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                | unique `(pledge_id, scheduled_for, channel)`                                                                                                   |
+| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                            | short TTL; no raw phone in logs                                                                                                                |
+| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                    | unique gateway reference                                                                                                                       |
 
 ## Out of Scope
 
@@ -774,6 +839,14 @@ decide it only in chat.
 
 ## Change log
 
+- 2026-11-05: V3 phase 2 specified for ticket 21. Contributions are idempotent by a globally unique
+  key (identical repeat `200`, different payload `409 idempotency_conflict`), bind to an active
+  attached offering and one of the event's session dates, are rejected after the effective expiry
+  (`422 offering_expired`), record the `termsVersion`, and carry a server-generated `MR-…` reference.
+  Visitor gifts store only an HMAC-SHA-256 phone hash and create no member; `GET /v1/contributions` is
+  `no-store`; `GET /v1/contributions/summary` reports member and visitor totals separately by currency.
+  The `contributions` table gains `terms_version`, `created_at`, `created_by` and a unique `reference`.
+  The API spec is reconciled in the same change.
 - 2026-11-05: V3 phase 1 specified for ticket 20. Offering versions publish through a terms POST with
   a required `baseVersion`, a required `reason` and a full flat body (the `PUT` now changes only the
   active flag and records `updated_by`); event and
