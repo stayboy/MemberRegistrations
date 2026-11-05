@@ -52,6 +52,8 @@ export interface MemberSummary {
   readonly lastName: string;
   readonly otherNames: string | null;
   readonly gender: Gender;
+  /** Derived current age, or null when the date of birth is unknown or in the future. */
+  readonly age: number | null;
   readonly placeOfResidence: string | null;
   readonly joinedOn: string | null;
   readonly isPresbyter: boolean;
@@ -93,6 +95,8 @@ export interface MemberRelationship {
   readonly isDependent: boolean;
   readonly memberNo: string;
   readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
   readonly archived: boolean;
 }
 
@@ -119,6 +123,8 @@ export interface ShepherdingAssignmentHistory {
   readonly assignmentId: string;
   readonly officerMemberNo: string;
   readonly officerName: string;
+  readonly officerGender: Gender;
+  readonly officerAge: number | null;
   readonly assignedOn: string;
   readonly endedOn: string | null;
   readonly reason: string | null;
@@ -129,10 +135,14 @@ export interface ShepherdingAssignmentHistory {
 export interface MemberShepherding {
   readonly memberNo: string;
   readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
   readonly shepherd: {
     readonly assignmentId: string;
     readonly memberNo: string;
     readonly name: string;
+    readonly gender: Gender;
+    readonly age: number | null;
     readonly assignedOn: string;
   } | null;
   readonly history: readonly ShepherdingAssignmentHistory[];

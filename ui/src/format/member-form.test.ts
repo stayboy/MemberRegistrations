@@ -24,6 +24,7 @@ function detail(overrides: Partial<MemberDetail> = {}): MemberDetail {
     alias: null,
     dob: null,
     gender: 'female',
+    age: null,
     placeOfResidence: 'Adenta',
     addressLine: null,
     joinedOn: '2026-01-04',

@@ -31,11 +31,12 @@ import {
   removeContact,
   type ContactInput,
   type ContactKind,
+  type Gender,
   type MemberContact,
 } from '../api/members';
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from './ConfirmDialog';
-import { memberInitials, memberName } from '../format/member';
+import { memberInitials, memberLabel } from '../format/member';
 
 const CONTACT_GROUPS: readonly { kind: ContactKind; label: string }[] = [
   { kind: 'phone', label: 'Phone' },
@@ -125,19 +126,23 @@ export interface ContactsDialogMember {
   firstName: string;
   lastName: string;
   otherNames?: string | null;
-  /** A roster's composed name replaces the first/last composition when present. */
+  gender?: Gender;
+  age?: number | null;
+  /** A caller-composed label (for example the roster's `memberLabel`) wins. */
   displayName?: string | null;
   isPresbyter?: boolean;
 }
 
 function contactDisplayName(member: ContactsDialogMember): string {
   const displayName = member.displayName?.trim();
-  return displayName && displayName.length > 0 ? displayName : memberName(member);
+  return displayName && displayName.length > 0 ? displayName : memberLabel(member);
 }
 
 function contactInitials(member: ContactsDialogMember): string {
-  const displayName = member.displayName?.trim();
-  if (!displayName) return memberInitials(member);
+  if (member.firstName.trim() || member.lastName.trim()) return memberInitials(member);
+
+  const displayName = member.displayName?.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (!displayName) return '?';
 
   const parts = displayName.split(/\s+/).filter(Boolean);
   const first = parts[0]?.charAt(0) ?? '';

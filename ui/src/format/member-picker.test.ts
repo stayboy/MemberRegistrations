@@ -2,15 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { toMemberPickerOptions } from './member-picker';
 
 describe('toMemberPickerOptions', () => {
-  it('maps the list page to memberNo — name labels', () => {
+  it('maps the list page to memberNo — label labels', () => {
     expect(
       toMemberPickerOptions([
-        { memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah' },
-        { memberNo: 'M-1002', firstName: 'Kofi', lastName: 'Owusu' },
+        { memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 },
+        { memberNo: 'M-1002', firstName: 'Kofi', lastName: 'Owusu', gender: 'male', age: null },
       ]),
     ).toEqual([
-      { memberNo: 'M-1001', name: 'Ama Mensah', label: 'M-1001 — Ama Mensah' },
-      { memberNo: 'M-1002', name: 'Kofi Owusu', label: 'M-1002 — Kofi Owusu' },
+      {
+        memberNo: 'M-1001',
+        name: 'Ama Mensah',
+        label: 'M-1001 — Ama Mensah (Female, 32y)',
+      },
+      {
+        memberNo: 'M-1002',
+        name: 'Kofi Owusu',
+        label: 'M-1002 — Kofi Owusu (Male)',
+      },
     ]);
   });
 

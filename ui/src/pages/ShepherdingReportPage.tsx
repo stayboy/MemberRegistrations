@@ -24,6 +24,7 @@ import { getReport } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { memberLabelFromName } from '../format/member';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
@@ -235,7 +236,11 @@ export function ShepherdingReportPage() {
                                 className={styles.link}
                                 to={rosterHref(officer.memberNo, window.from, window.to)}
                               >
-                                {officer.name || officer.memberNo}
+                                {memberLabelFromName(
+                                  officer.name || officer.memberNo,
+                                  officer.gender,
+                                  officer.age,
+                                )}
                               </Link>
                               <Text size={200} className={styles.muted}>
                                 {officer.memberNo}

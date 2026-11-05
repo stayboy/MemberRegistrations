@@ -1,6 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/sql.js';
 import { shepherdingCalls } from '../db/schema.js';
+import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
 import {
   latestKnownStatus,
@@ -17,6 +18,7 @@ import {
 } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
+import type { Gender } from './members.js';
 
 const UTC = 'UTC';
 
@@ -45,8 +47,12 @@ export interface AssignmentDto {
   id: string;
   officerMemberNo: string;
   officerName: string;
+  officerGender: Gender;
+  officerAge: number | null;
   memberNo: string;
   memberName: string;
+  memberGender: Gender;
+  memberAge: number | null;
   assignedOn: string;
   endedOn: string | null;
   reason: string | null;
@@ -70,6 +76,8 @@ export interface RosterEntryDto {
   assignedOn: string;
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   placeOfResidence: string | null;
   contacts: ContactDto[];
   attempts: number;
@@ -84,6 +92,8 @@ export interface RosterEntryDto {
 export interface OfficerDto {
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   assignedMembers: number;
   attempts: number;
   conversations: number;
@@ -94,16 +104,22 @@ export interface OfficerDto {
 export interface MemberShepherdingDto {
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   shepherd: {
     assignmentId: string;
     memberNo: string;
     name: string;
+    gender: Gender;
+    age: number | null;
     assignedOn: string;
   } | null;
   history: Array<{
     assignmentId: string;
     officerMemberNo: string;
     officerName: string;
+    officerGender: Gender;
+    officerAge: number | null;
     assignedOn: string;
     endedOn: string | null;
     reason: string | null;
@@ -137,6 +153,8 @@ interface MemberRef {
   memberNo: string;
   firstName: string | null;
   lastName: string | null;
+  gender: Gender;
+  dob: string | Date | null;
 }
 
 /** Snake-case aliases keep `toCall` mapping for both the ORM and the raw join. */
@@ -379,6 +397,8 @@ export class ShepherdingRepository {
       member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
       place_of_residence: string | null;
       attempts: number;
       conversations: number;
@@ -389,7 +409,8 @@ export class ShepherdingRepository {
       issue: string | null;
     }>(
       `select a.id as assignment_id, a.assigned_on,
-              m.id as member_id, m.member_no, m.first_name, m.last_name, m.place_of_residence,
+              m.id as member_id, m.member_no, m.first_name, m.last_name,
+              m.gender, m.dob, m.place_of_residence,
               w.attempts, w.conversations, w.last_called_on,
               l.outcome as last_outcome,
               k.still_in_church,
@@ -449,6 +470,8 @@ export class ShepherdingRepository {
       assignedOn: iso(row.assigned_on)!,
       memberNo: row.member_no,
       name: fullName(row.first_name, row.last_name),
+      gender: row.gender,
+      age: ageInYears(iso(row.dob)),
       placeOfResidence: row.place_of_residence,
       contacts: contacts.get(row.member_id) ?? [],
       attempts: row.attempts,
@@ -533,9 +556,11 @@ export class ShepherdingRepository {
       officer_member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
     }>(
       `select a.id, a.assigned_on, a.ended_on, a.reason, a.ended_reason,
-              o.member_no as officer_member_no, o.first_name, o.last_name
+              o.member_no as officer_member_no, o.first_name, o.last_name, o.gender, o.dob
        from shepherding_assignments a
        join members o on o.id = a.officer_member_id
        where a.member_id = $1
@@ -550,11 +575,15 @@ export class ShepherdingRepository {
     return {
       memberNo: member.memberNo,
       name: fullName(member.firstName, member.lastName),
+      gender: member.gender,
+      age: ageInYears(iso(member.dob)),
       shepherd: current
         ? {
             assignmentId: current.id,
             memberNo: current.officer_member_no,
             name: fullName(current.first_name, current.last_name),
+            gender: current.gender,
+            age: ageInYears(iso(current.dob)),
             assignedOn: iso(current.assigned_on)!,
           }
         : null,
@@ -562,6 +591,8 @@ export class ShepherdingRepository {
         assignmentId: assignment.id,
         officerMemberNo: assignment.officer_member_no,
         officerName: fullName(assignment.first_name, assignment.last_name),
+        officerGender: assignment.gender,
+        officerAge: ageInYears(iso(assignment.dob)),
         assignedOn: iso(assignment.assigned_on)!,
         endedOn: iso(assignment.ended_on),
         reason: assignment.reason,
@@ -595,13 +626,15 @@ export class ShepherdingRepository {
       officer_member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
       assigned_members: number;
       attempts: number;
       conversations: number;
       last_called_on: string | null;
       members_never_called: number;
     }>(
-      `select o.member_no as officer_member_no, o.first_name, o.last_name,
+      `select o.member_no as officer_member_no, o.first_name, o.last_name, o.gender, o.dob,
               count(a.id) filter (where m.id is not null)::int as assigned_members,
               coalesce(sum(w.attempts) filter (where m.id is not null), 0)::int as attempts,
               coalesce(sum(w.conversations) filter (where m.id is not null), 0)::int as conversations,
@@ -632,6 +665,8 @@ export class ShepherdingRepository {
     return rows.map((row) => ({
       memberNo: row.officer_member_no,
       name: fullName(row.first_name, row.last_name),
+      gender: row.gender,
+      age: ageInYears(iso(row.dob)),
       assignedMembers: row.assigned_members,
       attempts: row.attempts,
       conversations: row.conversations,
@@ -650,14 +685,19 @@ export class ShepherdingRepository {
       officer_member_no: string;
       officer_first: string | null;
       officer_last: string | null;
+      officer_gender: Gender;
+      officer_dob: string | Date | null;
       member_no: string;
       member_first: string | null;
       member_last: string | null;
+      member_gender: Gender;
+      member_dob: string | Date | null;
     }>(
       `select a.id, a.assigned_on, a.ended_on, a.reason, a.ended_reason,
               o.member_no as officer_member_no, o.first_name as officer_first,
-              o.last_name as officer_last,
-              m.member_no, m.first_name as member_first, m.last_name as member_last
+              o.last_name as officer_last, o.gender as officer_gender, o.dob as officer_dob,
+              m.member_no, m.first_name as member_first, m.last_name as member_last,
+              m.gender as member_gender, m.dob as member_dob
        from shepherding_assignments a
        join members o on o.id = a.officer_member_id
        join members m on m.id = a.member_id
@@ -670,8 +710,12 @@ export class ShepherdingRepository {
       id: row.id,
       officerMemberNo: row.officer_member_no,
       officerName: fullName(row.officer_first, row.officer_last),
+      officerGender: row.officer_gender,
+      officerAge: ageInYears(iso(row.officer_dob)),
       memberNo: row.member_no,
       memberName: fullName(row.member_first, row.member_last),
+      memberGender: row.member_gender,
+      memberAge: ageInYears(iso(row.member_dob)),
       assignedOn: iso(row.assigned_on)!,
       endedOn: iso(row.ended_on),
       reason: row.reason,
@@ -731,9 +775,11 @@ export class ShepherdingRepository {
       member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
       is_presbyter: boolean;
     }>(
-      `select id, member_no, first_name, last_name, is_presbyter
+      `select id, member_no, first_name, last_name, gender, dob, is_presbyter
        from members
        where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
       [memberNo],
@@ -747,6 +793,8 @@ export class ShepherdingRepository {
       memberNo: row.member_no,
       firstName: row.first_name,
       lastName: row.last_name,
+      gender: row.gender,
+      dob: row.dob,
     };
   }
 
@@ -756,8 +804,10 @@ export class ShepherdingRepository {
       member_no: string;
       first_name: string | null;
       last_name: string | null;
+      gender: Gender;
+      dob: string | Date | null;
     }>(
-      `select id, member_no, first_name, last_name
+      `select id, member_no, first_name, last_name, gender, dob
        from members
        where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
       [memberNo],
@@ -768,6 +818,8 @@ export class ShepherdingRepository {
       memberNo: row.member_no,
       firstName: row.first_name,
       lastName: row.last_name,
+      gender: row.gender,
+      dob: row.dob,
     };
   }
 }

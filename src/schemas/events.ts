@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GENDERS } from '../repos/members.js';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
 import { offeringStatsSchema, termsSchema } from './offerings.js';
 
@@ -143,6 +144,8 @@ export const eventAttendanceRowSchema = z.object({
   id: z.string(),
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   status: z.literal('present'),
   source: z.enum(['import', 'manual']),
   sessionTime: z.string().nullable(),
@@ -161,6 +164,8 @@ export const eventAttendanceEntrySchema = z.object({
   id: z.string(),
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   sessionDate: z.string(),
   source: z.enum(['import', 'manual']),
 });

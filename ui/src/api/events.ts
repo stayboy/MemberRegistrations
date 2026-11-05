@@ -1,5 +1,6 @@
 import { ApiError } from './errors';
 import { gatewayRequest, gatewayRequestWithMeta } from './gateway';
+import type { Gender } from './members';
 
 /**
  * Wire types mirror `src/schemas/events.ts` and the event DTOs in
@@ -116,6 +117,8 @@ export interface EventAttendanceRow {
   readonly id: string;
   readonly memberNo: string;
   readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
   readonly status: 'present';
   readonly source: 'import' | 'manual';
   /** Wall-clock time the register carried, `HH:MM`; null for a date-only row. */

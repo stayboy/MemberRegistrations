@@ -35,7 +35,7 @@ import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog, type ContactsDialogMember } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
-import { contactLabel } from '../format/member';
+import { contactLabel, memberLabelFromName } from '../format/member';
 import { isFollowUp, outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { LogCallDialog } from './LogCallDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
@@ -63,27 +63,37 @@ function OfficerPicker({
   onChange: (memberNo: string) => void;
 }) {
   const selected = officers.find((officer) => officer.memberNo === value);
+  const selectedLabel = selected
+    ? memberLabelFromName(selected.name || selected.memberNo, selected.gender, selected.age)
+    : '';
 
   return (
     <Field label="Officer">
       <Dropdown
         aria-label="Officer"
-        value={selected ? `${selected.name || selected.memberNo} · ${selected.memberNo}` : ''}
+        value={selected ? `${selectedLabel} · ${selected.memberNo}` : ''}
         selectedOptions={value ? [value] : []}
         placeholder="Choose an officer"
         onOptionSelect={(_, data) => {
           if (data.optionValue) onChange(data.optionValue);
         }}
       >
-        {officers.map((officer) => (
-          <Option
-            key={officer.memberNo}
-            value={officer.memberNo}
-            text={`${officer.name || officer.memberNo} · ${officer.memberNo}`}
-          >
-            {officer.name || officer.memberNo} · {officer.memberNo}
-          </Option>
-        ))}
+        {officers.map((officer) => {
+          const label = memberLabelFromName(
+            officer.name || officer.memberNo,
+            officer.gender,
+            officer.age,
+          );
+          return (
+            <Option
+              key={officer.memberNo}
+              value={officer.memberNo}
+              text={`${label} · ${officer.memberNo}`}
+            >
+              {label} · {officer.memberNo}
+            </Option>
+          );
+        })}
       </Dropdown>
     </Field>
   );
@@ -206,7 +216,13 @@ export function ShepherdingRosterPage() {
         memberNo: contactsFor.memberNo,
         firstName: '',
         lastName: '',
-        displayName: contactsFor.name,
+        gender: contactsFor.gender,
+        age: contactsFor.age,
+        displayName: memberLabelFromName(
+          contactsFor.name || contactsFor.memberNo,
+          contactsFor.gender,
+          contactsFor.age,
+        ),
       }
     : null;
 
@@ -307,7 +323,15 @@ export function ShepherdingRosterPage() {
         {rosterReady ? (
           <>
             <div className={styles.filterRow}>
-              <Text weight="semibold">{selectedOfficer?.name || selectedOfficer?.memberNo}</Text>
+              <Text weight="semibold">
+                {selectedOfficer
+                  ? memberLabelFromName(
+                      selectedOfficer.name || selectedOfficer.memberNo,
+                      selectedOfficer.gender,
+                      selectedOfficer.age,
+                    )
+                  : officerParam}
+              </Text>
               <Text size={200} className={styles.muted}>
                 {selectedOfficer?.memberNo} ·{' '}
                 <Link className={styles.link} to={officersHref(window.from, window.to)}>
@@ -379,99 +403,104 @@ export function ShepherdingRosterPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filtered.map((entry) => (
-                          <TableRow key={entry.assignmentId}>
-                            <TableCell>
-                              <div className={styles.identity}>
-                                <Link
-                                  className={styles.link}
-                                  to={`/members/${encodeURIComponent(entry.memberNo)}`}
-                                >
-                                  {entry.name || entry.memberNo}
-                                </Link>
-                                <Text size={200} className={styles.muted}>
-                                  {entry.memberNo}
-                                </Text>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {entry.placeOfResidence || <Text className={styles.muted}>—</Text>}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="small"
-                                appearance="transparent"
-                                aria-label={`${contactLabel(entry.contacts.length)} for ${
-                                  entry.name || entry.memberNo
-                                }`}
-                                onClick={() => setContactsFor(entry)}
-                              >
-                                {contactLabel(entry.contacts.length)}
-                              </Button>
-                            </TableCell>
-                            <TableCell>{entry.attempts}</TableCell>
-                            <TableCell>{entry.conversations}</TableCell>
-                            <TableCell>
-                              {entry.lastCalledOn ? (
-                                formatDate(entry.lastCalledOn)
-                              ) : (
-                                <Text className={styles.muted}>Never called</Text>
-                              )}
-                            </TableCell>
-                            <TableCell>{outcomeLabel(entry.lastOutcome)}</TableCell>
-                            <TableCell>
-                              <StillInChurchCell entry={entry} />
-                            </TableCell>
-                            <TableCell>
-                              {entry.latestFeedback ? (
-                                <Text size={200}>{entry.latestFeedback}</Text>
-                              ) : (
-                                <Text className={styles.muted}>—</Text>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {entry.latestIssue ? (
-                                <Text size={200}>{entry.latestIssue}</Text>
-                              ) : (
-                                <Text className={styles.muted}>—</Text>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className={styles.actions}>
+                        {filtered.map((entry) => {
+                          const label = memberLabelFromName(
+                            entry.name || entry.memberNo,
+                            entry.gender,
+                            entry.age,
+                          );
+                          return (
+                            <TableRow key={entry.assignmentId}>
+                              <TableCell>
+                                <div className={styles.identity}>
+                                  <Link
+                                    className={styles.link}
+                                    to={`/members/${encodeURIComponent(entry.memberNo)}`}
+                                  >
+                                    {label}
+                                  </Link>
+                                  <Text size={200} className={styles.muted}>
+                                    {entry.memberNo}
+                                  </Text>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {entry.placeOfResidence || <Text className={styles.muted}>—</Text>}
+                              </TableCell>
+                              <TableCell>
                                 <Button
                                   size="small"
-                                  appearance="primary"
-                                  onClick={() => {
-                                    setActionError(null);
-                                    setCallFor(entry);
-                                  }}
+                                  appearance="transparent"
+                                  aria-label={`${contactLabel(entry.contacts.length)} for ${label}`}
+                                  onClick={() => setContactsFor(entry)}
                                 >
-                                  Log call
+                                  {contactLabel(entry.contacts.length)}
                                 </Button>
-                                <Button
-                                  size="small"
-                                  appearance="secondary"
-                                  onClick={() => {
-                                    setActionError(null);
-                                    setAssignFor(entry);
-                                  }}
-                                >
-                                  Reassign
-                                </Button>
-                                <Button
-                                  size="small"
-                                  appearance="subtle"
-                                  onClick={() => {
-                                    setActionError(null);
-                                    setEndFor(entry);
-                                  }}
-                                >
-                                  End assignment
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell>{entry.attempts}</TableCell>
+                              <TableCell>{entry.conversations}</TableCell>
+                              <TableCell>
+                                {entry.lastCalledOn ? (
+                                  formatDate(entry.lastCalledOn)
+                                ) : (
+                                  <Text className={styles.muted}>Never called</Text>
+                                )}
+                              </TableCell>
+                              <TableCell>{outcomeLabel(entry.lastOutcome)}</TableCell>
+                              <TableCell>
+                                <StillInChurchCell entry={entry} />
+                              </TableCell>
+                              <TableCell>
+                                {entry.latestFeedback ? (
+                                  <Text size={200}>{entry.latestFeedback}</Text>
+                                ) : (
+                                  <Text className={styles.muted}>—</Text>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {entry.latestIssue ? (
+                                  <Text size={200}>{entry.latestIssue}</Text>
+                                ) : (
+                                  <Text className={styles.muted}>—</Text>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className={styles.actions}>
+                                  <Button
+                                    size="small"
+                                    appearance="primary"
+                                    onClick={() => {
+                                      setActionError(null);
+                                      setCallFor(entry);
+                                    }}
+                                  >
+                                    Log call
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    appearance="secondary"
+                                    onClick={() => {
+                                      setActionError(null);
+                                      setAssignFor(entry);
+                                    }}
+                                  >
+                                    Reassign
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    onClick={() => {
+                                      setActionError(null);
+                                      setEndFor(entry);
+                                    }}
+                                  >
+                                    End assignment
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -493,7 +522,11 @@ export function ShepherdingRosterPage() {
       {callFor ? (
         <LogCallDialog
           assignmentId={callFor.assignmentId}
-          memberName={callFor.name || callFor.memberNo}
+          memberName={memberLabelFromName(
+            callFor.name || callFor.memberNo,
+            callFor.gender,
+            callFor.age,
+          )}
           assignedOn={callFor.assignedOn}
           onClose={() => setCallFor(null)}
           onLogged={invalidate}
@@ -503,11 +536,21 @@ export function ShepherdingRosterPage() {
       {assignFor ? (
         <AssignShepherdDialog
           memberNo={assignFor.memberNo}
-          memberName={assignFor.name}
+          memberName={memberLabelFromName(
+            assignFor.name || assignFor.memberNo,
+            assignFor.gender,
+            assignFor.age,
+          )}
           currentAssignment={{
             assignmentId: assignFor.assignmentId,
             officerMemberNo: selectedOfficer?.memberNo ?? officerParam,
-            officerName: selectedOfficer?.name,
+            officerName: selectedOfficer
+              ? memberLabelFromName(
+                  selectedOfficer.name || selectedOfficer.memberNo,
+                  selectedOfficer.gender,
+                  selectedOfficer.age,
+                )
+              : undefined,
             assignedOn: assignFor.assignedOn,
           }}
           onClose={() => setAssignFor(null)}
@@ -518,7 +561,13 @@ export function ShepherdingRosterPage() {
       <ConfirmDialog
         open={endFor !== null}
         title={
-          endFor ? `End the assignment for ${endFor.name || endFor.memberNo}?` : 'End assignment?'
+          endFor
+            ? `End the assignment for ${memberLabelFromName(
+                endFor.name || endFor.memberNo,
+                endFor.gender,
+                endFor.age,
+              )}?`
+            : 'End assignment?'
         }
         message="The assignment ends now. The assignment history and every logged call stay readable; the pastoral record is not deleted."
         confirmLabel="End assignment"

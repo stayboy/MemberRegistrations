@@ -50,7 +50,7 @@ import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
-import { contactLabel, memberName } from '../format/member';
+import { contactLabel, memberLabel, memberLabelFromName } from '../format/member';
 import { isNotFoundError } from '../format/member-form';
 import { MemberAttendanceTab } from './MemberAttendanceTab';
 import { errorMessage } from './member-detail-errors';
@@ -327,7 +327,7 @@ export function MemberDetailPage() {
   return (
     <PageFrame
       sectionId="members"
-      title={memberName(member)}
+      title={memberLabel(member)}
       submenu={member.memberNo}
       description="Review the registration, attendance, ministries and coverage. Contacts open only from the explicit Contacts action."
       actions={actions}
@@ -423,13 +423,17 @@ export function MemberDetailPage() {
       {assignOpen ? (
         <AssignShepherdDialog
           memberNo={member.memberNo}
-          memberName={memberName(member)}
+          memberName={memberLabel(member)}
           currentAssignment={
             shepherdingQuery.data?.shepherd
               ? {
                   assignmentId: shepherdingQuery.data.shepherd.assignmentId,
                   officerMemberNo: shepherdingQuery.data.shepherd.memberNo,
-                  officerName: shepherdingQuery.data.shepherd.name,
+                  officerName: memberLabelFromName(
+                    shepherdingQuery.data.shepherd.name,
+                    shepherdingQuery.data.shepherd.gender,
+                    shepherdingQuery.data.shepherd.age,
+                  ),
                   assignedOn: shepherdingQuery.data.shepherd.assignedOn,
                 }
               : null
@@ -441,7 +445,7 @@ export function MemberDetailPage() {
 
       <ConfirmDialog
         open={endAssignmentOpen}
-        title={`End the assignment for ${member.memberNo}?`}
+        title={`End the assignment for ${memberLabel(member)}?`}
         message="The assignment ends now. The assignment history and every logged call stay readable; the pastoral record is not deleted."
         confirmLabel="End assignment"
         busy={endAssignmentMutation.isPending}
@@ -451,7 +455,7 @@ export function MemberDetailPage() {
 
       <ConfirmDialog
         open={archiveOpen}
-        title={`Archive ${member.memberNo}?`}
+        title={`Archive ${memberLabel(member)}?`}
         message="The member leaves active views and history is preserved. An active shepherding assignment must be reassigned first. You can restore the member from the archived list."
         confirmLabel="Archive member"
         busy={archiveMutation.isPending}
@@ -468,9 +472,9 @@ export function MemberDetailPage() {
           }
         }}
       >
-        <DialogSurface aria-label={`Purge ${member.memberNo}`}>
+        <DialogSurface aria-label={`Purge ${memberLabel(member)}`}>
           <DialogBody>
-            <DialogTitle>Purge {member.memberNo}?</DialogTitle>
+            <DialogTitle>Purge {memberLabel(member)}?</DialogTitle>
             <DialogContent className={styles.dialogContent}>
               <Text className={styles.purgeWarning}>
                 This permanently erases the member&apos;s personal data and cannot be undone.

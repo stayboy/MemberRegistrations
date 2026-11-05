@@ -57,12 +57,16 @@ describe('shepherding paths', () => {
 
 describe('listOfficers and getRoster', () => {
   it('reads the officers list through the gateway', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ items: [{ memberNo: 'M-1', name: 'Ama' }] }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        items: [{ memberNo: 'M-1', name: 'Ama', gender: 'female', age: 32 }],
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const officers = await listOfficers('https://gateway.example', 'session-token', window);
 
-    expect(officers).toEqual([{ memberNo: 'M-1', name: 'Ama' }]);
+    expect(officers).toEqual([{ memberNo: 'M-1', name: 'Ama', gender: 'female', age: 32 }]);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       'https://gateway.example/gateway/v1/shepherding/officers?from=2026-08-06&to=2026-11-04',

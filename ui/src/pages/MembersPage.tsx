@@ -50,6 +50,7 @@ import {
   contactLabel,
   formatAttendance,
   memberInitials,
+  memberLabel,
   memberName,
   subscriptionDescription,
   subscriptionLabel,
@@ -614,6 +615,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                     <TableBody>
                       {members.map((member) => {
                         const name = memberName(member);
+                        const label = memberLabel(member);
                         return (
                           <TableRow key={member.memberNo}>
                             <TableCell>
@@ -630,7 +632,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                                       className={styles.memberLink}
                                       to={`/members/${encodeURIComponent(member.memberNo)}`}
                                     >
-                                      {name}
+                                      {label}
                                     </Link>
                                     {member.isPresbyter ? (
                                       <Tooltip
@@ -660,7 +662,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                               <Button
                                 size="small"
                                 appearance="transparent"
-                                aria-label={`${contactLabel(member.contactCount)} for ${name}`}
+                                aria-label={`${contactLabel(member.contactCount)} for ${label}`}
                                 onClick={() => setContactsFor(member)}
                               >
                                 {contactLabel(member.contactCount)}
@@ -702,7 +704,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                                 size="small"
                                 appearance="subtle"
                                 icon={<OpenRegular />}
-                                aria-label={`Open ${name} (${member.memberNo})`}
+                                aria-label={`Open ${label} (${member.memberNo})`}
                                 onClick={() => {
                                   navigate(`/members/${encodeURIComponent(member.memberNo)}`);
                                 }}

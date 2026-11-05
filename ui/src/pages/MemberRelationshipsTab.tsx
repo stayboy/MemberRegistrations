@@ -25,6 +25,7 @@ import {
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { MemberPicker } from '../components/MemberPicker';
+import { memberLabelFromName } from '../format/member';
 import { errorMessage, inlineActionError } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 
@@ -35,6 +36,14 @@ const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, string> = {
   guardian: 'Guardian',
   other: 'Other',
 };
+
+function relationshipLabel(relationship: MemberRelationship): string {
+  return memberLabelFromName(
+    relationship.name || relationship.memberNo,
+    relationship.gender,
+    relationship.age,
+  );
+}
 
 export interface MemberRelationshipsTabProps {
   readonly member: MemberDetail;
@@ -129,42 +138,45 @@ export function MemberRelationshipsTab({
         <Text className={styles.muted}>No relationships recorded.</Text>
       ) : (
         <div className={styles.list}>
-          {member.relationships.map((relationship) => (
-            <div key={relationship.id} className={styles.rowCard}>
-              <div className={styles.rowHead}>
-                <Link to={`/members/${encodeURIComponent(relationship.memberNo)}`}>
-                  {relationship.name || relationship.memberNo}
-                </Link>
-                <div className={styles.pills}>
-                  <Badge appearance="outline" size="small">
-                    {RELATIONSHIP_TYPE_LABELS[relationship.type]}
-                  </Badge>
-                  {relationship.isDependent ? (
-                    <Badge appearance="outline" color="informative" size="small">
-                      Dependent
+          {member.relationships.map((relationship) => {
+            const label = relationshipLabel(relationship);
+            return (
+              <div key={relationship.id} className={styles.rowCard}>
+                <div className={styles.rowHead}>
+                  <Link to={`/members/${encodeURIComponent(relationship.memberNo)}`}>
+                    {label}
+                  </Link>
+                  <div className={styles.pills}>
+                    <Badge appearance="outline" size="small">
+                      {RELATIONSHIP_TYPE_LABELS[relationship.type]}
                     </Badge>
-                  ) : null}
-                  {relationship.archived ? (
-                    <Badge appearance="outline" color="warning" size="small">
-                      Archived
-                    </Badge>
-                  ) : null}
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<DismissRegular />}
-                    aria-label={`Remove relationship with ${relationship.memberNo}`}
-                    onClick={() => setRemoveTarget(relationship)}
-                  >
-                    Remove
-                  </Button>
+                    {relationship.isDependent ? (
+                      <Badge appearance="outline" color="informative" size="small">
+                        Dependent
+                      </Badge>
+                    ) : null}
+                    {relationship.archived ? (
+                      <Badge appearance="outline" color="warning" size="small">
+                        Archived
+                      </Badge>
+                    ) : null}
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<DismissRegular />}
+                      aria-label={`Remove relationship with ${label}`}
+                      onClick={() => setRemoveTarget(relationship)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
+                <Text size={200} className={styles.muted}>
+                  {relationship.memberNo}
+                </Text>
               </div>
-              <Text size={200} className={styles.muted}>
-                {relationship.memberNo}
-              </Text>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -221,12 +233,12 @@ export function MemberRelationshipsTab({
         open={removeTarget !== null}
         title={
           removeTarget
-            ? `Remove the relationship with ${removeTarget.memberNo}?`
+            ? `Remove the relationship with ${relationshipLabel(removeTarget)}?`
             : 'Remove relationship?'
         }
         message={
           removeTarget
-            ? `The ${RELATIONSHIP_TYPE_LABELS[removeTarget.type].toLowerCase()} relationship with ${removeTarget.name || removeTarget.memberNo} is removed. The member record itself stays.`
+            ? `The ${RELATIONSHIP_TYPE_LABELS[removeTarget.type].toLowerCase()} relationship with ${relationshipLabel(removeTarget)} is removed. The member record itself stays.`
             : ''
         }
         confirmLabel="Remove relationship"

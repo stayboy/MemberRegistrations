@@ -158,6 +158,8 @@ const relationshipSchema = z.object({
   isDependent: z.boolean(),
   memberNo: z.string(),
   name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   archived: z.boolean(),
 });
 
@@ -204,6 +206,7 @@ export const memberSummarySchema = z.object({
   lastName: z.string(),
   otherNames: z.string().nullable(),
   gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
   placeOfResidence: z.string().nullable(),
   joinedOn: z.string().nullable(),
   isPresbyter: z.boolean(),

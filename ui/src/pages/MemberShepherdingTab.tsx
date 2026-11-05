@@ -9,6 +9,7 @@ import {
 } from '@fluentui/react-components';
 import { Link } from 'react-router-dom';
 import type { MemberShepherding } from '../api/members';
+import { memberLabelFromName } from '../format/member';
 import { outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { errorMessage } from './member-detail-errors';
@@ -112,7 +113,11 @@ export function MemberShepherdingTab({
             {summary.shepherd ? (
               <Text size={200}>
                 <Link to={`/members/${encodeURIComponent(summary.shepherd.memberNo)}`}>
-                  {summary.shepherd.name || summary.shepherd.memberNo}
+                  {memberLabelFromName(
+                    summary.shepherd.name || summary.shepherd.memberNo,
+                    summary.shepherd.gender,
+                    summary.shepherd.age,
+                  )}
                 </Link>{' '}
                 · {summary.shepherd.memberNo} · assigned {formatDate(summary.shepherd.assignedOn)}
               </Text>
@@ -147,7 +152,11 @@ export function MemberShepherdingTab({
                   <div key={assignment.assignmentId} className={styles.rowCard}>
                     <div className={styles.rowHead}>
                       <Text weight="semibold">
-                        {assignment.officerName || assignment.officerMemberNo}
+                        {memberLabelFromName(
+                          assignment.officerName || assignment.officerMemberNo,
+                          assignment.officerGender,
+                          assignment.officerAge,
+                        )}
                       </Text>
                       <Badge
                         appearance="outline"

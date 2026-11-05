@@ -41,8 +41,8 @@ test('the event detail opens the session attendance dialog with the API rows', a
 
   const rows = dialog.getByRole('table', { name: 'Attendance rows' }).getByRole('row');
   await expect(rows).toHaveCount(4); // header plus the three API rows
-  await expect(dialog.getByText('Kwame Asante')).toBeVisible();
-  await expect(dialog.getByText('Yaw Owusu')).toBeVisible();
+  await expect(dialog.getByText('Kwame Asante (Male, 41y)')).toBeVisible();
+  await expect(dialog.getByText('Yaw Owusu (Male, 35y)')).toBeVisible();
   await expect(dialog.getByText('Import', { exact: true })).toHaveCount(2);
   await expect(dialog.getByText('Manual', { exact: true })).toHaveCount(1);
 

@@ -1,7 +1,6 @@
 import { Avatar, Badge, Text } from '@fluentui/react-components';
 import type { MemberDetail } from '../api/members';
-import { memberInitials, memberName } from '../format/member';
-import { genderLabel } from '../format/member-form';
+import { memberInitials, memberLabel, memberName } from '../format/member';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useMemberDetailStyles } from './member-detail-styles';
 
@@ -25,7 +24,7 @@ export function MemberOverviewTab({ member }: { member: MemberDetail }) {
         />
         <div>
           <div className={styles.nameRow}>
-            <span className={styles.name}>{memberName(member)}</span>
+            <span className={styles.name}>{memberLabel(member)}</span>
             {member.isPresbyter ? (
               <Badge appearance="tint" color="informative">
                 Presbyter
@@ -59,7 +58,6 @@ export function MemberOverviewTab({ member }: { member: MemberDetail }) {
       </h2>
       <div className={styles.detailGrid}>
         <DetailItem label="Member number" value={member.memberNo} />
-        <DetailItem label="Gender" value={genderLabel(member.gender)} />
         <DetailItem label="Joined" value={member.joinedOn ? formatDate(member.joinedOn) : '—'} />
         <DetailItem label="Place of residence" value={member.placeOfResidence ?? ''} />
         <DetailItem label="Presbyter" value={member.isPresbyter ? 'Yes' : 'No'} />

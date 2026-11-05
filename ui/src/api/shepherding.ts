@@ -1,6 +1,6 @@
 import { ApiError } from './errors';
 import { gatewayRequest } from './gateway';
-import type { CallOutcome, MemberContact, ShepherdingCall, StillInChurch } from './members';
+import type { CallOutcome, Gender, MemberContact, ShepherdingCall, StillInChurch } from './members';
 
 /**
  * Wire types mirror `src/schemas/shepherding.ts` and the shepherding DTOs in
@@ -16,6 +16,8 @@ export interface ShepherdingWindow {
 export interface OfficerSummary {
   readonly memberNo: string;
   readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
   readonly assignedMembers: number;
   readonly attempts: number;
   readonly conversations: number;
@@ -28,6 +30,8 @@ export interface RosterEntry {
   readonly assignedOn: string;
   readonly memberNo: string;
   readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
   readonly placeOfResidence: string | null;
   /** Values are present on the wire; the roster renders a count, never these values (Q157). */
   readonly contacts: readonly MemberContact[];
@@ -82,8 +86,12 @@ export interface ShepherdingAssignment {
   readonly id: string;
   readonly officerMemberNo: string;
   readonly officerName: string;
+  readonly officerGender: Gender;
+  readonly officerAge: number | null;
   readonly memberNo: string;
   readonly memberName: string;
+  readonly memberGender: Gender;
+  readonly memberAge: number | null;
   readonly assignedOn: string;
   readonly endedOn: string | null;
   readonly reason: string | null;

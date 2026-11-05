@@ -76,6 +76,8 @@ const ATTENDANCE: EventAttendance = {
       id: 'attendance-1',
       memberNo: 'M-1',
       name: 'Ama Mensah',
+      gender: 'female',
+      age: 32,
       status: 'present',
       source: 'import',
       sessionTime: '09:04',
