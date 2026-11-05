@@ -104,6 +104,25 @@ const CONTACTS_1001: readonly MemberContact[] = [
   },
 ];
 
+const CONTACTS_1002: readonly MemberContact[] = [
+  {
+    id: 'contact-1002-phone',
+    kind: 'phone',
+    value: '+233 20 000 0002',
+    displayOrder: 0,
+    ownerMemberNo: 'M-1002',
+    linked: false,
+  },
+  {
+    id: 'contact-1002-email',
+    kind: 'email',
+    value: 'ama.mensah@example.test',
+    displayOrder: 0,
+    ownerMemberNo: 'M-1002',
+    linked: false,
+  },
+];
+
 const SUBSCRIPTIONS_1001: readonly MemberSubscription[] = [
   {
     id: 'subscription-1',
@@ -182,7 +201,7 @@ export const MEMBERS: readonly MemberSummary[] = [
     joinedOn: '2020-07-19',
     isPresbyter: false,
     archivedAt: null,
-    contactCount: 0,
+    contactCount: 2,
     ministries: [],
   },
 ];
@@ -230,7 +249,7 @@ const DETAILS = new Map<string, MemberDetail>([
       joinedOn: '2020-07-19',
       isPresbyter: false,
       archivedAt: null,
-      contactCount: 0,
+      contactCount: 2,
       ministries: [],
       maidenName: null,
       alias: null,
@@ -240,7 +259,7 @@ const DETAILS = new Map<string, MemberDetail>([
       version: 1,
       createdAt: '2024-02-01T08:00:00.000Z',
       updatedAt: '2024-02-01T08:00:00.000Z',
-      contacts: [],
+      contacts: CONTACTS_1002,
       subscriptions: [],
       relationships: [],
       attendance: [],
@@ -409,25 +428,25 @@ const OFFICER = {
 const SHEPHERDING_ROSTER_SUMMARY: OfficerSummary = {
   memberNo: 'M-1001',
   name: 'Kwame Asante',
-  assignedMembers: 2,
+  assignedMembers: 4,
   attempts: 4,
   conversations: 3,
-  lastCalledOn: '2026-01-02',
+  lastCalledOn: '2026-01-04',
   membersNeverCalled: 1,
 };
 
 const CHURCH_REPORT: ChurchReport = {
   from: '2025-10-03',
-  to: '2026-01-01',
+  to: '2026-01-04',
   totals: {
     officers: 1,
-    activeMembers: 2,
-    assignedMembers: 2,
+    activeMembers: 4,
+    assignedMembers: 4,
     unassignedMembers: 0,
     attempts: 4,
     conversations: 3,
     membersNeverCalled: 1,
-    stillInChurch: { yes: 2, no: 0, unknown: 0, neverReported: 0 },
+    stillInChurch: { yes: 3, no: 0, unknown: 0, neverReported: 1 },
   },
   officers: [SHEPHERDING_ROSTER_SUMMARY],
 };
@@ -435,8 +454,87 @@ const CHURCH_REPORT: ChurchReport = {
 const ROSTER: Roster = {
   officerMemberNo: 'M-1001',
   from: '2025-10-03',
-  to: '2026-01-01',
-  items: [],
+  to: '2026-01-04',
+  items: [
+    {
+      assignmentId: 'assignment-1',
+      assignedOn: '2025-06-01',
+      memberNo: 'M-1002',
+      name: 'Ama Mensah',
+      placeOfResidence: 'Accra',
+      contacts: CONTACTS_1002,
+      attempts: 2,
+      conversations: 1,
+      lastCalledOn: '2026-01-02',
+      lastOutcome: 'reached',
+      stillInChurch: 'yes',
+      latestFeedback: 'Settling in well after the move.',
+      latestIssue: null,
+    },
+    {
+      assignmentId: 'assignment-2',
+      assignedOn: '2025-08-17',
+      memberNo: 'M-1003',
+      name: 'Yaw Owusu',
+      placeOfResidence: 'Tema',
+      contacts: [
+        {
+          id: 'contact-1003-phone',
+          kind: 'phone',
+          value: '+233 20 000 0003',
+          displayOrder: 0,
+          ownerMemberNo: 'M-1003',
+          linked: false,
+        },
+      ],
+      attempts: 1,
+      conversations: 1,
+      lastCalledOn: '2025-12-20',
+      lastOutcome: 'reached',
+      stillInChurch: 'yes',
+      latestFeedback: 'Asked for a follow-up visit.',
+      latestIssue: 'Missed two Sundays.',
+    },
+    {
+      assignmentId: 'assignment-3',
+      assignedOn: '2025-11-02',
+      memberNo: 'M-1005',
+      name: 'Adjoa Boateng',
+      placeOfResidence: 'Takoradi',
+      contacts: [
+        {
+          id: 'contact-1005-email',
+          kind: 'email',
+          value: 'adjoa.boateng@example.test',
+          displayOrder: 0,
+          ownerMemberNo: 'M-1005',
+          linked: false,
+        },
+      ],
+      attempts: 1,
+      conversations: 1,
+      lastCalledOn: '2026-01-04',
+      lastOutcome: 'reached',
+      stillInChurch: 'yes',
+      latestFeedback: 'Grateful for the prayer visit.',
+      latestIssue: null,
+    },
+    {
+      assignmentId: 'assignment-4',
+      assignedOn: '2025-11-09',
+      memberNo: 'M-1006',
+      name: 'Kojo Antwi',
+      placeOfResidence: 'Kumasi',
+      contacts: [],
+      attempts: 0,
+      conversations: 0,
+      lastCalledOn: null,
+      lastOutcome: null,
+      stillInChurch: null,
+      latestFeedback: null,
+      latestIssue: null,
+    },
+  ],
 };
 
 const MEMBER_SHEPHERDING: MemberShepherding = {

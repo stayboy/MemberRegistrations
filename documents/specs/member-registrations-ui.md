@@ -1166,7 +1166,7 @@ The API's `vercel.json` is unchanged; Vercel continues to build only `src/index.
 - Build with `VITE_GATEWAY_URL=https://member-registrations-mind-logs.vercel.app` and
   `base: "/MemberRegistrations/"`.
 - Use `createHashRouter`; deep links are `https://stayboy.github.io/MemberRegistrations/#/members/M-1001`.
-- Workflow `.github/workflows/pages.yml`: on push to `main`, `npm ci`, `npm run ui:build`, upload
+- Workflow `.github/workflows/deploy-pages.yml`: on push to `main`, `npm ci`, `npm run ui:build`, upload
   `ui/dist` with `actions/upload-pages-artifact`, deploy with `actions/deploy-pages`. Permissions:
   `pages: write`, `id-token: write`; environment `github-pages`.
 - The Pages origin is **`https://stayboy.github.io`** (origin excludes the repository path).
