@@ -239,7 +239,7 @@ export function EventDetailPage() {
                             <Button
                               size="small"
                               appearance="transparent"
-                              aria-label={`View attendance rows for ${formatDate(item.date)}`}
+                              aria-label={`View rows for ${formatDate(item.date)}`}
                               onClick={() => setSelected(item)}
                             >
                               View rows

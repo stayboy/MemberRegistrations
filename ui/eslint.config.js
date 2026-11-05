@@ -6,7 +6,13 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -24,7 +30,13 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
   },
   {
-    files: ['vite.config.ts', 'vitest.config.ts', 'eslint.config.js'],
+    files: [
+      'vite.config.ts',
+      'vitest.config.ts',
+      'playwright.config.ts',
+      'e2e/**/*.ts',
+      'eslint.config.js',
+    ],
     languageOptions: { globals: { ...globals.node } },
   },
   prettier,

@@ -347,6 +347,7 @@ export function MemberDetailPage() {
           onTabSelect={(_, data) => setActiveTab(data.value as MemberTab)}
           data-testid="member-tabs"
           aria-label="Member record sections"
+          className={styles.tabs}
         >
           <Tab value="overview">Overview</Tab>
           <Tab value="attendance">Attendance</Tab>
