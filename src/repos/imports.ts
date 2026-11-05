@@ -5,6 +5,7 @@ import {
   DuplicateImportError,
   NotFoundError,
   ValidationError,
+  type ImportRowError,
 } from '../errors/domain-errors.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { GENDERS, type Gender } from './members.js';
@@ -251,6 +252,37 @@ function textOrNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** A row-level rejection: the flattened detail stays stable and `rows` names the row. */
+function importRowError(row: number, message: string): ImportError {
+  return new ImportError(`Row ${row}: ${message}`, [{ row, message }]);
+}
+
+/**
+ * Runs a field-validation pass over every row and reports all offenders, not just the first.
+ * `detail` keeps the first failure's wording; the thrown error carries every rejected row.
+ */
+function prepareRows<TRow, TPrepared>(
+  rows: TRow[],
+  prepare: (row: TRow, rowNumber: number) => TPrepared,
+): TPrepared[] {
+  const prepared: TPrepared[] = [];
+  const errors: ImportRowError[] = [];
+  let firstMessage: string | null = null;
+
+  for (const [index, row] of rows.entries()) {
+    try {
+      prepared.push(prepare(row, index + 1));
+    } catch (error) {
+      if (!(error instanceof ImportError) || !error.rows?.length) throw error;
+      firstMessage ??= error.message;
+      errors.push(...error.rows);
+    }
+  }
+
+  if (firstMessage !== null) throw new ImportError(firstMessage, errors);
+  return prepared;
+}
+
 interface PreparedMemberRow {
   memberNo: string;
   firstName: string;
@@ -270,7 +302,7 @@ interface PreparedMemberRow {
 
 function requiredImportText(value: string | null | undefined, field: string, row: number): string {
   const trimmed = textOrNull(value);
-  if (!trimmed) throw new ImportError(`Row ${row}: ${field} is required`);
+  if (!trimmed) throw importRowError(row, `${field} is required`);
   return trimmed;
 }
 
@@ -280,7 +312,7 @@ function importDate(value: string | null | undefined, field: string, row: number
   try {
     return assertDate(text, field);
   } catch (error) {
-    throw new ImportError(`Row ${row}: ${(error as Error).message}`);
+    throw importRowError(row, (error as Error).message);
   }
 }
 
@@ -288,7 +320,7 @@ function prepareMemberRow(row: MemberImportRow, rowNumber: number): PreparedMemb
   let gender: Gender | undefined;
   if (row.gender !== undefined) {
     if (!GENDERS.includes(row.gender)) {
-      throw new ImportError(`Row ${rowNumber}: gender is not recognised`);
+      throw importRowError(rowNumber, 'gender is not recognised');
     }
     gender = row.gender;
   }
@@ -310,8 +342,15 @@ function prepareMemberRow(row: MemberImportRow, rowNumber: number): PreparedMemb
   };
 }
 
-function duplicateMemberNos(rows: Array<{ memberNo: string; rowNumber: number }>): string | null {
-  const seen = new Map<string, { memberNo: string; rows: number[] }>();
+interface DuplicateMemberNo {
+  memberNo: string;
+  rows: number[];
+}
+
+function duplicateMemberNos(
+  rows: Array<{ memberNo: string; rowNumber: number }>,
+): DuplicateMemberNo[] {
+  const seen = new Map<string, DuplicateMemberNo>();
   for (const row of rows) {
     const key = row.memberNo.toLowerCase();
     const entry = seen.get(key) ?? { memberNo: row.memberNo, rows: [] };
@@ -319,9 +358,20 @@ function duplicateMemberNos(rows: Array<{ memberNo: string; rowNumber: number }>
     seen.set(key, entry);
   }
 
-  const duplicates = [...seen.values()].filter((entry) => entry.rows.length > 1);
-  if (duplicates.length === 0) return null;
+  return [...seen.values()].filter((entry) => entry.rows.length > 1);
+}
+
+/** The flattened detail keeps its established wording, including every involved row. */
+function duplicateMemberNoDetail(duplicates: DuplicateMemberNo[]): string {
   return duplicates.map((entry) => `${entry.memberNo} (rows ${entry.rows.join(', ')})`).join('; ');
+}
+
+/** One entry per involved row; a duplicate spans rows and repeats their shared message. */
+function duplicateMemberNoRows(duplicates: DuplicateMemberNo[]): ImportRowError[] {
+  return duplicates.flatMap((entry) => {
+    const message = `Duplicate memberNo ${entry.memberNo} (rows ${entry.rows.join(', ')})`;
+    return entry.rows.map((row) => ({ row, message }));
+  });
 }
 
 interface PreparedAttendanceRow {
@@ -351,8 +401,9 @@ function prepareAttendanceRow(
 
   const match = IMPORT_DATETIME_PATTERN.exec(raw);
   if (!match) {
-    throw new ImportError(
-      `Row ${rowNumber}: datetime "${raw}" must be YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]`,
+    throw importRowError(
+      rowNumber,
+      `datetime "${raw}" must be YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]`,
     );
   }
 
@@ -360,11 +411,12 @@ function prepareAttendanceRow(
   try {
     assertDate(date, 'datetime');
   } catch (error) {
-    throw new ImportError(`Row ${rowNumber}: ${(error as Error).message}`);
+    throw importRowError(rowNumber, (error as Error).message);
   }
   if (date !== sessionDate) {
-    throw new ImportError(
-      `Row ${rowNumber}: datetime ${raw} is on ${date}, but the selected session is ${sessionDate}`,
+    throw importRowError(
+      rowNumber,
+      `datetime ${raw} is on ${date}, but the selected session is ${sessionDate}`,
     );
   }
 
@@ -374,7 +426,7 @@ function prepareAttendanceRow(
   const minutes = match[3]!;
   const seconds = match[4] ?? '00';
   if (Number(hours) > 23 || Number(minutes) > 59 || Number(seconds) > 59) {
-    throw new ImportError(`Row ${rowNumber}: datetime ${raw} has a time outside 00:00:00-23:59:59`);
+    throw importRowError(rowNumber, `datetime ${raw} has a time outside 00:00:00-23:59:59`);
   }
 
   return { memberNo, sessionTime: `${hours}:${minutes}:${seconds}`, rowNumber };
@@ -394,10 +446,13 @@ export class ImportRepository {
   async importMembers(rows: MemberImportRow[], actor: string): Promise<ImportBatchDto> {
     assertRows(rows, 'rows');
 
-    const prepared = rows.map((row, index) => prepareMemberRow(row, index + 1));
+    const prepared = prepareRows(rows, prepareMemberRow);
     const duplicates = duplicateMemberNos(prepared);
-    if (duplicates) {
-      throw new ImportError(`Duplicate memberNo in the file: ${duplicates}`);
+    if (duplicates.length > 0) {
+      throw new ImportError(
+        `Duplicate memberNo in the file: ${duplicateMemberNoDetail(duplicates)}`,
+        duplicateMemberNoRows(duplicates),
+      );
     }
 
     return this.db.transaction(async (tx) => {
@@ -410,13 +465,15 @@ export class ImportRepository {
       for (const row of prepared) {
         const current = existing.get(row.memberNo.toLowerCase());
         if (current?.purged_at) {
-          throw new ImportError(
-            `Row ${row.rowNumber}: member ${current.member_no} has been purged and cannot be resurrected`,
+          throw importRowError(
+            row.rowNumber,
+            `member ${current.member_no} has been purged and cannot be resurrected`,
           );
         }
         if (current?.archived_at) {
-          throw new ImportError(
-            `Row ${row.rowNumber}: member ${current.member_no} is archived; restore it before importing`,
+          throw importRowError(
+            row.rowNumber,
+            `member ${current.member_no} is archived; restore it before importing`,
           );
         }
 
@@ -482,12 +539,15 @@ export class ImportRepository {
         );
       }
 
-      const prepared = request.rows.map((row, index) =>
-        prepareAttendanceRow(row, index + 1, sessionDate),
+      const prepared = prepareRows(request.rows, (row, rowNumber) =>
+        prepareAttendanceRow(row, rowNumber, sessionDate),
       );
       const duplicates = duplicateMemberNos(prepared);
-      if (duplicates) {
-        throw new ImportError(`Duplicate memberNo in the file: ${duplicates}`);
+      if (duplicates.length > 0) {
+        throw new ImportError(
+          `Duplicate memberNo in the file: ${duplicateMemberNoDetail(duplicates)}`,
+          duplicateMemberNoRows(duplicates),
+        );
       }
 
       const memberNos = [...new Set(prepared.map((row) => row.memberNo.toLowerCase()))];
@@ -499,12 +559,16 @@ export class ImportRepository {
         members.map((member) => [member.member_no.toLowerCase(), member.id]),
       );
 
-      const unknownMembers = new Set<string>();
-      for (const row of prepared) {
-        if (!memberMap.has(row.memberNo.toLowerCase())) unknownMembers.add(row.memberNo);
-      }
-      if (unknownMembers.size > 0) {
-        throw new ImportError(`Unknown member numbers: ${[...unknownMembers].sort().join(', ')}`);
+      const unknownRows = prepared.filter((row) => !memberMap.has(row.memberNo.toLowerCase()));
+      if (unknownRows.length > 0) {
+        const unknownMembers = [...new Set(unknownRows.map((row) => row.memberNo))].sort();
+        throw new ImportError(
+          `Unknown member numbers: ${unknownMembers.join(', ')}`,
+          unknownRows.map((row) => ({
+            row: row.rowNumber,
+            message: `Unknown member number ${row.memberNo}`,
+          })),
+        );
       }
 
       const [batchRow] = await tx.query<{ id: string; created_at: Date | string }>(
@@ -682,8 +746,9 @@ export class ImportRepository {
       );
       const count = Number(active?.count ?? 0);
       if (count > 0) {
-        throw new ImportError(
-          `Row ${row.rowNumber}: member ${current.member_no} still shepherds ${count} member(s); reassign them before clearing the presbyter flag`,
+        throw importRowError(
+          row.rowNumber,
+          `member ${current.member_no} still shepherds ${count} member(s); reassign them before clearing the presbyter flag`,
         );
       }
     }
@@ -732,7 +797,7 @@ export class ImportRepository {
     try {
       normalized = normalizeContactValue(kind, value);
     } catch (error) {
-      throw new ImportError(`Row ${row.rowNumber}: ${(error as Error).message}`);
+      throw importRowError(row.rowNumber, (error as Error).message);
     }
 
     const [existing] = await tx.query<{ id: string; member_id: string }>(
@@ -741,8 +806,9 @@ export class ImportRepository {
     );
     if (existing) {
       if (existing.member_id === memberId) return;
-      throw new ImportError(
-        `Row ${row.rowNumber}: this ${kind} already belongs to another member; correct or remove it`,
+      throw importRowError(
+        row.rowNumber,
+        `this ${kind} already belongs to another member; correct or remove it`,
       );
     }
 

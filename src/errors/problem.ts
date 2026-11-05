@@ -80,6 +80,16 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   }
 
   if (error instanceof ImportError) {
+    if (error.rows && error.rows.length > 0) {
+      res
+        .status(422)
+        .type('application/problem+json')
+        .json({
+          ...problemBody(422, 'Import rejected', error.message, 'import_failed'),
+          rows: error.rows,
+        });
+      return;
+    }
     sendProblem(res, 422, 'Import rejected', error.message, 'import_failed');
     return;
   }

@@ -156,6 +156,8 @@ export interface ListQuery {
   status?: 'active' | 'archived';
   /** Deprecated alias for active + archived. */
   includeArchived?: boolean;
+  /** Active members with no active shepherding assignment (FR-8a). */
+  unassigned?: boolean;
   include?: ListInclude[];
   seriesId?: string;
   limit?: number;
@@ -279,7 +281,16 @@ export class MemberRepository {
     const params: unknown[] = [];
     const where: string[] = [];
 
-    if (query.status === 'archived') {
+    if (query.unassigned) {
+      // FR-8a: the same predicate the church report counts, and it implies active.
+      where.push(
+        `m.archived_at is null and m.purged_at is null
+         and not exists (
+           select 1 from shepherding_assignments a
+           where a.member_id = m.id and a.ended_on is null
+         )`,
+      );
+    } else if (query.status === 'archived') {
       where.push('m.archived_at is not null and m.purged_at is null');
     } else if (query.status === 'active') {
       where.push('m.archived_at is null and m.purged_at is null');

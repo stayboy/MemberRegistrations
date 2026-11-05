@@ -295,6 +295,10 @@ describe('members import', () => {
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('I-3001');
     expect(response.body.detail).toContain('rows 1, 2');
+    expect(response.body.rows).toEqual([
+      { row: 1, message: 'Duplicate memberNo I-3001 (rows 1, 2)' },
+      { row: 2, message: 'Duplicate memberNo I-3001 (rows 1, 2)' },
+    ]);
 
     await request(app).get('/v1/members/I-3001').set(readHeaders).expect(404);
   });
@@ -310,6 +314,9 @@ describe('members import', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('archived');
+    expect(response.body.rows).toEqual([
+      { row: 1, message: 'member A-1001 is archived; restore it before importing' },
+    ]);
 
     const archived = await request(app)
       .get('/v1/members/A-1001')
@@ -333,6 +340,9 @@ describe('members import', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('purged');
+    expect(response.body.rows).toEqual([
+      { row: 1, message: 'member P-1001 has been purged and cannot be resurrected' },
+    ]);
   });
 
   it('skips an identical contact and rejects one held by another member', async () => {
@@ -359,6 +369,9 @@ describe('members import', () => {
     expect(clash.status).toBe(422);
     expect(clash.body.code).toBe('import_failed');
     expect(clash.body.detail).toContain('Row 1');
+    expect(clash.body.rows).toEqual([
+      { row: 1, message: 'this phone already belongs to another member; correct or remove it' },
+    ]);
 
     await request(app).get('/v1/members/D-1002').set(readHeaders).expect(404);
   });
@@ -374,6 +387,9 @@ describe('members import', () => {
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
+    expect(response.body.rows).toEqual([
+      { row: 2, message: 'member R-ARCH is archived; restore it before importing' },
+    ]);
 
     await request(app).get('/v1/members/R-1001').set(readHeaders).expect(404);
   });

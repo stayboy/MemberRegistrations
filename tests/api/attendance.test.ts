@@ -197,6 +197,7 @@ describe('imports', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain(unknownId);
+    expect(response.body).not.toHaveProperty('rows');
 
     const [row] = await harness.db.query<{ count: number | string }>(
       'select count(*)::int as count from import_batches where event_instance_id = $1',
@@ -261,8 +262,13 @@ describe('imports', () => {
       .set(readHeaders);
 
     expect(report.status).toBe(200);
+    const [row] = await harness.db.query<{ id: string }>(
+      'select id from attendance where event_instance_id = $1 and session_date = $2',
+      [target.id, '2026-01-25'],
+    );
     expect(report.body.rows).toEqual([
       {
+        id: row!.id,
         memberNo: 'M-5001',
         name: 'Ama Mensah',
         status: 'present',
@@ -306,8 +312,13 @@ describe('imports', () => {
       .query({ date: '2026-02-01' })
       .set(readHeaders);
 
+    const [row] = await harness.db.query<{ id: string }>(
+      'select id from attendance where event_instance_id = $1 and session_date = $2',
+      [target.id, '2026-02-01'],
+    );
     expect(report.body.rows).toEqual([
       {
+        id: row!.id,
         memberNo: 'M-5001',
         name: 'Ama Mensah',
         status: 'present',
@@ -349,6 +360,13 @@ describe('imports', () => {
     expect(response.body.detail).toContain('Row 1');
     expect(response.body.detail).toContain('2026-01-25');
     expect(response.body.detail).toContain('2026-01-18');
+    expect(response.body.rows).toEqual([
+      {
+        row: 1,
+        message:
+          'datetime 2026-01-25T09:00 is on 2026-01-25, but the selected session is 2026-01-18',
+      },
+    ]);
 
     const [batch] = await harness.db.query<{ count: number | string }>(
       'select count(*)::int as count from import_batches where event_instance_id = $1',
@@ -364,6 +382,37 @@ describe('imports', () => {
     expect(Number(attendance!.count)).toBe(1);
   });
 
+  it('names every row whose datetime falls outside the selected session, keeping the first in detail', async () => {
+    const target = event('2026-01-18');
+    const response = await importAttendance({
+      eventId: target.id,
+      sessionDate: '2026-01-18',
+      rows: [
+        { memberNo: 'M-5001', datetime: '2026-01-25T09:00' },
+        { memberNo: 'M-5002', datetime: '2026-01-25T09:05' },
+        { memberNo: 'M-5003', datetime: '2026-01-18T09:10' },
+      ],
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('import_failed');
+    expect(response.body.detail).toBe(
+      'Row 1: datetime 2026-01-25T09:00 is on 2026-01-25, but the selected session is 2026-01-18',
+    );
+    expect(response.body.rows).toEqual([
+      {
+        row: 1,
+        message:
+          'datetime 2026-01-25T09:00 is on 2026-01-25, but the selected session is 2026-01-18',
+      },
+      {
+        row: 2,
+        message:
+          'datetime 2026-01-25T09:05 is on 2026-01-25, but the selected session is 2026-01-18',
+      },
+    ]);
+  });
+
   it('rejects a cancelled event, and writes nothing', async () => {
     const response = await importAttendance({
       eventId: cancelledEventId,
@@ -374,6 +423,8 @@ describe('imports', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('cancelled');
+    // A cancelled event is a batch-level failure, so there is no row list.
+    expect(response.body).not.toHaveProperty('rows');
 
     const [batch] = await harness.db.query<{ count: number | string }>(
       'select count(*)::int as count from import_batches where event_instance_id = $1',
@@ -399,6 +450,7 @@ describe('imports', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('M-9999');
+    expect(response.body.rows).toEqual([{ row: 1, message: 'Unknown member number M-9999' }]);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
@@ -420,6 +472,10 @@ describe('imports', () => {
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain('M-5001');
     expect(response.body.detail).toContain('rows 1, 2');
+    expect(response.body.rows).toEqual([
+      { row: 1, message: 'Duplicate memberNo M-5001 (rows 1, 2)' },
+      { row: 2, message: 'Duplicate memberNo M-5001 (rows 1, 2)' },
+    ]);
 
     const [batch] = await harness.db.query<{ count: number | string }>(
       'select count(*)::int as count from import_batches where event_instance_id = $1',
@@ -452,6 +508,7 @@ describe('imports', () => {
     expect(second.body.code).toBe('conflict');
     expect(second.body.batchId).toBe(first.body.id);
     expect(second.body.detail).toContain(first.body.id);
+    expect(second.body).not.toHaveProperty('rows');
 
     const [rows] = await harness.db.query<{ count: number | string }>(
       "select count(*)::int as count from import_batches where kind = 'attendance' and checksum = $1",
@@ -839,6 +896,7 @@ describe('event attendance per session', () => {
     expect(response.body.code).toBe('import_failed');
     expect(response.body.detail).toContain(EVENT_NO);
     expect(response.body.detail).toContain('2026-10-16');
+    expect(response.body).not.toHaveProperty('rows');
 
     const [row] = await harness.db.query<{ count: number | string }>(
       'select count(*)::int as count from attendance where event_instance_id = $1',
@@ -879,6 +937,11 @@ describe('event attendance per session', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
+    const [importedRow] = await harness.db.query<{ id: string }>(
+      `select id from attendance
+       where event_instance_id = $1 and session_date = '2026-10-14' and source = 'import'`,
+      [eventId],
+    );
     expect(response.body).toEqual({
       eventId,
       sessionDate: '2026-10-14',
@@ -888,6 +951,7 @@ describe('event attendance per session', () => {
       importedRows: 1,
       rows: [
         {
+          id: importedRow!.id,
           memberNo: 'M-7001',
           name: 'Ada Bello',
           status: 'present',
@@ -895,6 +959,7 @@ describe('event attendance per session', () => {
           sessionTime: null,
         },
         {
+          id: manual.body.id,
           memberNo: 'M-7002',
           name: 'Chika Okafor',
           status: 'present',
@@ -903,6 +968,24 @@ describe('event attendance per session', () => {
         },
       ],
     });
+  });
+
+  it('carries the attendance id the row delete accepts', async () => {
+    const created = await addManual(eventId, 'M-7002', '2026-10-13');
+    expect(created.status).toBe(201);
+
+    const before = await readReport(eventId, '2026-10-13');
+    expect(before.body.rows).toHaveLength(1);
+    const rowId = before.body.rows[0].id as string;
+    expect(rowId).toBe(created.body.id);
+
+    await request(app)
+      .delete(`/v1/events/${eventId}/attendance/${rowId}`)
+      .set(writeHeaders)
+      .expect(204);
+
+    const after = await readReport(eventId, '2026-10-13');
+    expect(after.body.rows).toEqual([]);
   });
 
   it('counts expected per session date and lists nobody for an empty session', async () => {
@@ -994,8 +1077,15 @@ describe('event attendance per session', () => {
 
     const report = await readReport(eventId, '2026-10-15');
     expect(report.body.present).toBe(1);
+    const [surviving] = await harness.db.query<{ id: string }>(
+      `select a.id from attendance a
+       join members m on m.id = a.member_id
+       where m.member_no = 'M-7001' and a.event_instance_id = $1 and a.session_date = '2026-10-15'`,
+      [eventId],
+    );
     expect(report.body.rows).toEqual([
       {
+        id: surviving!.id,
         memberNo: 'M-7001',
         name: 'Ada Bello',
         status: 'present',

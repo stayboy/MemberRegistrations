@@ -27,6 +27,7 @@ import {
 import {
   AddRegular,
   ArrowClockwiseRegular,
+  DismissRegular,
   OpenRegular,
   SearchRegular,
 } from '@fluentui/react-icons';
@@ -55,6 +56,7 @@ import {
 } from '../format/member';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
+import { FindByContactDialog } from './FindByContactDialog';
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -82,6 +84,15 @@ const useStyles = makeStyles({
   },
   seriesFilter: {
     minWidth: '200px',
+  },
+  chip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    paddingInlineStart: tokens.spacingHorizontalS,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusCircular,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
   panel: {
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
@@ -360,6 +371,11 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
   const [contactsFor, setContactsFor] = useState<MemberSummary | null>(null);
+  const [findByContactOpen, setFindByContactOpen] = useState(false);
+  // Read once: the report link seeds the filter; afterwards the chip owns it.
+  const [unassigned, setUnassigned] = useState(
+    () => searchParams.get('unassigned') === 'true',
+  );
 
   const setParam = useCallback(
     (key: string, value: string | null) => {
@@ -383,11 +399,12 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
   }, [debouncedSearch, searchParams, setParam]);
 
   const membersQuery = useInfiniteQuery({
-    queryKey: ['members', baseUrl, status, debouncedSearch, seriesId],
+    queryKey: ['members', baseUrl, status, unassigned, debouncedSearch, seriesId],
     queryFn: ({ pageParam, signal }) =>
       listMembers(baseUrl, token, {
         q: debouncedSearch || undefined,
         status,
+        unassigned: unassigned || undefined,
         includeAttendance: Boolean(seriesId),
         seriesId: seriesId || undefined,
         limit: PAGE_SIZE,
@@ -415,18 +432,21 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
   const members = membersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const seriesOptions = seriesQuery.data ?? [];
   const selectedSeries = seriesOptions.find((series) => series.id === seriesId);
-  const isFiltered = debouncedSearch.length > 0 || seriesId.length > 0;
 
-  const emptyTitle = isFiltered
+  const emptyTitle = debouncedSearch
     ? 'No members match'
-    : status === 'archived'
-      ? 'No archived members'
-      : 'No members yet';
-  const emptyBody = isFiltered
+    : unassigned
+      ? 'No unassigned members'
+      : status === 'archived'
+        ? 'No archived members'
+        : 'No members yet';
+  const emptyBody = debouncedSearch
     ? 'Try a different name, member number or series.'
-    : status === 'archived'
-      ? 'Archived registrations will appear here when a member is archived.'
-      : 'Members will appear here once the register has been imported or a member is added.';
+    : unassigned
+      ? 'Every active member has an active shepherding assignment.'
+      : status === 'archived'
+        ? 'Archived registrations will appear here when a member is archived.'
+        : 'Members will appear here once the register has been imported or a member is added.';
 
   return (
     <PageFrame
@@ -506,6 +526,32 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
               </Option>
             ))}
           </Dropdown>
+
+          <Button
+            appearance="secondary"
+            icon={<SearchRegular />}
+            onClick={() => setFindByContactOpen(true)}
+          >
+            Find by contact
+          </Button>
+
+          {unassigned ? (
+            <span className={styles.chip}>
+              <Badge appearance="tint" color="brand" size="medium">
+                Unassigned
+              </Badge>
+              <Button
+                size="small"
+                appearance="transparent"
+                icon={<DismissRegular />}
+                aria-label="Remove Unassigned filter"
+                onClick={() => {
+                  setUnassigned(false);
+                  setParam('unassigned', null);
+                }}
+              />
+            </span>
+          ) : null}
         </div>
 
         {membersQuery.isError ? (
@@ -670,8 +716,8 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                 </div>
                 <div className={styles.footer}>
                   <Text size={200} className={styles.muted}>
-                    {members.length} {status} {members.length === 1 ? 'member' : 'members'} shown ·
-                    cursor pagination
+                    {members.length} {unassigned ? 'unassigned' : status}{' '}
+                    {members.length === 1 ? 'member' : 'members'} shown · cursor pagination
                   </Text>
                   <div className={styles.footerActions}>
                     {membersQuery.isFetchingNextPage ? <Spinner size="tiny" /> : null}
@@ -702,6 +748,8 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
         }}
         onOpenMember={(no) => navigate(`/members/${encodeURIComponent(no)}`)}
       />
+
+      <FindByContactDialog open={findByContactOpen} onOpenChange={setFindByContactOpen} />
     </PageFrame>
   );
 }

@@ -64,6 +64,6 @@ export const importBatchSchema = z.object({
 });
 
 export const importErrorSchema = z.object({
-  message: z.string(),
+  detail: z.string().optional(),
   rows: z.array(z.object({ row: z.number().int(), message: z.string() })).optional(),
 });

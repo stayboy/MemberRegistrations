@@ -149,6 +149,7 @@ export const eventAttendanceInputSchema = z.object({
 });
 
 export const eventAttendanceRowSchema = z.object({
+  id: z.string(),
   memberNo: z.string(),
   name: z.string(),
   status: z.literal('present'),
