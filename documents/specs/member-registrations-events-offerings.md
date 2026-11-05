@@ -86,7 +86,8 @@ contracts they will use.
   separately on the landing and never expose phone numbers.
 - **Pledges**: a member may pledge instead of paying, with an expected date and a required active
   presbyter as follow-up officer. The member's current shepherd is used first; otherwise the
-  offering's default officer; an administrator can assign or reassign.
+  administrator supplies an active presbyter with a reason; a pledge always targets an existing offering,
+  never a standalone one.
 - **Reminders**: scheduled for pending/overdue pledges, with a channel and delivery record. No
   duplicate reminder for the same pledge/date/channel.
 - **USSD**: member or visitor identification, the current/next active event, a short offering list
@@ -118,7 +119,7 @@ rule becomes an HTTP rejection.
   `{ items: OfferingTerms[] }`, newest first.
 - **Name.** `terms.name` is nullable. The API resolves the display name as the trimmed custom name when
   it is non-empty, otherwise `${event.name} · ${kindLabel}`, where the labels are Freewill, Tithe,
-  Pledge, Building, Missions and Other. `EventOffering.name` is always the resolved name and the UI
+  Building, Missions and Other. `EventOffering.name` is always the resolved name and the UI
   MUST NOT compose it. In the catalogue, where no event exists, `Offering.terms.name` is returned as
   stored (null when unnamed) and a UI label falls back to the kind label.
 - **Attachment.** An offering attaches to exactly one of an event or a series. `POST
@@ -200,6 +201,51 @@ eventId, sessionDate, amountMinor, currency?, channel, status?, idempotencyKey }
   of paid contribution rows, not distinct givers. Member and visitor totals are separate and no member
   name, contact value or phone hash appears.
 
+### V3 phase 3 — pledges and reminders (ticket 22)
+
+Ticket 22 records pledges against an existing offering and their reminder records; the landing, the
+offerings UI and the USSD/gateway flows are tickets 23–24. A pledge is **never an offering**: it
+references an offering attached to the event and never creates one.
+
+- **Create.** `POST /v1/pledges` takes `{ memberNo, offeringId, eventId, sessionDate?, amountMinor,
+currency?, expectedOn, followUpOfficerMemberNo?, officerReason?, idempotencyKey }`. The member exists,
+  is active and not purged (`404`). The offering exists (`404`), is active (`422`) and is actively
+  attached to the event or its series (`422 offering_not_on_event`); the pledge records the current
+  `termsVersion`. The event exists (`404`) and is not cancelled or archived (`409 event_not_active`);
+  `sessionDate` is optional but, when present, MUST be one of the event's sessions and not a cancelled
+  one (`422 session_not_in_event`). `amountMinor` is positive; `currency` defaults to the terms
+  currency and MUST equal it. `expectedOn` MUST not be before today (UTC) (`422 invalid_expected_date`)
+  and MAY be after the offering's expiry. The pledge is dated by `sessionDate`, else today (UTC), and
+  that date MUST be on or before the effective expiry (`422 offering_expired`); pending pledges
+  themselves survive expiry. The pledge starts `pending`.
+- **Idempotency.** `idempotencyKey` (1–128 characters) is globally unique. An identical canonical
+  payload returns the stored pledge with `200`; a different payload under the same key is `409
+idempotency_conflict`; a concurrent duplicate resolves through the unique index and a re-read. The
+  three default reminders are created once, inside the creating transaction.
+- **Officer.** A supplied `followUpOfficerMemberNo` MUST be an active presbyter and wins over the
+  shepherd, with `officerReason` (3–500 characters) required; `officerReason` without an officer is
+  `422 validation_error`. Without a supplied officer, the member's active shepherd is used. If neither
+  exists, `422 officer_required`. A `created` event is appended with the actor.
+- **Honor, dishonor, reassign.** `POST /v1/pledges/{id}/honor` appends `honored`;
+  `.../dishonor` requires `{ reason }` and appends `dishonored`; `.../reassign` requires
+  `{ officerMemberNo, reason }`, validates an active presbyter and appends `reassigned` with
+  `fromOfficerMemberNo`/`toOfficerMemberNo`, so both officers stay in history (FR-34). A terminal pledge
+  (`honored` or `dishonored`) rejects another transition with `409 pledge_already_terminal`. A pending
+  pledge MAY be honored after the offering's expiry; the expiry gate never applies to honor.
+- **Overdue.** `overdue` is derived on read (`status = 'pending'` and `expectedOn` before today, UTC);
+  it is never stored. The list accepts it as a `status` filter value and computes the same predicate.
+- **List.** `GET /v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor` returns
+  `{ items, nextCursor? }`, newest first, with `Cache-Control: no-store`. `from`/`to` filter
+  `expectedOn` (inclusive).
+- **Reminders.** Creation automatically writes three `pending` reminders on channel `sms` inside the
+  same transaction: 7 days before `expectedOn`, on it, and 7 days after. `POST
+/v1/pledges/{id}/reminders` adds `{ scheduledFor, channel }` (both required); a duplicate
+  `(pledge, scheduledFor, channel)` is `409 conflict`. `GET /v1/pledges/{id}/reminders` lists them.
+  Reminders are records only and stay `pending` in V3; delivery is out of scope (OS-5), and the
+  member-level opt-out preference is deferred to the delivery round.
+- **Append-only.** Pledges are never deleted; every transition is a `pledge_events` row with actor,
+  timestamp and reason.
+
 ### Navigation
 
 | Top-level | Submenu         | Route                    | API                                    | Slice |
@@ -274,9 +320,9 @@ separate Attendance section, that is Q1.
   keep the series link. `event_no` is unique and is the key used by imports.
 - FR-17: Visitors MUST be able to give with name + phone and receive a receipt/reference without a
   member record; visitor totals MUST be aggregated separately from member totals.
-- FR-18: A pledge MUST use the member's active shepherd as follow-up; otherwise the offering's default
-  officer; otherwise it MUST be rejected. An administrator MAY assign or reassign the officer with a
-  reason.
+- FR-18: A pledge MUST use the member's active shepherd as follow-up, or the active presbyter an
+  administrator supplies with a reason; if neither exists it MUST be rejected with `422
+officer_required`. An administrator MAY assign at creation or reassign later with a reason.
 - FR-19: An offering's display name MAY be omitted; it then falls back to `${event.name} · ${kind}`.
   Special offerings MAY carry a custom name. `availableUntil` is the event end or an explicit date;
   expiry blocks new gifts but MUST NOT block honoring a pending pledge.
@@ -425,7 +471,7 @@ separate Attendance section, that is Q1.
 
 ### AC-30: **Given** a visitor, **When** they give, **Then** the contribution records name + phone hash, returns a receipt/reference, creates no member record, and appears only in the separate visitor total. (FR-17)
 
-### AC-31: **Given** a USSD pledge, **When** the member's shepherd is active, **Then** that presbyter is the follow-up officer; otherwise the offering default officer is used; if neither exists the pledge is rejected. An admin can assign or reassign with a reason. (FR-18)
+### AC-31: **Given** a USSD pledge, **When** the member's shepherd is active, **Then** that presbyter is the follow-up officer; otherwise the administrator-supplied active presbyter is used; if neither exists the pledge is rejected with `422 officer_required`. An admin can assign or reassign with a reason. (FR-18)
 
 ### AC-32: **Given** an offering with no custom name, **When** it is displayed, **Then** the label falls back to the event name + kind; `availableUntil` is event end or the explicit date; after expiry new gifts are rejected but a pending pledge can still be honored. (FR-19)
 
@@ -571,7 +617,7 @@ is optional (for example “Main Auditorium” or “Auditorium + Zoom”).
 ### Proposed offerings
 
 ```ts
-export type OfferingKind = 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
+export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
 export type ContributionStatus = 'initiated' | 'paid' | 'failed';
 export type PledgeStatus = 'pending' | 'honored' | 'dishonored' | 'overdue';
 
@@ -668,15 +714,21 @@ export interface Pledge {
   followUpOfficerMemberNo: string;
   status: PledgeStatus;
   reason: string | null;
+  /** The terms version the pledge was recorded under (FR-33). */
+  termsVersion: number;
+  idempotencyKey: string;
   createdAt: string;
 }
 
 export interface PledgeEvent {
   id: string;
   pledgeId: string;
-  kind: 'created' | 'honored' | 'dishonored' | 'reassigned' | 'reminded' | 'corrected';
+  kind: 'created' | 'honored' | 'dishonored' | 'reassigned';
   actor: string;
   reason: string | null;
+  /** Set on `reassigned`: the officer before and after, so both stay in history (FR-34). */
+  fromOfficerMemberNo: string | null;
+  toOfficerMemberNo: string | null;
   at: string;
 }
 
@@ -735,12 +787,12 @@ export interface ChurchOfferingSummary {
 | `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21 |
 | `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21 |
 | `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21 |
-| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | proposed  |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`                        | Pledge list                                                               | proposed  |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | proposed  |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | proposed  |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | proposed  |
-| `POST`       | `/v1/pledges/{id}/reminders`                                         | Schedule reminder                                                         | proposed  |
+| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22 |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22 |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22 |
 | `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed  |
 | `POST`       | `/v1/ussd/session`                                                   | Start USSD session                                                        | future    |
 | `POST`       | `/v1/ussd/session/{id}/select`                                       | Select offerings                                                          | future    |
@@ -760,6 +812,7 @@ export interface ChurchOfferingSummary {
 | 422     | `session_not_in_event`      | Pick one of the event's sessions |
 | 422     | `offering_expired`          | Show the closed offering         |
 | 422     | `invalid_exception_date`    | Inline date error                |
+| 422     | `officer_required`          | Assign an active presbyter       |
 | 422     | `invalid_amount`            | Inline amount error              |
 | 422     | `invalid_expected_date`     | Inline date error                |
 | 402/409 | `payment_failed`            | Keep `initiated`, allow retry    |
@@ -777,9 +830,9 @@ All money is `bigint` minor units plus an ISO currency. All history tables are a
 | `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                        | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null        |
 | `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                       | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                             |
 | `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                              | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                                                                                                              | amount > 0; expected date not past at create                                                                                                   |
-| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                                                                                | append-only                                                                                                                                    |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                | unique `(pledge_id, scheduled_for, channel)`                                                                                                   |
+| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                              | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter |
+| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                              | append-only; `from`/`to` are set on `reassigned`                                                                                               |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                | unique `(pledge_id, scheduled_for, channel)`; status stays `pending` in V3 (no delivery)                                                       |
 | `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                            | short TTL; no raw phone in logs                                                                                                                |
 | `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                    | unique gateway reference                                                                                                                       |
 
@@ -804,22 +857,22 @@ All money is `bigint` minor units plus an ISO currency. All history tables are a
 
 ## Open Decisions (Grill Round) — settled 2026-11-03
 
-| ID  | Decision                 | Answer                                                                                                                                                                                |
-| --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q1  | Event identity           | First-class dated **Event**; `EventSeries` remains the recurring template. A standalone multi-day event needs no dummy series.                                                        |
-| Q2  | Event attendance         | `event_instances` with a `sessions` JSONB array; attendance is per session date; `GET /v1/events` and `GET /v1/events/{eventId}/attendance?date=`.                                    |
-| Q3  | Offering money/name      | GHS, integer minor units; kinds freewill/tithe/pledge/building/missions/other; name optional, defaults to event + kind; expiry at event end or later; pending pledges survive expiry. |
-| Q4  | Who may give             | Active members and visitors. Visitors give name + phone, receive a receipt, and have no member record; archived/purged members keep history only.                                     |
-| Q5  | Pledge follow-up         | One active presbyter per pledge. Use the member's current shepherd, then the offering default officer, then reject; an admin may assign or reassign with a reason.                    |
-| Q6  | Honor/dishonor/reminders | Honor when paid; dishonor only with an explicit reason; pending/overdue reminders at 7 days before, due date and 7 days after; opt-out and quiet hours.                               |
-| Q7  | USSD/payment             | Specify the flow now; integrate a Ghanaian gateway and USSD aggregator later. No card data in the app.                                                                                |
-| Q7b | USSD listing             | Show the current/next active event, at most five offerings plus `0 More`; visitors identify with name + phone.                                                                        |
-| Q8  | Terms of reference       | Versioned: name, purpose, scripture, kind, currency, target, default amount, start/end, available-until, gateway account and metadata.                                                |
-| Q9  | Financial privacy        | Member totals behind the officer connect gate; visitors aggregated separately; no contact values.                                                                                     |
-| Q10 | Corrections/refunds      | Append-only correction/refund records with actor and reason; no edits or deletes.                                                                                                     |
-| Q11 | Offering exceptions      | Attach to an event or a series; `skip`/`opt_in` on specific dates; available until event end or an explicit later date.                                                               |
-| Q12 | Navigation               | Add **Events** as a top-level and replace the old Attendance calendar; attendance recording is an event action, imports stay under Imports.                                           |
-| Q13 | Venue                    | `events.venue_type` is required and one of `auditorium`, `virtual`, `hybrid`; `venue_name` is optional (e.g. “Main Auditorium”, “Auditorium + Zoom”).                                 |
+| ID  | Decision                 | Answer                                                                                                                                                                                                                   |
+| --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Q1  | Event identity           | First-class dated **Event**; `EventSeries` remains the recurring template. A standalone multi-day event needs no dummy series.                                                                                           |
+| Q2  | Event attendance         | `event_instances` with a `sessions` JSONB array; attendance is per session date; `GET /v1/events` and `GET /v1/events/{eventId}/attendance?date=`.                                                                       |
+| Q3  | Offering money/name      | GHS, integer minor units; kinds freewill/tithe/building/missions/other (a pledge is a payment mode, not a kind); name optional, defaults to event + kind; expiry at event end or later; pending pledges survive expiry.  |
+| Q4  | Who may give             | Active members and visitors. Visitors give name + phone, receive a receipt, and have no member record; archived/purged members keep history only.                                                                        |
+| Q5  | Pledge follow-up         | One active presbyter per pledge. Use the member's current shepherd, or the active presbyter an admin supplies with a reason, else reject; an admin may assign or reassign. A pledge always targets an existing offering. |
+| Q6  | Honor/dishonor/reminders | Honor when paid; dishonor only with an explicit reason; pending/overdue reminders at 7 days before, due date and 7 days after; opt-out and quiet hours.                                                                  |
+| Q7  | USSD/payment             | Specify the flow now; integrate a Ghanaian gateway and USSD aggregator later. No card data in the app.                                                                                                                   |
+| Q7b | USSD listing             | Show the current/next active event, at most five offerings plus `0 More`; visitors identify with name + phone.                                                                                                           |
+| Q8  | Terms of reference       | Versioned: name, purpose, scripture, kind, currency, target, default amount, start/end, available-until, gateway account and metadata.                                                                                   |
+| Q9  | Financial privacy        | Member totals behind the officer connect gate; visitors aggregated separately; no contact values.                                                                                                                        |
+| Q10 | Corrections/refunds      | Append-only correction/refund records with actor and reason; no edits or deletes.                                                                                                                                        |
+| Q11 | Offering exceptions      | Attach to an event or a series; `skip`/`opt_in` on specific dates; available until event end or an explicit later date.                                                                                                  |
+| Q12 | Navigation               | Add **Events** as a top-level and replace the old Attendance calendar; attendance recording is an event action, imports stay under Imports.                                                                              |
+| Q13 | Venue                    | `events.venue_type` is required and one of `auditorium`, `virtual`, `hybrid`; `venue_name` is optional (e.g. “Main Auditorium”, “Auditorium + Zoom”).                                                                    |
 
 The frontier is empty. Any new question must be added here and settled before implementation; do not
 decide it only in chat.
@@ -839,6 +892,12 @@ decide it only in chat.
 
 ## Change log
 
+- 2026-11-05: pledge follow-up is the member's active shepherd or an active presbyter the administrator
+  supplies with a reason (`422 officer_required` otherwise); the offering-level default officer is
+  removed because no such field exists. `pledge` leaves `OfferingKind` — a pledge is a payment mode on
+  an existing offering, never a standalone offering. V3 phase 3 (ticket 22) specifies pledge creation
+  with a unique idempotency key and a date gate, honor/dishonor/reassign with both officers in history,
+  derived `overdue`, three auto-created reminders with dedupe, and the pledge tables.
 - 2026-11-05: V3 phase 2 specified for ticket 21. Contributions are idempotent by a globally unique
   key (identical repeat `200`, different payload `409 idempotency_conflict`), bind to an active
   attached offering and one of the event's session dates, are rejected after the effective expiry
