@@ -149,6 +149,106 @@ code. No raw phone number is stored or logged.
 - The final commit is idempotent by session id: a repeated keypress or gateway retry returns the same
   confirmation code and never creates a second gift.
 
+### Display glossary
+
+USSD screens are short; every static display string has a `full` form for the web and the admin portal
+and a `short` form for USSD. The glossary is a typed, code-owned map in the USSD module, reviewed in
+this spec; it is not a database table in V3. `short` defaults to `full` when the full text already
+fits.
+
+- **Static copy only.** Menus, prompts, confirmations, errors, statuses and field labels use the
+  glossary. Dynamic values (member, event and offering names, amounts, dates, references) keep the
+  API's value and are never renamed. Dynamic field widths are fixed per kind: member and event name
+  **24** characters, offering name **20**, reference **16**, amount **14** and date **12**; a longer
+  value is truncated to that width with `…`, never replaced by a synonym.
+- **Budgets.** A short menu label is at most **16** characters, a prompt line at most **60**, and a
+  whole screen at most **182** characters including the menu and footer. `9 Back`, `0 More` and
+  `00 Main` are fixed copy and count toward the budget. A test renders every screen and fails on a
+  missing key, an exceeded budget, or a changed fixed key. The screen registry is the state list in
+  `USSD session and menu tree` plus the flows below; the test iterates it.
+- **Maintenance.** English only in V3; keys are stable so a later locale can add variants. Wording
+  changes are spec-first. This initial table is the 24a set; 24b and 24c add their own keys, and the
+  completeness test covers every key the shipped screens use. An admin-editable glossary is a backlog
+  item, not V3.
+
+| Key                      | Full                | Short           |
+| ------------------------ | ------------------- | --------------- |
+| `menu.offerings`         | Offerings           | Offerings       |
+| `menu.activities`        | Activities          | Activities      |
+| `menu.attendance`        | Attendance          | Attendance      |
+| `menu.welfare`           | Welfare & Services  | Welfare         |
+| `menu.profile`           | My Profile          | Profile         |
+| `menu.register`          | Register            | Register        |
+| `menu.exit`              | Exit                | Exit            |
+| `nav.back`               | Back                | Back            |
+| `nav.more`               | More                | More            |
+| `nav.main`               | Main menu           | Main            |
+| `action.give`            | Give                | Give            |
+| `action.pledge`          | Pledge              | Pledge          |
+| `action.my_pledges`      | My pledges          | Pledges         |
+| `action.my_payments`     | My payments         | Payments        |
+| `action.redeem`          | Redeem              | Redeem          |
+| `action.accept`          | Accept              | Accept          |
+| `action.change`          | Change              | Change          |
+| `action.pay`             | Pay                 | Pay             |
+| `prompt.amount`          | Enter amount        | Amount          |
+| `prompt.offerings`       | Choose offering(s)  | Offering(s)     |
+| `prompt.split`           | Split amount        | Split           |
+| `prompt.date`            | Enter date DDMMYYYY | Date (DDMMYYYY) |
+| `prompt.expected_date`   | Expected date       | Due date        |
+| `prompt.phone`           | Enter phone number  | Phone           |
+| `prompt.code`            | Enter code          | Code            |
+| `prompt.name`            | Enter name          | Name            |
+| `label.total`            | Total               | Total           |
+| `label.reference`        | Reference           | Ref             |
+| `label.code`             | Confirmation code   | Code            |
+| `label.event`            | Event               | Event           |
+| `label.day`              | Day                 | Day             |
+| `label.offering`         | Offering            | Offering        |
+| `label.amount`           | Amount              | Amount          |
+| `label.currency`         | Currency            | Currency        |
+| `activities.today`       | Today               | Today           |
+| `activities.this_week`   | This week           | This week       |
+| `activities.a_date`      | A date              | Date            |
+| `activities.summary`     | Attendance summary  | Attendance      |
+| `activities.give`        | Give to an offering | Give            |
+| `attendance.day`         | A specific day      | Day             |
+| `attendance.period`      | Period summary      | Period          |
+| `attendance.present`     | I was present       | Present         |
+| `attendance.clocking`    | Clocking            | Clock           |
+| `attendance.clock_in`    | Clock in            | Clock in        |
+| `attendance.expected`    | Expected            | Expected        |
+| `attendance.delegate`    | Delegate            | Delegate        |
+| `attendance.no_data`     | No attendance yet   | No attendance   |
+| `status.regular`         | Regular             | Regular         |
+| `status.non_regular`     | Non-Regular         | Non-reg         |
+| `status.not_enough_data` | Not enough data     | No data         |
+| `welfare.my_services`    | My services         | My plans        |
+| `welfare.subscribe`      | Subscribe           | Join            |
+| `welfare.eligible`       | Eligible            | Eligible        |
+| `welfare.not_eligible`   | Not eligible        | Not eligible    |
+| `welfare.premium`        | Premium             | Premium         |
+| `welfare.payer_member`   | You pay             | You pay         |
+| `welfare.payer_church`   | Church pays         | Church          |
+| `welfare.cover`          | Cover               | Cover           |
+| `welfare.claimed`        | Total claimed       | Claimed         |
+| `welfare.expired`        | Expired             | Expired         |
+| `welfare.until`          | Until               | Until           |
+| `profile.member_no`      | Member no.          | Member no.      |
+| `profile.gender`         | Gender              | Gender          |
+| `profile.age`            | Age                 | Age             |
+| `profile.dob`            | Date of birth       | DOB             |
+| `profile.ministries`     | Ministries          | Ministries      |
+| `profile.shepherd`       | Shepherd            | Shepherd        |
+| `profile.not_assigned`   | Not assigned        | Not assigned    |
+| `error.session_expired`  | Session expired     | Session expired |
+| `error.too_many_tries`   | Too many attempts   | Too many tries  |
+| `error.invalid_amount`   | Invalid amount      | Bad amount      |
+| `error.invalid_date`     | Invalid date        | Bad date        |
+| `error.not_eligible`     | Not eligible        | Not eligible    |
+| `error.already_paid`     | Already paid        | Already paid    |
+| `error.try_again`        | Try again           | Try again       |
+
 ### Giving: events, offerings, splits
 
 - "Valid events for the day" are events whose sessions include today in the event's timezone, that are
@@ -252,21 +352,25 @@ code. No raw phone number is stored or logged.
   shows status, paid by, period and expiry. An ineligible product is hidden, never refused after entry.
 - **Inherited cover.** A member covered by another member's subscription sees it in "My services" as
   inherited, labelled with the relationship from the covered member to the policyholder: `spouse`
-  renders Husband or Wife from gender, otherwise the relationship type — for example
-  "Life Cover (Husband · Solomon)". Inherited rows are read-only in USSD (the policyholder manages the
-  plan); the list and detail show status, payer, period and total claimed. The member subscription read
-  (`GET /v1/members/{memberNo}/subscriptions`) returns owned and inherited rows with `source: 'owned' |
-'inherited'`, `policyholder: { memberNo, name } | null` and `relationship: string | null`.
+  renders Husband or Wife from gender, otherwise the relationship type. The policyholder's identity
+  uses the shared label inside the same parentheses, never a nested pair — for example
+  "Life Cover (Husband · Solomon, Male, 32y)". Inherited rows are read-only in USSD (the policyholder
+  manages the plan); the list and detail show status, payer, period and total claimed. The member
+  subscription read (`GET /v1/members/{memberNo}/subscriptions`) returns owned and inherited rows with
+  `source: 'owned' | 'inherited'`, `policyholder: { memberNo, name, gender, age } | null` and
+  `relationship: string | null`.
 - Claims are back-office records (`subscription_claims`): amount, reason, status, recorded by and
   decided by. "Total claimed" is the sum of approved/paid claims for the subscription.
 
 ### My profile
 
-- **My profile.** The member menu's last entry shows a compact profile: name (`first + last`, the DTO
-  convention) and member number, gender and age (from `dob`; `age` is null when `dob` is unknown), up to
-  three ministry names, the attendance line and the shepherd. The API returns one aggregate: `GET
+- **My profile.** The member menu's last entry shows a compact profile: the shared identity label
+  `FullName (Gender, Ny)` (the UI label rule: `undisclosed` omitted, `age` null when `dob` is unknown
+  or in the future), the member number, up to three ministry names, the attendance line and the
+  shepherd. The label is composed from the DTO by the channel; the separate gender/age line is never
+  repeated. The API returns one aggregate: `GET
 /v1/members/{memberNo}/profile` → `{ memberNo, name, gender, age: number | null, ministries: [name],
-shepherd: { memberNo, name } | null, attendance: { status: 'regular' | 'non_regular' |
+shepherd: { memberNo, name, gender, age } | null, attendance: { status: 'regular' | 'non_regular' |
 'not_enough_data', attended,
 expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the member's **tracked** attendance
   across the events that apply to them: every **general** event (its series has no ministry, or it has no
@@ -286,9 +390,10 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
   to 5) and `attended` is the number present, both reported in every status. `lastAttendedOn` is the most recent attended date in scope. A
   headcount-only event never counts, and neither does attendance at an event whose ministry the member
   does not belong to. With no scoped sessions the status is `not_enough_data`, `attended` and `expected`
-  are `0`, the date is null, and the screen says "No attendance yet"; with one or two it shows "Not
-  enough data" with the ratio and, when `lastAttendedOn` is set, the date (for example, "Not enough
-  data · 2 of 2 · 5 Oct 2026"); when nothing was attended it shows "Not enough data · 0 of 1". A
+  are `0`, the date is null, and the screen says "No attendance" (`attendance.no_data`); with one or two
+  it shows "No data" (`status.not_enough_data`) with the ratio and, when `lastAttendedOn` is set, the
+  date (for example, "No data · 2 of 2 · 5 Oct 2026"); when nothing was attended it shows "No data · 0
+  of 1". A
   floored session is dropped from the held-session window entirely, so it is neither an `expected` nor
   an `attended` session. The shepherd is the active shepherding
   assignment's officer, or null ("Not assigned"). One request, `no-store`.
@@ -355,6 +460,8 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
 - Card data, PCI scope, refunds and settlement (unchanged from the offerings spec).
 - The mobile app and the richer mobile views (V5).
 - Self-service profile editing, contact changes or member-number creation from USSD.
+- Complaints (Change of Profile, General Report, Event / Event Day, Offering) and the admin complaint
+  queue — deferred to the last round after the basic V3 features (ticket 24e).
 - Per-officer web authorization; the web app keeps the shared bearer, USSD derives the actor from the
   phone-matched presbyter.
 - Claim approval policy, payout rails and provider integrations (claims are recorded, not paid out).
@@ -371,11 +478,12 @@ expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the
   main menu.
 
 - **Ticket split.** 24a — USSD core (identity, session, events/offerings, splits, lay text, payment
-  group, pledge and redemption, confirmation code, stub gateway). 24b — attendance (check, summaries,
-  one-time codes, anonymous registration, clocking/delegation, expected headcounts). 24c —
-  subscriptions (products, eligibility, member card/verified fields, claims, USSD flows). 24d — the
-  simulator and back-office mocks for review. 24a is the only ticket that must land before the simulator
-  can be exercised against the real API.
+  group, pledge and redemption, confirmation code, stub gateway, display glossary). 24b — attendance
+  (check, summaries, one-time codes, anonymous registration, clocking/delegation, expected headcounts).
+  24c — subscriptions (products, eligibility, member card/verified fields, claims, USSD flows). 24d —
+  the simulator and back-office mocks for review. 24e — complaints and the admin complaint queue,
+  deferred to the last round after 24d and 23. 24a is the only ticket that must land before the
+  simulator can be exercised against the real API.
 - **V5 candidates** (identified, not in the USSD app): a mobile app with the full event calendar,
   offering browse beyond five, recurring gifts, family/group giving, profile editing, subscription
   claim history and uploads, notifications, pledge reminders, and richer attendance analytics. The
