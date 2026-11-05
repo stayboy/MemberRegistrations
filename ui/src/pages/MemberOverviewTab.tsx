@@ -1,7 +1,8 @@
 import { Avatar, Badge, Text } from '@fluentui/react-components';
 import type { MemberDetail } from '../api/members';
-import { formatDateLong, memberInitials, memberName } from '../format/member';
+import { memberInitials, memberName } from '../format/member';
 import { genderLabel } from '../format/member-form';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useMemberDetailStyles } from './member-detail-styles';
 
 /**
@@ -10,6 +11,7 @@ import { useMemberDetailStyles } from './member-detail-styles';
  */
 export function MemberOverviewTab({ member }: { member: MemberDetail }) {
   const styles = useMemberDetailStyles();
+  const { formatDate, formatInstant, formatInstantTitle } = useDateTimeFormat();
   const isArchived = Boolean(member.archivedAt);
 
   return (
@@ -29,13 +31,26 @@ export function MemberOverviewTab({ member }: { member: MemberDetail }) {
                 Presbyter
               </Badge>
             ) : null}
-            <Badge appearance="outline" color={isArchived ? 'warning' : 'success'}>
+            <Badge
+              appearance="outline"
+              color={isArchived ? 'warning' : 'success'}
+              title={member.archivedAt ? formatInstantTitle(member.archivedAt) : undefined}
+            >
               {isArchived ? 'Archived' : 'Active'}
             </Badge>
           </div>
           <Text size={200} className={styles.muted}>
             {member.memberNo}
-            {member.archivedAt ? ` · archived ${formatDateLong(member.archivedAt)}` : ''}
+            {member.archivedAt ? (
+              <>
+                {' · archived '}
+                <span title={formatInstantTitle(member.archivedAt)}>
+                  {formatInstant(member.archivedAt)}
+                </span>
+              </>
+            ) : (
+              ''
+            )}
           </Text>
         </div>
       </div>
@@ -45,13 +60,10 @@ export function MemberOverviewTab({ member }: { member: MemberDetail }) {
       <div className={styles.detailGrid}>
         <DetailItem label="Member number" value={member.memberNo} />
         <DetailItem label="Gender" value={genderLabel(member.gender)} />
-        <DetailItem
-          label="Joined"
-          value={member.joinedOn ? formatDateLong(member.joinedOn) : '—'}
-        />
+        <DetailItem label="Joined" value={member.joinedOn ? formatDate(member.joinedOn) : '—'} />
         <DetailItem label="Place of residence" value={member.placeOfResidence ?? ''} />
         <DetailItem label="Presbyter" value={member.isPresbyter ? 'Yes' : 'No'} />
-        <DetailItem label="Date of birth" value={member.dob ? formatDateLong(member.dob) : '—'} />
+        <DetailItem label="Date of birth" value={member.dob ? formatDate(member.dob) : '—'} />
         <DetailItem label="Other names" value={member.otherNames ?? ''} />
         <DetailItem label="Maiden name" value={member.maidenName ?? ''} />
         <DetailItem label="Alias" value={member.alias ?? ''} />

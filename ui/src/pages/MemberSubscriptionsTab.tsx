@@ -24,7 +24,7 @@ import type { MemberDetail, MemberSubscription, SubscriptionInput } from '../api
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { MemberPicker } from '../components/MemberPicker';
-import { formatDateLong, memberName } from '../format/member';
+import { memberName } from '../format/member';
 import {
   SUBSCRIPTION_KIND_OPTIONS,
   SUBSCRIPTION_SCOPE_OPTIONS,
@@ -42,6 +42,7 @@ import {
   type SubscriptionFormErrors,
   type SubscriptionFormValues,
 } from '../format/subscription';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { errorMessage, inlineActionError } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 
@@ -86,6 +87,7 @@ export function MemberSubscriptionsTab({
 }: MemberSubscriptionsTabProps) {
   const styles = useMemberDetailStyles();
   const { signOut } = useSession();
+  const { formatDate } = useDateTimeFormat();
 
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [subscriptionForm, setSubscriptionForm] = useState<SubscriptionFormValues>(() =>
@@ -322,8 +324,8 @@ export function MemberSubscriptionsTab({
                   {subscription.policyholderMemberNo}
                 </Text>
                 <Text size={200} className={styles.muted}>
-                  Started {formatDateLong(subscription.startedOn)}
-                  {subscription.endedOn ? ` · Ended ${formatDateLong(subscription.endedOn)}` : ''}
+                  Started {formatDate(subscription.startedOn)}
+                  {subscription.endedOn ? ` · Ended ${formatDate(subscription.endedOn)}` : ''}
                   {subscription.reference ? ` · Reference ${subscription.reference}` : ''}
                 </Text>
                 {subscription.scope === 'household' ? (

@@ -1,5 +1,4 @@
 import type { SeriesExceptionKind } from '../api/series';
-import { formatDateLong } from './member';
 
 /**
  * Pure series labels for FR-5/FR-6. The formatter understands the common
@@ -126,11 +125,16 @@ export function scheduleLabel(rrule: string): string {
 /**
  * The list cell: the first API-supplied occurrence, never a locally computed
  * one. `windowDays` is the same length the page requested, so the empty text
- * cannot claim a different window from the request.
+ * cannot claim a different window from the request. The caller supplies the
+ * preference-bound calendar-date formatter (ticket 18c).
  */
-export function nextOccurrenceLabel(date: string | null, windowDays: number): string {
+export function nextOccurrenceLabel(
+  date: string | null,
+  windowDays: number,
+  formatDate: (value: string) => string,
+): string {
   if (!date) return `None in ${windowDays} days`;
-  return formatDateLong(date);
+  return formatDate(date);
 }
 
 export function exceptionKindLabel(kind: SeriesExceptionKind): string {

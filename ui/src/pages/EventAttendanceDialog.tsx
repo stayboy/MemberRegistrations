@@ -24,7 +24,7 @@ import { useEffect } from 'react';
 import { isUnauthorized } from '../api/errors';
 import { getEventAttendance, type EventSessionItem } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
-import { formatDateLong } from '../format/member';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
 
 function errorMessage(error: unknown): string {
@@ -54,6 +54,7 @@ export function EventAttendanceDialog({
 }) {
   const styles = useEventStyles();
   const { baseUrl, session: credential, signOut } = useSession();
+  const { formatDate, formatTime } = useDateTimeFormat();
   const token = credential?.token ?? '';
   const date = session?.date ?? '';
 
@@ -79,7 +80,7 @@ export function EventAttendanceDialog({
       <DialogSurface className={styles.dialogSurface}>
         <DialogBody>
           <DialogTitle>
-            {session ? `Attendance · ${formatDateLong(session.date)}` : 'Attendance'}
+            {session ? `Attendance · ${formatDate(session.date)}` : 'Attendance'}
           </DialogTitle>
           <DialogContent className={styles.dialogContent}>
             <MessageBar intent="info">
@@ -149,7 +150,9 @@ export function EventAttendanceDialog({
                                 </Text>
                               </div>
                             </TableCell>
-                            <TableCell>{row.sessionTime ?? '—'}</TableCell>
+                            <TableCell>
+                              {row.sessionTime ? formatTime(row.sessionTime) : '—'}
+                            </TableCell>
                             <TableCell>
                               <Badge appearance="outline" size="small">
                                 {row.source === 'import' ? 'Import' : 'Manual'}

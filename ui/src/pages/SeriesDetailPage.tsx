@@ -41,8 +41,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
 import { ministryLabel } from '../format/events';
-import { formatDateLong } from '../format/member';
 import { exceptionKindLabel, scheduleLabel, seriesStatusLabel } from '../format/series';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { AddScheduleVersionDialog } from './AddScheduleVersionDialog';
 import { SeriesExceptionDialog } from './SeriesExceptionDialog';
 import { useEventStyles } from './events-styles';
@@ -81,6 +81,7 @@ export function SeriesDetailPage() {
   const queryClient = useQueryClient();
   const { id = '' } = useParams<{ id: string }>();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate, formatInstant, formatInstantTitle } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [window, setWindow] = useDateWindow();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
@@ -280,7 +281,12 @@ export function SeriesDetailPage() {
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Status</Text>
                   <div className={styles.metaValue}>
-                    <Badge appearance="tint" color={statusColor(series.archivedAt)} size="small">
+                    <Badge
+                      appearance="tint"
+                      color={statusColor(series.archivedAt)}
+                      size="small"
+                      title={series.archivedAt ? formatInstantTitle(series.archivedAt) : undefined}
+                    >
                       {seriesStatusLabel(series.archivedAt)}
                     </Badge>
                   </div>
@@ -288,7 +294,13 @@ export function SeriesDetailPage() {
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Archived</Text>
                   <Text className={styles.metaValue}>
-                    {series.archivedAt ? formatDateLong(series.archivedAt) : 'Not archived'}
+                    {series.archivedAt ? (
+                      <span title={formatInstantTitle(series.archivedAt)}>
+                        {formatInstant(series.archivedAt)}
+                      </span>
+                    ) : (
+                      'Not archived'
+                    )}
                   </Text>
                 </div>
               </div>
@@ -343,7 +355,7 @@ export function SeriesDetailPage() {
                     <TableBody>
                       {versions.map((version) => (
                         <TableRow key={version.effectiveFrom}>
-                          <TableCell>{formatDateLong(version.effectiveFrom)}</TableCell>
+                          <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
                           <TableCell>
                             <div className={styles.identity}>
                               <Text>{scheduleLabel(version.rrule)}</Text>
@@ -353,7 +365,7 @@ export function SeriesDetailPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {version.endsOn ? formatDateLong(version.endsOn) : 'No end date'}
+                            {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -409,7 +421,7 @@ export function SeriesDetailPage() {
                     <TableBody>
                       {exceptions.map((exception) => (
                         <TableRow key={exception.date}>
-                          <TableCell>{formatDateLong(exception.date)}</TableCell>
+                          <TableCell>{formatDate(exception.date)}</TableCell>
                           <TableCell>
                             <Badge
                               appearance="tint"
@@ -436,7 +448,7 @@ export function SeriesDetailPage() {
                                 size="small"
                                 appearance="transparent"
                                 icon={<DeleteRegular />}
-                                aria-label={`Remove exception on ${formatDateLong(exception.date)}`}
+                                aria-label={`Remove exception on ${formatDate(exception.date)}`}
                                 onClick={() => {
                                   setRemoveError(null);
                                   setRemoving(exception);
@@ -515,7 +527,7 @@ export function SeriesDetailPage() {
                         const exception = exceptionByDate.get(date);
                         return (
                           <TableRow key={date}>
-                            <TableCell>{formatDateLong(date)}</TableCell>
+                            <TableCell>{formatDate(date)}</TableCell>
                             <TableCell>
                               {exception ? (
                                 <Badge
@@ -588,7 +600,7 @@ export function SeriesDetailPage() {
         title="Remove exception"
         message={
           removing
-            ? `Remove the ${exceptionKindLabel(removing.kind).toLowerCase()} exception on ${formatDateLong(
+            ? `Remove the ${exceptionKindLabel(removing.kind).toLowerCase()} exception on ${formatDate(
                 removing.date,
               )}? Removing it changes the occurrence list; the schedule versions are unchanged.`
             : ''

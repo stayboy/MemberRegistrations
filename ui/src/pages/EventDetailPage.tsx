@@ -30,16 +30,14 @@ import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import {
   eventStatusLabel,
-  formatDateRange,
   formatPresentExpected,
-  formatTimeRange,
   offeringsLabel,
   seriesLabel,
   sessionSourceLabel,
   sessionStatusLabel,
   venueLabel,
 } from '../format/events';
-import { formatDateLong } from '../format/member';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { EventAttendanceDialog } from './EventAttendanceDialog';
 import { useEventStyles } from './events-styles';
 
@@ -75,6 +73,7 @@ export function EventDetailPage() {
   const navigate = useNavigate();
   const { id = '' } = useParams<{ id: string }>();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate, formatTime, formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [selected, setSelected] = useState<EventSessionItem | null>(null);
 
@@ -177,13 +176,14 @@ export function EventDetailPage() {
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Dates</Text>
                   <Text className={styles.metaValue}>
-                    {formatDateRange(event.startDate, event.endDate)}
+                    {formatRange(event.startDate, event.endDate)}
                   </Text>
                 </div>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Times</Text>
                   <Text className={styles.metaValue}>
-                    {formatTimeRange(event.startTime, event.endTime)}
+                    {formatTime(event.startTime)}
+                    {event.endTime ? `–${formatTime(event.endTime)}` : ''} · {event.timezone}
                   </Text>
                 </div>
                 <div className={styles.metaRow}>
@@ -214,8 +214,8 @@ export function EventDetailPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHeaderCell>Date</TableHeaderCell>
-                        <TableHeaderCell>Start</TableHeaderCell>
-                        <TableHeaderCell>End</TableHeaderCell>
+                        <TableHeaderCell>Start ({event.timezone})</TableHeaderCell>
+                        <TableHeaderCell>End ({event.timezone})</TableHeaderCell>
                         <TableHeaderCell>Status</TableHeaderCell>
                         <TableHeaderCell>Source</TableHeaderCell>
                         <TableHeaderCell>Present/expected</TableHeaderCell>
@@ -225,9 +225,9 @@ export function EventDetailPage() {
                     <TableBody>
                       {sessions.map((item) => (
                         <TableRow key={item.date}>
-                          <TableCell>{formatDateLong(item.date)}</TableCell>
-                          <TableCell>{item.startTime}</TableCell>
-                          <TableCell>{item.endTime ?? '—'}</TableCell>
+                          <TableCell>{formatDate(item.date)}</TableCell>
+                          <TableCell>{formatTime(item.startTime)}</TableCell>
+                          <TableCell>{item.endTime ? formatTime(item.endTime) : '—'}</TableCell>
                           <TableCell>
                             <Badge appearance="tint" color={statusColor(item.status)} size="small">
                               {sessionStatusLabel(item.status)}
@@ -239,7 +239,7 @@ export function EventDetailPage() {
                             <Button
                               size="small"
                               appearance="transparent"
-                              aria-label={`View attendance rows for ${formatDateLong(item.date)}`}
+                              aria-label={`View attendance rows for ${formatDate(item.date)}`}
                               onClick={() => setSelected(item)}
                             >
                               View rows

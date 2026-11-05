@@ -31,6 +31,7 @@ import {
 import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { checkImportLimits, type ParsedImportRows } from '../format/import-file';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const PREVIEW_ROWS = 5;
 
@@ -211,6 +212,7 @@ export function ImportPanel<Row extends object>({
 }: ImportPanelProps<Row>) {
   const styles = useStyles();
   const { signOut } = useSession();
+  const { formatInstant, formatInstantTitle } = useDateTimeFormat();
   const inputRef = useRef<HTMLInputElement>(null);
   const parseSequence = useRef(0);
 
@@ -640,7 +642,11 @@ export function ImportPanel<Row extends object>({
                 <TableCell>
                   <Text weight="semibold">Created</Text>
                 </TableCell>
-                <TableCell>{new Date(result.createdAt).toLocaleString()}</TableCell>
+                <TableCell>
+                  <span title={formatInstantTitle(result.createdAt)}>
+                    {formatInstant(result.createdAt)}
+                  </span>
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>

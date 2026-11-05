@@ -23,8 +23,8 @@ import { isUnauthorized } from '../api/errors';
 import { getReport } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
-import { formatDateLong } from '../format/member';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
 function errorMessage(error: unknown): string {
@@ -43,6 +43,7 @@ function rosterHref(memberNo: string, from: string, to: string): string {
  */
 export function ShepherdingReportPage() {
   const styles = useShepherdingStyles();
+  const { formatDate } = useDateTimeFormat();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
   const [window, setWindow] = useDateWindow();
@@ -120,7 +121,7 @@ export function ShepherdingReportPage() {
                 <div className={styles.cardHeader}>
                   <h2 className={styles.cardTitle}>Church totals</h2>
                   <Text size={200} className={styles.muted}>
-                    {formatDateLong(window.from)} to {formatDateLong(window.to)}
+                    {formatDate(window.from)} to {formatDate(window.to)}
                   </Text>
                 </div>
                 <div className={styles.metrics}>
@@ -243,7 +244,7 @@ export function ShepherdingReportPage() {
                           <TableCell>{officer.conversations}</TableCell>
                           <TableCell>
                             {officer.lastCalledOn ? (
-                              formatDateLong(officer.lastCalledOn)
+                              formatDate(officer.lastCalledOn)
                             ) : (
                               <Text className={styles.muted}>Never called</Text>
                             )}

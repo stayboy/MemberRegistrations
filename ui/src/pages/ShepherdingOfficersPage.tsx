@@ -20,8 +20,8 @@ import { isUnauthorized } from '../api/errors';
 import { listOfficers } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
-import { formatDateLong } from '../format/member';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
 function errorMessage(error: unknown): string {
@@ -40,6 +40,7 @@ function rosterHref(memberNo: string, from: string, to: string): string {
  */
 export function ShepherdingOfficersPage() {
   const styles = useShepherdingStyles();
+  const { formatDate } = useDateTimeFormat();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
   const [window, setWindow] = useDateWindow();
@@ -148,7 +149,7 @@ export function ShepherdingOfficersPage() {
                         <TableCell>{officer.conversations}</TableCell>
                         <TableCell>
                           {officer.lastCalledOn ? (
-                            formatDateLong(officer.lastCalledOn)
+                            formatDate(officer.lastCalledOn)
                           ) : (
                             <Text className={styles.muted}>Never called</Text>
                           )}

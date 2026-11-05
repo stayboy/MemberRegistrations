@@ -1,6 +1,6 @@
 import { Badge, Text } from '@fluentui/react-components';
 import type { MemberDetail } from '../api/members';
-import { formatDateShort } from '../format/member';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useMemberDetailStyles } from './member-detail-styles';
 
 /**
@@ -10,6 +10,7 @@ import { useMemberDetailStyles } from './member-detail-styles';
  */
 export function MemberAttendanceTab({ member }: { member: MemberDetail }) {
   const styles = useMemberDetailStyles();
+  const { formatDate } = useDateTimeFormat();
 
   return (
     <section className={styles.section} aria-labelledby="member-attendance-heading">
@@ -44,7 +45,7 @@ export function MemberAttendanceTab({ member }: { member: MemberDetail }) {
                   {series.entries.map((entry) => (
                     <li key={entry.id}>
                       <span className={styles.entry}>
-                        <Text size={200}>{formatDateShort(entry.date)}</Text>
+                        <Text size={200}>{formatDate(entry.date)}</Text>
                         <Text size={100} className={styles.muted}>
                           {entry.source}
                         </Text>

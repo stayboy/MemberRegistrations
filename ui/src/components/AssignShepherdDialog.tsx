@@ -21,8 +21,8 @@ import { assignMember, type AssignmentInput } from '../api/shepherding';
 import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { MemberPicker } from './MemberPicker';
-import { formatDateLong } from '../format/member';
 import { currentAssignmentOf, validateReason, type CurrentAssignment } from '../format/shepherding';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const useStyles = makeStyles({
   content: {
@@ -85,6 +85,7 @@ export function AssignShepherdDialog({
 }) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate } = useDateTimeFormat();
   const token = session?.token ?? '';
 
   const [officerMemberNo, setOfficerMemberNo] = useState<string | null>(null);
@@ -169,7 +170,7 @@ export function AssignShepherdDialog({
                   {currentAssignment.officerName
                     ? `${currentAssignment.officerName} · ${currentAssignment.officerMemberNo}`
                     : currentAssignment.officerMemberNo}{' '}
-                  · assigned {formatDateLong(currentAssignment.assignedOn)}
+                  · assigned {formatDate(currentAssignment.assignedOn)}
                 </Text>
                 <Text size={200} className={styles.muted}>
                   Saving ends this assignment on the new assignment&apos;s start date and keeps the
@@ -228,7 +229,7 @@ export function AssignShepherdDialog({
                 <MessageBarBody>
                   <MessageBarTitle>This member already has a shepherd</MessageBarTitle>
                   Member {memberNo} is currently shepherded by officer {conflict.officerMemberNo}{' '}
-                  (the wire carries no name), assigned {formatDateLong(conflict.assignedOn)}.
+                  (the wire carries no name), assigned {formatDate(conflict.assignedOn)}.
                   Reassigning ends that assignment and keeps its history. Confirm to resend with the
                   current assignment.
                   <div className={styles.conflictActions}>

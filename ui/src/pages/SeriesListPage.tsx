@@ -30,8 +30,8 @@ import { PageFrame } from '../components/PageFrame';
 import { shiftUtcDate } from '../format/date-window';
 import { ministryLabel } from '../format/events';
 import { utcToday } from '../format/member-form';
-import { formatDateLong } from '../format/member';
 import { nextOccurrenceLabel, scheduleLabel, seriesStatusLabel } from '../format/series';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
 
 type BadgeColor = ComponentProps<typeof Badge>['color'];
@@ -72,6 +72,7 @@ export function SeriesListPage() {
   const styles = useEventStyles();
   const navigate = useNavigate();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate, formatRange, formatInstantTitle } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [includeArchived, setIncludeArchived] = useState(false);
 
@@ -235,7 +236,7 @@ export function SeriesListPage() {
                               Not available
                             </Text>
                           ) : (
-                            nextOccurrenceLabel(nextDate, NEXT_OCCURRENCE_DAYS)
+                            nextOccurrenceLabel(nextDate, NEXT_OCCURRENCE_DAYS, formatDate)
                           )}
                         </TableCell>
                         <TableCell>{exceptionSummary(item.exceptions)}</TableCell>
@@ -244,6 +245,9 @@ export function SeriesListPage() {
                             appearance="tint"
                             color={statusColor(item.archivedAt)}
                             size="small"
+                            title={
+                              item.archivedAt ? formatInstantTitle(item.archivedAt) : undefined
+                            }
                           >
                             {seriesStatusLabel(item.archivedAt)}
                           </Badge>
@@ -259,8 +263,8 @@ export function SeriesListPage() {
 
         {series.length > 0 ? (
           <Text size={200} className={styles.muted}>
-            Next occurrences are requested from the API for {formatDateLong(occurrenceFrom)} –{' '}
-            {formatDateLong(occurrenceTo)}. Exceptions are append-only history.
+            Next occurrences are requested from the API for{' '}
+            {formatRange(occurrenceFrom, occurrenceTo)}. Exceptions are append-only history.
           </Text>
         ) : null}
       </div>

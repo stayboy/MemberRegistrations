@@ -9,8 +9,8 @@ import {
 } from '@fluentui/react-components';
 import { Link } from 'react-router-dom';
 import type { MemberShepherding } from '../api/members';
-import { formatDateLong } from '../format/member';
 import { outcomeLabel, stillInChurchLabel } from '../format/shepherding';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { errorMessage } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 
@@ -44,6 +44,7 @@ export function MemberShepherdingTab({
   onEnd,
 }: MemberShepherdingTabProps) {
   const styles = useMemberDetailStyles();
+  const { formatDate } = useDateTimeFormat();
 
   return (
     <section className={styles.section} aria-labelledby="member-shepherding-heading">
@@ -113,8 +114,7 @@ export function MemberShepherdingTab({
                 <Link to={`/members/${encodeURIComponent(summary.shepherd.memberNo)}`}>
                   {summary.shepherd.name || summary.shepherd.memberNo}
                 </Link>{' '}
-                · {summary.shepherd.memberNo} · assigned{' '}
-                {formatDateLong(summary.shepherd.assignedOn)}
+                · {summary.shepherd.memberNo} · assigned {formatDate(summary.shepherd.assignedOn)}
               </Text>
             ) : (
               <Text size={200} className={styles.muted}>
@@ -124,7 +124,7 @@ export function MemberShepherdingTab({
             <Text size={200}>
               {summary.calls.attempts} attempts · {summary.calls.conversations} conversations ·{' '}
               {summary.calls.lastCalledOn
-                ? `last called ${formatDateLong(summary.calls.lastCalledOn)}`
+                ? `last called ${formatDate(summary.calls.lastCalledOn)}`
                 : 'never called'}
             </Text>
             {summary.latestFeedback ? (
@@ -158,9 +158,8 @@ export function MemberShepherdingTab({
                       </Badge>
                     </div>
                     <Text size={200} className={styles.muted}>
-                      {assignment.officerMemberNo} · assigned{' '}
-                      {formatDateLong(assignment.assignedOn)}
-                      {assignment.endedOn ? ` · ended ${formatDateLong(assignment.endedOn)}` : ''}
+                      {assignment.officerMemberNo} · assigned {formatDate(assignment.assignedOn)}
+                      {assignment.endedOn ? ` · ended ${formatDate(assignment.endedOn)}` : ''}
                     </Text>
                     {assignment.reason ? <Text size={200}>Reason: {assignment.reason}</Text> : null}
                     {assignment.endedReason ? (
@@ -183,7 +182,7 @@ export function MemberShepherdingTab({
                 {summary.recentCalls.map((call) => (
                   <div key={call.id} className={styles.rowCard}>
                     <div className={styles.rowHead}>
-                      <Text weight="semibold">{formatDateLong(call.calledOn)}</Text>
+                      <Text weight="semibold">{formatDate(call.calledOn)}</Text>
                       <div className={styles.pills}>
                         <Badge appearance="outline" size="small">
                           {outcomeLabel(call.outcome)}

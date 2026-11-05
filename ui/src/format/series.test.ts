@@ -6,6 +6,10 @@ import {
   scheduleLabel,
   seriesStatusLabel,
 } from './series';
+import { formatCalendarDate } from './datetime';
+
+const formatDate = (value: string) =>
+  formatCalendarDate(value, { dateStyle: 'dmy', timeCycle: 'h24' });
 
 describe('scheduleLabel', () => {
   it('names the daily form', () => {
@@ -55,12 +59,12 @@ describe('scheduleLabel', () => {
 
 describe('nextOccurrenceLabel', () => {
   it('formats the API-supplied first occurrence as a UTC calendar date', () => {
-    expect(nextOccurrenceLabel('2026-11-05', 90)).toBe('5 November 2026');
+    expect(nextOccurrenceLabel('2026-11-05', 90, formatDate)).toBe('5 November 2026');
   });
 
   it('names the requested window instead of inventing a date', () => {
-    expect(nextOccurrenceLabel(null, 90)).toBe('None in 90 days');
-    expect(nextOccurrenceLabel(null, 30)).toBe('None in 30 days');
+    expect(nextOccurrenceLabel(null, 90, formatDate)).toBe('None in 90 days');
+    expect(nextOccurrenceLabel(null, 30, formatDate)).toBe('None in 30 days');
   });
 });
 
