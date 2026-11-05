@@ -75,6 +75,10 @@ export const listQuerySchema = z
       .enum(['true', 'false'])
       .optional()
       .transform((value) => value === 'true'),
+    unassigned: z
+      .enum(['true'])
+      .optional()
+      .transform((value) => value === 'true'),
     include: z
       .string()
       .optional()
@@ -105,6 +109,14 @@ export const listQuerySchema = z
         code: 'custom',
         path: ['seriesId'],
         message: 'seriesId is required when include=attendance',
+      });
+    }
+    if (query.unassigned && query.status === 'archived') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['unassigned'],
+        message:
+          'unassigned=true already implies active; it cannot be combined with status=archived',
       });
     }
   });

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_EVENT_LIMIT,
+  deleteEventAttendance,
   eventAttendancePath,
+  eventAttendanceRowPath,
   eventDetailPath,
   eventsListPath,
   getEvent,
@@ -71,6 +73,7 @@ const ATTENDANCE: EventAttendance = {
   importedRows: 4,
   rows: [
     {
+      id: 'attendance-1',
       memberNo: 'M-1',
       name: 'Ama Mensah',
       status: 'present',
@@ -222,6 +225,49 @@ describe('eventAttendancePath', () => {
     expect(eventAttendancePath('event/1', '2026-11-01')).toBe(
       '/gateway/v1/events/event%2F1/attendance?date=2026-11-01',
     );
+  });
+});
+
+describe('eventAttendanceRowPath', () => {
+  it('addresses the attendance id under its event and encodes both ids', () => {
+    expect(eventAttendanceRowPath('event/1', 'attendance 1')).toBe(
+      '/gateway/v1/events/event%2F1/attendance/attendance%201',
+    );
+  });
+});
+
+describe('deleteEventAttendance', () => {
+  it('DELETEs one attendance row through the gateway and accepts 204', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(
+      deleteEventAttendance(BASE, TOKEN, 'event/1', 'attendance-1'),
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${BASE}/gateway/v1/events/event%2F1/attendance/attendance-1`,
+    );
+    expect(requestOptions(0).method).toBe('DELETE');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(requestOptions(0).body).toBeUndefined();
+  });
+
+  it('surfaces the API message when the row cannot be removed', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        {
+          type: 'about:blank',
+          title: 'Not Found',
+          status: 404,
+          detail: 'Attendance attendance-1 was not found',
+        },
+        404,
+      ),
+    );
+
+    await expect(
+      deleteEventAttendance(BASE, TOKEN, 'event-1', 'attendance-1'),
+    ).rejects.toMatchObject({ status: 404, message: 'Attendance attendance-1 was not found' });
   });
 });
 

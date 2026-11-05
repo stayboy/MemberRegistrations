@@ -230,7 +230,11 @@ export interface MemberDetailResult {
 
 export interface ListMembersOptions {
   readonly q?: string;
+  /** Explicit contact lookup (FR-79); the main search never sets it. */
+  readonly contact?: string;
   readonly status?: MemberStatus;
+  /** Active members with no active shepherding assignment (FR-8a). */
+  readonly unassigned?: boolean;
   /** Adds the page-level attendance aggregate; requires `seriesId`. */
   readonly includeAttendance?: boolean;
   readonly seriesId?: string;
@@ -250,6 +254,7 @@ export function membersListPath(options: ListMembersOptions = {}): string {
   const params = new URLSearchParams();
 
   if (options.status) params.set('status', options.status);
+  if (options.unassigned) params.set('unassigned', 'true');
 
   const include: string[] = [];
   if (options.includeAttendance && options.seriesId) include.push('attendance');
@@ -257,6 +262,7 @@ export function membersListPath(options: ListMembersOptions = {}): string {
   if (include.length > 0) params.set('include', include.join(','));
   if (options.includeAttendance && options.seriesId) params.set('seriesId', options.seriesId);
 
+  if (options.contact?.trim()) params.set('contact', options.contact.trim());
   if (options.q?.trim()) params.set('q', options.q.trim());
   if (options.limit !== undefined) params.set('limit', String(options.limit));
   if (options.cursor) params.set('cursor', options.cursor);

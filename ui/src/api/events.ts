@@ -89,6 +89,8 @@ export interface EventDetail {
 
 /** Mirrors `EventAttendanceRow`; there is no absence record. */
 export interface EventAttendanceRow {
+  /** The `attendance.id` the row delete accepts, not the member id. */
+  readonly id: string;
   readonly memberNo: string;
   readonly name: string;
   readonly status: 'present';
@@ -173,6 +175,23 @@ export async function getEvent(
 /** `GET /v1/events/:id/attendance?date=YYYY-MM-DD`. */
 export function eventAttendancePath(eventId: string, date: string): string {
   return `${eventDetailPath(eventId)}/attendance?date=${encodeURIComponent(date)}`;
+}
+
+/** `DELETE /v1/events/:id/attendance/:attendanceId`; 204 on success. */
+export function eventAttendanceRowPath(eventId: string, attendanceId: string): string {
+  return `${eventDetailPath(eventId)}/attendance/${encodeURIComponent(attendanceId)}`;
+}
+
+export async function deleteEventAttendance(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  attendanceId: string,
+): Promise<void> {
+  await gatewayRequest(baseUrl, eventAttendanceRowPath(eventId, attendanceId), {
+    method: 'DELETE',
+    sessionToken,
+  });
 }
 
 export async function getEventAttendance(

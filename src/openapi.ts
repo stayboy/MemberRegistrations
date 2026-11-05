@@ -297,6 +297,13 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               schema: { type: 'boolean' },
             },
             {
+              name: 'unassigned',
+              in: 'query',
+              description:
+                'Only `true`: active members with no active shepherding assignment. Cannot be combined with status=archived.',
+              schema: { type: 'string', enum: ['true'] },
+            },
+            {
               name: 'include',
               in: 'query',
               description: 'Comma-separated aggregates: attendance, subscriptions.',

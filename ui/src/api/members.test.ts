@@ -67,6 +67,21 @@ describe('membersListPath', () => {
     expect(path).toContain('seriesId=series-1');
   });
 
+  it('sends an explicit contact lookup encoded, never through q', () => {
+    const path = membersListPath({ contact: ' ama+church@example.com ', includeSubscriptions: false });
+    expect(path).toBe(
+      '/gateway/v1/members?contact=ama%2Bchurch%40example.com',
+    );
+    expect(path).not.toContain('q=');
+  });
+
+  it('sends unassigned=true only when the filter is on', () => {
+    expect(membersListPath({ unassigned: true, includeSubscriptions: false })).toBe(
+      '/gateway/v1/members?unassigned=true',
+    );
+    expect(membersListPath({ includeSubscriptions: false })).toBe('/gateway/v1/members');
+  });
+
   it('omits the include parameter when subscriptions are switched off', () => {
     expect(membersListPath({ includeSubscriptions: false })).toBe('/gateway/v1/members');
   });

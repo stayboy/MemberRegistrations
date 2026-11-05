@@ -51,9 +51,18 @@ export class ReassignmentRequiredError extends ConflictError {
   }
 }
 
+/** One 1-based data row named by an `import_failed` report. */
+export interface ImportRowError {
+  row: number;
+  message: string;
+}
+
 /** A whole-file import failure: nothing was applied. */
 export class ImportError extends DomainError {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly rows?: ImportRowError[],
+  ) {
     super(message, 'import_failed');
   }
 }

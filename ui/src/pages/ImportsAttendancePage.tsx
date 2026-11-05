@@ -463,6 +463,10 @@ export function ImportsAttendancePage() {
     // The member detail's attendance line and any open members list.
     void queryClient.invalidateQueries({ queryKey: ['member', baseUrl] });
     void queryClient.invalidateQueries({ queryKey: ['members', baseUrl] });
+
+    // The prefix covers an open session report, the event detail's present/expected column and the
+    // list counts.
+    void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
   }
 
   return (

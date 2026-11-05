@@ -14,6 +14,11 @@
 
 ## Change log
 
+- 2026-11-05: the per-session attendance report's rows carry their `attendance.id`; `GET /v1/members`
+  accepts `unassigned=true`; an `import_failed` body may carry `rows: [{ row, message }]` for
+  row-level failures — field validation and unknown attendance members name every offending row, a
+  duplicate `memberNo` names each involved row, database-dependent checks name the row they stop at,
+  and batch-level failures carry none.
 - 2026-11-04: attendance import scoped to a selected session (`eventId` + `sessionDate`) instead of a
   per-row event number; rows are `(memberNo, datetime?)`; the attendance row gains an optional
   `sessionTime`; the checksum covers the occurrence; a repeat is a `409` with the existing batch id;
@@ -127,6 +132,11 @@ deployed to Vercel as a single function.
   write a suppression so a later import cannot resurrect it.
 - FR-8: `GET /v1/members` MUST support a list-level attendance aggregate
   (`include=attendance&seriesId=`) so a page of members is one request, not one request per row.
+- FR-8a: `GET /v1/members` MUST accept `unassigned=true`, returning only active members with no active
+  shepherding assignment — the same predicate the church report counts as `unassignedMembers` — and MUST
+  combine it with `q` and cursor pagination. The server derives the filter; the client MUST NOT filter a
+  page locally. `unassigned` accepts only `true`: any other value is a `422 validation_error`, and
+  `unassigned=true` combined with `status=archived` is also a `422` (the filter already implies active).
 - FR-9: An offering MUST carry versioned terms of reference; published terms MUST be immutable and an
   edit MUST create a new version.
 - FR-10: Two or more offerings MAY attach to one event; detaching MUST end the attachment
@@ -389,6 +399,9 @@ unique on `(eventInstanceId, sessionDate, memberId)`.
 - `present` is the number of attendance rows for that session; `rows` lists exactly those members with
   `status: 'present'` and their `import | manual` source. The data model has no absence row, so the
   report never invents an absent member; `expected - present` is the only absence signal.
+- Each `rows` entry carries `id`, the **`attendance.id` primary key** (not the member id), so the UI can
+  call `DELETE /v1/events/{eventId}/attendance/{attendanceId}` without a second lookup. The report and
+  the delete share the same id; the events route table's `{id}` is the event id.
 - `expected` is the register at the session date: members with `joined_on <= sessionDate`, not archived
   and not purged. Each session is counted on its own date, so a multi-day event may report a different
   denominator per day.
@@ -411,6 +424,16 @@ Extras count when held; cancellations do not.
 
 Every import is one transaction and one `import_batch` row (`kind`, `actor`, `rowCount`, `checksum`,
 `createdAt`). Row-level errors fail the whole request with a `422` report; there is no partial apply.
+The problem body keeps the RFC 9457 shape — `detail` carries the human message and stays stable — and
+adds `rows: [{ row, message }]` as an extension alongside it; `message` is not a top-level field, and
+`row` is the 1-based data-row index. `rows` lists every row rejected by the file's field validation,
+which runs before anything is written, and every unknown member number in an attendance import; a
+failure that spans rows (a duplicate `memberNo`) emits one entry per involved row with the same
+message. Any other check that needs the database — an archived or purged member, a contact value
+already owned by another member — reports the row it stopped at. `detail` carries the `Row N: …`
+message of the first rejected row, unchanged from the wording before `rows` existed. Batch-level
+failures — an unknown or cancelled event, an unlisted or cancelled session, a repeated batch — carry
+no `rows`.
 
 A **member import** row `(memberNo, firstName, lastName, otherNames?, gender?, dob?, joinedOn?,
 placeOfResidence?, addressLine?, isPresbyter?, phone?, email?)` upserts the member by `memberNo`

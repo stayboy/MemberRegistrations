@@ -39,7 +39,8 @@ function rosterHref(memberNo: string, from: string, to: string): string {
 /**
  * Shepherding → Church report (FR-58): church totals, coverage and the
  * still-in-church distribution, then one row per officer. The unassigned figure
- * is a count only; the API exposes no unassigned-member list (FR-60).
+ * opens the members list filtered to active members with no active assignment
+ * (FR-8a); the report itself remains aggregate counts only.
  */
 export function ShepherdingReportPage() {
   const styles = useShepherdingStyles();
@@ -139,7 +140,9 @@ export function ShepherdingReportPage() {
                   </div>
                   <div className={styles.metric}>
                     <Text className={styles.metricLabel}>Unassigned</Text>
-                    <Text className={styles.metricValue}>{totals.unassignedMembers}</Text>
+                    <Link className={styles.link} to="/members?unassigned=true">
+                      {totals.unassignedMembers}
+                    </Link>
                   </div>
                   <div className={styles.metric}>
                     <Text className={styles.metricLabel}>Attempts</Text>
@@ -156,8 +159,8 @@ export function ShepherdingReportPage() {
                 </div>
                 <Divider />
                 <Text size={200} className={styles.muted}>
-                  Unassigned is a count from the report. The API has no unassigned-member list
-                  endpoint, so this screen does not open one.
+                  Unassigned opens the members list filtered to active members with no active
+                  shepherding assignment.
                 </Text>
               </Card>
 

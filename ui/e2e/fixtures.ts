@@ -394,6 +394,7 @@ const ATTENDANCE_EVENT_1: EventAttendance = {
   importedRows: 2,
   rows: [
     {
+      id: 'attendance-row-1',
       memberNo: 'M-1001',
       name: 'Kwame Asante',
       status: 'present',
@@ -401,6 +402,7 @@ const ATTENDANCE_EVENT_1: EventAttendance = {
       sessionTime: '09:05',
     },
     {
+      id: 'attendance-row-2',
       memberNo: 'M-1002',
       name: 'Ama Mensah',
       status: 'present',
@@ -408,6 +410,7 @@ const ATTENDANCE_EVENT_1: EventAttendance = {
       sessionTime: '09:07',
     },
     {
+      id: 'attendance-row-3',
       memberNo: 'M-1003',
       name: 'Yaw Owusu',
       status: 'present',

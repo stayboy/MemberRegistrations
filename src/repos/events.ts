@@ -108,6 +108,8 @@ interface SessionExpected {
 }
 
 export interface EventAttendanceRow {
+  /** The `attendance.id` the row delete accepts; never the member id. */
+  id: string;
   memberNo: string;
   name: string;
   status: 'present';
@@ -706,13 +708,14 @@ export class EventRepository {
     }
 
     const rows = await this.db.query<{
+      id: string;
       member_no: string;
       first_name: string | null;
       last_name: string | null;
       source: 'import' | 'manual';
       session_time: string | null;
     }>(
-      `select m.member_no, m.first_name, m.last_name, a.source,
+      `select a.id, m.member_no, m.first_name, m.last_name, a.source,
               to_char(a.session_time, 'HH24:MI') as session_time
        from attendance a
        join members m on m.id = a.member_id
@@ -737,6 +740,7 @@ export class EventRepository {
       expected: Number(register?.count ?? 0),
       importedRows: rows.filter((row) => row.source === 'import').length,
       rows: rows.map((row) => ({
+        id: row.id,
         memberNo: row.member_no,
         name: [row.first_name, row.last_name].filter(Boolean).join(' '),
         status: 'present' as const,
