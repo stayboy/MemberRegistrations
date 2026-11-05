@@ -14,6 +14,13 @@
 
 ## Change log
 
+- 2026-11-05: offerings routes reconciled with the ticket-20 phase-1 contract — terms publish via
+  `POST /v1/offerings/{id}/terms` with a required `baseVersion` and `reason` (NFR-3 audit), `PUT`
+  toggles only `active` and records `updated_by`, attach and
+  list are on the collection and detach is a `DELETE` on the item, exception routes nest under the
+  attachment, and `terms_version_conflict`/`invalid_exception_date` join the code list. Contributions
+  and pledges name `eventId` on the wire. The full detail is in
+  `member-registrations-events-offerings.md`.
 - 2026-11-05: the per-session attendance report's rows carry their `attendance.id`; `GET /v1/members`
   accepts `unassigned=true`; an `import_failed` body may carry `rows: [{ row, message }]` for
   row-level failures — field validation and unknown attendance members name every offending row, a
@@ -468,19 +475,31 @@ the JSON contract MUST describe the same columns.
 `{ version, name?, purpose, kind, currency, targetMinor?, defaultAmountMinor?, startsOn?, endsOn?, availableUntil?, scripture?, gatewayAccount?, gatewayMetadata? }`
 
 - `kind` is `freewill | tithe | pledge | building | missions | other`.
-- `name` is optional; the display label falls back to `${event.name} · ${kind}`.
-- Terms are versioned and immutable after publish. An edit publishes a new version; history is not
-  rewritten.
+- `name` is optional. The API resolves the event-scoped display label as the trimmed custom name, else
+  `${event.name} · ${kindLabel}` (Freewill, Tithe, Pledge, Building, Missions, Other); the catalogue
+  returns the stored name, which may be null.
+- Terms are versioned and immutable after publish. `POST /v1/offerings/{id}/terms` takes a full flat
+  terms body, a required `baseVersion` and a required `reason`, and publishes version n+1; a stale base
+  is `409
+terms_version_conflict`. `PUT /v1/offerings/{id}` changes only `{ active }`; there is no delete and
+  archiving is `active: false`.
 - Currency is GHS and amounts are integer minor units.
-- `availableUntil` is the event end or an explicit later date. Expiry blocks new gifts but MUST NOT
-  block honoring a pending pledge.
-- Two or more offerings attach to one event; a series attachment may carry `skip` or `opt_in`
-  exceptions on a date.
-- Detaching ends the attachment; it never deletes the offering or its history.
+- `availableUntil` resolves per event as the attachment date (event attachments only, on or after the
+  event end), else the terms date, else the event end. Expiry blocks new gifts but MUST NOT block
+  honoring a pending pledge.
+- Two or more offerings MAY attach to one event, or to a series for all its occurrences. Attaching is
+  `POST` on the collection (`/v1/events/{eventId}/offerings`, `/v1/series/{id}/offerings`); detaching is
+  `DELETE` on the item and sets `detachedOn`, keeping the row.
+- Exceptions are append-only rows on the attachment (`skip` on an event session date; `skip` or
+  `opt_in` on a series occurrence or extra date). The newest row per date is effective and there is no
+  exception delete route.
+- The event aggregate returns each attached offering with its resolved name, effective `availableUntil`,
+  `expired`, current `terms`, exceptions and stats. The full phase-1 contract is
+  `member-registrations-events-offerings.md`.
 
 ### Contribution
 
-- A member contribution carries `memberNo`, `offeringId`, `eventInstanceId`, optional `sessionDate`,
+- A member contribution carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`,
   amount, currency, channel (`app | ussd | manual`), status (`initiated | paid | failed`), reference and
   a unique idempotency key.
 - A visitor contribution carries `visitorName` and a hashed phone instead of `memberNo`; it returns a
@@ -490,7 +509,7 @@ the JSON contract MUST describe the same columns.
 
 ### Pledge
 
-- A pledge carries `memberNo`, `offeringId`, `eventInstanceId`, optional `sessionDate`, amount,
+- A pledge carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`, amount,
   currency, `expectedOn` and exactly one follow-up officer.
 - The officer is the member's active shepherd; otherwise the offering's default officer; otherwise the
   pledge is rejected.
@@ -654,27 +673,30 @@ export interface Event {
 
 ### Offerings and giving
 
-| Method          | Path                                            | Result                                              |
-| --------------- | ----------------------------------------------- | --------------------------------------------------- |
-| `GET`/`POST`    | `/v1/offerings`                                 | List/create offering                                |
-| `GET`/`PUT`     | `/v1/offerings/{id}`                            | Read/update; a change publishes a new terms version |
-| `POST`          | `/v1/offerings/{id}/terms`                      | Publish a terms version                             |
-| `GET`/`POST`    | `/v1/events/{eventId}/offerings`                | List/attach offerings                               |
-| `DELETE`        | `/v1/events/{eventId}/offerings/{offeringId}`   | Detach (end, not delete)                            |
-| `POST`/`DELETE` | `/v1/offerings/{id}/exceptions`                 | Skip or opt in a specific date                      |
-| `POST`          | `/v1/contributions`                             | Member or visitor contribution (idempotent)         |
-| `GET`           | `/v1/contributions?memberNo&offeringId&from&to` | Contribution history                                |
-| `POST`          | `/v1/pledges`                                   | Create a pledge with a follow-up officer            |
-| `GET`           | `/v1/pledges?status&memberNo&officerMemberNo`   | Pledge list                                         |
-| `POST`          | `/v1/pledges/{id}/honor`                        | Append an honor event                               |
-| `POST`          | `/v1/pledges/{id}/dishonor`                     | Append a dishonor event with a reason               |
-| `POST`          | `/v1/pledges/{id}/reassign`                     | Assign or reassign the officer with a reason        |
-| `POST`          | `/v1/pledges/{id}/reminders`                    | Schedule a reminder                                 |
-| `GET`           | `/v1/offerings/summary?from&to`                 | Church landing totals                               |
-| `POST`          | `/v1/ussd/session`                              | Start a USSD session (future)                       |
-| `POST`          | `/v1/ussd/session/{id}/select`                  | Select offerings (future)                           |
-| `POST`          | `/v1/ussd/session/{id}/commit`                  | Pay or pledge (future)                              |
-| `POST`          | `/v1/payments/callback`                         | Gateway callback (future)                           |
+| Method       | Path                                                     | Result                                                |
+| ------------ | -------------------------------------------------------- | ----------------------------------------------------- |
+| `GET`/`POST` | `/v1/offerings`                                          | List (default active) or create with terms v1         |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                     | Read the offering; update the active flag only        |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                               | List versions or publish one (`baseVersion`)          |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                         | List active attachments or attach                     |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`            | Detach (end, not delete)                              |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                              | List active attachments or attach for all occurrences |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                 | Detach                                                |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions` | List rows or append a skip/opt-in                     |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`      | List rows or append a skip/opt-in                     |
+| `POST`       | `/v1/contributions`                                      | Member or visitor contribution (idempotent)           |
+| `GET`        | `/v1/contributions?memberNo&offeringId&from&to`          | Contribution history                                  |
+| `POST`       | `/v1/pledges`                                            | Create a pledge with a follow-up officer              |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`            | Pledge list                                           |
+| `POST`       | `/v1/pledges/{id}/honor`                                 | Append an honor event                                 |
+| `POST`       | `/v1/pledges/{id}/dishonor`                              | Append a dishonor event with a reason                 |
+| `POST`       | `/v1/pledges/{id}/reassign`                              | Assign or reassign the officer with a reason          |
+| `POST`       | `/v1/pledges/{id}/reminders`                             | Schedule a reminder                                   |
+| `GET`        | `/v1/offerings/summary?from&to`                          | Church landing totals                                 |
+| `POST`       | `/v1/ussd/session`                                       | Start a USSD session (future)                         |
+| `POST`       | `/v1/ussd/session/{id}/select`                           | Select offerings (future)                             |
+| `POST`       | `/v1/ussd/session/{id}/commit`                           | Pay or pledge (future)                                |
+| `POST`       | `/v1/payments/callback`                                  | Gateway callback (future)                             |
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
@@ -701,17 +723,23 @@ export interface OfferingTerms {
   currency: string;
   targetMinor: number | null;
   defaultAmountMinor: number | null;
+  startsOn: string | null;
+  endsOn: string | null;
   availableUntil: string | null;
   scripture: string | null;
   gatewayAccount: string | null;
+  gatewayMetadata: Record<string, string> | null;
+  createdAt: string;
+  createdBy: string;
+  reason: string | null;
 }
 
 export interface EventOffering {
   offeringId: string;
   name: string;
-  kind: OfferingKind;
-  currency: string;
   availableUntil: string | null;
+  expired: boolean;
+  terms: OfferingTerms;
   exceptions: OfferException[];
   stats: OfferingStats;
 }
@@ -721,8 +749,8 @@ export interface Contribution {
   memberNo: string | null;
   visitorName: string | null;
   offeringId: string;
-  eventInstanceId: string;
-  sessionDate: string | null;
+  eventId: string;
+  sessionDate: string;
   amountMinor: number;
   currency: string;
   channel: 'app' | 'ussd' | 'manual';
@@ -735,7 +763,7 @@ export interface Pledge {
   id: string;
   memberNo: string;
   offeringId: string;
-  eventInstanceId: string;
+  eventId: string;
   sessionDate: string | null;
   amountMinor: number;
   currency: string;
@@ -779,8 +807,9 @@ an HTTP hop.
 RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `not_found`, `conflict`,
 `unauthorized`, `invalid_json`, `payload_too_large`, `route_not_found`, `internal_error`,
 `import_failed`, `event_not_active`, `session_not_in_event`, `offering_already_attached`,
-`offering_not_on_event`, `invalid_amount`, `invalid_expected_date`, `officer_required`,
-`pledge_already_terminal`, `payment_failed`, `cors_rejected`.
+`offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `invalid_amount`,
+`invalid_expected_date`, `officer_required`, `pledge_already_terminal`, `payment_failed`,
+`cors_rejected`.
 
 ### Concurrency and caching
 
@@ -795,24 +824,24 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 All money is `bigint` minor units plus an ISO currency. History tables are append-only.
 `event_instances` is the evolved `event_occurrences`; the attendance rows move with it.
 
-| Table                      | Key fields                                                                                                                                                                                                                       | Constraints                                                                                                           |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `ministry_code`, `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`, `venue_name`, `description`, `status`, `source`, `sessions` (JSONB), timestamps | unique `event_no` (nullable until ticket 11 assigns one); end >= start; sessions non-empty, unique dates inside range |
-| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source`, `import_batch_id`                                                                                                                                              | unique `(event_instance_id, session_date, member_id)`; session date in sessions                                       |
-| `offerings`                | `id`, `active`, `created_at`                                                                                                                                                                                                     | soft archive; no hard delete                                                                                          |
-| `offering_terms`           | `offering_id`, `version`, `name`, `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`                                                   | unique `(offering_id, version)`; immutable after publish                                                              |
-| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `detached_on`                                                                                                     | exactly one of event instance or series; unique active attachment                                                     |
-| `offering_exceptions`      | `offering_id`, `event_instance_id`/`series_id`, `date`, `kind` (`skip`/`opt_in`), `note`                                                                                                                                         | unique `(offering_id, event_instance_id, date)` or series variant                                                     |
-| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`                          | unique `idempotency_key`; amount > 0; member XOR visitor                                                              |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                             | amount > 0; expected date not past at create                                                                          |
-| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                               | append-only                                                                                                           |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                               | unique `(pledge_id, scheduled_for, channel)`                                                                          |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                           | short TTL; no raw phone in logs                                                                                       |
-| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                   | unique gateway reference                                                                                              |
-| `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                    | only active officers can sign in                                                                                      |
-| `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                        | single use; short TTL                                                                                                 |
-| `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                       | revocable; credential stored hashed                                                                                   |
-| `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                 | atomic upsert; no in-memory authority                                                                                 |
+| Table                      | Key fields                                                                                                                                                                                                                                              | Constraints                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `ministry_code`, `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`, `venue_name`, `description`, `status`, `source`, `sessions` (JSONB), timestamps                        | unique `event_no` (nullable until ticket 11 assigns one); end >= start; sessions non-empty, unique dates inside range                                           |
+| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source`, `import_batch_id`                                                                                                                                                                     | unique `(event_instance_id, session_date, member_id)`; session date in sessions                                                                                 |
+| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                  |
+| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by` | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                     |
+| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null |
+| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                              |
+| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`                                                 | unique `idempotency_key`; amount > 0; member XOR visitor                                                                                                        |
+| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                                                    | amount > 0; expected date not past at create                                                                                                                    |
+| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                      | append-only                                                                                                                                                     |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`                                                                                                                    |
+| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                  | short TTL; no raw phone in logs                                                                                                                                 |
+| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                          | unique gateway reference                                                                                                                                        |
+| `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                |
+| `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                           |
+| `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                             |
+| `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                        | atomic upsert; no in-memory authority                                                                                                                           |
 
 ## Acceptance Criteria
 

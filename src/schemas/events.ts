@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
+import { offeringStatsSchema, termsSchema } from './offerings.js';
 
 export const VENUE_TYPES = ['auditorium', 'virtual', 'hybrid'] as const;
 export const EVENT_STATUSES = ['draft', 'scheduled', 'held', 'cancelled', 'archived'] as const;
@@ -80,23 +81,13 @@ export const eventSessionSchema = z.object({
   source: sessionSourceSchema,
 });
 
-const offeringKindSchema = z.enum(['freewill', 'tithe', 'pledge', 'building', 'missions', 'other']);
-
-export const offeringStatsSchema = z.object({
-  attachedEvents: z.number().int(),
-  pledgedMinor: z.number().int(),
-  paidMinor: z.number().int(),
-  pendingMinor: z.number().int(),
-  honorRate: z.number(),
-  contributionCount: z.number().int(),
-});
-
 export const eventOfferingSchema = z.object({
   offeringId: z.string(),
+  /** The API resolves the display name; the UI must not compose it. */
   name: z.string(),
-  kind: offeringKindSchema,
-  currency: z.string(),
   availableUntil: z.string().nullable(),
+  expired: z.boolean(),
+  terms: termsSchema,
   exceptions: z.array(
     z.object({
       date: z.string(),

@@ -117,6 +117,85 @@ async function runScenario() {
     JSON.stringify(report.body?.totals),
   );
 
+  const offering = await request('/v1/offerings', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      name: 'Smoke Offering',
+      purpose: 'Exercises the offerings migration',
+      kind: 'freewill',
+      availableUntil: '2999-12-31',
+    }),
+  });
+  check(
+    'offering created with terms v1',
+    offering.status === 201 && offering.body.terms?.version === 1,
+    JSON.stringify(offering.body),
+  );
+
+  const published = await request(`/v1/offerings/${offering.body.id}/terms`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      baseVersion: 1,
+      name: 'Smoke Offering',
+      purpose: 'Published a second terms version',
+      kind: 'freewill',
+      availableUntil: '2999-12-31',
+      reason: 'Smoke test publisher',
+    }),
+  });
+  check('terms version 2 published', published.status === 201 && published.body.version === 2);
+
+  const smokeEvent = await request('/v1/events', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      eventNo: 'SMOKE-9001',
+      name: 'Smoke Offering Event',
+      startDate: '2999-01-01',
+      endDate: '2999-01-01',
+      startTime: '09:00',
+      venueType: 'auditorium',
+      sessions: [{ date: '2999-01-01', startTime: '09:00' }],
+    }),
+  });
+  check(
+    'smoke event created',
+    smokeEvent.status === 201 && Boolean(smokeEvent.body.id),
+    JSON.stringify(smokeEvent.body),
+  );
+
+  const attached = await request(`/v1/events/${smokeEvent.body.id}/offerings`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ offeringId: offering.body.id }),
+  });
+  check('offering attached', attached.status === 201, JSON.stringify(attached.body));
+
+  const exception = await request(
+    `/v1/events/${smokeEvent.body.id}/offerings/${offering.body.id}/exceptions`,
+    {
+      method: 'POST',
+      headers: write,
+      body: JSON.stringify({ date: '2999-01-01', kind: 'skip', note: 'smoke' }),
+    },
+  );
+  check('offering exception appended', exception.status === 201);
+
+  const eventDetail = await request(`/v1/events/${smokeEvent.body.id}`, { headers: read });
+  const attachedOffering = eventDetail.body.offerings?.[0];
+  check(
+    'event aggregate carries the offering',
+    eventDetail.status === 200 &&
+      eventDetail.body.offerings?.length === 1 &&
+      attachedOffering.name === 'Smoke Offering' &&
+      attachedOffering.terms?.version === 2 &&
+      attachedOffering.expired === false &&
+      attachedOffering.exceptions?.length === 1,
+    JSON.stringify(attachedOffering),
+  );
+
   const openapi = await request('/openapi.json');
   check(
     'openapi is served',

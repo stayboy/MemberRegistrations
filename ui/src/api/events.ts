@@ -40,12 +40,35 @@ export interface EventOfferingStatsItem {
   readonly contributionCount: number;
 }
 
-export interface EventOfferingItem {
-  readonly offeringId: string;
-  readonly name: string;
+export interface OfferingTermsItem {
+  readonly version: number;
+  readonly name: string | null;
+  readonly purpose: string;
   readonly kind: 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
   readonly currency: string;
+  readonly targetMinor: number | null;
+  readonly defaultAmountMinor: number | null;
+  readonly startsOn: string | null;
+  readonly endsOn: string | null;
   readonly availableUntil: string | null;
+  readonly scripture: string | null;
+  readonly gatewayAccount: string | null;
+  readonly gatewayMetadata: Readonly<Record<string, string>> | null;
+  /** Audit (NFR-3): who published this version, when, and why. */
+  readonly createdAt: string;
+  readonly createdBy: string;
+  /** Null for version 1; required on every later version. */
+  readonly reason: string | null;
+}
+
+export interface EventOfferingItem {
+  readonly offeringId: string;
+  /** Resolved by the API; the UI must not compose the display name. */
+  readonly name: string;
+  /** The effective expiry: attachment date, else terms date, else event end. */
+  readonly availableUntil: string | null;
+  readonly expired: boolean;
+  readonly terms: OfferingTermsItem;
   readonly exceptions: readonly {
     readonly date: string;
     readonly kind: 'skip' | 'opt_in';
@@ -54,7 +77,7 @@ export interface EventOfferingItem {
   readonly stats: EventOfferingStatsItem;
 }
 
-/** Mirrors `EventItem`; `offerings` is empty until the offerings tickets land. */
+/** Mirrors `EventItem`; offerings are resolved in the same request. */
 export interface EventItem extends EventListItem {
   readonly seriesId: string | null;
   readonly ministry: { readonly code: string; readonly name: string } | null;

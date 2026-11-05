@@ -53,6 +53,21 @@ import {
   updateEventSchema,
 } from './schemas/events.js';
 import {
+  attachSchema,
+  exceptionInputSchema,
+  exceptionListSchema,
+  exceptionRowSchema,
+  offeringAttachmentListSchema,
+  offeringAttachmentSchema,
+  offeringListSchema,
+  offeringSchema,
+  seriesAttachSchema,
+  setActiveSchema,
+  termsInputSchema,
+  termsPublishSchema,
+  termsSchema,
+} from './schemas/offerings.js';
+import {
   assignmentInputSchema,
   assignmentSchema,
   callInputSchema,
@@ -194,6 +209,19 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventAttendance: toSchema(eventAttendanceSchema, 'output'),
         EventAttendanceEntry: toSchema(eventAttendanceEntrySchema, 'output'),
         EventAttendanceInput: toSchema(eventAttendanceInputSchema, 'input'),
+        OfferingTerms: toSchema(termsSchema, 'output'),
+        Offering: toSchema(offeringSchema, 'output'),
+        OfferingList: toSchema(offeringListSchema, 'output'),
+        OfferingInput: toSchema(termsInputSchema, 'input'),
+        OfferingTermsPublish: toSchema(termsPublishSchema, 'input'),
+        OfferingActiveUpdate: toSchema(setActiveSchema, 'input'),
+        OfferingAttachment: toSchema(offeringAttachmentSchema, 'output'),
+        OfferingAttachmentList: toSchema(offeringAttachmentListSchema, 'output'),
+        OfferingAttach: toSchema(attachSchema, 'input'),
+        SeriesOfferingAttach: toSchema(seriesAttachSchema, 'input'),
+        OfferingException: toSchema(exceptionRowSchema, 'output'),
+        OfferingExceptionList: toSchema(exceptionListSchema, 'output'),
+        OfferingExceptionInput: toSchema(exceptionInputSchema, 'input'),
         ImportBatch: toSchema(importBatchSchema, 'output'),
         MemberImport: toSchema(memberImportSchema, 'input'),
         AttendanceImport: toSchema(attendanceImportSchema, 'input'),
@@ -1054,6 +1082,252 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             404: notFound,
             409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/offerings': {
+        get: {
+          summary: 'List offerings',
+          description:
+            'Active offerings by default; active=false lists archived only and includeArchived=true lists both. Newest first.',
+          parameters: [
+            {
+              name: 'active',
+              in: 'query',
+              schema: { type: 'string', enum: ['true', 'false'] },
+            },
+            {
+              name: 'includeArchived',
+              in: 'query',
+              schema: { type: 'string', enum: ['true', 'false'] },
+            },
+          ],
+          responses: {
+            200: json('Offerings with their current terms.', 'OfferingList'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Create an offering with terms version 1',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingInput') } },
+          },
+          responses: {
+            201: json('Offering created; Location names it.', 'Offering'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/offerings/{id}': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Read an offering and its current terms',
+          responses: {
+            200: json('The offering.', 'Offering'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Archive or reactivate an offering; terms never change here',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingActiveUpdate') } },
+          },
+          responses: {
+            200: json('The offering with its new active flag.', 'Offering'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/offerings/{id}/terms': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'List every published terms version, newest first',
+          responses: {
+            200: {
+              description: 'Published terms versions.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['items'],
+                    properties: {
+                      items: { type: 'array', items: ref('OfferingTerms') },
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Publish the next terms version',
+          description:
+            'The body is a full replacement plus baseVersion and a required reason (NFR-3 audit). A stale base returns 409 terms_version_conflict; a published version is immutable.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingTermsPublish') } },
+          },
+          responses: {
+            201: json('The new terms version.', 'OfferingTerms'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The terms body was built from a stale baseVersion.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/offerings': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'List the event active offering attachments',
+          responses: {
+            200: json('Active attachments with current terms.', 'OfferingAttachmentList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Attach an offering to an event',
+          description:
+            'A cancelled, archived or past event is 409 event_not_active; an inactive offering is 422; an active duplicate is 409 offering_already_attached. An attachment availableUntil must be on or after the event end.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingAttach') } },
+          },
+          responses: {
+            201: json('Attachment created; Location names it.', 'OfferingAttachment'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The event is not active, or the offering is already attached.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/offerings/{offeringId}': {
+        parameters: [idParam('eventId'), idParam('offeringId')],
+        delete: {
+          summary: 'Detach an offering from an event (end, not delete)',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Attachment ended; the row is kept.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/offerings/{offeringId}/exceptions': {
+        parameters: [idParam('eventId'), idParam('offeringId')],
+        get: {
+          summary: 'List exception rows for an event attachment, newest first',
+          responses: {
+            200: json('Exception history.', 'OfferingExceptionList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Append a skip on an event session date',
+          description:
+            'An event accepts only skip, and the date must be one of its sessions; anything else is 422 invalid_exception_date.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingExceptionInput') } },
+          },
+          responses: {
+            201: json('Exception appended.', 'OfferingException'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}/offerings': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'List the series active offering attachments',
+          responses: {
+            200: json('Active attachments with current terms.', 'OfferingAttachmentList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Attach an offering to a series for every occurrence',
+          description:
+            'A series attachment omits availableUntil. An archived series is 409 event_not_active; an active duplicate is 409 offering_already_attached; an inactive offering is 422.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SeriesOfferingAttach') } },
+          },
+          responses: {
+            201: json('Attachment created; Location names it.', 'OfferingAttachment'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The series is archived, or the offering is already attached.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/series/{id}/offerings/{offeringId}': {
+        parameters: [idParam('id'), idParam('offeringId')],
+        delete: {
+          summary: 'Detach an offering from a series (end, not delete)',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('Attachment ended; the row is kept.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/series/{id}/offerings/{offeringId}/exceptions': {
+        parameters: [idParam('id'), idParam('offeringId')],
+        get: {
+          summary: 'List exception rows for a series attachment, newest first',
+          responses: {
+            200: json('Exception history.', 'OfferingExceptionList'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Append a skip or opt-in on a series date',
+          description:
+            'skip requires a date the series meets; opt_in requires an extra date the series records. Anything else is 422 invalid_exception_date.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingExceptionInput') } },
+          },
+          responses: {
+            201: json('Exception appended.', 'OfferingException'),
+            401: unauthorized,
+            404: notFound,
             422: validation,
           },
         },
