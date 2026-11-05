@@ -120,6 +120,23 @@ describe('eventsListPath', () => {
       '/gateway/v1/events?from=2026-10-02&to=2026-12-02&limit=100&offset=100',
     );
   });
+
+  it('adds the series filter between the window and the page size', () => {
+    expect(
+      eventsListPath({
+        from: '2026-10-02',
+        to: '2026-12-02',
+        seriesId: 'series-1',
+        limit: 100,
+      }),
+    ).toBe('/gateway/v1/events?from=2026-10-02&to=2026-12-02&seriesId=series-1&limit=100');
+  });
+
+  it('omits the series filter when it is empty', () => {
+    expect(eventsListPath({ from: '2026-10-02', to: '2026-12-02', seriesId: '', limit: 100 })).toBe(
+      '/gateway/v1/events?from=2026-10-02&to=2026-12-02&limit=100',
+    );
+  });
 });
 
 describe('listEvents', () => {
@@ -146,6 +163,20 @@ describe('listEvents', () => {
       ['2026-11-01', '09:00', 'held'],
       ['2026-11-08', '09:00', 'cancelled'],
     ]);
+  });
+
+  it('passes the series filter through to the API query', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ items: [EVENT] }));
+
+    await listEvents(BASE, TOKEN, {
+      from: '2026-10-02',
+      to: '2026-12-02',
+      seriesId: 'series-1',
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${BASE}/gateway/v1/events?from=2026-10-02&to=2026-12-02&seriesId=series-1&limit=100`,
+    );
   });
 
   it('rejects an empty response body', async () => {

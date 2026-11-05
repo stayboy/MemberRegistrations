@@ -23,14 +23,15 @@ scope. Move an item to a GitHub issue only when the tracker is adopted.
 | Event attendance refresh after an import          | The attendance import invalidates the member queries, but the event attendance report key does not exist until the events UI lands, so an open report would not refresh                                                                                      | Ticket 17 adds the events UI                                      |
 | Attendance row ids missing from the event report  | The event attendance report (`GET /v1/events/:id/attendance`) returns rows without an attendance id, so a row delete needs an id added to the DTO (a wire-contract change)                                                                                   | The events DTO is next touched                                    |
 | Events/offerings spec DTO debt                    | `member-registrations-events-offerings.md` still lists `seriesName`, an offerings-shaped `stats` on the event, and attendance rows as `status: 'present' \| 'absent'`, while the implemented schema differs; the UI follows the implemented schema           | That spec is next edited                                          |
+| Series occurrences are dates, not events          | `GET /v1/series/:id/occurrences` returns dates only, so the detail links each date to the filtered events list instead of linking a generated event; revisit if the endpoint returns event ids                                                               | The series occurrence DTO is next touched                         |
 | Orchestrator skill packaging                      | The canonical lives at `~/.agents/skills/orchestrator`; a second machine does not need it yet                                                                                                                                                                | A second machine or repo needs the shared skill                   |
 | School-Collab orchestrator fork                   | Its `.pi/skills/...` is a protected doc with a higher-model review gate; migrating it needs its own round                                                                                                                                                    | That repo opens a docs round                                      |
 | `verify:skill` canonical check in CI              | CI has no `~/.agents/skills`; only the repo-side pointer is checked there                                                                                                                                                                                    | CI gains a way to install the canonical skill                     |
 
 ## V2 events, UI and ORM ticket set
 
-`documents/tickets/v2-events-ui/` holds 27 tickets in dependency order. Tickets 01-19 plus 11a, 15a and
-15b deliver V2 (specs and ORM gate, events API, session gateway, shell, members, imports, shepherding,
+`documents/tickets/v2-events-ui/` holds 28 tickets in dependency order. Tickets 01-19 plus 11a, 15a, 15b and
+18b deliver V2 (specs and ORM gate, events API, session gateway, shell, members, imports, shepherding,
 events, series); tickets 20-24 are the gated V3 offerings/USSD phase. Start at 01. The ORM decision gate
 is 03-04, 11a is the magic-link session gateway that blocks the UI shell in 12, 15a is the attendance
 import contract that blocks the attendance import screen in 15b, 15 is the shared import shell that 15b
@@ -39,8 +40,8 @@ builds on, and ticket 19 is the live-vs-mock release probe.
 After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, then **12–19**. Approval
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
-11a, 02-14, 12 and 15a are implemented and accepted (2026-11-04); the next serial ticket is **15**
-(imports shell, member import and batch lookup), then **15b** (attendance import screen), then 16-19.
+11a, 02-18, 12, 15a/15b, 16a and 17 are implemented and accepted (2026-11-04/05); the next serial
+ticket is **18b** (series authoring: create, edit, archive), then 19 (the release gate).
 
 UI gaps backlogged: the Pages deploy workflow and the ticket-19 browser gate. The CI UI checks and
 route-level code splitting are done (PRs after ticket 14); the `ui` job is advisory until GitHub

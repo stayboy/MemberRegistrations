@@ -31,10 +31,12 @@ export interface ConfirmDialogProps {
 }
 
 /**
- * Call sites: MemberDetailPage (archive, end subscription, remove coverage) and
- * ContactsDialog (remove contact). It is the shared destructive confirmation
- * required by FR-54. Purge stays inline in MemberDetailPage because it needs a
- * typed member-number input (FR-28), not a plain confirm.
+ * Call sites: MemberDetailPage (archive, end subscription, remove coverage),
+ * ContactsDialog (remove contact) and SeriesDetailPage (remove series
+ * exception). It is the shared destructive confirmation required by FR-54;
+ * series exception removal is the same pattern for FR-42. Purge stays inline in
+ * MemberDetailPage because it needs a typed member-number input (FR-28), not a
+ * plain confirm.
  */
 export function ConfirmDialog({
   open,

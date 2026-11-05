@@ -36,11 +36,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   listMembers,
-  listSeries,
   type MemberSummary,
   type MemberStatus,
   type SubscriptionSummary,
 } from '../api/members';
+import { listSeries } from '../api/series';
 import { useSession } from '../auth/SessionProvider';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
@@ -400,7 +400,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
 
   const seriesQuery = useQuery({
     queryKey: ['series', baseUrl],
-    queryFn: ({ signal }) => listSeries(baseUrl, token, signal),
+    queryFn: ({ signal }) => listSeries(baseUrl, token, { signal }),
     enabled: Boolean(token),
     staleTime: 5 * 60_000,
   });
