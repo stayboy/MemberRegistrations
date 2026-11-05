@@ -787,34 +787,36 @@ export interface ChurchOfferingSummary {
 
 ### Endpoints
 
-| Method       | Path                                                                 | Purpose                                                                   | Status    |
-| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------- |
-| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed  |
-| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed  |
-| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed  |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20 |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20 |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20 |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20 |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20 |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20 |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20 |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20 |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20 |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21 |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21 |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21 |
-| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22 |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22 |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22 |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22 |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed  |
-| `POST`       | `/v1/ussd/session`                                                   | Start USSD session                                                        | future    |
-| `POST`       | `/v1/ussd/session/{id}/select`                                       | Select offerings                                                          | future    |
-| `POST`       | `/v1/ussd/session/{id}/commit`                                       | Pay or pledge                                                             | future    |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback                                                          | future    |
+| Method       | Path                                                                 | Purpose                                                                   | Status     |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed   |
+| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed   |
+| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed   |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20  |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20  |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20  |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20  |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20  |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20  |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20  |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20  |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20  |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21  |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21  |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21  |
+| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22  |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22  |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22  |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed   |
+| `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a |
+
+The former `/v1/ussd/session/{id}/select` and `…/commit` routes are retired: the USSD flow is one
+server-owned route at `POST /ussd/session` with a `seq` frame number, specified in
+`member-registrations-ussd.md`.
 
 ### Error mapping additions
 
