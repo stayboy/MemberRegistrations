@@ -28,6 +28,27 @@ CI. The gap was invisible because the required check was green. Fixed by a separ
 
 ---
 
+## 2026-11-05 — Screen a proposed mock against the approved one before asking for approval
+
+**Rule.** When a UI mock must be approved against an existing approved mock, run the mock-parity
+screen (`documents/specs/mock-parity-screen.md`; `scripts/round/decision-probe.mjs`) on the pair, with a
+closed claim list derived from the approved artifact. Treat a flagged atom as a question to confirm,
+not a verdict: only a confirmed missing spec-required atom forces rework, and a mock-only difference is
+a recorded mock correction. Put the `## Mock parity` table and `DM:` in the round doc, never in the
+git-ignored `mockups/`.
+
+**Evidence.** 2026-11-05, the settings mock: screening the first hand-drawn mock against
+`v2-shell/01-shell-expanded-light.png` flagged an extra header control (0.911), an un-pinned footer
+(PARTIAL 0.828), no members toolbar, and no date/time block in the sidebar (0.868). Rebuilding the mock
+from the same prototype that produced the approved screenshot flipped the load-bearing atoms (toolbar
+PRESENT 0.890, date/time block PRESENT 0.801, header control ABSENT). One transport detail: the probe
+accepts `--images` on its own, but the hosted endpoint refused an image-only request with
+`400 state must be a nonempty string`; a short `state` describing the two images fixed it.
+
+**Trigger.** Any atomic claim about whether a proposed mock or built screenshot matches an approved
+mock — a label, a region, a control, a column. Not a holistic "does this feel like the mock?"
+judgement, which the screen is weak at.
+
 ## 2026-11-04 — A reused component inherits the narrowest capability of its call sites
 
 **Rule.** When a component is extracted because a second call site appeared, the shared version may
