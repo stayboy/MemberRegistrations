@@ -6,7 +6,7 @@ export default tseslint.config(
   {
     // The UI is its own workspace with its own ESLint/Prettier/tsconfig.
     // Keeping it out of the root config keeps `npm run verify` unchanged.
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**', 'ui/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'data/**', 'ui/**', 'mockups/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
