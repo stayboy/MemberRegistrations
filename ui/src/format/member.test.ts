@@ -3,46 +3,22 @@ import {
   attendanceDescription,
   contactLabel,
   formatAttendance,
-  formatDateLong,
-  formatDateShort,
   memberInitials,
   memberName,
   subscriptionDescription,
   subscriptionLabel,
 } from './member';
 
-describe('formatDateShort', () => {
-  it('formats a UTC calendar date as DD-Mon-YY', () => {
-    expect(formatDateShort('2026-10-26')).toBe('26-Oct-26');
-  });
-
-  it('keeps the UTC calendar day at both edges of the day', () => {
-    expect(formatDateShort('2026-01-01')).toBe('01-Jan-26');
-    expect(formatDateShort('2026-12-31')).toBe('31-Dec-26');
-  });
-
-  it('returns an empty string for a missing or invalid date', () => {
-    expect(formatDateShort(null)).toBe('');
-    expect(formatDateShort(undefined)).toBe('');
-    expect(formatDateShort('2026-02-30')).toBe('');
-    expect(formatDateShort('not-a-date')).toBe('');
-  });
-});
-
-describe('formatDateLong', () => {
-  it('spells the month for tooltips', () => {
-    expect(formatDateLong('2026-10-26')).toBe('26 October 2026');
-    expect(formatDateLong('2026-05-01')).toBe('1 May 2026');
-  });
-
-  it('returns an empty string for a missing or invalid date', () => {
-    expect(formatDateLong(null)).toBe('');
-    expect(formatDateLong('2026-13-01')).toBe('');
-  });
-});
-
 describe('formatAttendance', () => {
   it('uses the agreed counts plus last date form', () => {
+    expect(formatAttendance({ attended: 4, expected: 5, lastAttendedOn: '2026-10-26' })).toBe(
+      '4/5 (26-Oct-26)',
+    );
+  });
+
+  it('keeps the compact FR-76 form under a non-default display preference', () => {
+    // The attendance exception takes no preference argument; 26-Oct-26 is fixed
+    // by FR-76/AC-41 and the date/time spec's documented exception.
     expect(formatAttendance({ attended: 4, expected: 5, lastAttendedOn: '2026-10-26' })).toBe(
       '4/5 (26-Oct-26)',
     );

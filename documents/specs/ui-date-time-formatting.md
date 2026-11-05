@@ -1,12 +1,13 @@
 # Spec - UI date and time formatting (proposed)
 
-|            |                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **PROPOSED 2026-11-05.** Q169–Q178 resolved; the design and the mock are approved.                                                                |
-| Author     | Solomon Owoo                                                                                                                                      |
-| Related    | `documents/specs/member-registrations-ui.md` (FR-12, FR-76), `AGENTS.md` §4                                                                       |
-| Mock       | local `mockups/v2-settings/01-date-time-settings.png` (1440×1150) and `02-date-time-sidebar.png` (1440×900, the shell mock viewport; git-ignored) |
-| Supersedes | The single "dates are UTC calendar dates; the UI formats, never shifts" rule, which does not say what an instant does                             |
+|             |                                                                                                                                                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status      | **APPROVED 2026-11-05.** Q169–Q178 resolved; design and mock approved; implemented in ticket 18c.                                                                                                                     |
+| Spec review | `ollama-cloud/deepseek-v4-pro:0813` — ACCEPT 2026-11-05, second pass; reviewed text sha256 `9160c944840f82c44b93e0741943ad992d7aef027a609e08c74d4c5e33136ab0`, recorded in `documents/rounds/datetime-formatting.md`. |
+| Author      | Solomon Owoo                                                                                                                                                                                                          |
+| Related     | `documents/specs/member-registrations-ui.md` (FR-30, FR-76), `AGENTS.md` §4                                                                                                                                           |
+| Mock        | local `mockups/v2-settings/01-date-time-settings.png` (1440×1150) and `02-date-time-sidebar.png` (1440×900, the shell mock viewport; git-ignored)                                                                     |
+| Supersedes  | The single "dates are UTC calendar dates; the UI formats, never shifts" rule, which does not say what an instant does                                                                                                 |
 
 ---
 
@@ -65,8 +66,8 @@ officer can change — the same way the accent and the light/dark scheme are cha
     that the exact instant is still recoverable.
 15. As an officer using a screen reader, I want dates and times announced in the chosen style, so
     that the preference is not visual-only.
-16. As a developer, I want one formatter with two named entry points, so that "convert to local" and
-    "do not shift a calendar date" cannot be confused again.
+16. As a developer, I want one module with a function per value kind — instant, calendar date, wall
+    clock — so that "convert to local" and "do not shift a calendar date" cannot be confused again.
 
 ## Implementation Decisions
 
@@ -90,15 +91,22 @@ officer can change — the same way the accent and the light/dark scheme are cha
 - **Calendar-date safety.** `formatCalendarDate` builds the date at 12:00 UTC and formats with
   `timeZone: 'UTC'`. Noon is chosen so a ±14-hour offset can never cross a day boundary, even under
   a future refactor that forgets the explicit zone.
-- **Styles.** `dmy`: `day: numeric, month: long, year: numeric`; `mdy`: `month: long, day: numeric,
-year: numeric`; `iso`: `2026-11-05`; `locale`: `dateStyle: 'medium'`. Times: `h24` sets
-  `hour12: false`, `h12` sets `hour12: true`, `locale` omits the option.
+- **Styles.** `dmy`: `day: numeric, month: long, year: numeric`, formatted in **`en-GB`**; `mdy`:
+  `month: long, day: numeric, year: numeric`, formatted in **`en-US`** — the pins are what make the
+  named order true, because the option bag alone follows the reader's locale and would reverse
+  "Day Month Year" for an en-US browser. `iso`: `YYYY-MM-DD`. `locale`: `dateStyle: 'medium'` in the
+  browser's locale. Times: `h24` sets `hour12: false`, `h12` sets `hour12: true`, `locale` omits the
+  option; the time always formats in the browser's locale, including alongside the pinned date styles.
+  `formatDateRange(from, to, preference)` returns one date when the endpoints are equal, otherwise
+  `from – to`, both through the chosen date style.
 - **Instants are always local; wall-clock times never are.** A session's `startTime` belongs to the
-  event's timezone, not the reader's, so it is shown as scheduled and labelled with the event's zone;
-  converting it would relabel the service.
+  event's timezone, not the reader's, so it is shown as scheduled and labelled with the event's zone
+  (`09:00 · Africa/Lagos`, the event's IANA zone); converting it would relabel the service.
 - **Full timestamps carry a tooltip** with the UTC value, so the exact instant stays recoverable.
-- **Settings** gains a **Date and time** section with the two selects and a live preview, beside the
-  existing appearance controls.
+- **Settings** gains a **Date and time** panel beside Appearance: the same two choices as a Fluent
+  `RadioGroup` per choice (no dropdown), and a live preview showing a known instant
+  (`2026-11-04T23:30:00Z`), a calendar date (`1990-05-14`) and a wall-clock time (`09:00`) under the
+  current preference.
 - **One Display entry in the sidebar footer, not inline dropdowns.** Directly **above** the
   **Appearance** block sits a single **Date and time** row showing the current choice (for example
   "Day Month Year · 24-hour"). Opening it — by click or right-click, as a context menu — reveals the
@@ -109,6 +117,9 @@ year: numeric`; `iso`: `2026-11-05`; `locale`: `dateStyle: 'medium'`. Times: `h2
 - **Audit** of every render site: member dates and `archivedAt`, event dates and times, session
   times, attendance `sessionTime`, import batch and call timestamps, series dates. The spec rule
   "dates are formatted, never shifted" is amended to state the three kinds explicitly.
+  **One documented exception:** the members grid's attendance annotation stays the compact
+  `4/5 (26-Oct-26)` that FR-76 and AC-41 pin, because the cell is a dense grid token rather than a
+  date surface; it does not follow the preference and keeps its own fixed formatter.
 - **No first-paint flash work.** Unlike the theme, the preference affects text rather than colours;
   a default-then-preferred render is acceptable and needs no boot script.
 
@@ -168,15 +179,18 @@ and the un-pinned footer.
 The decision model (`clef:27b-cloud`, `scripts/round/decision-probe.mjs`) compared the rebuilt mock
 with `v2-shell/01-shell-expanded-light.png` on six closed claims. `DM: clef:27b-cloud`.
 
-| Claim | Ask                                                 | Answer  | Max prob |
-| ----- | --------------------------------------------------- | ------- | -------- |
-| c01   | A `Display` button was added to the header          | ABSENT  | 0.503    |
-| c02   | Appearance pinned to the sidebar bottom in both     | PARTIAL | 0.807    |
-| c03   | Same top-level navigation labels                    | PARTIAL | 0.533    |
-| c04   | Members toolbar present as in the shell mock        | PRESENT | 0.890    |
-| c05   | Date and time block above Appearance in the sidebar | PRESENT | 0.801    |
-| c06   | Same sidebar items above the footer                 | PRESENT | 0.763    |
+| Claim | Ask                                                 | Answer  | Max prob | Note      |
+| ----- | --------------------------------------------------- | ------- | -------- | --------- |
+| c01   | A `Display` button was added to the header          | ABSENT  | 0.503    | below bar |
+| c02   | Appearance pinned to the sidebar bottom in both     | PARTIAL | 0.807    |           |
+| c03   | Same top-level navigation labels                    | PARTIAL | 0.533    | below bar |
+| c04   | Members toolbar present as in the shell mock        | PRESENT | 0.890    |           |
+| c05   | Date and time block above Appearance in the sidebar | PRESENT | 0.801    |           |
+| c06   | Same sidebar items above the footer                 | PRESENT | 0.763    | below bar |
 
-The screen is advisory: the `Display` control is gone, the date/time block sits above Appearance, and
-the toolbar matches. The one visible difference is the header label — the shell screenshot predates
-the `Attendance` → `Events` rename, while the rebuilt mock is the app's current render.
+The screen is advisory, and three rows sit below the 0.80 bar, so they are confirmed by eye rather
+than treated as answers: the `Display` control is absent and the date/time block sits above Appearance
+in the rebuilt mock; the members toolbar matches. The `PARTIAL` on the pinned footer and the `PARTIAL`
+on the navigation labels are the model's uncertainty, not a defect — the one real difference is the
+header label: the shell screenshot predates the `Attendance` → `Events` rename, while the rebuilt mock
+is the app's current render.

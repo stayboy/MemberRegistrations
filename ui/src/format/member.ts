@@ -1,9 +1,10 @@
 /**
- * Formatting helpers for the members grid. Dates are UTC calendar dates from the
- * API (`YYYY-MM-DD`); parsing them as UTC avoids a local-time day shift (FR-76).
+ * Formatting helpers for the members grid. Most API dates use the shared
+ * preference formatter, but the attendance annotation is the one documented
+ * exception: FR-76/AC-41 and the date/time spec keep it compact and fixed.
  */
 
-const MONTHS_SHORT = [
+const ATTENDANCE_MONTHS_SHORT = [
   'Jan',
   'Feb',
   'Mar',
@@ -18,7 +19,7 @@ const MONTHS_SHORT = [
   'Dec',
 ] as const;
 
-const MONTHS_LONG = [
+const ATTENDANCE_MONTHS_LONG = [
   'January',
   'February',
   'March',
@@ -33,13 +34,13 @@ const MONTHS_LONG = [
   'December',
 ] as const;
 
-interface CalendarDate {
+interface AttendanceDate {
   readonly year: number;
   readonly month: number;
   readonly day: number;
 }
 
-function parseCalendarDate(value: string | null | undefined): CalendarDate | null {
+function parseAttendanceDate(value: string | null | undefined): AttendanceDate | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
   if (!match) return null;
 
@@ -58,20 +59,24 @@ function parseCalendarDate(value: string | null | undefined): CalendarDate | nul
   return { year, month, day };
 }
 
-/** `2026-10-26` -> `26-Oct-26`, or an empty string when the value is not a date. */
-export function formatDateShort(value: string | null | undefined): string {
-  const date = parseCalendarDate(value);
+/**
+ * FR-76/AC-41 and the date/time spec's documented exception: the members-grid
+ * attendance annotation stays `DD-Mon-YY` and deliberately ignores the display
+ * preference. This helper is private to the two attendance formatters.
+ */
+function formatAttendanceCompactDate(value: string | null | undefined): string {
+  const date = parseAttendanceDate(value);
   if (!date) return '';
   const year = String(date.year % 100).padStart(2, '0');
   const day = String(date.day).padStart(2, '0');
-  return `${day}-${MONTHS_SHORT[date.month - 1]}-${year}`;
+  return `${day}-${ATTENDANCE_MONTHS_SHORT[date.month - 1]}-${year}`;
 }
 
-/** `2026-10-26` -> `26 October 2026`, for tooltips and detail copy. */
-export function formatDateLong(value: string | null | undefined): string {
-  const date = parseCalendarDate(value);
+/** The tooltip keeps a fixed full date, as FR-76 requires, not the preference. */
+function formatAttendanceLongDate(value: string | null | undefined): string {
+  const date = parseAttendanceDate(value);
   if (!date) return '';
-  return `${date.day} ${MONTHS_LONG[date.month - 1]} ${date.year}`;
+  return `${date.day} ${ATTENDANCE_MONTHS_LONG[date.month - 1]} ${date.year}`;
 }
 
 export interface AttendanceLike {
@@ -84,13 +89,13 @@ export interface AttendanceLike {
 /**
  * The single attendance line: `4/5 (26-Oct-26)`, `4/5` when there is no last
  * date, or `No attendance yet` when the aggregate is absent. Never a second
- * date line (FR-76).
+ * date line (FR-76/AC-41).
  */
 export function formatAttendance(summary: AttendanceLike | null | undefined): string {
   if (!summary) return 'No attendance yet';
 
   const counts = `${summary.attended}/${summary.expected}`;
-  const last = formatDateShort(summary.lastAttendedOn);
+  const last = formatAttendanceCompactDate(summary.lastAttendedOn);
   return last ? `${counts} (${last})` : counts;
 }
 
@@ -100,7 +105,7 @@ export function attendanceDescription(summary: AttendanceLike | null | undefined
 
   const series = summary.seriesName?.trim();
   const prefix = series ? `${series} · ` : '';
-  const last = formatDateLong(summary.lastAttendedOn);
+  const last = formatAttendanceLongDate(summary.lastAttendedOn);
   const counts = `${summary.attended} of ${summary.expected} attended`;
   return last
     ? `${prefix}${counts} · last attended ${last}`

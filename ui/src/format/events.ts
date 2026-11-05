@@ -5,7 +5,6 @@ import type {
   EventVenueType,
   SessionSource,
 } from '../api/events';
-import { formatDateLong } from './member';
 
 /**
  * Pure event labels and formatters (events FR-1/FR-2/FR-4/FR-10/FR-15). They
@@ -61,17 +60,6 @@ export function formatPresentExpected(counts: {
   readonly expected: number;
 }): string {
   return `${counts.present}/${counts.expected}`;
-}
-
-/** `17:30–20:30`, or just the start time when the API has no end. */
-export function formatTimeRange(startTime: string, endTime: string | null): string {
-  return endTime ? `${startTime}–${endTime}` : startTime;
-}
-
-/** `13 October 2026 – 15 October 2026`, or one date for a single-day event. */
-export function formatDateRange(startDate: string, endDate: string): string {
-  if (startDate === endDate) return formatDateLong(startDate);
-  return `${formatDateLong(startDate)} – ${formatDateLong(endDate)}`;
 }
 
 /**

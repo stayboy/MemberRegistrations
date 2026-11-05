@@ -35,10 +35,11 @@ import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog, type ContactsDialogMember } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
-import { contactLabel, formatDateLong } from '../format/member';
+import { contactLabel } from '../format/member';
 import { isFollowUp, outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { LogCallDialog } from './LogCallDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
 type RosterFilter = 'all' | 'never_called' | 'follow_up';
@@ -118,6 +119,7 @@ function StillInChurchCell({ entry }: { entry: RosterEntry }) {
 export function ShepherdingRosterPage() {
   const styles = useShepherdingStyles();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [window, setWindow] = useDateWindow();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -411,7 +413,7 @@ export function ShepherdingRosterPage() {
                             <TableCell>{entry.conversations}</TableCell>
                             <TableCell>
                               {entry.lastCalledOn ? (
-                                formatDateLong(entry.lastCalledOn)
+                                formatDate(entry.lastCalledOn)
                               ) : (
                                 <Text className={styles.muted}>Never called</Text>
                               )}

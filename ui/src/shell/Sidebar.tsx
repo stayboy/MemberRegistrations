@@ -1,6 +1,7 @@
 import { Button, Tooltip, makeStyles, tokens } from '@fluentui/react-components';
 import { PanelLeftContractRegular, PanelLeftExpandRegular } from '@fluentui/react-icons';
 import { Link, useLocation } from 'react-router-dom';
+import { DateTimeMenu } from '../components/DateTimeMenu';
 import type { NavSection } from './navigation';
 import { ThemeControl } from './ThemeControl';
 
@@ -219,6 +220,7 @@ export function Sidebar({
       </nav>
 
       <div className={styles.footer}>
+        <DateTimeMenu collapsed={collapsed} />
         <ThemeControl collapsed={collapsed} />
       </div>
     </aside>

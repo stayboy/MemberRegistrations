@@ -27,6 +27,7 @@ import { getImportBatch, type ImportBatch } from '../api/imports';
 import { clearBatches, readBatches, type StoredImportBatch } from '../app/import-batches';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const useStyles = makeStyles({
   grid: {
@@ -93,12 +94,9 @@ function errorMessage(error: unknown): string {
   return 'Check the API connection and try again.';
 }
 
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
 function BatchResult({ batch }: { batch: ImportBatch }) {
   const styles = useStyles();
+  const { formatInstant, formatInstantTitle, formatDate } = useDateTimeFormat();
 
   return (
     <Card className={styles.card}>
@@ -142,7 +140,11 @@ function BatchResult({ batch }: { batch: ImportBatch }) {
             <TableCell>
               <Text weight="semibold">Created</Text>
             </TableCell>
-            <TableCell>{formatTimestamp(batch.createdAt)}</TableCell>
+            <TableCell>
+              <span title={formatInstantTitle(batch.createdAt)}>
+                {formatInstant(batch.createdAt)}
+              </span>
+            </TableCell>
           </TableRow>
           <TableRow>
             <TableCell>
@@ -155,7 +157,7 @@ function BatchResult({ batch }: { batch: ImportBatch }) {
               <TableCell>
                 <Text weight="semibold">Session date</Text>
               </TableCell>
-              <TableCell>{batch.sessionDate}</TableCell>
+              <TableCell>{batch.sessionDate ? formatDate(batch.sessionDate) : '—'}</TableCell>
             </TableRow>
           ) : null}
           {typeof batch.written === 'number' ? (
@@ -182,6 +184,7 @@ function BatchResult({ batch }: { batch: ImportBatch }) {
 
 export function ImportBatchesPage() {
   const styles = useStyles();
+  const { formatInstant, formatInstantTitle } = useDateTimeFormat();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
 
@@ -269,7 +272,11 @@ export function ImportBatchesPage() {
                       <TableCell className={styles.mono}>{batch.id}</TableCell>
                       <TableCell>{batch.kind}</TableCell>
                       <TableCell>{batch.rowCount}</TableCell>
-                      <TableCell>{formatTimestamp(batch.createdAt)}</TableCell>
+                      <TableCell>
+                        <span title={formatInstantTitle(batch.createdAt)}>
+                          {formatInstant(batch.createdAt)}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <Button
                           size="small"

@@ -1,8 +1,27 @@
-import { Button, makeStyles, shorthands, tokens } from '@fluentui/react-components';
+import {
+  Button,
+  Radio,
+  RadioGroup,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+  Text,
+  makeStyles,
+  shorthands,
+  tokens,
+} from '@fluentui/react-components';
 import { SignOutRegular } from '@fluentui/react-icons';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
+import {
+  DATE_STYLE_OPTIONS,
+  TIME_CYCLE_OPTIONS,
+  isDateStyle,
+  isTimeCycle,
+} from '../format/datetime';
+import { useDateTimeFormat, useDateTimePreference } from '../shell/DateTimeProvider';
 import { AppearanceFields } from '../shell/ThemeControl';
 
 const useStyles = makeStyles({
@@ -37,6 +56,17 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
   },
+  controlGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXS,
+  },
+  previewRow: {
+    verticalAlign: 'top',
+  },
+  previewNote: {
+    color: tokens.colorNeutralForeground3,
+  },
   actions: {
     display: 'flex',
     gap: tokens.spacingHorizontalS,
@@ -48,13 +78,19 @@ export function SettingsPage() {
   const styles = useStyles();
   const navigate = useNavigate();
   const { officer, signOut } = useSession();
+  const { preference, setDateStyle, setTimeCycle } = useDateTimePreference();
+  const { formatDate, formatInstant, formatTime, formatInstantTitle } = useDateTimeFormat();
+
+  const previewInstant = '2026-11-04T23:30:00Z';
+  const previewCalendarDate = '1990-05-14';
+  const previewWallClock = '09:00';
 
   return (
     <PageFrame
       sectionId="admin"
       title="Settings"
       submenu="Settings"
-      description="Appearance, navigation and the session for this tab. Preferences stay in this browser; no register data is stored."
+      description="Appearance, dates and the session for this tab. Preferences stay in this browser; no register data is stored."
     >
       <div className={styles.grid}>
         <section className={styles.panel} aria-labelledby="settings-appearance">
@@ -68,6 +104,70 @@ export function SettingsPage() {
             The accent and light/dark choice are restored before first paint and remembered in this
             browser. The sidebar collapse state is remembered the same way.
           </p>
+        </section>
+
+        <section className={styles.panel} aria-labelledby="settings-datetime">
+          <h2 id="settings-datetime" className={styles.panelTitle}>
+            Date and time
+          </h2>
+          <p className={styles.muted}>
+            How dates and times are written. Instants convert to this browser&apos;s zone; calendar
+            dates and session times keep the day and time the register recorded.
+          </p>
+          <div className={styles.appearance}>
+            <div className={styles.controlGroup}>
+              <Text weight="semibold">Date format</Text>
+              <RadioGroup
+                aria-label="Date format"
+                value={preference.dateStyle}
+                onChange={(_, data) => {
+                  if (isDateStyle(data.value)) setDateStyle(data.value);
+                }}
+              >
+                {DATE_STYLE_OPTIONS.map((option) => (
+                  <Radio key={option.value} value={option.value} label={option.label} />
+                ))}
+              </RadioGroup>
+            </div>
+            <div className={styles.controlGroup}>
+              <Text weight="semibold">Time format</Text>
+              <RadioGroup
+                aria-label="Time format"
+                value={preference.timeCycle}
+                onChange={(_, data) => {
+                  if (isTimeCycle(data.value)) setTimeCycle(data.value);
+                }}
+              >
+                {TIME_CYCLE_OPTIONS.map((option) => (
+                  <Radio key={option.value} value={option.value} label={option.label} />
+                ))}
+              </RadioGroup>
+            </div>
+          </div>
+          <Text weight="semibold">Preview</Text>
+          <Table size="small" aria-label="Date and time preview">
+            <TableBody>
+              <TableRow className={styles.previewRow}>
+                <TableCell>Record created</TableCell>
+                <TableCell>
+                  <span title={formatInstantTitle(previewInstant)}>
+                    {formatInstant(previewInstant)}
+                  </span>
+                </TableCell>
+                <TableCell className={styles.previewNote}>Instant · converted</TableCell>
+              </TableRow>
+              <TableRow className={styles.previewRow}>
+                <TableCell>Birth date</TableCell>
+                <TableCell>{formatDate(previewCalendarDate)}</TableCell>
+                <TableCell className={styles.previewNote}>Date · not shifted</TableCell>
+              </TableRow>
+              <TableRow className={styles.previewRow}>
+                <TableCell>Session start</TableCell>
+                <TableCell>{formatTime(previewWallClock)}</TableCell>
+                <TableCell className={styles.previewNote}>Wall clock · as scheduled</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </section>
 
         <section className={styles.panel} aria-labelledby="settings-session">

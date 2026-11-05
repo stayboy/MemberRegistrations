@@ -23,7 +23,6 @@ import { useState } from 'react';
 import { isUnauthorized } from '../api/errors';
 import { logCall, type CallInput } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
-import { formatDateLong } from '../format/member';
 import {
   CALL_OUTCOME_OPTIONS,
   STILL_IN_CHURCH_OPTIONS,
@@ -32,6 +31,7 @@ import {
   type CallFormErrors,
   type CallFormValues,
 } from '../format/shepherding';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const useStyles = makeStyles({
   content: {
@@ -64,6 +64,7 @@ export function LogCallDialog({
 }) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
+  const { formatDate } = useDateTimeFormat();
   const token = session?.token ?? '';
 
   const [values, setValues] = useState<CallFormValues>(() => createEmptyCallForm());
@@ -127,7 +128,7 @@ export function LogCallDialog({
           <DialogTitle>Log call</DialogTitle>
           <DialogContent className={styles.content}>
             <Text size={200} className={styles.muted}>
-              {memberName} · assignment started {formatDateLong(assignedOn)}
+              {memberName} · assignment started {formatDate(assignedOn)}
             </Text>
 
             <Field

@@ -6,9 +6,7 @@ import {
   SESSION_STATUS_LABELS,
   VENUE_LABELS,
   eventStatusLabel,
-  formatDateRange,
   formatPresentExpected,
-  formatTimeRange,
   ministryLabel,
   offeringsLabel,
   seriesColumnLabel,
@@ -96,16 +94,6 @@ describe('event formatting', () => {
       ]),
     ).toBe('86/120 · 92/120');
     expect(sessionAttendanceLabels([])).toBe('');
-  });
-
-  it('formats a start/end time range, or a lone start time', () => {
-    expect(formatTimeRange('17:30', '20:30')).toBe('17:30–20:30');
-    expect(formatTimeRange('17:30', null)).toBe('17:30');
-  });
-
-  it('formats one date for a single day and a range otherwise', () => {
-    expect(formatDateRange('2026-11-02', '2026-11-02')).toBe('2 November 2026');
-    expect(formatDateRange('2026-10-13', '2026-10-15')).toBe('13 October 2026 – 15 October 2026');
   });
 
   it('labels offering counts', () => {

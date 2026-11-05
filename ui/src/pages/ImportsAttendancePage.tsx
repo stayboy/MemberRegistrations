@@ -34,7 +34,6 @@ import { ImportPanel } from '../components/ImportPanel';
 import { PageFrame } from '../components/PageFrame';
 import { saveBlob } from '../format/download';
 import { parseAttendanceFile } from '../format/import-file';
-import { formatDateLong, formatDateShort } from '../format/member';
 import {
   importableEvents,
   importableSessions,
@@ -44,6 +43,7 @@ import {
   type OccurrenceRef,
 } from '../format/occurrence';
 import { recordBatch } from '../app/import-batches';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const KIND = 'attendance' as const;
 const EVENT_LIMIT = 100;
@@ -115,13 +115,17 @@ function errorMessage(error: unknown): string {
   return 'Check the API connection and try again.';
 }
 
-function eventLabel(event: EventListItem): string {
+function eventLabel(event: EventListItem, formatDate: (value: string) => string): string {
   const number = event.eventNo ? `${event.eventNo} · ` : '';
-  return `${number}${event.name} (${formatDateShort(event.startDate)})`;
+  return `${number}${event.name} (${formatDate(event.startDate)})`;
 }
 
-function sessionLabel(session: EventSessionSummary): string {
-  return `${formatDateLong(session.date)} · ${session.startTime}`;
+function sessionLabel(
+  session: EventSessionSummary,
+  formatDate: (value: string) => string,
+  formatTime: (value: string) => string,
+): string {
+  return `${formatDate(session.date)} · ${formatTime(session.startTime)}`;
 }
 
 /** The chosen occurrence is a snapshot so it survives a date-window refetch. */
@@ -186,6 +190,7 @@ function AttendanceWorkspace({
   onCommitted,
 }: AttendanceWorkspaceProps) {
   const styles = useStyles();
+  const { formatDate, formatTime } = useDateTimeFormat();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Seed once. A later `events` refetch cannot unmount the panel because the
@@ -239,7 +244,7 @@ function AttendanceWorkspace({
                   </Badge>
                 ) : null}
                 <Text size={200}>
-                  {formatDateLong(occurrence.date)} · {occurrence.startTime}
+                  {formatDate(occurrence.date)} · {formatTime(occurrence.startTime)}
                 </Text>
                 <Badge appearance="tint" color="subtle" size="small">
                   {occurrence.sessionStatus}
@@ -292,14 +297,14 @@ function AttendanceWorkspace({
                     placeholder={
                       events.length === 0 ? 'No events in this window' : 'Choose an event'
                     }
-                    value={draftEvent ? eventLabel(draftEvent) : ''}
+                    value={draftEvent ? eventLabel(draftEvent, formatDate) : ''}
                     selectedOptions={draftEventId ? [draftEventId] : []}
                     disabled={events.length === 0}
                     onOptionSelect={(_, data) => setDraftEventId(data.optionValue ?? null)}
                   >
                     {events.map((event) => (
-                      <Option key={event.id} value={event.id} text={eventLabel(event)}>
-                        {eventLabel(event)}
+                      <Option key={event.id} value={event.id} text={eventLabel(event, formatDate)}>
+                        {eventLabel(event, formatDate)}
                       </Option>
                     ))}
                   </Dropdown>
@@ -327,8 +332,12 @@ function AttendanceWorkspace({
                     }}
                   >
                     {sessions.map((session) => (
-                      <Option key={session.date} value={session.date} text={sessionLabel(session)}>
-                        {sessionLabel(session)}
+                      <Option
+                        key={session.date}
+                        value={session.date}
+                        text={sessionLabel(session, formatDate, formatTime)}
+                      >
+                        {sessionLabel(session, formatDate, formatTime)}
                       </Option>
                     ))}
                   </Dropdown>

@@ -48,13 +48,13 @@ import {
   attendanceDescription,
   contactLabel,
   formatAttendance,
-  formatDateLong,
   memberInitials,
   memberName,
   subscriptionDescription,
   subscriptionLabel,
 } from '../format/member';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -327,10 +327,10 @@ function AttendanceCell({
 
 function StatusCell({ member }: { member: MemberSummary }) {
   const styles = useStyles();
+  const { formatInstant, formatInstantTitle } = useDateTimeFormat();
   const label = member.archivedAt ? 'Archived' : 'Active';
-  const detail = member.archivedAt
-    ? `Archived ${formatDateLong(member.archivedAt)}`
-    : 'Active member';
+  const archivedAt = member.archivedAt ? formatInstant(member.archivedAt) : '';
+  const detail = member.archivedAt ? `Archived ${archivedAt}` : 'Active member';
 
   return (
     <Tooltip content={detail} relationship="description" withArrow>
@@ -339,6 +339,7 @@ function StatusCell({ member }: { member: MemberSummary }) {
         role="note"
         tabIndex={0}
         aria-label={`${label}: ${detail}`}
+        title={formatInstantTitle(member.archivedAt)}
       >
         {label}
       </span>

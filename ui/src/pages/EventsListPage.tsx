@@ -33,7 +33,6 @@ import { PageFrame } from '../components/PageFrame';
 import { seedEventsListQuery } from '../format/events-list';
 import {
   eventStatusLabel,
-  formatDateRange,
   ministryLabel,
   offeringsLabel,
   seriesColumnLabel,
@@ -41,6 +40,7 @@ import {
   venueLabel,
 } from '../format/events';
 import { useEventStyles } from './events-styles';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
 type BadgeColor = ComponentProps<typeof Badge>['color'];
 
@@ -77,6 +77,7 @@ function statusColor(status: EventStatus): BadgeColor {
 export function EventsListPage() {
   const styles = useEventStyles();
   const { baseUrl, session, signOut } = useSession();
+  const { formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [searchParams, setSearchParams] = useSearchParams();
   const [window, setWindow] = useDateWindow();
@@ -242,7 +243,7 @@ export function EventsListPage() {
                   <TableBody>
                     {events.map((event) => (
                       <TableRow key={event.id}>
-                        <TableCell>{formatDateRange(event.startDate, event.endDate)}</TableCell>
+                        <TableCell>{formatRange(event.startDate, event.endDate)}</TableCell>
                         <TableCell>
                           <div className={styles.identity}>
                             <Link className={styles.link} to={eventHref(event.id)}>
