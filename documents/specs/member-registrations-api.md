@@ -14,6 +14,15 @@
 
 ## Change log
 
+- 2026-11-05: the aggregator-facing USSD entry is `POST /ussd/session`, outside the bearer namespace;
+  `/v1/ussd/*` is removed, and the attendance/giving/subscription flow is specified in
+  `member-registrations-ussd.md`. The payment-group commit, pledge settle and member attendance/payment
+  summaries are listed as ticket-24 bearer seams; the gateway callback is ticket 24.
+- 2026-11-05: pledge follow-up is the member's active shepherd or an admin-supplied active presbyter
+  with a reason (`422 officer_required` otherwise); `pledge` leaves `OfferingKind` because a pledge is
+  a payment mode on an existing offering. Pledges, pledge events and reminders are specified for ticket
+  22, and `pledges` gains `terms_version`/`idempotency_key`/`created_at`/`created_by`; `pledge_events`
+  records the from/to officer on reassignment.
 - 2026-11-05: contributions specified for ticket 21 — idempotent by a globally unique key (identical
   repeat `200`, different payload `409 idempotency_conflict`), accepted only for an active attached
   offering on one of the event's session dates and not after expiry (`422 offering_expired`), recording
@@ -162,7 +171,8 @@ deployed to Vercel as a single function.
 - FR-13: A visitor MUST be able to give with name and phone, receive a receipt or reference, and leave
   no member record; the phone MUST be stored hashed.
 - FR-14: A pledge MUST carry an expected date and exactly one follow-up officer, resolved from the
-  member's active shepherd, then the offering default officer, otherwise rejected.
+  member's active shepherd or from the active presbyter the administrator supplies with a reason,
+  otherwise rejected with `422 officer_required`.
 - FR-15: An administrator MUST be able to assign or reassign a pledge follow-up officer with a reason;
   the history MUST be append-only.
 - FR-16: A pledge MUST be honored on payment or dishonored with a reason; a pending pledge MUST
@@ -481,9 +491,10 @@ the JSON contract MUST describe the same columns.
 
 `{ version, name?, purpose, kind, currency, targetMinor?, defaultAmountMinor?, startsOn?, endsOn?, availableUntil?, scripture?, gatewayAccount?, gatewayMetadata? }`
 
-- `kind` is `freewill | tithe | pledge | building | missions | other`.
+- `kind` is `freewill | tithe | building | missions | other`. A pledge is not an offering kind: it is
+  a payment mode on any offering.
 - `name` is optional. The API resolves the event-scoped display label as the trimmed custom name, else
-  `${event.name} · ${kindLabel}` (Freewill, Tithe, Pledge, Building, Missions, Other); the catalogue
+  `${event.name} · ${kindLabel}` (Freewill, Tithe, Building, Missions, Other); the catalogue
   returns the stored name, which may be null.
 - Terms are versioned and immutable after publish. `POST /v1/offerings/{id}/terms` takes a full flat
   terms body, a required `baseVersion` and a required `reason`, and publishes version n+1; a stale base
@@ -528,15 +539,21 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 ### Pledge
 
 - A pledge carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`, amount,
-  currency, `expectedOn` and exactly one follow-up officer.
-- The officer is the member's active shepherd; otherwise the offering's default officer; otherwise the
-  pledge is rejected.
-- An administrator may assign or reassign the officer with a reason; both officers and the reason
-  remain in `pledge_events`.
-- Status is `pending | honored | dishonored | overdue`. Honor is appended on payment; dishonor requires
-  a reason.
+  currency, `expectedOn`, exactly one follow-up officer, the `termsVersion` and an `idempotencyKey`.
+- The officer is the member's active shepherd, or the active presbyter the administrator supplies with
+  a reason; otherwise the pledge is rejected (`422 officer_required`). A pledge always targets an
+  existing offering attached to the event; it never creates an offering.
+- An administrator may assign at creation or reassign later with a reason; both officers and the reason
+  remain in `pledge_events` (`fromOfficerMemberNo`/`toOfficerMemberNo`).
+- `POST /v1/pledges` is idempotent by `idempotencyKey`: an identical canonical payload returns `200`
+  with the stored pledge, a different payload is `409 idempotency_conflict`.
+- A pledge is dated by `sessionDate`, else today (UTC), and that date must be on or before the
+  offering's effective expiry (`422 offering_expired`); `expectedOn` may be later.
+- Status is `pending | honored | dishonored | overdue`; `overdue` is derived from `expectedOn`, never
+  stored. Honor is appended on payment; dishonor requires a reason.
 - A pending pledge survives offering expiry and can still be honored.
-- Reminders are unique per pledge, scheduled date and channel; opt-out is honoured.
+- Reminders are unique per pledge, scheduled date and channel and stay `pending` in V3; delivery and the
+  member opt-out are deferred (OS-5).
 
 ## API Contracts
 
@@ -549,32 +566,35 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 
 ### Members
 
-| Method   | Path                                               | Result                                                                                  |
-| -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `GET`    | `/v1/members`                                      | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `limit`, `cursor`) |
-| `POST`   | `/v1/members`                                      | `201` + `Location`; `409` duplicate member number                                       |
-| `GET`    | `/v1/members/{memberNo}`                           | Full DTO + `ETag`; `404` unknown/archived unless flagged                                |
-| `PUT`    | `/v1/members/{memberNo}`                           | Update; stale `If-Match` → `409`                                                        |
-| `DELETE` | `/v1/members/{memberNo}`                           | Archive; `204`                                                                          |
-| `POST`   | `/v1/members/{memberNo}/restore`                   | Un-archive; `409` when not archived                                                     |
-| `POST`   | `/v1/members/{memberNo}/purge`                     | Hard delete PII; body must repeat the member number                                     |
-| `GET`    | `/v1/members/{memberNo}/attendance`                | Per-series counts + rows                                                                |
-| `POST`   | `/v1/members/{memberNo}/attendance`                | `{ seriesId, date }`, resolved to the event session; `422` when not held                |
-| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}` | Remove a row (writes a suppression for imports)                                         |
-| `POST`   | `/v1/members/{memberNo}/contacts`                  | Add contact; `409` on duplicate value                                                   |
-| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`      | Update kind/value/order                                                                 |
-| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`      | Remove contact                                                                          |
-| `POST`   | `/v1/members/{memberNo}/contacts/link`             | Link another member's contact (dependent sharing)                                       |
-| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}` | Unlink                                                                                  |
-| `POST`   | `/v1/members/{memberNo}/subscriptions`             | Create subscription (optional coverage)                                                 |
-| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`        | End subscription                                                                        |
-| `POST`   | `/v1/subscriptions/{id}/coverage`                  | Add a covered member                                                                    |
-| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`       | Remove a covered member                                                                 |
-| `POST`   | `/v1/members/{memberNo}/ministries`                | Assign by ministry `code`                                                               |
-| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`         | Unassign                                                                                |
-| `GET`    | `/v1/members/{memberNo}/relationships`             | Spouse, dependents, guardians                                                           |
-| `POST`   | `/v1/members/{memberNo}/relationships`             | `{ relatedMemberNo, type, isDependent }`                                                |
-| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`        | Remove the edge                                                                         |
+| Method   | Path                                                | Result                                                                                  |
+| -------- | --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET`    | `/v1/members`                                       | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `limit`, `cursor`) |
+| `POST`   | `/v1/members`                                       | `201` + `Location`; `409` duplicate member number                                       |
+| `GET`    | `/v1/members/{memberNo}`                            | Full DTO + `ETag`; `404` unknown/archived unless flagged                                |
+| `PUT`    | `/v1/members/{memberNo}`                            | Update; stale `If-Match` → `409`                                                        |
+| `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                          |
+| `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                     |
+| `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                     |
+| `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                |
+| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                               | ticket 24 |
+| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                 | ticket 24 |
+| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                            | ticket 24 |
+| `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held                |
+| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                         |
+| `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                   |
+| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`       | Update kind/value/order                                                                 |
+| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`       | Remove contact                                                                          |
+| `POST`   | `/v1/members/{memberNo}/contacts/link`              | Link another member's contact (dependent sharing)                                       |
+| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}`  | Unlink                                                                                  |
+| `POST`   | `/v1/members/{memberNo}/subscriptions`              | Create subscription (optional coverage)                                                 |
+| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                        |
+| `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                    |
+| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                 |
+| `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                               |
+| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                |
+| `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                           |
+| `POST`   | `/v1/members/{memberNo}/relationships`              | `{ relatedMemberNo, type, isDependent }`                                                |
+| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`         | Remove the edge                                                                         |
 
 **Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
 `archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
@@ -691,34 +711,34 @@ export interface Event {
 
 ### Offerings and giving
 
-| Method       | Path                                                                 | Result                                                |
-| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1         |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only        |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)          |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                     |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                              |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                     |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                     |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)           | ticket 21 |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                     | ticket 21 |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                 | ticket 21 |
-| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer              |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo`                        | Pledge list                                           |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                 |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                 |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason          |
-| `POST`       | `/v1/pledges/{id}/reminders`                                         | Schedule a reminder                                   |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                 |
-| `POST`       | `/v1/ussd/session`                                                   | Start a USSD session (future)                         |
-| `POST`       | `/v1/ussd/session/{id}/select`                                       | Select offerings (future)                             |
-| `POST`       | `/v1/ussd/session/{id}/commit`                                       | Pay or pledge (future)                                |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback (future)                             |
+| Method       | Path                                                                 | Result                                                   |
+| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------- |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1            |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only           |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)             |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                        |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                 |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences    |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                   |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                        |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                        |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)              | ticket 21 |
+| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)          | ticket 24 |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                        | ticket 21 |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                    | ticket 21 |
+| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                 | ticket 22 |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                 | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                    | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                    | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason             | ticket 22 |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                        | ticket 22 |
+| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`          | ticket 24 |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                    |
+| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec | ticket 24 |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                    | ticket 24 |
 
 ```ts
-export type OfferingKind = 'freewill' | 'tithe' | 'pledge' | 'building' | 'missions' | 'other';
+export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
 export interface OfferException {
   date: string;
   kind: 'skip' | 'opt_in';
@@ -804,6 +824,29 @@ export interface Pledge {
   followUpOfficerMemberNo: string;
   status: 'pending' | 'honored' | 'dishonored' | 'overdue';
   reason: string | null;
+  termsVersion: number;
+  idempotencyKey: string;
+  createdAt: string;
+}
+
+export interface PledgeEvent {
+  id: string;
+  pledgeId: string;
+  kind: 'created' | 'honored' | 'dishonored' | 'reassigned';
+  actor: string;
+  reason: string | null;
+  fromOfficerMemberNo: string | null;
+  toOfficerMemberNo: string | null;
+  at: string;
+}
+
+export interface Reminder {
+  id: string;
+  pledgeId: string;
+  scheduledFor: string;
+  channel: 'sms' | 'whatsapp' | 'ussd' | 'email';
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  sentAt: string | null;
 }
 ```
 
@@ -866,11 +909,11 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 | `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null |
 | `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                              |
 | `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                  |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`                                                                                    | amount > 0; expected date not past at create                                                                                                                    |
-| `pledge_events`            | `id`, `pledge_id`, `kind`, `actor`, `reason`, `at`                                                                                                                                                                                                      | append-only                                                                                                                                                     |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`                                                                                                                    |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                  | short TTL; no raw phone in logs                                                                                                                                 |
-| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                          | unique gateway reference                                                                                                                                        |
+| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                  |
+| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status stays `pending` in V3 (no delivery)                                                                        |
+| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                           | 3-minute idle TTL; no raw phone; defined in the USSD spec                                                                                                       |
+| `payment_intents`          | `id`, `payment_group_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                         | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                |
 | `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                |
 | `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                           |
 | `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                             |
@@ -904,7 +947,7 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 
 ### AC-13: **Given** a visitor with a name and phone, **When** they give, **Then** a receipt or reference is returned, no member is created, and the phone is stored hashed. (FR-13)
 
-### AC-14: **Given** a member with no active shepherd and an offering with no default officer, **When** they pledge, **Then** the request fails with `422` and an officer-required code. (FR-14)
+### AC-14: **Given** a member with no active shepherd and no administrator-supplied officer, **When** they pledge, **Then** the request fails with `422 officer_required`. (FR-14)
 
 ### AC-15: **Given** a pledge, **When** an administrator reassigns its officer with a reason, **Then** a `pledge_events` row records both officers and the reason. (FR-15)
 
