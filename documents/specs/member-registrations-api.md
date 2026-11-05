@@ -14,6 +14,11 @@
 
 ## Change log
 
+- 2026-11-05: member references render a shared `FullName (Gender, Ny)` identity label. `MemberSummary`
+  and `MemberDetail` gain a derived `age`; the relationship, shepherding and event-attendance DTOs gain
+  `gender` and `age`; `dob` stays detail-only. Age is completed years at today (UTC), null when `dob`
+  is null or in the future, and always the current age, never the age at a historical record's date.
+  The UI spec owns the label rule and the USSD spec owns the short display glossary.
 - 2026-11-05: welfare products gain a payer (`member`/`church`/`either`), a cover period, and
   dependent rules (`covers`, `maxDependents`, `allowedRelationships`); subscriptions record `paidBy`,
   `periodStart`/`periodEnd` and a per-period `subscription_payments` row for member-paid cover, while
@@ -230,22 +235,27 @@ deployed to Vercel as a single function.
 
 ### Member
 
-| Field                             | Notes                                                                    |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives). |
-| `firstName`, `lastName`           | Required.                                                                |
-| `otherNames`                      | Single free-text field.                                                  |
-| `maidenName`, `alias`             | Optional free text.                                                      |
-| `dob`                             | Date, nullable.                                                          |
-| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                          |
-| `placeOfResidence`, `addressLine` | Free text.                                                               |
-| `joinedOn`                        | Date; defaults to the registration date when omitted.                    |
-| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.           |
-| `archivedAt`                      | Set by archive, cleared by restore.                                      |
-| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.           |
+| Field                             | Notes                                                                                   |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                |
+| `firstName`, `lastName`           | Required.                                                                               |
+| `otherNames`                      | Single free-text field.                                                                 |
+| `maidenName`, `alias`             | Optional free text.                                                                     |
+| `dob`                             | Date, nullable.                                                                         |
+| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                         |
+| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored. |
+| `placeOfResidence`, `addressLine` | Free text.                                                                              |
+| `joinedOn`                        | Date; defaults to the registration date when omitted.                                   |
+| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                          |
+| `archivedAt`                      | Set by archive, cleared by restore.                                                     |
+| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                          |
 
 Invariants: `memberNo` never changes; a purged member is read-only and invisible; an archived member
 is invisible to default reads but readable with `includeArchived=true`.
+
+`age` is derived, never stored: completed years at today (UTC), with a 29 February birthday reached on
+1 March in a non-leap year. Every member DTO reports the member's **current** age, never the age at a
+historical record's date. The members list carries `age` but not `dob`; the detail carries both.
 
 ### Contact
 
@@ -294,6 +304,9 @@ periodStart, periodEnd }`
 - At most one `spouse` edge per member.
 - `parent` describes kinship; `guardian` describes responsibility. A member may hold both edges.
 - Every related member is a real member with its own `memberNo`; there are no shadow people.
+- The relationship read DTO carries the related member's `gender` and `age` alongside `name`, so the
+  UI renders the same identity label as every other member reference. `age` is current, not the age
+  when the edge was created.
 
 ### Shepherding
 
@@ -355,6 +368,10 @@ residence, `attempts`, `conversations`, `lastCalledOn`, `lastOutcome`, current `
 `latestFeedback` and `latestIssue`. Counts cover the **current assignment only**; the member's own
 shepherding view exposes the full history across previous officers, including prior feedback and
 issues.
+
+Roster rows, officer rows and the member's shepherding view carry `gender` and `age` alongside the
+composed `name`, so every shepherding surface renders the same identity label. Assignment history and
+calls show the member's and officer's current age, not the age at the time of the record.
 
 The **church report** aggregates the same data per officer plus totals: officers, active members,
 assigned members, unassigned members, attempts, conversations, members never called, and the current
@@ -435,9 +452,11 @@ unique on `(eventInstanceId, sessionDate, memberId)`.
 - `present` is the number of attendance rows for that session; `rows` lists exactly those members with
   `status: 'present'` and their `import | manual` source. The data model has no absence row, so the
   report never invents an absent member; `expected - present` is the only absence signal.
-- Each `rows` entry carries `id`, the **`attendance.id` primary key** (not the member id), so the UI can
-  call `DELETE /v1/events/{eventId}/attendance/{attendanceId}` without a second lookup. The report and
-  the delete share the same id; the events route table's `{id}` is the event id.
+- Each `rows` entry carries the member's `name`, `gender` and `age` (current, not the age at the
+  session) alongside `id`, the **`attendance.id` primary key** (not the member id), so the UI can
+  render the identity label and call `DELETE /v1/events/{eventId}/attendance/{attendanceId}` without a
+  second lookup. The report and the delete share the same id; the events route table's `{id}` is the
+  event id.
 - `expected` is the register at the session date: members with `joined_on <= sessionDate`, not archived
   and not purged. Each session is counted on its own date, so a multi-day event may report a different
   denominator per day.
@@ -612,6 +631,8 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 
 **Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
 `archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
+The identity carries `gender` and the derived `age` (nullable); the list never carries `dob`. The
+detail adds `dob` and reports the same `age`.
 
 - `status=active|archived` selects the set; the default is `active`, and purged members are never
   returned. `includeArchived=true` is a deprecated alias for active + archived.

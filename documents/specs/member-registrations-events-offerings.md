@@ -595,6 +595,9 @@ export interface EventAttendanceRow {
   id: string;
   memberNo: string;
   name: string;
+  /** Current identity label parts; age is null when dob is unknown or in the future. */
+  gender: 'male' | 'female' | 'other' | 'undisclosed';
+  age: number | null;
   status: 'present';
   source: 'import' | 'manual';
   sessionTime: string | null;

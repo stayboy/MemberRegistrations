@@ -263,6 +263,19 @@ roster detail, not as global sidebar items.
   with a **bare last-attended date**, and active/archived status. The attendance and subscriptions
   summaries MUST be backed by the list aggregates in FR-69/FR-75; the UI MUST NOT issue one request
   per row.
+- FR-22a: Every member identity MUST render the shared label `FullName (Gender, Ny)` — for example
+  `Ama Mensah (Female, 32y)` — using `firstName + lastName` (the existing `memberName` convention), the
+  capitalised gender (`Male`, `Female`, `Other`), and the API's derived `age`. `undisclosed` gender is
+  omitted, a null age is omitted, and both missing leaves the name alone: `Name (Male)`, `Name (32y)`,
+  `Name`. The label applies to the members list, contact lookup, the detail heading and overview, the
+  contacts dialog, member pickers, relationships, the shepherding roster/officers/report and their
+  dialogs, event attendance rows and confirmations, subscription policyholder sentences (the current
+  member's detail, not the subscription DTO), and archive/end-assignment confirmations. Avatars keep
+  plain-name initials, breadcrumbs keep the member number, and Add/Edit keeps its form fields.
+  `otherNames`, `alias` and `maidenName` never enter the label. The visible label MUST also be the
+  accessible name wherever an action names a member. On the overview the heading carries gender and
+  age, so the separate Gender field is removed; the Date of birth field stays. A picker MAY append the
+  member number when two options share a name; the number is a tie-breaker, never a second label.
 - FR-23: Selecting a row MUST open `#/members/:memberNo` with the full detail DTO (identity,
   contacts, ministries, subscriptions, relationships, attendance per series, shepherding summary).
 - FR-24: Create MUST collect the fields in `createMemberSchema`, mirror its client-side constraints
@@ -516,6 +529,8 @@ Each criterion is testable and references at least one requirement.
 ### AC-10: **Given** the production build, **When** the bundle and browser storage are searched, **Then** the API bearer is absent everywhere, no token field exists, and only a short-lived session credential is in `sessionStorage`. (FR-12, FR-15, NFR-3, NFR-4)
 
 ### AC-11: **Given** the member list, **When** the operator searches, pages, or toggles archived, **Then** the URL reflects the query and the results come from the API, not a client-side copy of the register. (FR-20, FR-21, FR-22)
+
+### AC-11a: **Given** a member with a known gender and date of birth, **When** any member identity is rendered, **Then** it reads `FullName (Gender, Ny)`; a missing gender or age omits that part without a placeholder, and the overview does not repeat a separate Gender field. (FR-22a)
 
 ### AC-12: **Given** a member row, **When** it is opened, **Then** the detail shows contacts, ministries, subscriptions, relationships and attendance per series. (FR-23, FR-30)
 
@@ -824,6 +839,8 @@ export interface MemberSummary {
   lastName: string;
   otherNames: string | null;
   gender: Gender;
+  /** Derived current age, or null when dob is unknown or in the future. */
+  age: number | null;
   placeOfResidence: string | null;
   joinedOn: string | null;
   isPresbyter: boolean;
@@ -873,6 +890,8 @@ export interface Relationship {
   isDependent: boolean;
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   archived: boolean;
 }
 
@@ -932,6 +951,8 @@ export interface Health {
 export interface Officer {
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   assignedMembers: number;
   attempts: number;
   conversations: number;
@@ -948,6 +969,8 @@ export interface RosterEntry {
   assignedOn: string;
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   placeOfResidence: string | null;
   contacts: Contact[];
   attempts: number;
@@ -970,8 +993,12 @@ export interface Assignment {
   id: string;
   officerMemberNo: string;
   officerName: string;
+  officerGender: Gender;
+  officerAge: number | null;
   memberNo: string;
   memberName: string;
+  memberGender: Gender;
+  memberAge: number | null;
   assignedOn: string;
   endedOn: string | null;
   reason: string | null;
@@ -1035,16 +1062,22 @@ export interface Report {
 export interface MemberShepherding {
   memberNo: string;
   name: string;
+  gender: Gender;
+  age: number | null;
   shepherd: {
     assignmentId: string;
     memberNo: string;
     name: string;
+    gender: Gender;
+    age: number | null;
     assignedOn: string;
   } | null;
   history: Array<{
     assignmentId: string;
     officerMemberNo: string;
     officerName: string;
+    officerGender: Gender;
+    officerAge: number | null;
     assignedOn: string;
     endedOn: string | null;
     reason: string | null;
