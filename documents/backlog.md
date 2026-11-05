@@ -36,8 +36,9 @@ After approval, run **11a first**, then **02 → 03 → 04**, then **05–11**, 
 covers the V3 contracts too, but tickets 20–24 still need their own go before any code.
 
 11a, 02-18, 12, 15a/15b, 17, 18b, 18c and 19a-19c are implemented and accepted (2026-11-04/05).
-**V2 is closed.** The next serial ticket is **20** (offerings terms and attach), the first gated V3
-ticket.
+**V2 is closed.** The V3 phase opened on 2026-11-05: ticket 20 (offerings terms and attach) and ticket
+21 (contributions and visitor gifts) are implemented; the next serial ticket is **22** (pledges and
+reminders).
 
 UI release gate: both backlogged pieces are in place — 19a merged the browser gate, 19b adds the Pages
 deploy workflow plus the committed screenshot baseline, and 19c closes the post-release gaps. The CI UI

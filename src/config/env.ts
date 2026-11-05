@@ -3,6 +3,9 @@ import { z } from 'zod';
 export const DEFAULT_CORS_ORIGINS =
   'http://localhost:5173,http://127.0.0.1:4173,https://stayboy.github.io';
 
+/** Tests and development use this pepper; production must override it. */
+export const DEFAULT_VISITOR_PHONE_PEPPER = 'dev-only-visitor-phone-pepper';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -16,6 +19,8 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   MAGIC_LINK_FROM: z.string().email().optional(),
   CORS_ALLOWED_ORIGINS: z.string().default(DEFAULT_CORS_ORIGINS),
+  // Production must override this; rotating it changes every stored visitor hash.
+  VISITOR_PHONE_PEPPER: z.string().min(16).default(DEFAULT_VISITOR_PHONE_PEPPER),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -37,6 +42,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is required when NODE_ENV=production');
     if (!env.MAGIC_LINK_FROM)
       throw new Error('MAGIC_LINK_FROM is required when NODE_ENV=production');
+    if (env.VISITOR_PHONE_PEPPER === DEFAULT_VISITOR_PHONE_PEPPER) {
+      throw new Error('VISITOR_PHONE_PEPPER is required when NODE_ENV=production');
+    }
   }
 
   if (env.AUTH_SESSION_IDLE_MINUTES > env.AUTH_SESSION_ABSOLUTE_MINUTES) {

@@ -1071,19 +1071,20 @@ describe('expiry helpers and the ticket-21 split', () => {
     expect(isExpired('2026-01-02', '2026-01-01')).toBe(false);
   });
 
-  it('exposes the predicate but adds no contribution route', async () => {
+  it('exposes the predicate and leaves contributions to ticket 21', async () => {
     expect(typeof isExpired).toBe('function');
 
+    // Ticket 20 shipped the expiry predicate only; ticket 21 owns the route.
     const contributions = await request(harness.app)
       .post('/v1/contributions')
       .set(writeHeaders)
       .send({ offeringId: '00000000-0000-4000-8000-000000000000' });
-    expect(contributions.status).toBe(404);
-    expect(contributions.body.code).toBe('route_not_found');
+    expect(contributions.status).toBe(422);
+    expect(contributions.body.code).toBe('validation_error');
 
     const openapi = await request(harness.app).get('/openapi.json');
     expect(openapi.status).toBe(200);
-    expect(openapi.body.paths['/v1/contributions']).toBeUndefined();
+    expect(openapi.body.paths['/v1/contributions']).toBeDefined();
     expect(openapi.body.paths['/v1/offerings']).toBeDefined();
   });
 });

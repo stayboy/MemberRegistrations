@@ -196,6 +196,62 @@ async function runScenario() {
     JSON.stringify(attachedOffering),
   );
 
+  const contribution = await request('/v1/contributions', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      memberNo: 'M-9002',
+      offeringId: offering.body.id,
+      eventId: smokeEvent.body.id,
+      sessionDate: '2999-01-01',
+      amountMinor: 5000,
+      channel: 'manual',
+      idempotencyKey: 'smoke-contribution-1',
+    }),
+  });
+  check(
+    'contribution recorded',
+    contribution.status === 201 &&
+      /^MR-[A-Z2-7]{10}$/.test(contribution.body.reference) &&
+      contribution.body.termsVersion === 2,
+    JSON.stringify(contribution.body),
+  );
+
+  const repeatContribution = await request('/v1/contributions', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      memberNo: 'M-9002',
+      offeringId: offering.body.id,
+      eventId: smokeEvent.body.id,
+      sessionDate: '2999-01-01',
+      amountMinor: 5000,
+      channel: 'manual',
+      idempotencyKey: 'smoke-contribution-1',
+    }),
+  });
+  check(
+    'contribution repeat is idempotent',
+    repeatContribution.status === 200 &&
+      repeatContribution.body.id === contribution.body.id &&
+      repeatContribution.body.reference === contribution.body.reference,
+    JSON.stringify(repeatContribution.body),
+  );
+
+  const contributionSummary = await request(
+    '/v1/contributions/summary?from=2999-01-01&to=2999-01-01',
+    { headers: read },
+  );
+  const ghsTotals = contributionSummary.body.items?.find((item) => item.currency === 'GHS');
+  check(
+    'contribution summary totals',
+    contributionSummary.status === 200 &&
+      ghsTotals?.memberCount === 1 &&
+      ghsTotals?.memberPaidMinor === 5000 &&
+      ghsTotals?.visitorCount === 0,
+    JSON.stringify(contributionSummary.body),
+  );
+
   const openapi = await request('/openapi.json');
   check(
     'openapi is served',

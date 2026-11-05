@@ -563,4 +563,36 @@ create index offering_exceptions_lookup
   on offering_exceptions (attachment_id, date, created_at desc);
 `,
   },
+  {
+    version: '0011_contributions',
+    sql: `
+-- A gift is append-only: exactly one giver (member or visitor) and the terms
+-- version it was made under. Visitor gifts keep only a phone hash.
+create table contributions (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid references members(id),
+  visitor_name text,
+  visitor_phone_hash text,
+  offering_id uuid not null references offerings(id),
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  amount_minor bigint not null check (amount_minor > 0),
+  currency text not null,
+  channel text not null check (channel in ('app', 'ussd', 'manual')),
+  status text not null check (status in ('initiated', 'paid', 'failed')),
+  reference text not null unique,
+  idempotency_key text not null unique,
+  terms_version integer not null,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  check ((member_id is null) <> (visitor_name is null)),
+  check ((member_id is null) = (visitor_phone_hash is not null)),
+  foreign key (offering_id, terms_version) references offering_terms (offering_id, version)
+);
+create index contributions_session_page
+  on contributions (session_date, created_at desc, id desc);
+create index contributions_cursor on contributions (created_at desc, id desc);
+create index contributions_member on contributions (member_id);
+`,
+  },
 ];
