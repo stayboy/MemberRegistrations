@@ -5,6 +5,7 @@ import {
   DuplicateImportError,
   ImportError,
   NotFoundError,
+  PaymentFailedError,
   ReassignmentRequiredError,
   UnauthorizedError,
   ValidationError,
@@ -96,6 +97,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof UnauthorizedError) {
     sendProblem(res, 401, 'Unauthorized', error.message, 'unauthorized');
+    return;
+  }
+
+  if (error instanceof PaymentFailedError) {
+    sendProblem(res, 502, 'Payment failed', error.message, 'payment_failed');
     return;
   }
 

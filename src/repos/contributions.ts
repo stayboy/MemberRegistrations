@@ -180,6 +180,18 @@ function findSession(sessions: unknown, date: string): { status: string } | null
   return null;
 }
 
+export interface CreateWithinOptions {
+  paymentGroupId?: string;
+  /**
+   * A pledge already passed the event, attachment, expiry and session gates
+   * when it was created, so redemption reuses that validation and skips them.
+   * The normal contribution path never sets this.
+   */
+  skipEventGates?: boolean;
+  /** A pledge may be redeemed after its offering was archived. */
+  allowInactiveOffering?: boolean;
+}
+
 export class ContributionRepository {
   constructor(
     private readonly db: Db,
@@ -187,18 +199,27 @@ export class ContributionRepository {
   ) {}
 
   async create(input: CreateContributionInput, actor: string): Promise<CreatedContribution> {
+    return this.createWithin(this.db, input, actor);
+  }
+
+  async createWithin(
+    db: DbClient,
+    input: CreateContributionInput,
+    actor: string,
+    options: CreateWithinOptions = {},
+  ): Promise<CreatedContribution> {
     const sessionDate = assertDate(input.sessionDate, 'sessionDate');
 
     // The idempotency key wins over current entity state: a retry must return
     // the stored record even after the member, offering or event became
     // read-only. A purged or archived member still exists, so its id matches.
-    const memberLookup = input.memberNo ? await this.findMember(this.db, input.memberNo) : null;
+    const memberLookup = input.memberNo ? await this.findMember(db, input.memberNo) : null;
     const visitorName = memberLookup ? null : (input.visitorName ?? null);
     const visitorPhoneHash = input.visitorPhone
       ? hashVisitorPhone(input.visitorPhone, this.visitorPhonePepper)
       : null;
 
-    const existing = await this.findByKey(this.db, input.idempotencyKey);
+    const existing = await this.findByKey(db, input.idempotencyKey);
     if (existing) {
       return {
         created: false,
@@ -226,52 +247,60 @@ export class ContributionRepository {
       throw new NotFoundError(`Member ${input.memberNo} was not found`);
     }
 
-    const event = await this.resolveEvent(this.db, input.eventId);
+    const event = await this.resolveEvent(db, input.eventId, options.skipEventGates === true);
 
-    const session = findSession(event.sessions, sessionDate);
-    if (!session) {
-      throw new SessionNotInEventError(`Event ${input.eventId} has no session on ${sessionDate}`);
-    }
-    if (session.status === 'cancelled') {
-      throw new SessionNotInEventError(
-        `The session on ${sessionDate} is cancelled and cannot take contributions`,
-      );
+    if (options.skipEventGates !== true) {
+      const session = findSession(event.sessions, sessionDate);
+      if (!session) {
+        throw new SessionNotInEventError(`Event ${input.eventId} has no session on ${sessionDate}`);
+      }
+      if (session.status === 'cancelled') {
+        throw new SessionNotInEventError(
+          `The session on ${sessionDate} is cancelled and cannot take contributions`,
+        );
+      }
     }
 
-    const offering = await this.resolveOffering(this.db, input.offeringId);
+    const offering = await this.resolveOffering(
+      db,
+      input.offeringId,
+      options.allowInactiveOffering === true,
+    );
     const termsCurrency = offering.currency;
     const termsVersion = offering.version;
 
-    const attachments = await this.db.query<AttachmentExpiryRow>(
-      `select a.available_until as attachment_available_until,
-              t.available_until as terms_available_until
-         from event_instance_offerings a
-         join lateral (
-           select available_until
-             from offering_terms t
-            where t.offering_id = a.offering_id
-            order by t.version desc
-            limit 1
-         ) t on true
-        where a.detached_on is null
-          and a.offering_id = $1
-          and (
-            a.event_instance_id = $2::uuid
-            or ($3::uuid is not null and a.series_id = $3::uuid)
-          )`,
-      [input.offeringId, input.eventId, event.series_id],
-    );
-    if (attachments.length === 0) {
-      throw new OfferingNotOnEventError(
-        `Offering ${input.offeringId} is not attached to event ${input.eventId}`,
+    if (options.skipEventGates !== true) {
+      const attachments = await db.query<AttachmentExpiryRow>(
+        `select a.available_until as attachment_available_until,
+                t.available_until as terms_available_until
+           from event_instance_offerings a
+           join lateral (
+             select available_until
+               from offering_terms t
+              where t.offering_id = a.offering_id
+              order by t.version desc
+              limit 1
+           ) t on true
+          where a.detached_on is null
+            and a.offering_id = $1
+            and (
+              a.event_instance_id = $2::uuid
+              or ($3::uuid is not null and a.series_id = $3::uuid)
+            )`,
+        [input.offeringId, input.eventId, event.series_id],
       );
-    }
+      if (attachments.length === 0) {
+        throw new OfferingNotOnEventError(
+          `Offering ${input.offeringId} is not attached to event ${input.eventId}`,
+        );
+      }
 
-    const expiry = earliestExpiry(attachments, isoDate(event.end_date));
-    if (expiry !== null && sessionDate > expiry) {
-      throw new OfferingExpiredError(
-        `Offering ${input.offeringId} expired on ${expiry}; ${sessionDate} is too late`,
-      );
+      const expiry = earliestExpiry(attachments, isoDate(event.end_date));
+      if (expiry !== null && sessionDate > expiry) {
+        throw new OfferingExpiredError(
+          `Offering ${input.offeringId} expired on ${expiry}; ${sessionDate} is too late`,
+        );
+      }
     }
 
     const currency = input.currency ?? termsCurrency;
@@ -301,12 +330,12 @@ export class ContributionRepository {
     // the winner and applies the same canonical comparison.
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const [inserted] = await this.db.query<{ id: string }>(
+        const [inserted] = await db.query<{ id: string }>(
           `insert into contributions (
              member_id, visitor_name, visitor_phone_hash, offering_id, event_instance_id,
              session_date, amount_minor, currency, channel, status, reference, idempotency_key,
-             terms_version, created_by
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             terms_version, created_by, payment_group_id
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            returning id`,
           [
             memberLookup?.id ?? null,
@@ -323,12 +352,13 @@ export class ContributionRepository {
             input.idempotencyKey,
             termsVersion,
             actor,
+            options.paymentGroupId ?? null,
           ],
         );
-        return { created: true, contribution: await this.getById(this.db, inserted!.id) };
+        return { created: true, contribution: await this.readById(db, inserted!.id) };
       } catch (error) {
         if (sqlState(error) !== '23505') throw error;
-        const duplicate = await this.findByKey(this.db, input.idempotencyKey);
+        const duplicate = await this.findByKey(db, input.idempotencyKey);
         if (duplicate) {
           return { created: false, contribution: this.samePayloadOrThrow(duplicate, canonical) };
         }
@@ -373,6 +403,32 @@ export class ContributionRepository {
     const more = rows.length > query.limit;
     const last = items[items.length - 1];
     return more && last ? { items, nextCursor: last.id } : { items };
+  }
+
+  /** Reads one contribution, or null when it does not exist. */
+  async getById(id: string): Promise<ContributionItem | null> {
+    const [row] = await this.db.query<ContributionRow>(
+      `select ${CONTRIBUTION_COLUMNS}
+         ${CONTRIBUTION_FROM}
+        where c.id = $1`,
+      [id],
+    );
+    return row ? contributionFromRow(row) : null;
+  }
+
+  /** Child contributions of one payment group, in the split's selection order. */
+  async listByPaymentGroup(paymentGroupId: string): Promise<ContributionItem[]> {
+    const rows = await this.db.query<ContributionRow>(
+      `select ${CONTRIBUTION_COLUMNS}
+         ${CONTRIBUTION_FROM}
+        where c.payment_group_id = $1
+        order by coalesce(
+          nullif(reverse(split_part(reverse(c.idempotency_key), ':', 1)), '')::int,
+          0
+        )`,
+      [paymentGroupId],
+    );
+    return rows.map(contributionFromRow);
   }
 
   /** Totals by currency, counting only paid rows; no names or contact values. */
@@ -425,7 +481,11 @@ export class ContributionRepository {
     return row ?? null;
   }
 
-  private async resolveEvent(db: DbClient, eventId: string): Promise<EventRow> {
+  private async resolveEvent(
+    db: DbClient,
+    eventId: string,
+    allowInactive = false,
+  ): Promise<EventRow> {
     const [row] = await db.query<EventRow>(
       `select status, sessions, end_date, series_id
          from event_instances
@@ -433,7 +493,7 @@ export class ContributionRepository {
       [eventId],
     );
     if (!row) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (row.status === 'cancelled' || row.status === 'archived') {
+    if (!allowInactive && (row.status === 'cancelled' || row.status === 'archived')) {
       throw new EventNotActiveError(`Event ${eventId} is ${row.status} and cannot take gifts`);
     }
     return row;
@@ -442,6 +502,7 @@ export class ContributionRepository {
   private async resolveOffering(
     db: DbClient,
     offeringId: string,
+    allowInactive = false,
   ): Promise<{ currency: string; version: number }> {
     const [row] = await db.query<OfferingTermsRow>(
       `select o.active, t.currency, t.version
@@ -457,7 +518,7 @@ export class ContributionRepository {
       [offeringId],
     );
     if (!row) throw new NotFoundError(`Offering ${offeringId} was not found`);
-    if (!row.active) {
+    if (!row.active && !allowInactive) {
       throw new ValidationError(`Offering ${offeringId} is archived and cannot take contributions`);
     }
     if (row.currency === null || row.version === null) {
@@ -481,7 +542,7 @@ export class ContributionRepository {
     return row ?? null;
   }
 
-  private async getById(db: DbClient, id: string): Promise<ContributionItem> {
+  private async readById(db: DbClient, id: string): Promise<ContributionItem> {
     const [row] = await db.query<ContributionRow>(
       `select ${CONTRIBUTION_COLUMNS}
          ${CONTRIBUTION_FROM}

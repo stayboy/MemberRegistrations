@@ -61,6 +61,8 @@ export const pledgeSchema = z.object({
   followUpOfficerMemberNo: z.string(),
   status: pledgeStatusSchema,
   reason: z.string().nullable(),
+  /** Set once when a paid contribution settles the pledge. */
+  settledContributionId: z.string().nullable(),
   termsVersion: z.number().int(),
   idempotencyKey: z.string(),
   createdAt: z.string(),
@@ -113,7 +115,12 @@ export const reassignSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 });
 
+export const settleSchema = z.object({
+  contributionId: z.string().uuid(),
+});
+
 export type CreatePledgeInput = z.infer<typeof createPledgeSchema>;
+export type SettleInput = z.infer<typeof settleSchema>;
 export type PledgeItem = z.infer<typeof pledgeSchema>;
 export type PledgeListQuery = z.infer<typeof listPledgesQuerySchema>;
 export type PledgeEventItem = z.infer<typeof pledgeEventSchema>;

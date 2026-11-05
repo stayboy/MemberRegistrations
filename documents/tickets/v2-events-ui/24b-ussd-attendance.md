@@ -13,6 +13,8 @@ round by the owner (2026-11-05).
 
 **Status:** ready-for-agent
 
+- [ ] The member menu gains **My Profile**, and the anonymous menu gains **Register**; both menus gain
+      **Activities** and **Attendance**, each opening its primary content with `9`, `0` and `00`.
 - [ ] Attendance opens today's status; `1` a day, `2` a period (month, quarter, year), `3` I was present
       (code) and, for presbyters, `4` clocking. Checks never fabricate an absence and ignore
       headcount-only events (`tracksMembers = false`).

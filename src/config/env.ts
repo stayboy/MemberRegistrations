@@ -6,6 +6,12 @@ export const DEFAULT_CORS_ORIGINS =
 /** Tests and development use this pepper; production must override it. */
 export const DEFAULT_VISITOR_PHONE_PEPPER = 'dev-only-visitor-phone-pepper';
 
+/** Development and test defaults. Production must override every one of these. */
+export const DEFAULT_USSD_GATEWAY_SECRET = 'dev-only-ussd-gateway-secret';
+export const DEFAULT_USSD_PHONE_PEPPER = 'dev-only-ussd-phone-pepper';
+export const DEFAULT_USSD_CODE_PEPPER = 'dev-only-ussd-code-pepper';
+export const DEFAULT_PAYMENT_GATEWAY_SECRET = 'dev-only-payment-gateway-secret';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -21,6 +27,15 @@ const envSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.string().default(DEFAULT_CORS_ORIGINS),
   // Production must override this; rotating it changes every stored visitor hash.
   VISITOR_PHONE_PEPPER: z.string().min(16).default(DEFAULT_VISITOR_PHONE_PEPPER),
+  // USSD stays off in production until a real aggregator exists.
+  USSD_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  USSD_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_USSD_GATEWAY_SECRET),
+  USSD_PHONE_PEPPER: z.string().min(16).default(DEFAULT_USSD_PHONE_PEPPER),
+  USSD_CODE_PEPPER: z.string().min(16).default(DEFAULT_USSD_CODE_PEPPER),
+  PAYMENT_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_PAYMENT_GATEWAY_SECRET),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -44,6 +59,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       throw new Error('MAGIC_LINK_FROM is required when NODE_ENV=production');
     if (env.VISITOR_PHONE_PEPPER === DEFAULT_VISITOR_PHONE_PEPPER) {
       throw new Error('VISITOR_PHONE_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.USSD_GATEWAY_SECRET === DEFAULT_USSD_GATEWAY_SECRET) {
+      throw new Error('USSD_GATEWAY_SECRET is required when NODE_ENV=production');
+    }
+    if (env.USSD_PHONE_PEPPER === DEFAULT_USSD_PHONE_PEPPER) {
+      throw new Error('USSD_PHONE_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.USSD_CODE_PEPPER === DEFAULT_USSD_CODE_PEPPER) {
+      throw new Error('USSD_CODE_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.PAYMENT_GATEWAY_SECRET === DEFAULT_PAYMENT_GATEWAY_SECRET) {
+      throw new Error('PAYMENT_GATEWAY_SECRET is required when NODE_ENV=production');
+    }
+    if (env.USSD_ENABLED) {
+      throw new Error(
+        'USSD_ENABLED must be false when NODE_ENV=production until a real aggregator exists',
+      );
     }
   }
 

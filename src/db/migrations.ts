@@ -674,4 +674,71 @@ alter table offering_terms add constraint offering_terms_kind_check
   check (kind in ('freewill', 'tithe', 'building', 'missions', 'other'));
 `,
   },
+  {
+    version: '0013_ussd_core',
+    sql: `
+-- A USSD session stores only the HMAC phone hash, never the raw MSISDN.
+create table ussd_sessions (
+  id uuid primary key default gen_random_uuid(),
+  phone_hash text not null,
+  member_id uuid references members(id),
+  anonymous boolean not null,
+  state text not null,
+  context jsonb not null default '{}'::jsonb,
+  last_input_seq integer not null default 0,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index ussd_sessions_phone_hash on ussd_sessions (phone_hash);
+create index ussd_sessions_expires_at on ussd_sessions (expires_at);
+
+-- Replay guard for the aggregator HMAC; rows are pruned after ten minutes.
+create table ussd_nonces (
+  nonce text primary key,
+  seen_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index ussd_nonces_expires_at on ussd_nonces (expires_at);
+
+-- One group is one gateway charge: one total, one currency, one idempotency key.
+-- A pledge redemption group carries the pledge and is unique per pledge.
+create table payment_groups (
+  id uuid primary key default gen_random_uuid(),
+  reference text not null unique,
+  idempotency_key text not null unique,
+  total_minor bigint not null check (total_minor > 0),
+  currency text not null,
+  status text not null default 'pending'
+    check (status in ('pending', 'paid', 'failed')),
+  pledge_id uuid references pledges(id),
+  created_at timestamptz not null default now(),
+  created_by text not null
+);
+create unique index payment_groups_pledge
+  on payment_groups (pledge_id)
+  where pledge_id is not null;
+
+-- One intent per group, keyed by the gateway reference.
+create table payment_intents (
+  id uuid primary key default gen_random_uuid(),
+  payment_group_id uuid not null unique references payment_groups(id),
+  gateway text not null,
+  reference text not null unique,
+  status text not null default 'initiated'
+    check (status in ('initiated', 'paid', 'failed')),
+  raw_callback_hash text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table contributions add column payment_group_id uuid references payment_groups(id);
+create index contributions_payment_group on contributions (payment_group_id);
+
+alter table pledges add column settled_contribution_id uuid references contributions(id);
+create unique index pledges_settled_contribution
+  on pledges (settled_contribution_id)
+  where settled_contribution_id is not null;
+`,
+  },
 ];

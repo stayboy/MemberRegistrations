@@ -15,6 +15,7 @@ import {
   contactInputSchema,
   contactResponseSchema,
   createMemberSchema,
+  memberContributionsSummarySchema,
   memberDetailSchema,
   memberListSchema,
   memberSummarySchema,
@@ -84,7 +85,16 @@ import {
   reassignSchema,
   reminderListSchema,
   reminderSchema,
+  settleSchema,
 } from './schemas/pledges.js';
+import {
+  createPaymentGroupSchema,
+  paymentCallbackResultSchema,
+  paymentCallbackSchema,
+  paymentGroupResultSchema,
+  paymentGroupSchema,
+  paymentIntentSchema,
+} from './schemas/payment-groups.js';
 import {
   assignmentInputSchema,
   assignmentSchema,
@@ -197,6 +207,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         MemberSummary: toSchema(memberSummarySchema, 'output'),
         MemberDetail: toSchema(memberDetailSchema, 'output'),
         MemberList: toSchema(memberListSchema, 'output'),
+        MemberContributionsSummary: toSchema(memberContributionsSummarySchema, 'output'),
         CreateMember: toSchema(createMemberSchema, 'input'),
         UpdateMember: toSchema(updateMemberSchema, 'input'),
         PurgeMember: toSchema(purgeSchema, 'input'),
@@ -251,6 +262,13 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         PledgeHonor: toSchema(honorSchema, 'input'),
         PledgeDishonor: toSchema(dishonorSchema, 'input'),
         PledgeReassign: toSchema(reassignSchema, 'input'),
+        PledgeSettle: toSchema(settleSchema, 'input'),
+        PaymentGroup: toSchema(paymentGroupSchema, 'output'),
+        PaymentIntent: toSchema(paymentIntentSchema, 'output'),
+        PaymentGroupCreate: toSchema(createPaymentGroupSchema, 'input'),
+        PaymentGroupResult: toSchema(paymentGroupResultSchema, 'output'),
+        PaymentCallback: toSchema(paymentCallbackSchema, 'input'),
+        PaymentCallbackResult: toSchema(paymentCallbackResultSchema, 'output'),
         Reminder: toSchema(reminderSchema, 'output'),
         ReminderList: toSchema(reminderListSchema, 'output'),
         ReminderCreate: toSchema(addReminderSchema, 'input'),
@@ -333,6 +351,86 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             200: json('Service is ready.', 'Health'),
             503: problem('The database is unreachable.'),
+          },
+        },
+      },
+
+      '/ussd/session': {
+        post: {
+          summary: 'USSD gateway entry (HMAC, not bearer)',
+          description:
+            'The aggregator signs `timestamp + nonce + raw body` with USSD_GATEWAY_SECRET. A timestamp more than 300 seconds from now, a missing or invalid signature and a replayed nonce are 401; the phone is rate-limited per hash (10/min) and client address (30/min). The raw phone is never stored, returned or logged. USSD is disabled by configuration in production (503 ussd_disabled).',
+          security: [],
+          parameters: [
+            {
+              name: 'X-USSD-Timestamp',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+            },
+            {
+              name: 'X-USSD-Nonce',
+              in: 'header',
+              required: true,
+              schema: { type: 'string', minLength: 8, maxLength: 128 },
+            },
+            {
+              name: 'X-USSD-Signature',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['phone', 'input', 'seq'],
+                  properties: {
+                    phone: { type: 'string' },
+                    sessionId: { type: 'string', format: 'uuid' },
+                    input: { type: 'string', maxLength: 64 },
+                    seq: { type: 'integer', minimum: 0 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'The whole screen for this frame, with Cache-Control: no-store.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['sessionId', 'text', 'done', 'state'],
+                    properties: {
+                      sessionId: { type: 'string', format: 'uuid' },
+                      text: { type: 'string' },
+                      done: { type: 'boolean' },
+                      state: { type: 'string' },
+                      options: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          required: ['key', 'label'],
+                          properties: {
+                            key: { type: 'string' },
+                            label: { type: 'string' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            401: problem('The signature, timestamp or nonce is invalid.'),
+            422: validation,
+            429: problem('The phone hash or client address is over the rate limit.'),
+            503: problem('USSD is disabled by configuration.'),
           },
         },
       },
@@ -505,6 +603,23 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           parameters: [actorHeader],
           responses: {
             204: noContent('Attendance removed.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/contributions/summary': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'Week, quarter and year paid totals plus the top three events',
+          description:
+            'One member-scoped aggregate. Windows are UTC calendar dates ending today (week starts Monday, quarter starts its first day, year starts 1 January). Only paid member contributions count; visitor gifts never appear. Responses carry Cache-Control: no-store.',
+          responses: {
+            200: json(
+              'Payment windows and top events with Cache-Control: no-store.',
+              'MemberContributionsSummary',
+            ),
             401: unauthorized,
             404: notFound,
           },
@@ -1415,6 +1530,35 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
+      '/v1/contributions/groups': {
+        post: {
+          summary: 'Commit one payment group for a split gift',
+          description:
+            'One group owns the idempotency key and the total; each child contribution uses `<key>:<n>` and starts initiated. The group and its one intent are written in one transaction. An identical repeat returns 200 with the stored group; a different payload is 409 idempotency_conflict. A pledgeId group has exactly one item matching the pending pledge. Responses carry Cache-Control: no-store.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PaymentGroupCreate') } },
+          },
+          responses: {
+            201: {
+              description:
+                'Payment group, child contributions and intent created; Location names the group.',
+              content: { 'application/json': { schema: ref('PaymentGroupResult') } },
+            },
+            200: {
+              description: 'Identical repeat of the idempotency key; the stored rows.',
+              content: { 'application/json': { schema: ref('PaymentGroupResult') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem('The idempotency key was already used for a different payment group.'),
+            422: validation,
+            502: problem('The gateway rejected the payment; the whole commit rolled back.'),
+          },
+        },
+      },
+
       '/v1/contributions/summary': {
         get: {
           summary: 'Member and visitor totals by currency',
@@ -1508,6 +1652,29 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             },
             401: unauthorized,
             404: notFound,
+          },
+        },
+      },
+
+      '/v1/pledges/{id}/settle': {
+        post: {
+          summary: 'Settle a pledge with an existing paid contribution',
+          description:
+            'The contribution must be paid and match the pledge member, offering, currency and amount. An identical repeat returns 200 with the stored settlement and appends no second event; a different contribution on a settled pledge is 409 pledge_already_terminal.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            actorHeader,
+          ],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PledgeSettle') } },
+          },
+          responses: {
+            200: json('The honored pledge with Cache-Control: no-store.', 'Pledge'),
+            401: unauthorized,
+            404: notFound,
+            409: problem('The pledge is already settled with a different contribution.'),
+            422: validation,
           },
         },
       },
@@ -1608,6 +1775,34 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             404: notFound,
             409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/payments/callback': {
+        post: {
+          summary: 'Gateway callback (signature-verified, not bearer-protected)',
+          description:
+            'The X-Payment-Signature header is a hex HMAC-SHA-256 of the exact raw JSON body using the shared gateway secret. An invalid or missing signature is 401; a malformed body is 422; an unknown reference is 404. An amount or currency that differs from the group writes nothing and is 422. A paid callback marks the intent, group and child contributions paid in one transaction; a repeated callback answers 200 with duplicate true. A terminal intent never moves to another status.',
+          security: [],
+          parameters: [
+            {
+              name: 'X-Payment-Signature',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('PaymentCallback') } },
+          },
+          responses: {
+            200: json('The reconciled callback result.', 'PaymentCallbackResult'),
+            401: problem('The signature is missing or invalid.'),
+            404: notFound,
+            409: problem('The intent is terminal with a different status.'),
             422: validation,
           },
         },
