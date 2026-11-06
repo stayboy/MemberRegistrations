@@ -32,6 +32,8 @@ const EVENT: EventItem = {
   description: null,
   status: 'scheduled',
   source: 'series',
+  tracksMembers: true,
+  presbyterOnly: false,
   sessions: [
     {
       date: '2026-11-01',

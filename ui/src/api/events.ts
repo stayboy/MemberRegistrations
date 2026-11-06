@@ -90,6 +90,10 @@ export interface EventItem extends EventListItem {
   readonly venueName: string | null;
   readonly description: string | null;
   readonly source: EventSource;
+  /** False = headcount-only; per-member attendance does not apply. */
+  readonly tracksMembers: boolean;
+  /** Presbyter-only events are hidden from non-presbyters and roster the presbyters. */
+  readonly presbyterOnly: boolean;
   readonly sessions: readonly EventSessionItem[];
   readonly offerings: readonly EventOfferingItem[];
   readonly stats: EventOfferingStatsItem;
@@ -218,6 +222,33 @@ export async function deleteEventAttendance(
     method: 'DELETE',
     sessionToken,
   });
+}
+
+/** Mirrors `EventAttendanceEntry`; a manual clock-in creates one row. */
+export interface EventAttendanceEntry {
+  readonly id: string;
+  readonly memberNo: string;
+  readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
+  readonly sessionDate: string;
+  readonly source: 'import' | 'manual';
+}
+
+/** `POST /v1/events/:id/attendance` with a member number and the session date. */
+export async function addEventAttendance(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  input: { readonly memberNo: string; readonly date: string },
+): Promise<EventAttendanceEntry> {
+  const entry = await gatewayRequest<EventAttendanceEntry>(
+    baseUrl,
+    `${eventDetailPath(eventId)}/attendance`,
+    { method: 'POST', body: input, sessionToken },
+  );
+  if (!entry) throw new ApiError(500, 'The attendance entry response was empty.');
+  return entry;
 }
 
 export async function getEventAttendance(

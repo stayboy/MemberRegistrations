@@ -202,7 +202,10 @@ export function createApp(options: AppOptions): Express {
 
   // The dev-only simulator gateway builds the provider wire server-side. It is
   // registered before the global JSON parser so its production refusal cannot
-  // be pre-empted by a body-parse error.
+  // be pre-empted by a body-parse error. CORS is scoped to this dev path only so
+  // a browser on the allowed development origin can drive it; the route still
+  // refuses in production.
+  app.use('/dev', corsMiddleware(corsOrigins));
   app.use(
     devUssdRouter(ussdAdapters, ussdDeps, {
       enabled: ussd.enabled,

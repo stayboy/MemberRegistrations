@@ -143,9 +143,7 @@ export function MemberRelationshipsTab({
             return (
               <div key={relationship.id} className={styles.rowCard}>
                 <div className={styles.rowHead}>
-                  <Link to={`/members/${encodeURIComponent(relationship.memberNo)}`}>
-                    {label}
-                  </Link>
+                  <Link to={`/members/${encodeURIComponent(relationship.memberNo)}`}>{label}</Link>
                   <div className={styles.pills}>
                     <Badge appearance="outline" size="small">
                       {RELATIONSHIP_TYPE_LABELS[relationship.type]}

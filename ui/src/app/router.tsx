@@ -63,6 +63,42 @@ const SeriesDetailPage = lazy(() =>
 const SeriesFormPage = lazy(() =>
   import('../pages/SeriesFormPage').then(({ SeriesFormPage: page }) => ({ default: page })),
 );
+const UssdCodesPage = lazy(() =>
+  import('../pages/ussd/UssdCodesPage').then(({ UssdCodesPage: page }) => ({ default: page })),
+);
+const UssdRegistrationsPage = lazy(() =>
+  import('../pages/ussd/UssdRegistrationsPage').then(({ UssdRegistrationsPage: page }) => ({
+    default: page,
+  })),
+);
+const UssdClockingPage = lazy(() =>
+  import('../pages/ussd/UssdClockingPage').then(({ UssdClockingPage: page }) => ({
+    default: page,
+  })),
+);
+const UssdHeadcountPage = lazy(() =>
+  import('../pages/ussd/UssdHeadcountPage').then(({ UssdHeadcountPage: page }) => ({
+    default: page,
+  })),
+);
+const UssdActivitiesPage = lazy(() =>
+  import('../pages/ussd/UssdActivitiesPage').then(({ UssdActivitiesPage: page }) => ({
+    default: page,
+  })),
+);
+const UssdProductsPage = lazy(() =>
+  import('../pages/ussd/UssdProductsPage').then(({ UssdProductsPage: page }) => ({
+    default: page,
+  })),
+);
+const UssdClaimsPage = lazy(() =>
+  import('../pages/ussd/UssdClaimsPage').then(({ UssdClaimsPage: page }) => ({ default: page })),
+);
+const UssdSimulatorPage = lazy(() =>
+  import('../pages/ussd/UssdSimulatorPage').then(({ UssdSimulatorPage: page }) => ({
+    default: page,
+  })),
+);
 
 function placeholder(sectionId: SectionId, path: string, title?: string) {
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
@@ -119,6 +155,15 @@ export const router = createHashRouter([
             path: 'shepherding/report',
             element: <ShepherdingReportPage />,
           },
+          { path: 'ussd', element: <Navigate to="/ussd/codes" replace /> },
+          { path: 'ussd/codes', element: <UssdCodesPage /> },
+          { path: 'ussd/registrations', element: <UssdRegistrationsPage /> },
+          { path: 'ussd/clocking', element: <UssdClockingPage /> },
+          { path: 'ussd/headcount', element: <UssdHeadcountPage /> },
+          { path: 'ussd/activities', element: <UssdActivitiesPage /> },
+          { path: 'ussd/products', element: <UssdProductsPage /> },
+          { path: 'ussd/claims', element: <UssdClaimsPage /> },
+          { path: 'ussd/simulator', element: <UssdSimulatorPage /> },
           { path: 'admin/ministries', element: placeholder('admin', '/admin/ministries') },
           { path: 'settings', element: <SettingsPage /> },
         ],

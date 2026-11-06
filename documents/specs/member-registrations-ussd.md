@@ -645,7 +645,9 @@ above. Both gates are tested.
 **The Simulator page.** A dev-only page in the operator app offers a provider dropdown (Nalo, HMAC
 reference) and a handset-style display. It posts each keypress to `POST /dev/ussd/session`, renders the
 returned screen text as a caller would see it — including the provider's real truncation — and exposes
-the stub payment gateway's callback so a commit can be completed end to end. It drives the real adapters
+the stub payment gateway's callback so a commit can be completed end to end: it shows the commit
+reference, the callback body and a signed-callback shell template, while the signature itself stays
+server-side (the browser never holds `PAYMENT_GATEWAY_SECRET`). It drives the real adapters
 and the real session pipeline; it is never a mock for acceptance. The static `mockups/ussd` simulator
 remains a review artifact.
 

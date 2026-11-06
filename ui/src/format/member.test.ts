@@ -106,9 +106,9 @@ describe('memberInitials', () => {
 
 describe('memberLabel', () => {
   it('composes the shared FullName (Gender, Ny) label', () => {
-    expect(
-      memberLabel({ firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 }),
-    ).toBe('Ama Mensah (Female, 32y)');
+    expect(memberLabel({ firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 })).toBe(
+      'Ama Mensah (Female, 32y)',
+    );
     expect(memberLabel({ firstName: 'Kofi', lastName: 'Owusu', gender: 'male', age: 7 })).toBe(
       'Kofi Owusu (Male, 7y)',
     );
@@ -146,9 +146,9 @@ describe('memberLabel', () => {
         age: 30,
       }),
     ).toBe('Akosua (Female, 30y)');
-    expect(
-      memberLabel({ firstName: 'Ama', lastName: 'Mensah', otherNames: 'Adwoa' }),
-    ).toBe('Ama Mensah');
+    expect(memberLabel({ firstName: 'Ama', lastName: 'Mensah', otherNames: 'Adwoa' })).toBe(
+      'Ama Mensah',
+    );
   });
 
   it('returns an empty string for a blank name', () => {

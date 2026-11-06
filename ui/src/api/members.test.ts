@@ -68,10 +68,11 @@ describe('membersListPath', () => {
   });
 
   it('sends an explicit contact lookup encoded, never through q', () => {
-    const path = membersListPath({ contact: ' ama+church@example.com ', includeSubscriptions: false });
-    expect(path).toBe(
-      '/gateway/v1/members?contact=ama%2Bchurch%40example.com',
-    );
+    const path = membersListPath({
+      contact: ' ama+church@example.com ',
+      includeSubscriptions: false,
+    });
+    expect(path).toBe('/gateway/v1/members?contact=ama%2Bchurch%40example.com');
     expect(path).not.toContain('q=');
   });
 
@@ -263,7 +264,9 @@ describe('memberPickerPath and searchMembers', () => {
   it('searches through the gateway with the session credential', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        items: [{ memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 }],
+        items: [
+          { memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah', gender: 'female', age: 32 },
+        ],
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
