@@ -10,14 +10,14 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "bee3307e4b0ffee204504cb200ea04f4b29183e9ce6aa4daeab465c896ac743c",
+      "sha256": "4e9552a34a562b684c155f3d46a5be99447aede38d95a9b5b0877881065ea21f",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: §2 is reduced to the non-negotiable (a separate higher-model session reviews a behavioural spec before the implementer, at every tier; the author's own reading never counts) plus pointers to skill Procedure step 1b and the policy; §17 lists spec review among the gates that stay unchanged in unattended rounds. why: placement ruling — the procedure lives in the skill, the model and Tier 0 record in the policy. rejected: keeping the full rule in AGENTS.",
+      "reason": "changes: section 7's hook bullet now names the serialized `verify:precommit` profile that .githooks/pre-commit actually runs, and one pointer sentence records that durable process rules live in documents/lessons.md and that the gates print bounded per-step summaries with full logs under .gates/. why: the round replaced the unbounded chained gate with a bounded runner and fixed the pre-commit crash that forced recorded --no-verify bypasses, so the hook line would otherwise be false. rejected: restating the gate recipes or the review rules in AGENTS.md, which belong to the scripts and documents/rounds/review-brief.md.",
       "verdict": "ACCEPTED",
-      "attestation": "§2 is now a two-sentence non-negotiable plus pointer to skill step 1b and the policy, and §17 lists spec review among the gates that stay unchanged in unattended rounds.",
-      "at": "2026-11-05"
+      "attestation": "Re-read the final text of this file in the quiet-gates-and-lessons round and approved it for hashing: the reviewer read the exact on-disk content in full, made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-06"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
@@ -43,25 +43,25 @@
     },
     {
       "path": "documents/lessons.md",
-      "sha256": "a03a45a25afa1ff45e43a8e35bcb58b28682cd06c1c9647d2c15159284c28106",
+      "sha256": "bdcd87e3aa68d34d3bdb4e56392bd6f9bcbd103aac420df3e2199b8738881845",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds two 2026-11-05 lessons - 'A screenshot baseline must pin the clock' (19b: member-add and series-list drifted on the capture date until page.clock.setFixedTime was added before navigation) and 'A contrast fix must keep the Fluent ramp monotonic' (19a: patching Ocean 70/80, Meadow 70 and Plum 100 inverted the derived hover/pressed tokens; the ramps were re-derived and are guarded by ui/src/theme/brand.test.ts) - and records their acceptance in the Q200 round (2026-11-05, 'all as recommended'); the existing 2026-11-05 mock-parity entry moves beside them so the file is actually newest-first. why: both are evidenced by this session's rounds, the owner accepted them in Q200, and the lessons are the durable record before the V3 phase starts. rejected: the third candidate, 'a mock with no capture hides a missing feature', which stays an observation rather than a rule.",
+      "reason": "changes: the acceptance preamble records that the six 2026-11-06 process entries were accepted in the quiet-gates-and-lessons round (2026-11-06, \"all as recommended\"); the entries are new, newest-first, each with Rule/Evidence/Trigger: output is re-read so bound it at the source; a heavy gate belongs in the worker or CI; a reviewer gets one complete delta and at most one confirmation round; a hook that cannot pass is a hook people bypass; remove a git worktree before the squash merge deletes its branch; and a local-only artefact must still fail closed. why: these were the measured costs of the 24c/24d rounds and the docker-stack round. rejected: an entry for the Windows fork-pool flake itself, which became code (the serialized precommit profile) instead of a lesson.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-read the final text of documents/lessons.md: the only change since the prior review is the added separator between the workspace-gate entry's trigger and the 'A reused component' entry, which makes that boundary symmetric; the two new lessons and the Q200 preamble are unchanged from the accepted text, the timestamp milliseconds quote and the 'colour' spelling remain deliberately as written, the facts were verified against capture.spec.ts, member-form.ts, SeriesListPage.tsx, brand.ts and brand.test.ts, and the file is newest-first.",
-      "at": "2026-11-05"
+      "attestation": "Re-read the final text of this file in the quiet-gates-and-lessons round and approved it for hashing: the reviewer read the exact on-disk content in full, made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-06"
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "0e0993713bc7d2e04363434bc0e99713400ad3c0a517cf04e7063637e5aa48d4",
+      "sha256": "df492def5d9768ba8b6fa77f6715b82e070ae9c8b00d3e111bc1b5207962a993",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the round-doc template gains a `Mode` row (`attended` / `unattended (auto-accept recommendations)`) so an unattended pin can never look like an attended one. why: `AGENTS.md` §17 and `documents/agents/orchestrator-policy.md` require the field and the shared template did not carry it. rejected: leaving the field to prose in each round doc.",
+      "reason": "changes: the round-doc template gains the `Review rounds` and `Gate runs in parent` rows and a required verbatim `gate-run` signature line; the counters are documented as self-reported with the signature as the runner-printed exception; and review dispatch now points at documents/rounds/review-brief.md, making that brief discoverable from the round-doc home. why: the round record must carry the evidence that the gate ran and how many review rounds it took, and the brevity rules for reviews needed a durable, referenced home. rejected: verifying the signature's truth inside the checker, which stays structural by design.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-read documents/rounds/README.md and confirmed the added Mode row is verbatim-consistent with the Mode requirement in AGENTS.md §17 and documents/agents/orchestrator-policy.md, with template ordering, the Workers row and all sections intact and nothing else in the file contradicting the rule.",
-      "at": "2026-11-04"
+      "attestation": "Re-read the final text of this file in the quiet-gates-and-lessons round and approved it for hashing: the reviewer read the exact on-disk content in full, made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-06"
     },
     {
       "path": ".github/merge-policy.md",
