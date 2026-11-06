@@ -812,6 +812,8 @@ export interface ChurchOfferingSummary {
 | `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22  |
 | `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed   |
 | `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a |
+| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d |
+| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d |
 | `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a |
 
 The former `/v1/ussd/session/{id}/select` and `…/commit` routes are retired: the USSD flow is one
