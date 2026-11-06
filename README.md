@@ -59,6 +59,30 @@ curl -X POST http://localhost:3000/v1/members \
   }'
 ```
 
+## Local Docker stack
+
+An optional, production-shaped local path: Postgres, the compiled API, and the built UI behind
+nginx. `npm run dev` + `npm run ui:dev` remain the quick loop, and production still deploys to
+GitHub Pages + Vercel.
+
+```bash
+docker compose build
+docker compose up -d        # UI http://localhost:8080, API http://localhost:3000
+docker compose exec app node dist/authn/cli.js add local@church.test "Local Officer" local
+curl -X POST http://localhost:3000/auth/magic-link -H "Content-Type: application/json" \
+  -d '{"email":"local@church.test"}'
+```
+
+The magic link is printed by the console mailer in `docker compose logs app`; open it against
+`http://localhost:8080/#/connect?token=...`. The volume keeps the seeded officer across
+`docker compose down`.
+
+Inspect data with `docker compose exec db psql -U postgres -d member_registrations`; reset with
+`docker compose down -v`. Personal tweaks go in a git-ignored `docker-compose.override.yml`; to use
+another Postgres, override `DATABASE_URL` for `app` and `migrate` there. Docker is not built in CI:
+re-verify with `docker compose build && docker compose up -d`, then `curl -s
+http://localhost:3000/health`.
+
 ## API
 
 Server-to-server callers use `/v1` with `Authorization: Bearer <API_BEARER_TOKEN>`; every write also
