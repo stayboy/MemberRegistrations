@@ -118,13 +118,24 @@ async function issueCode(eventId: string, sessionDate: string, purpose: string) 
   return response.body as { id: string; code: string };
 }
 
-async function recordExpected(male: number, female: number, children: number) {
+async function recordHeadcount(
+  date: string,
+  adultMale: number,
+  adultFemale: number,
+  childUnspecified: number,
+) {
   const response = await request(harness.app)
-    .put(`/v1/events/${headcountEventId}/expected`)
-    .query({ sessionDate: tomorrow })
+    .post(`/v1/events/${headcountEventId}/headcounts`)
     .set(writeHeaders)
-    .send({ male, female, children });
-  expect(response.status).toBe(200);
+    .send({
+      sessionDate: date,
+      mode: 'adults',
+      adultMale,
+      adultFemale,
+      childUnspecified,
+      asOf: `${date}T09:15:00.000Z`,
+    });
+  expect(response.status).toBe(201);
 }
 
 async function createOffering(name: string) {
@@ -216,6 +227,21 @@ beforeAll(async () => {
   await createMember('UA-GIVE', '0816 000 0016', { firstName: 'Give', lastName: 'Member' });
   await createMember('UA-ACT', '0817 000 0017', { firstName: 'Act', lastName: 'Member' });
   await createMember('UA-DATE', '0818 000 0018', { firstName: 'Date', lastName: 'Member' });
+  await createMember('UA-HC1', '0819 000 0019', {
+    firstName: 'Count',
+    lastName: 'One',
+    isPresbyter: true,
+  });
+  await createMember('UA-HC2', '0820 000 0020', {
+    firstName: 'Count',
+    lastName: 'Two',
+    isPresbyter: true,
+  });
+  await createMember('UA-HC3', '0821 000 0021', {
+    firstName: 'Count',
+    lastName: 'Three',
+    isPresbyter: true,
+  });
 
   await assignShepherd('UA-SHEPHERD', 'UA-PROFILE');
   await assignShepherd('UA-SHEPHERD', 'UA-SHEEP');
@@ -223,7 +249,7 @@ beforeAll(async () => {
   mainEventId = await createEvent('Sunday Celebration', today);
   pastEventId = await createEvent('Past Gathering', yesterday);
   headcountEventId = await createEvent('Rally', tomorrow, { tracksMembers: false });
-  await recordExpected(20, 30, 40);
+  await recordHeadcount(tomorrow, 20, 30, 40);
 
   const profileEventIds: string[] = [];
   for (let offset = 60; offset >= 56; offset -= 1) {
@@ -317,7 +343,7 @@ describe('USSD attendance, codes and clocking', () => {
     const attendance = await frame(sessionId, phone, '2', 6, ip);
     expect(attendance.body.state).toBe('attendance.event');
     expect(attendance.body.text).toContain('Past Gathering');
-    expect(attendance.body.text).toContain('Present 0 Expected 1');
+    expect(attendance.body.text).toContain('Present 0 Roster 1');
     expect(attendance.body.text).toContain('Date Member');
     expect(attendance.body.text).toContain('1 Present');
   });
@@ -330,7 +356,7 @@ describe('USSD attendance, codes and clocking', () => {
 
     const todayStatus = await frame(sessionId, phone, '3', 2, ip);
     expect(todayStatus.body.state).toBe('attendance');
-    expect(todayStatus.body.text).toContain('Present 1 Expected 1');
+    expect(todayStatus.body.text).toContain('Present 1 Roster 1');
     expect(todayStatus.body.text).toContain('Sunday Celebration');
     expect(todayStatus.body.text).toContain('1 Day');
     expect(todayStatus.body.text).toContain('2 Period');
@@ -341,7 +367,7 @@ describe('USSD attendance, codes and clocking', () => {
     expect(dayPrompt.body.state).toBe('attendance.day');
     const day = await frame(sessionId, phone, ddmmyyyy(yesterday), 4, ip);
     expect(day.body.state).toBe('attendance.status');
-    expect(day.body.text).toContain('Present 1 Expected 1');
+    expect(day.body.text).toContain('Present 1 Roster 1');
     expect(day.body.text).toContain('Past Gathering');
 
     const back = await frame(sessionId, phone, '9', 5, ip);
@@ -514,7 +540,7 @@ describe('USSD attendance, codes and clocking', () => {
     const menu = await frame(sessionId, phone, '4', 3, ip);
     expect(menu.body.state).toBe('attendance.clocking');
     expect(menu.body.text).toContain('1 Clock in');
-    expect(menu.body.text).toContain('2 Expected');
+    expect(menu.body.text).toContain('2 Headcount');
     expect(menu.body.text).toContain('3 Delegate');
     const prompt = await frame(sessionId, phone, '1', 4, ip);
     expect(prompt.body.state).toBe('attendance.clock');
@@ -585,30 +611,145 @@ describe('USSD attendance, codes and clocking', () => {
     expect(delegatedDone.body.text).toContain('Target2 Other');
   });
 
-  it('records the expected headcount and restates the buckets', async () => {
-    const phone = '0815 000 0015';
+  it('records, restates and corrects a headcount from the presbyter clocking menu', async () => {
+    const phone = '0819 000 0019';
     const ip = '10.20.9.1';
     const started = await start(phone, ip);
     const sessionId = started.body.sessionId as string;
     await frame(sessionId, phone, '3', 2, ip);
-    await frame(sessionId, phone, '4', 3, ip);
-    const prompt = await frame(sessionId, phone, '2', 4, ip);
-    expect(prompt.body.state).toBe('attendance.expected');
-    expect(prompt.body.text).toContain('Male, Female, Children');
-    const done = await frame(sessionId, phone, '20,30,40', 5, ip);
-    expect(done.body.state).toBe('attendance.done');
-    expect(done.body.text).toContain('20 Male, 30 Female, 40 Children');
-    expect(done.body.text).toContain('90 Expected');
+    const clocking = await frame(sessionId, phone, '4', 3, ip);
+    expect(clocking.body.state).toBe('attendance.clocking');
+    expect(clocking.body.text).toContain('2 Headcount');
 
-    const [row] = await harness.db.query<{
-      male: number;
-      female: number;
-      children: number;
+    const empty = await frame(sessionId, phone, '2', 4, ip);
+    expect(empty.body.state).toBe('attendance.headcount');
+    expect(empty.body.text).toContain('No headcount yet');
+    expect(empty.body.text).toContain('1 New count');
+    expect(empty.body.text).not.toContain('2 Correct');
+
+    const mode = await frame(sessionId, phone, '1', 5, ip);
+    expect(mode.body.state).toBe('attendance.headcount.mode');
+    expect(mode.body.text).toContain('Last mode Adult service');
+    expect(mode.body.text).toContain('1 Adult service');
+    expect(mode.body.text).toContain('2 Children service');
+
+    const entry = await frame(sessionId, phone, '1', 6, ip);
+    expect(entry.body.state).toBe('attendance.headcount.entry');
+    expect(entry.body.text).toContain('Adult service');
+    expect(entry.body.text).toContain('Enter male,female,children');
+
+    const reprompt = await frame(sessionId, phone, '20,30', 7, ip);
+    expect(reprompt.body.state).toBe('attendance.headcount.entry');
+    expect(reprompt.body.text).toContain('Bad count');
+
+    const confirm = await frame(sessionId, phone, '20/30/40', 8, ip);
+    expect(confirm.body.state).toBe('attendance.headcount.confirm');
+    expect(confirm.body.text).toContain('20 Male, 30 Female, 40 Children');
+    expect(confirm.body.text).toContain('Total 90');
+    expect(confirm.body.text).toContain('1 Save');
+
+    const done = await frame(sessionId, phone, '1', 9, ip);
+    expect(done.body.state).toBe('attendance.headcount.done');
+    expect(done.body.text).toContain('Recorded');
+    expect(done.body.text).toContain('Total 90');
+    expect(done.body.text).toContain('9 Back');
+
+    const [first] = await harness.db.query<{
+      id: string;
+      mode: string;
+      as_of: Date | string;
+      total: number;
+      recorded_by: string;
+      supersedes_id: string | null;
     }>(
-      `select male, female, children from event_session_expected
+      `select id, mode, as_of, total, recorded_by, supersedes_id
+         from event_session_headcounts
         where event_instance_id = $1 and session_date = $2`,
       [mainEventId, today],
     );
-    expect(row).toEqual({ male: 20, female: 30, children: 40 });
+    expect(first).toMatchObject({ mode: 'adults', total: 90, supersedes_id: null });
+    expect(first!.recorded_by).toMatch(/^ussd:/);
+
+    // The next presbyter corrects the current observation: the count is
+    // replaced, the moment counted is kept, and the original stays readable.
+    const correctPhone = '0820 000 0020';
+    const correctIp = '10.20.9.2';
+    const correctStart = await start(correctPhone, correctIp);
+    const correctSession = correctStart.body.sessionId as string;
+    await frame(correctSession, correctPhone, '3', 2, correctIp);
+    await frame(correctSession, correctPhone, '4', 3, correctIp);
+    const current = await frame(correctSession, correctPhone, '2', 4, correctIp);
+    expect(current.body.state).toBe('attendance.headcount');
+    expect(current.body.text).toMatch(/Adult service · \d{2}:\d{2}/);
+    expect(current.body.text).toContain('Total 90');
+    expect(current.body.text).toContain('2 Correct');
+
+    const correctMode = await frame(correctSession, correctPhone, '2', 5, correctIp);
+    expect(correctMode.body.state).toBe('attendance.headcount.mode');
+    const children = await frame(correctSession, correctPhone, '2', 6, correctIp);
+    expect(children.body.text).toContain('Children service');
+    expect(children.body.text).toContain('Enter male,female,adults');
+    const childConfirm = await frame(correctSession, correctPhone, '5 6 7', 7, correctIp);
+    expect(childConfirm.body.text).toContain('5 Male, 6 Female, 7 Adults');
+    expect(childConfirm.body.text).toContain('Total 18');
+    const corrected = await frame(correctSession, correctPhone, '1', 8, correctIp);
+    expect(corrected.body.state).toBe('attendance.headcount.done');
+    expect(corrected.body.text).toContain('Total 18');
+
+    const rows = await harness.db.query<{
+      as_of: Date | string;
+      mode: string;
+      total: number;
+      recorded_by: string;
+      supersedes_id: string | null;
+    }>(
+      `select as_of, mode, total, recorded_by, supersedes_id
+         from event_session_headcounts
+        where event_instance_id = $1 and session_date = $2
+        order by recorded_at`,
+      [mainEventId, today],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.supersedes_id).toBeNull();
+    expect(rows[1]!.supersedes_id).not.toBeNull();
+    expect(rows[1]!.mode).toBe('children');
+    expect(rows[1]!.total).toBe(18);
+    expect(new Date(rows[1]!.as_of).toISOString()).toBe(new Date(rows[0]!.as_of).toISOString());
+    expect(rows[1]!.recorded_by).not.toBe(rows[0]!.recorded_by);
+  });
+
+  it('displays a current mixed observation and never offers mixed entry', async () => {
+    // A portal-only mixed entry becomes current; USSD still shows it.
+    const response = await request(harness.app)
+      .post(`/v1/events/${mainEventId}/headcounts`)
+      .set(writeHeaders)
+      .send({
+        sessionDate: today,
+        mode: 'mixed',
+        adultMale: 3,
+        adultFemale: 4,
+        childMale: 5,
+        childFemale: 6,
+        asOf: new Date().toISOString(),
+      });
+    expect(response.status).toBe(201);
+
+    const phone = '0821 000 0021';
+    const ip = '10.20.9.3';
+    const started = await start(phone, ip);
+    const sessionId = started.body.sessionId as string;
+    await frame(sessionId, phone, '3', 2, ip);
+    await frame(sessionId, phone, '4', 3, ip);
+    const screen = await frame(sessionId, phone, '2', 4, ip);
+    expect(screen.body.state).toBe('attendance.headcount');
+    expect(screen.body.text).toContain('Mixed service');
+    expect(screen.body.text).toContain(
+      '3 Adult male, 4 Adult female, 5 Child male, 6 Child female',
+    );
+    expect(screen.body.text).toContain('Total 18');
+
+    const mode = await frame(sessionId, phone, '1', 5, ip);
+    expect(mode.body.state).toBe('attendance.headcount.mode');
+    expect(mode.body.text).not.toContain('Mixed service');
   });
 });

@@ -65,6 +65,7 @@ async function runScenario() {
       memberNo: 'P-9001',
       firstName: 'Grace',
       lastName: 'Okafor',
+      joinedOn: '2026-01-01',
       isPresbyter: true,
     }),
   });
@@ -242,6 +243,103 @@ async function runScenario() {
     'today offering attached',
     todayAttached.status === 201,
     JSON.stringify(todayAttached.body),
+  );
+
+  // Headcount: append, correct, read back the chain, and prove the retired
+  // /expected route is gone. The presbyter-only roster is the active presbyters.
+  const headcountDate = shiftDate(TODAY, -1);
+  const headcountEvent = await request('/v1/events', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      eventNo: 'SMOKE-HEAD',
+      name: 'Smoke Headcount Event',
+      // Dated yesterday so it never competes with today's giving event.
+      startDate: shiftDate(TODAY, -1),
+      endDate: shiftDate(TODAY, -1),
+      startTime: '09:00',
+      venueType: 'auditorium',
+      presbyterOnly: true,
+      sessions: [{ date: headcountDate, startTime: '09:00' }],
+    }),
+  });
+  check(
+    'headcount event created',
+    headcountEvent.status === 201,
+    JSON.stringify(headcountEvent.body),
+  );
+
+  const headcount = await request(`/v1/events/${headcountEvent.body.id}/headcounts`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      sessionDate: headcountDate,
+      mode: 'adults',
+      adultMale: 20,
+      adultFemale: 30,
+      asOf: `${headcountDate}T08:00:00.000Z`,
+    }),
+  });
+  check(
+    'headcount appended',
+    headcount.status === 201 && headcount.body.total === 50 && headcount.body.supersedesId === null,
+    JSON.stringify(headcount.body),
+  );
+
+  const correctedHeadcount = await request(`/v1/events/${headcountEvent.body.id}/headcounts`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      sessionDate: headcountDate,
+      mode: 'adults',
+      adultMale: 21,
+      adultFemale: 30,
+      supersedesId: headcount.body.id,
+    }),
+  });
+  check(
+    'headcount correction supersedes and keeps asOf',
+    correctedHeadcount.status === 201 &&
+      correctedHeadcount.body.asOf === headcount.body.asOf &&
+      correctedHeadcount.body.supersedesId === headcount.body.id &&
+      correctedHeadcount.body.total === 51,
+    JSON.stringify(correctedHeadcount.body),
+  );
+
+  const headcountPage = await request(
+    `/v1/events/${headcountEvent.body.id}/headcounts?sessionDate=${headcountDate}`,
+    { headers: read },
+  );
+  const supersededHeadcount = headcountPage.body.observations?.find(
+    (row) => row.id === headcount.body.id,
+  );
+  check(
+    'headcount list keeps current and the chain',
+    headcountPage.status === 200 &&
+      headcountPage.body.current?.id === correctedHeadcount.body.id &&
+      headcountPage.body.current?.total === 51 &&
+      supersededHeadcount?.supersededBy === correctedHeadcount.body.id,
+    JSON.stringify(headcountPage.body),
+  );
+
+  const retiredExpected = await request(
+    `/v1/events/${headcountEvent.body.id}/expected?sessionDate=${headcountDate}`,
+    { headers: read },
+  );
+  check(
+    'retired expected route is 404',
+    retiredExpected.status === 404,
+    JSON.stringify(retiredExpected.body),
+  );
+
+  const presbyterReport = await request(
+    `/v1/events/${headcountEvent.body.id}/attendance?date=${headcountDate}`,
+    { headers: read },
+  );
+  check(
+    'presbyter-only roster counts active presbyters',
+    presbyterReport.status === 200 && presbyterReport.body.expected === 1,
+    JSON.stringify({ expected: presbyterReport.body?.expected }),
   );
 
   const exception = await request(

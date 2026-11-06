@@ -36,7 +36,11 @@ export const STATES = [
   'attendance.code',
   'attendance.clocking',
   'attendance.clock',
-  'attendance.expected',
+  'attendance.headcount',
+  'attendance.headcount.mode',
+  'attendance.headcount.entry',
+  'attendance.headcount.confirm',
+  'attendance.headcount.done',
   'attendance.delegate',
   'attendance.delegate_reason',
   'attendance.done',
@@ -96,15 +100,24 @@ export interface UssdActivity {
   name: string;
   sessionDate: string;
   tracksMembers: boolean;
-  /** The operator's expected headcount; present only for a headcount-only event. */
-  headcountOnlyExpected?: number;
+  /** The current non-superseded count; present only for a headcount-only event. */
+  headcount?: number;
+}
+
+/** The optional member identity that scopes Activities eligibility. */
+export interface UssdActivityViewer {
+  memberNo: string | null;
+  isPresbyter: boolean;
+  pageSize: number;
 }
 
 export interface UssdActivities {
-  /** At most five for the requested date. */
+  /** Every applicable session on the requested date, already ordered. */
   items: UssdActivity[];
   /** There are more sessions in the seven-day window. */
   moreThisWeek: boolean;
+  /** The next applicable day inside the 14-day horizon, when the day is empty. */
+  next: { date: string; count: number } | null;
 }
 
 export interface UssdAttendance {
@@ -184,11 +197,17 @@ export interface UssdMemberContext {
   presbyterRank: number | null;
 }
 
-export interface UssdExpected {
-  male: number;
-  female: number;
-  children: number;
+export interface UssdHeadcount {
+  id: string;
+  mode: 'adults' | 'children' | 'mixed';
+  asOf: string;
   total: number;
+  adultMale: number;
+  adultFemale: number;
+  adultUnspecified: number;
+  childMale: number;
+  childFemale: number;
+  childUnspecified: number;
 }
 
 /** The selected event's register count and the caller's own presence. */
@@ -212,7 +231,6 @@ export interface UssdSessionInfo {
   /** The channel's declared paged-list sizes; the reference is 3 events and 5 offerings. */
   pageSize?: { events: number; offerings: number };
 }
-
 export interface CreateGroupInput {
   memberNo?: string;
   visitorName?: string;
@@ -246,9 +264,23 @@ export interface UssdServices {
   paymentsSummary(memberNo: string): Promise<MemberPayments>;
   offeringById(id: string): Promise<UssdOffering | null>;
   memberContext(memberNo: string): Promise<UssdMemberContext>;
-  activities(date: string): Promise<UssdActivities>;
-  /** Every session in the seven days from `date`, newest first is not required. */
-  activitiesWeek(date: string): Promise<UssdActivity[]>;
+  activities(date: string, viewer: UssdActivityViewer): Promise<UssdActivities>;
+  /** Every applicable session in the seven days from `date`, already ordered. */
+  activitiesWeek(date: string, viewer: UssdActivityViewer): Promise<UssdActivity[]>;
+  currentHeadcount(eventId: string, sessionDate: string): Promise<UssdHeadcount | null>;
+  recordHeadcount(input: {
+    eventId: string;
+    sessionDate: string;
+    mode: 'adults' | 'children';
+    adultMale: number;
+    adultFemale: number;
+    adultUnspecified: number;
+    childMale: number;
+    childFemale: number;
+    childUnspecified: number;
+    supersedesId?: string;
+    phoneHash: string;
+  }): Promise<UssdHeadcount>;
   attendance(memberNo: string, from: string, to: string): Promise<UssdAttendance>;
   profile(memberNo: string): Promise<UssdProfile>;
   redeemCode(input: {
@@ -279,14 +311,6 @@ export interface UssdServices {
     reason: string;
     phoneHash: string;
   }): Promise<{ toMemberNo: string; toName: string }>;
-  recordExpected(input: {
-    eventId: string;
-    sessionDate: string;
-    male: number;
-    female: number;
-    children: number;
-    phoneHash: string;
-  }): Promise<UssdExpected>;
   memberByNo(memberNo: string): Promise<{ memberNo: string; name: string }>;
   isSenior(memberNo: string): Promise<boolean>;
   /** Active, eligible products whose paymentMode is member, in code order. */
@@ -329,6 +353,7 @@ export interface UssdContext {
   activitiesDate?: string;
   activitiesMore?: boolean;
   activitiesBack?: UssdState;
+  activitiesNext?: { date: string; count: number } | null;
   weekActivities?: UssdActivity[];
   weekPage?: number;
   activity?: UssdActivity;
@@ -349,7 +374,19 @@ export interface UssdContext {
   delegateName?: string;
   doneLabel?: string;
   doneKind?: 'clock' | 'delegate' | 'code';
-  expected?: UssdExpected;
+  headcount?: UssdHeadcount | null;
+  headcountMode?: 'adults' | 'children';
+  headcountCorrecting?: boolean;
+  headcountPending?: {
+    mode: 'adults' | 'children';
+    adultMale: number;
+    adultFemale: number;
+    adultUnspecified: number;
+    childMale: number;
+    childFemale: number;
+    childUnspecified: number;
+  };
+  headcountTotal?: number;
   requestReference?: string;
   welfareProducts?: UssdWelfareProduct[];
   welfarePage?: number;
@@ -386,7 +423,6 @@ export interface AdvanceResult {
 const OFFERING_PAGE_SIZE = 5;
 /** Three rows fit the 182-character budget with all three fields. */
 const PLEDGE_PAGE_SIZE = 3;
-const ACTIVITY_PAGE_SIZE = 4;
 /** Two full event rows fit the 182-character budget beside the actions. */
 const ATTENDANCE_EVENT_LINES = 2;
 /** The reference Subscribe list shows three eligible services plus More. */
@@ -402,6 +438,44 @@ const WELFARE_SERVICE_PAGE_SIZE = 1;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** The channel declares the row count; the reference is three, Nalo two. */
+function activityPageSize(session: UssdSessionInfo): number {
+  return Math.max(1, session.pageSize?.events ?? 3);
+}
+
+/** `HH:MM` from an ISO instant; the headcount screen shows the as-of time. */
+function clockTime(iso: string | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(11, 16);
+}
+
+function headcountModeLabel(mode: 'adults' | 'children' | 'mixed'): string {
+  if (mode === 'children') return t('headcount.children_service');
+  if (mode === 'mixed') return t('headcount.mixed_service');
+  return t('headcount.adult_service');
+}
+
+/** The three-number restatement; each handset mode maps its own buckets. */
+function headcountBucketLine(headcount: {
+  mode: 'adults' | 'children' | 'mixed';
+  adultMale: number;
+  adultFemale: number;
+  adultUnspecified: number;
+  childMale: number;
+  childFemale: number;
+  childUnspecified: number;
+}): string {
+  if (headcount.mode === 'children') {
+    return `${headcount.childMale} ${t('label.male')}, ${headcount.childFemale} ${t('label.female')}, ${headcount.adultUnspecified} ${t('label.adults')}`;
+  }
+  if (headcount.mode === 'mixed') {
+    return `${headcount.adultMale} ${t('label.adult_male')}, ${headcount.adultFemale} ${t('label.adult_female')}, ${headcount.childMale} ${t('label.child_male')}, ${headcount.childFemale} ${t('label.child_female')}`;
+  }
+  return `${headcount.adultMale} ${t('label.male')}, ${headcount.adultFemale} ${t('label.female')}, ${headcount.childUnspecified} ${t('label.children')}`;
 }
 
 function monthStart(date: string): string {
@@ -475,6 +549,19 @@ function clockingErrorKey(error: unknown): GlossaryKey {
   }
 }
 
+function headcountErrorKey(error: unknown): GlossaryKey {
+  const code = (error as { code?: string }).code;
+  switch (code) {
+    case 'not_presbyter':
+    case 'not_senior_presbyter':
+      return 'error.not_senior';
+    case 'validation_error':
+      return 'error.invalid_headcount';
+    default:
+      return 'error.try_again';
+  }
+}
+
 const PARENTS: Record<UssdState, UssdState | null> = {
   main: null,
   offerings: 'main',
@@ -508,7 +595,11 @@ const PARENTS: Record<UssdState, UssdState | null> = {
   'attendance.code': 'attendance',
   'attendance.clocking': 'attendance',
   'attendance.clock': 'attendance.clocking',
-  'attendance.expected': 'attendance.clocking',
+  'attendance.headcount': 'attendance.clocking',
+  'attendance.headcount.mode': 'attendance.headcount',
+  'attendance.headcount.entry': 'attendance.headcount',
+  'attendance.headcount.confirm': 'attendance.headcount.entry',
+  'attendance.headcount.done': 'attendance.clocking',
   'attendance.delegate': 'attendance.clocking',
   'attendance.delegate_reason': 'attendance.delegate',
   'attendance.done': 'main',
@@ -535,6 +626,23 @@ function newUssdKey(): string {
 
 function baseContext(context: UssdContext): UssdContext {
   return { invalid: context.invalid ?? 0 };
+}
+
+/** The member identity the channel carries; never a raw phone. */
+async function activityViewer(
+  session: UssdSessionInfo,
+  services: UssdServices,
+): Promise<{ viewer: UssdActivityViewer; memberContext: UssdMemberContext | null }> {
+  const memberNo = session.member?.memberNo ?? null;
+  const memberContext = memberNo ? await services.memberContext(memberNo) : null;
+  return {
+    viewer: {
+      memberNo,
+      isPresbyter: memberContext?.isPresbyter ?? false,
+      pageSize: activityPageSize(session),
+    },
+    memberContext,
+  };
 }
 
 function noticeLines(context: UssdContext): string[] {
@@ -991,9 +1099,19 @@ function renderedError(context: UssdContext): Rendered {
 }
 
 function activityLine(index: number, activity: UssdActivity): string {
-  const suffix =
-    activity.headcountOnlyExpected === undefined ? '' : ` (${activity.headcountOnlyExpected})`;
+  const suffix = activity.headcount === undefined ? '' : ` (${activity.headcount})`;
   return `${index} ${truncate('event', activity.name)}${suffix}`;
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+function nextEventLine(next: { date: string; count: number }, base: string): string {
+  const noun = next.count === 1 ? t('label.event') : t('label.events');
+  const days = daysBetween(base, next.date);
+  const when = days === 1 ? t('label.tomorrow') : t('label.in_days').replace('{n}', String(days));
+  return `${next.count} ${noun} ${when}`;
 }
 
 function listActivities(
@@ -1001,24 +1119,47 @@ function listActivities(
   context: UssdContext,
   all: UssdActivity[],
   page: number,
+  size: number,
   more: boolean,
 ): Rendered {
-  const heading =
-    state === 'activities.week'
+  const zero = all.length === 0;
+  const heading = zero
+    ? state === 'activities.week'
+      ? t('activities.zero_week')
+      : t('activities.zero_today')
+    : state === 'activities.week'
       ? t('activities.this_week')
       : (context.activitiesDate ?? todayIso()) === todayIso()
         ? t('activities.today')
         : shortDate(context.activitiesDate ?? todayIso());
   const lines = [...noticeLines(context), heading];
   const options: UssdOption[] = [];
-  all
-    .slice(page * ACTIVITY_PAGE_SIZE, (page + 1) * ACTIVITY_PAGE_SIZE)
-    .forEach((activity, index) => {
-      const key = String(index + 1);
-      lines.push(activityLine(index + 1, activity));
-      options.push({ key, label: truncate('event', activity.name) });
-    });
-  if (more) {
+
+  if (zero) {
+    if (state === 'activities.week') {
+      lines.push(`1 ${t('activities.a_date')}`);
+      options.push({ key: '1', label: t('activities.a_date') });
+    } else {
+      if (context.activitiesNext) {
+        lines.push(nextEventLine(context.activitiesNext, context.activitiesDate ?? todayIso()));
+        lines.push(`1 ${t('action.view')}`);
+        options.push({ key: '1', label: t('action.view') });
+      } else {
+        lines.push(t('label.no_upcoming'));
+      }
+      lines.push(`2 ${t('activities.this_week')}`);
+      options.push({ key: '2', label: t('activities.this_week') });
+    }
+    const nav = navLines(state, context, false);
+    return screen(state, context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  }
+
+  all.slice(page * size, (page + 1) * size).forEach((activity, index) => {
+    const key = String(index + 1);
+    lines.push(activityLine(index + 1, activity));
+    options.push({ key, label: truncate('event', activity.name) });
+  });
+  if (all.length > (page + 1) * size || more) {
     lines.push(`0 ${t('nav.more')}`);
     options.push({ key: '0', label: t('nav.more') });
   }
@@ -1032,7 +1173,7 @@ function listActivities(
 
 function attendanceCountLines(summary: UssdAttendance | undefined): string[] {
   const lines = [
-    `${t('label.attended')} ${summary?.attended ?? 0} ${t('label.expected_count')} ${summary?.expected ?? 0}`,
+    `${t('label.attended')} ${summary?.attended ?? 0} ${t('label.roster')} ${summary?.expected ?? 0}`,
   ];
   const events = summary?.events ?? [];
   for (const event of events.slice(0, ATTENDANCE_EVENT_LINES)) {
@@ -1108,7 +1249,7 @@ function renderedAttendanceEvent(context: UssdContext, session: UssdSessionInfo)
     t('menu.attendance'),
     truncate('event', event?.name ?? ''),
     shortDate(event?.sessionDate ?? ''),
-    `${t('label.attended')} ${report?.present ?? 0} ${t('label.expected_count')} ${report?.expected ?? 0}`,
+    `${t('label.attended')} ${report?.present ?? 0} ${t('label.roster')} ${report?.expected ?? 0}`,
   ];
   const member = session.member;
   if (member) {
@@ -1173,23 +1314,15 @@ function renderedProfile(context: UssdContext): Rendered {
 
 function renderedAttendanceDone(context: UssdContext): Rendered {
   const lines = [...noticeLines(context), t('status.attendance_recorded')];
-  if (context.expected) {
-    const expected = context.expected;
+  if (context.doneKind === 'delegate') {
+    lines.push(`${t('attendance.delegate')} ${truncate('member', context.doneLabel ?? '')}`);
+  } else if (context.doneLabel) {
+    lines.push(truncate('member', context.doneLabel));
+  }
+  if (context.attendanceSession) {
     lines.push(
-      `${expected.male} ${t('label.male')}, ${expected.female} ${t('label.female')}, ${expected.children} ${t('label.children')}`,
-      `${expected.total} ${t('label.expected_count')}`,
+      `${truncate('event', context.attendanceSession.name)} ${shortDate(context.attendanceSession.sessionDate)}`,
     );
-  } else {
-    if (context.doneKind === 'delegate') {
-      lines.push(`${t('attendance.delegate')} ${truncate('member', context.doneLabel ?? '')}`);
-    } else if (context.doneLabel) {
-      lines.push(truncate('member', context.doneLabel));
-    }
-    if (context.attendanceSession) {
-      lines.push(
-        `${truncate('event', context.attendanceSession.name)} ${shortDate(context.attendanceSession.sessionDate)}`,
-      );
-    }
   }
   return screen('attendance.done', context, lines, [], true);
 }
@@ -1199,7 +1332,7 @@ function renderedClocking(context: UssdContext): Rendered {
     ...noticeLines(context),
     t('attendance.clocking'),
     `1 ${t('attendance.clock_in')}`,
-    `2 ${t('attendance.expected')}`,
+    `2 ${t('attendance.headcount')}`,
     `3 ${t('attendance.delegate')}`,
   ];
   const nav = navLines('attendance.clocking', context, false);
@@ -1209,11 +1342,117 @@ function renderedClocking(context: UssdContext): Rendered {
     [...lines, ...nav.lines],
     [
       { key: '1', label: t('attendance.clock_in') },
-      { key: '2', label: t('attendance.expected') },
+      { key: '2', label: t('attendance.headcount') },
       { key: '3', label: t('attendance.delegate') },
       ...nav.options,
     ],
   );
+}
+
+function renderedHeadcount(context: UssdContext): Rendered {
+  const headcount = context.headcount ?? null;
+  const lines = [...noticeLines(context), t('attendance.headcount')];
+  const options: UssdOption[] = [];
+  if (headcount) {
+    lines.push(
+      `${headcountModeLabel(headcount.mode)} · ${clockTime(headcount.asOf)}`,
+      headcountBucketLine(headcount),
+      `${t('label.total')} ${headcount.total}`,
+    );
+  } else {
+    lines.push(t('status.no_headcount'));
+  }
+  lines.push(`1 ${t('action.new_count')}`);
+  options.push({ key: '1', label: t('action.new_count') });
+  if (headcount) {
+    lines.push(`2 ${t('action.correct')}`);
+    options.push({ key: '2', label: t('action.correct') });
+  }
+  const nav = navLines('attendance.headcount', context, false);
+  return screen(
+    'attendance.headcount',
+    context,
+    [...lines, ...nav.lines],
+    [...options, ...nav.options],
+  );
+}
+
+function headcountLastMode(context: UssdContext): 'adults' | 'children' {
+  return context.headcount?.mode === 'children' ? 'children' : 'adults';
+}
+
+function renderedHeadcountMode(context: UssdContext): Rendered {
+  const last = headcountLastMode(context);
+  const lines = [
+    ...noticeLines(context),
+    t('attendance.headcount'),
+    `${t('label.last_mode')} ${headcountModeLabel(last)}`,
+    `1 ${t('headcount.adult_service')}`,
+    `2 ${t('headcount.children_service')}`,
+  ];
+  const nav = navLines('attendance.headcount.mode', context, false);
+  return screen(
+    'attendance.headcount.mode',
+    context,
+    [...lines, ...nav.lines],
+    [
+      { key: '1', label: t('headcount.adult_service') },
+      { key: '2', label: t('headcount.children_service') },
+      ...nav.options,
+    ],
+  );
+}
+
+function renderedHeadcountEntry(context: UssdContext): Rendered {
+  const mode = context.headcountMode ?? 'adults';
+  return renderedPrompt(
+    'attendance.headcount.entry',
+    context,
+    headcountModeLabel(mode),
+    mode === 'children' ? t('prompt.headcount_children') : t('prompt.headcount_adults'),
+  );
+}
+
+function renderedHeadcountConfirm(context: UssdContext): Rendered {
+  const pending = context.headcountPending;
+  const lines = [
+    ...noticeLines(context),
+    t('attendance.headcount'),
+    headcountModeLabel(pending?.mode ?? context.headcountMode ?? 'adults'),
+  ];
+  if (pending) {
+    lines.push(headcountBucketLine(pending));
+    const total =
+      pending.adultMale +
+      pending.adultFemale +
+      pending.adultUnspecified +
+      pending.childMale +
+      pending.childFemale +
+      pending.childUnspecified;
+    lines.push(`${t('label.total')} ${total}`);
+  }
+  lines.push(`1 ${t('action.save')}`, `2 ${t('action.change')}`);
+  const nav = navLines('attendance.headcount.confirm', context, false);
+  return screen(
+    'attendance.headcount.confirm',
+    context,
+    [...lines, ...nav.lines],
+    [
+      { key: '1', label: t('action.save') },
+      { key: '2', label: t('action.change') },
+      ...nav.options,
+    ],
+  );
+}
+
+function renderedHeadcountDone(context: UssdContext): Rendered {
+  const lines = [
+    ...noticeLines(context),
+    t('status.headcount_recorded'),
+    `${t('label.total')} ${context.headcountTotal ?? 0}`,
+  ];
+  const nav = navLines('attendance.headcount.done', context, false);
+  return screen('attendance.headcount.done', context, [...lines, ...nav.lines], nav.options);
 }
 
 function renderedPrompt(
@@ -1332,6 +1571,7 @@ export function render(
         context,
         context.activities ?? [],
         context.activitiesPage ?? 0,
+        activityPageSize(session),
         context.activitiesMore ?? false,
       );
     case 'activities.week':
@@ -1340,7 +1580,9 @@ export function render(
         context,
         context.weekActivities ?? [],
         context.weekPage ?? 0,
-        (context.weekActivities ?? []).length > ((context.weekPage ?? 0) + 1) * ACTIVITY_PAGE_SIZE,
+        activityPageSize(session),
+        (context.weekActivities ?? []).length >
+          ((context.weekPage ?? 0) + 1) * activityPageSize(session),
       );
     case 'activities.date':
       return renderedPrompt('activities.date', context, t('activities.a_date'), t('prompt.date'));
@@ -1381,13 +1623,16 @@ export function render(
         t('attendance.clock_in'),
         t('profile.member_no'),
       );
-    case 'attendance.expected':
-      return renderedPrompt(
-        'attendance.expected',
-        context,
-        t('attendance.expected'),
-        `${t('label.male')}, ${t('label.female')}, ${t('label.children')}`,
-      );
+    case 'attendance.headcount':
+      return renderedHeadcount(context);
+    case 'attendance.headcount.mode':
+      return renderedHeadcountMode(context);
+    case 'attendance.headcount.entry':
+      return renderedHeadcountEntry(context);
+    case 'attendance.headcount.confirm':
+      return renderedHeadcountConfirm(context);
+    case 'attendance.headcount.done':
+      return renderedHeadcountDone(context);
     case 'attendance.delegate':
       return renderedPrompt(
         'attendance.delegate',
@@ -1450,20 +1695,43 @@ function noEvent(context: UssdContext, returnState: UssdState): AdvanceResult {
 async function openActivities(
   context: UssdContext,
   services: UssdServices,
+  session: UssdSessionInfo,
   date: string,
 ): Promise<AdvanceResult> {
-  const activities = await services.activities(date);
-  if (activities.items.length === 0)
-    return noEvent({ ...context, activitiesDate: date }, 'activities');
+  const { viewer, memberContext } = await activityViewer(session, services);
+  const activities = await services.activities(date, viewer);
   return {
     state: 'activities',
     context: {
       ...baseContext(context),
+      memberContext: memberContext ?? { isPresbyter: false, presbyterRank: null },
       activities: activities.items,
       activitiesPage: 0,
       activitiesDate: date,
       activitiesMore: activities.moreThisWeek,
+      activitiesNext: activities.next,
       activity: undefined,
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
+async function openWeek(
+  context: UssdContext,
+  services: UssdServices,
+  session: UssdSessionInfo,
+  date: string,
+): Promise<AdvanceResult> {
+  const { viewer, memberContext } = await activityViewer(session, services);
+  const week = await services.activitiesWeek(date, viewer);
+  return {
+    state: 'activities.week',
+    context: {
+      ...context,
+      memberContext: memberContext ?? { isPresbyter: false, presbyterRank: null },
+      weekActivities: week,
+      weekPage: 0,
       notice: undefined,
     },
     done: false,
@@ -1495,6 +1763,17 @@ async function openAttendance(
       attendanceTo: today,
       notice: undefined,
     },
+    done: false,
+  };
+}
+
+async function openHeadcount(context: UssdContext, services: UssdServices): Promise<AdvanceResult> {
+  const event = context.event;
+  if (!event) return noEvent(context, 'attendance.clocking');
+  const headcount = await services.currentHeadcount(event.id, event.sessionDate);
+  return {
+    state: 'attendance.headcount',
+    context: { ...context, headcount, notice: undefined },
     done: false,
   };
 }
@@ -1688,7 +1967,7 @@ export async function advance(
           done: false,
         };
       }
-      if (value === '3') return openActivities(context, services, todayIso());
+      if (value === '3') return openActivities(context, services, session, todayIso());
       // Attendance needs a member; the anonymous entry answers Invalid choice.
       if (value === '4') {
         return {
@@ -1713,7 +1992,7 @@ export async function advance(
         done: false,
       };
     }
-    if (value === '2') return openActivities(context, services, todayIso());
+    if (value === '2') return openActivities(context, services, session, todayIso());
     if (value === '3') return openAttendance(context, services, session);
     if (value === '4') return openWelfare(context, services, session);
     if (value === '5') return openProfile(context, services, session);
@@ -2104,9 +2383,28 @@ export async function advance(
   }
 
   if (state === 'activities') {
+    const all = context.activities ?? [];
+    const size = activityPageSize(session);
+    const page = context.activitiesPage ?? 0;
+    const visible = all.slice(page * size, (page + 1) * size);
+    const more = all.length > (page + 1) * size || (context.activitiesMore ?? false);
+
+    if (all.length === 0) {
+      if (value === '1' && context.activitiesNext) {
+        return openActivities(context, services, session, context.activitiesNext.date);
+      }
+      if (value === '2') {
+        return openWeek(context, services, session, context.activitiesDate ?? todayIso());
+      }
+      return invalid(state, context, 'error.invalid_choice');
+    }
+
     if (value === '0') {
-      if (!context.activitiesMore) return invalid(state, context, 'error.invalid_choice');
-      const week = await services.activitiesWeek(context.activitiesDate ?? todayIso());
+      if (!more) return invalid(state, context, 'error.invalid_choice');
+      const week = await services.activitiesWeek(
+        context.activitiesDate ?? todayIso(),
+        (await activityViewer(session, services)).viewer,
+      );
       return {
         state: 'activities.week',
         context: { ...context, weekActivities: week, weekPage: 0, notice: undefined },
@@ -2120,8 +2418,8 @@ export async function advance(
         done: false,
       };
     }
-    const index = parseIndex(value, context.activities?.length ?? 0);
-    const activity = index === null ? undefined : context.activities?.[index - 1];
+    const index = parseIndex(value, visible.length);
+    const activity = index === null ? undefined : visible[index - 1];
     if (!activity) return invalid(state, context, 'error.invalid_choice');
     return {
       state: 'activities.event',
@@ -2143,8 +2441,19 @@ export async function advance(
 
   if (state === 'activities.week') {
     const week = context.weekActivities ?? [];
+    const size = activityPageSize(session);
     const page = context.weekPage ?? 0;
-    const more = week.length > (page + 1) * ACTIVITY_PAGE_SIZE;
+    const more = week.length > (page + 1) * size;
+    if (week.length === 0) {
+      if (value === '1') {
+        return {
+          state: 'activities.date',
+          context: { ...context, notice: undefined },
+          done: false,
+        };
+      }
+      return invalid(state, context, 'error.invalid_choice');
+    }
     if (value === '0') {
       if (!more) return invalid(state, context, 'error.invalid_choice');
       return {
@@ -2153,7 +2462,7 @@ export async function advance(
         done: false,
       };
     }
-    const visible = week.slice(page * ACTIVITY_PAGE_SIZE, (page + 1) * ACTIVITY_PAGE_SIZE);
+    const visible = week.slice(page * size, (page + 1) * size);
     const index = parseIndex(value, visible.length);
     const activity = index === null ? undefined : visible[index - 1];
     if (!activity) return invalid(state, context, 'error.invalid_choice');
@@ -2178,7 +2487,7 @@ export async function advance(
   if (state === 'activities.date') {
     const date = parseUssdDate(value, '0000-01-01');
     if (!date) return invalid(state, context, 'error.invalid_date');
-    return openActivities(context, services, date);
+    return openActivities(context, services, session, date);
   }
 
   if (state === 'activities.event') {
@@ -2395,11 +2704,7 @@ export async function advance(
       return { state: 'attendance.clock', context: { ...context, notice: undefined }, done: false };
     }
     if (value === '2') {
-      return {
-        state: 'attendance.expected',
-        context: { ...context, notice: undefined },
-        done: false,
-      };
+      return openHeadcount(context, services);
     }
     if (value === '3') {
       if (!(await services.isSenior(session.member!.memberNo))) {
@@ -2456,41 +2761,142 @@ export async function advance(
     }
   }
 
-  if (state === 'attendance.expected') {
-    const parts = value.split(',').map((part) => part.trim());
+  if (state === 'attendance.headcount') {
+    if (!context.memberContext?.isPresbyter) {
+      return {
+        state: 'error',
+        context: {
+          ...context,
+          returnState: 'attendance',
+          messageKey: 'error.not_senior',
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    if (value === '1') {
+      return {
+        state: 'attendance.headcount.mode',
+        context: {
+          ...context,
+          headcountCorrecting: false,
+          headcountPending: undefined,
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    if (value === '2') {
+      if (!context.headcount) return invalid(state, context, 'error.invalid_choice');
+      return {
+        state: 'attendance.headcount.mode',
+        context: {
+          ...context,
+          headcountCorrecting: true,
+          headcountPending: undefined,
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'attendance.headcount.mode') {
+    const mode = value === '1' ? 'adults' : value === '2' ? 'children' : null;
+    if (!mode) return invalid(state, context, 'error.invalid_choice');
+    return {
+      state: 'attendance.headcount.entry',
+      context: { ...context, headcountMode: mode, headcountPending: undefined, notice: undefined },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.headcount.entry') {
+    const parts = value.split(/[\s,/]+/).filter(Boolean);
     if (parts.length !== 3 || parts.some((part) => !/^\d+$/.test(part))) {
-      return invalid(state, context, 'error.invalid_choice');
+      return invalid(state, context, 'error.invalid_headcount');
     }
-    const [male, female, children] = parts.map(Number) as [number, number, number];
-    if (male > 10000 || female > 10000 || children > 10000) {
-      return invalid(state, context, 'error.invalid_choice');
+    const [first, second, third] = parts.map(Number) as [number, number, number];
+    if ([first, second, third].some((count) => count > 10_000)) {
+      return invalid(state, context, 'error.invalid_headcount');
     }
+    const mode = context.headcountMode ?? 'adults';
+    const pending =
+      mode === 'children'
+        ? {
+            mode,
+            adultMale: 0,
+            adultFemale: 0,
+            adultUnspecified: third,
+            childMale: first,
+            childFemale: second,
+            childUnspecified: 0,
+          }
+        : {
+            mode,
+            adultMale: first,
+            adultFemale: second,
+            adultUnspecified: 0,
+            childMale: 0,
+            childFemale: 0,
+            childUnspecified: third,
+          };
+    if (first + second + third > 30_000) {
+      return invalid(state, context, 'error.invalid_headcount');
+    }
+    return {
+      state: 'attendance.headcount.confirm',
+      context: { ...context, headcountPending: pending, notice: undefined },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.headcount.confirm') {
+    if (value === '2') {
+      return {
+        state: 'attendance.headcount.entry',
+        context: { ...context, headcountPending: undefined, notice: undefined },
+        done: false,
+      };
+    }
+    if (value !== '1') return invalid(state, context, 'error.invalid_choice');
     const event = context.event;
-    if (!event) return noEvent(context, 'attendance');
+    const pending = context.headcountPending;
+    if (!event || !pending) return invalid(state, context, 'error.invalid_choice');
     try {
-      const expected = await services.recordExpected({
+      const headcount = await services.recordHeadcount({
         eventId: event.id,
         sessionDate: event.sessionDate,
-        male,
-        female,
-        children,
+        mode: pending.mode,
+        adultMale: pending.adultMale,
+        adultFemale: pending.adultFemale,
+        adultUnspecified: pending.adultUnspecified,
+        childMale: pending.childMale,
+        childFemale: pending.childFemale,
+        childUnspecified: pending.childUnspecified,
+        supersedesId: context.headcountCorrecting ? context.headcount?.id : undefined,
         phoneHash: session.phoneHash,
       });
       return {
-        state: 'attendance.done',
+        state: 'attendance.headcount.done',
         context: {
           ...context,
-          attendanceSession: event,
-          expected,
-          doneLabel: undefined,
-          doneKind: undefined,
+          headcount,
+          headcountTotal: headcount.total,
+          headcountPending: undefined,
+          headcountCorrecting: false,
           notice: undefined,
         },
-        done: true,
+        done: false,
       };
     } catch (error) {
-      return invalid(state, context, clockingErrorKey(error));
+      return invalid(state, context, headcountErrorKey(error));
     }
+  }
+
+  if (state === 'attendance.headcount.done') {
+    return invalid(state, context, 'error.invalid_choice');
   }
 
   if (state === 'attendance.delegate') {

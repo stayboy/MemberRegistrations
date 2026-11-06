@@ -23,15 +23,6 @@ export interface DelegationItem {
   createdAt: string;
 }
 
-export interface ExpectedHeadcount {
-  male: number;
-  female: number;
-  children: number;
-  total: number;
-  recordedBy: string | null;
-  recordedAt: string | null;
-}
-
 interface StoredSession {
   date?: unknown;
   status?: string;
@@ -89,6 +80,11 @@ export class ClockingRepository {
     this.events = new EventRepository(db);
   }
 
+  /**
+   * `surface` names who is asking. The USSD member session hides a
+   * presbyter-only session as `404`; the officer bearer route supplied the
+   * member number itself, so it gets the domain error instead.
+   */
   async delegate(
     input: {
       eventId: string;
@@ -98,13 +94,17 @@ export class ClockingRepository {
       reason: string;
     },
     actor: string,
+    { surface = 'member' }: { surface?: 'member' | 'operator' } = {},
   ): Promise<DelegationItem> {
-    await this.requireSession(input.eventId, input.sessionDate);
+    const session = await this.requireSession(input.eventId, input.sessionDate);
     const reason = input.reason.trim();
     if (reason.length < 3) throw new ValidationError('reason must be 3-500 characters');
 
     const from = await this.requireActiveMember(input.fromMemberNo);
     const to = await this.requireActiveMember(input.toMemberNo);
+    if (session.presbyterOnly && !from.is_presbyter && surface === 'member') {
+      throw new NotFoundError(`Event ${input.eventId} was not found`);
+    }
     if (!from.is_presbyter) {
       throw new NotPresbyterError(`Member ${from.member_no} is not a presbyter`);
     }
@@ -188,79 +188,6 @@ export class ClockingRepository {
     };
   }
 
-  async recordExpected(
-    eventId: string,
-    sessionDate: string,
-    input: { male: number; female: number; children: number },
-    actor: string,
-  ): Promise<ExpectedHeadcount> {
-    await this.requireSession(eventId, sessionDate);
-
-    const [row] = await this.db.query<{
-      male: number;
-      female: number;
-      children: number;
-      recorded_by: string;
-      recorded_at: Date | string;
-    }>(
-      `insert into event_session_expected (
-         event_instance_id, session_date, male, female, children, recorded_by, recorded_at
-       ) values ($1,$2,$3,$4,$5,$6, now())
-       on conflict (event_instance_id, session_date) do update
-         set male = excluded.male,
-             female = excluded.female,
-             children = excluded.children,
-             recorded_by = excluded.recorded_by,
-             recorded_at = now()
-       returning male, female, children, recorded_by, recorded_at`,
-      [eventId, sessionDate, input.male, input.female, input.children, actor],
-    );
-
-    return {
-      male: row!.male,
-      female: row!.female,
-      children: row!.children,
-      total: row!.male + row!.female + row!.children,
-      recordedBy: row!.recorded_by,
-      recordedAt: isoTimestamp(row!.recorded_at),
-    };
-  }
-
-  async getExpected(eventId: string, sessionDate: string): Promise<ExpectedHeadcount> {
-    await this.requireSession(eventId, sessionDate);
-    const [row] = await this.db.query<{
-      male: number;
-      female: number;
-      children: number;
-      recorded_by: string;
-      recorded_at: Date | string;
-    }>(
-      `select male, female, children, recorded_by, recorded_at
-         from event_session_expected
-        where event_instance_id = $1 and session_date = $2`,
-      [eventId, sessionDate],
-    );
-
-    if (!row) {
-      return {
-        male: 0,
-        female: 0,
-        children: 0,
-        total: 0,
-        recordedBy: null,
-        recordedAt: null,
-      };
-    }
-    return {
-      male: row.male,
-      female: row.female,
-      children: row.children,
-      total: row.male + row.female + row.children,
-      recordedBy: row.recorded_by,
-      recordedAt: isoTimestamp(row.recorded_at),
-    };
-  }
-
   async clockIn(input: {
     eventId: string;
     sessionDate: string;
@@ -268,9 +195,12 @@ export class ClockingRepository {
     actorMemberNo: string;
     actor: string;
   }): Promise<EventAttendanceEntry> {
-    await this.requireSession(input.eventId, input.sessionDate);
+    const session = await this.requireSession(input.eventId, input.sessionDate);
 
     const actor = await this.requireActiveMember(input.actorMemberNo);
+    if (session.presbyterOnly && !actor.is_presbyter) {
+      throw new NotFoundError(`Event ${input.eventId} was not found`);
+    }
     if (!actor.is_presbyter) {
       throw new NotPresbyterError(`Member ${actor.member_no} is not a presbyter`);
     }
@@ -304,11 +234,15 @@ export class ClockingRepository {
     );
   }
 
-  private async requireSession(eventId: string, sessionDate: string): Promise<void> {
-    const [event] = await this.db.query<{ status: string; sessions: unknown }>(
-      'select status, sessions from event_instances where id = $1',
-      [eventId],
-    );
+  private async requireSession(
+    eventId: string,
+    sessionDate: string,
+  ): Promise<{ presbyterOnly: boolean }> {
+    const [event] = await this.db.query<{
+      status: string;
+      sessions: unknown;
+      presbyter_only: boolean;
+    }>('select status, sessions, presbyter_only from event_instances where id = $1', [eventId]);
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
     if (event.status === 'cancelled' || event.status === 'archived') {
       throw new ConflictError('A cancelled or archived event is read-only');
@@ -323,6 +257,7 @@ export class ClockingRepository {
     if ((session.status ?? 'scheduled') === 'cancelled') {
       throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
     }
+    return { presbyterOnly: event.presbyter_only };
   }
 
   private async requireActiveMember(memberNo: string): Promise<MemberRef> {

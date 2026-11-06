@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -73,6 +74,7 @@ export const eventSeries = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
     ministryId: uuid('ministry_id').references(() => ministries.id),
+    presbyterOnly: boolean('presbyter_only').notNull().default(false),
     timezone: text('timezone').notNull().default('Africa/Lagos'),
     description: text('description'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -308,5 +310,76 @@ export const shepherdingCalls = pgTable(
   (table) => [
     index('shepherding_calls_assignment').on(table.assignmentId, table.calledOn),
     index('shepherding_calls_called_on').on(table.calledOn),
+  ],
+);
+
+/**
+ * Provider correlation and the append-only headcount observations. The
+ * machine still keys sessions by the internal uuid; `externalId` is the
+ * gateway's SESSIONID when an adapter supplies one.
+ */
+export const ussdSessions = pgTable(
+  'ussd_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    phoneHash: text('phone_hash').notNull(),
+    memberId: uuid('member_id').references(() => members.id),
+    anonymous: boolean('anonymous').notNull(),
+    state: text('state').notNull(),
+    context: jsonb('context')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    lastInputSeq: integer('last_input_seq').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    provider: text('provider').notNull().default('hmac'),
+    externalId: text('external_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ussd_sessions_phone_hash').on(table.phoneHash),
+    index('ussd_sessions_expires_at').on(table.expiresAt),
+    uniqueIndex('ussd_sessions_provider_external_id')
+      .on(table.provider, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
+/**
+ * The raw-SQL repository still owns event_instances; this partial mirror only
+ * types the headcount foreign key. It is deliberately not in the drift test's
+ * table list because the raw engine owns the rest of the row, including
+ * `presbyter_only`, which must not look ORM-owned.
+ */
+export const eventInstances = pgTable('event_instances', {
+  id: uuid('id').primaryKey().defaultRandom(),
+});
+
+export const eventSessionHeadcounts = pgTable(
+  'event_session_headcounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventInstanceId: uuid('event_instance_id')
+      .notNull()
+      .references(() => eventInstances.id),
+    sessionDate: date('session_date').notNull(),
+    asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    mode: text('mode').notNull(),
+    adultMale: integer('adult_male').notNull().default(0),
+    adultFemale: integer('adult_female').notNull().default(0),
+    adultUnspecified: integer('adult_unspecified').notNull().default(0),
+    childMale: integer('child_male').notNull().default(0),
+    childFemale: integer('child_female').notNull().default(0),
+    childUnspecified: integer('child_unspecified').notNull().default(0),
+    total: integer('total').notNull(),
+    recordedBy: text('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    supersedesId: uuid('supersedes_id'),
+  },
+  (table) => [
+    uniqueIndex('event_session_headcounts_supersedes')
+      .on(table.supersedesId)
+      .where(sql`${table.supersedesId} is not null`),
+    index('event_session_headcounts_session').on(table.eventInstanceId, table.sessionDate),
   ],
 );

@@ -23,6 +23,7 @@ export interface SeriesDto {
   id: string;
   name: string;
   ministry: { code: string; name: string } | null;
+  presbyterOnly: boolean;
   timezone: string;
   description: string | null;
   archivedAt: string | null;
@@ -33,6 +34,7 @@ export interface SeriesDto {
 export interface CreateSeriesInput {
   name: string;
   ministryCode?: string | null;
+  presbyterOnly?: boolean;
   timezone?: string;
   description?: string | null;
   effectiveFrom: string;
@@ -43,6 +45,7 @@ export interface CreateSeriesInput {
 export interface UpdateSeriesInput {
   name?: string;
   ministryCode?: string | null;
+  presbyterOnly?: boolean;
   timezone?: string;
   description?: string | null;
   archived?: boolean;
@@ -113,6 +116,7 @@ export class SeriesRepository {
           .values({
             name,
             ministryId,
+            presbyterOnly: input.presbyterOnly ?? false,
             timezone,
             description: input.description ?? null,
             createdBy: actor,
@@ -151,6 +155,10 @@ export class SeriesRepository {
     }
     if (input.ministryCode !== undefined) {
       set.ministryId = await this.resolveMinistry(input.ministryCode);
+      changed = true;
+    }
+    if (input.presbyterOnly !== undefined) {
+      set.presbyterOnly = input.presbyterOnly;
       changed = true;
     }
     if (input.timezone !== undefined) {
@@ -255,6 +263,7 @@ export class SeriesRepository {
       .select({
         id: eventSeries.id,
         name: eventSeries.name,
+        presbyterOnly: eventSeries.presbyterOnly,
         timezone: eventSeries.timezone,
         description: eventSeries.description,
         archivedAt: eventSeries.archivedAt,
@@ -293,6 +302,7 @@ export class SeriesRepository {
         row.ministryCode && row.ministryName
           ? { code: row.ministryCode, name: row.ministryName }
           : null,
+      presbyterOnly: row.presbyterOnly,
       timezone: row.timezone,
       description: row.description,
       archivedAt: isoTimestamp(row.archivedAt),

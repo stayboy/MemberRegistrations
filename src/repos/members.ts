@@ -751,6 +751,7 @@ export class MemberRepository {
         where m.id = $1
           and e.status not in ('cancelled', 'archived')
           and coalesce(e.tracks_members, true)
+          and (not e.presbyter_only or m.is_presbyter)
           and coalesce(session->>'status', 'scheduled') <> 'cancelled'
           and (session->>'date')::date <= (now() at time zone e.timezone)::date
           and ($2::date is null or (session->>'date')::date >= $2::date)

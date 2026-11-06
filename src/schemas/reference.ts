@@ -29,6 +29,7 @@ export const scheduleInputSchema = z.object({
 export const createSeriesSchema = z.object({
   name: z.string().min(1).max(120),
   ministryCode: z.string().min(2).max(16).nullable().optional(),
+  presbyterOnly: z.boolean().default(false),
   timezone: z.string().min(1).max(64).optional(),
   description: z.string().max(500).nullable().optional(),
   schedule: scheduleInputSchema,
@@ -37,6 +38,7 @@ export const createSeriesSchema = z.object({
 export const updateSeriesSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   ministryCode: z.string().min(2).max(16).nullable().optional(),
+  presbyterOnly: z.boolean().optional(),
   timezone: z.string().min(1).max(64).optional(),
   description: z.string().max(500).nullable().optional(),
   archived: z.boolean().optional(),
@@ -58,6 +60,7 @@ export const seriesSchema = z.object({
   id: z.string(),
   name: z.string(),
   ministry: z.object({ code: z.string(), name: z.string() }).nullable(),
+  presbyterOnly: z.boolean(),
   timezone: z.string(),
   description: z.string().nullable(),
   archivedAt: z.string().nullable(),

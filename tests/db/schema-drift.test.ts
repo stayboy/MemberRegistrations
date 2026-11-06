@@ -4,6 +4,7 @@ import { createPgliteDb } from '../../src/db/pglite.js';
 import { migrate } from '../../src/db/migrate.js';
 import {
   eventSeries,
+  eventSessionHeadcounts,
   members,
   ministries,
   seriesExceptions,
@@ -13,6 +14,7 @@ import {
   subscriptionPayments,
   subscriptionProducts,
   subscriptions,
+  ussdSessions,
 } from '../../src/db/schema.js';
 import type { Db } from '../../src/db/sql.js';
 
@@ -106,6 +108,8 @@ describe('ORM schema drift', () => {
     ['subscription_payments', subscriptionPayments],
     ['subscription_claims', subscriptionClaims],
     ['subscription_coverage', subscriptionCoverage],
+    ['ussd_sessions', ussdSessions],
+    ['event_session_headcounts', eventSessionHeadcounts],
   ];
 
   it('matches the committed SQL migrations', async () => {
@@ -118,6 +122,15 @@ describe('ORM schema drift', () => {
     const actual = await dbIndexes(db, 'subscription_payments');
     const expected = schemaIndexes(subscriptionPayments);
     expect(sortByName(actual)).toEqual(sortByName(expected));
+  });
+
+  it('matches the headcount and provider-correlation indexes', async () => {
+    expect(sortByName(await dbIndexes(db, 'event_session_headcounts'))).toEqual(
+      sortByName(schemaIndexes(eventSessionHeadcounts)),
+    );
+    expect(sortByName(await dbIndexes(db, 'ussd_sessions'))).toEqual(
+      sortByName(schemaIndexes(ussdSessions)),
+    );
   });
 
   it('fails on a deliberate column mismatch', async () => {

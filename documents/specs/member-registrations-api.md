@@ -14,6 +14,19 @@
 
 ## Change log
 
+- 2026-11-06: 24d slice A review follow-up. The headcount `Location` gains its read target
+  `GET /v1/events/{eventId}/headcounts/{headcountId}` (one observation, `no-store`, `404` for an
+  unknown id or another event's row). The presbyter-only hiding rule is scoped to the **member**
+  surface: the USSD delegate path still answers the hidden `404`, while the officer bearer
+  `POST /v1/events/{eventId}/delegations` answers `422 not_presbyter` because the officer supplied
+  the member number.
+- 2026-11-06: 24d slice A scopes presbyter-only visibility to **member-facing** surfaces: the USSD
+  member session and the member-scoped routes hide a presbyter-only event from a non-presbyter, while
+  an officer's bearer read is the whole-register back office and sees every event like any other (V2
+  has no per-officer authorization, so the bearer surface carries no member identity). An
+  implementer-introduced member-identity request header on the bearer event routes is removed before
+  merge; it was authorization-shaped and does not belong on that surface. A headcount correction
+  keeps the target's `asOf` even when recorded on a later day.
 - 2026-11-05: 24c settles the welfare wire contract: `subscription_products` (server-evaluated
   eligibility, `paymentMode`, period and dependent rules), product CRUD with an active-only `PUT`,
   self-subscription that resolves the payer server-side, renew from `max(periodEnd, today)`,
@@ -436,9 +449,9 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 - `series_exception(date, kind: cancelled | extra)` records a cancelled service or a one-off extra.
 - Archived, never deleted.
 - `presbyterOnly` (boolean, default false) templates generated instances; a presbyter-only series is
-  hidden from non-presbyters on every reading surface. Changing the flag affects **future generated
-  occurrences only**; already-generated events keep their own flag and their history, and can be edited
-  individually.
+  hidden from non-presbyters on every member-facing reading surface. Changing the flag affects
+  **future generated occurrences only**; already-generated events keep their own flag and their
+  history, and can be edited individually.
 
 ### Event instance
 
@@ -465,8 +478,12 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 - `event_instances` is the evolved `event_occurrences` table: the primary key moves from
   `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
 - `presbyterOnly` (boolean, default false) is inherited by a series-generated instance from its series
-  template and set directly on a manual event. Non-presbyters never see or open a presbyter-only event;
-  the roster (register-derived `expected`) for a presbyter-only session is the active presbyters.
+  template and set directly on a manual event. Presbyter-only visibility is a **member-facing** rule:
+  the USSD member session and the member-scoped routes neither show nor open the event for a
+  non-presbyter, and the roster (register-derived `expected`) for a presbyter-only session is the
+  active presbyters. An officer's bearer read is the whole-register back office: it reads a
+  presbyter-only event, its attendance report and an attendance write like any other event, because
+  that surface carries no member identity (V2 has no per-officer authorization).
 
 ### Occurrences and attendance
 
@@ -545,6 +562,7 @@ and are `no-store` on read.
 | `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path    |
 | `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                 |
 | `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`) |
+| `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                |
 | `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation; `201` the observation                |
 | `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                 |
 | `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                 |
@@ -586,7 +604,9 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   inherits the senior's broad clocking authority for that session only and may clock any member. The
   delegation ends with the session; `ended_at` stays null in V3 and "active" is derived from the session
   date, with no explicit end route. Errors: `not_shepherd`, `not_senior_presbyter`, `delegate_required`,
-  `delegation_exists`.
+  `delegation_exists`. The presbyter-only hiding rule is member-facing: the USSD path answers the hidden
+  `404` for a non-presbyter grantor, while the officer bearer route — where the caller supplied
+  `fromMemberNo` — answers `422 not_presbyter`.
 - **Headcounts.** A headcount is an actual count taken at a moment, never an "expected" figure. A
   presbyter or admin records it per session, append-only, in `event_session_headcounts`; each
   observation carries a `mode` (`adults` | `children` | `mixed`), six buckets, a `total`, an `asOf`
@@ -595,7 +615,10 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   `GET /v1/events/{eventId}/headcounts?sessionDate` returns
   `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
   first, `no-store`; `current` is the newest non-superseded observation (by `asOf`, then
-  `recordedAt`), and `observations` keeps the superseded history. A superseded observation is **not
+  `recordedAt`), and `observations` keeps the superseded history. `GET
+/v1/events/{eventId}/headcounts/{headcountId}`, the `Location` target of a create or correction, returns
+  one observation with its supersession links, `no-store`; an unknown id or a row belonging to another
+  event is `404 not_found`. A superseded observation is **not
   invalid**: it remains the valid record of the count at its `asOf`, and its `supersededBy` names the
   correcting row. `Headcount` is
   `{ id, eventId, sessionDate, asOf, mode, adultMale, adultFemale, adultUnspecified, childMale,
