@@ -53,6 +53,8 @@ export interface EventItem {
   source: EventSource;
   /** False = headcount-only; per-member attendance does not apply. */
   tracksMembers: boolean;
+  /** Presbyter-only events are hidden on member-facing surfaces and roster the presbyters. */
+  presbyterOnly: boolean;
   sessions: EventSessionItem[];
   offerings: EventOfferingItem[];
   stats: OfferingStatsItem;
@@ -146,6 +148,7 @@ type EventRow = {
   status: string;
   source: string;
   tracks_members: boolean;
+  presbyter_only: boolean;
   sessions: unknown;
   ministry_code: string | null;
   ministry_name: string | null;
@@ -175,6 +178,7 @@ const EVENT_COLUMNS = `
   e.status,
   e.source,
   e.tracks_members,
+  e.presbyter_only,
   e.sessions,
   m.code as ministry_code,
   m.name as ministry_name`;
@@ -217,7 +221,9 @@ function sessionCounts(alias: string): string {
                )
         from (
           select (session->>'date')::date as session_date,
-                 count(m.id)::int as expected
+                 count(m.id) filter (
+                   where not ${alias}.presbyter_only or m.is_presbyter
+                 )::int as expected
           from jsonb_array_elements(${alias}.sessions) session
           left join members m
             on coalesce(m.joined_on, m.created_at::date) <= (session->>'date')::date
@@ -282,6 +288,7 @@ select e.id,
        e.status,
        e.source,
        e.tracks_members,
+       e.presbyter_only,
        e.sessions
 from event_instances e
 where e.id = $1
@@ -290,10 +297,10 @@ where e.id = $1
 const INSERT_SQL = `
 insert into event_instances (
   event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, tracks_members, sessions
+  venue_type, venue_name, description, status, source, tracks_members, presbyter_only, sessions
 ) values (
   $1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual',
-  $11::boolean, $12::jsonb
+  $11::boolean, $12::boolean, $13::jsonb
 )
 returning id
 `;
@@ -301,10 +308,10 @@ returning id
 const GENERATE_INSERT_SQL = `
 insert into event_instances (
   event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, tracks_members, sessions
+  venue_type, venue_name, description, status, source, tracks_members, presbyter_only, sessions
 ) values (
   $1, $2, $3, $4, $5, $5, '00:00', null,
-  'auditorium', null, null, 'scheduled', 'series', true,
+  'auditorium', null, null, 'scheduled', 'series', true, $6::boolean,
   jsonb_build_array(jsonb_build_object(
     'date', $5::date,
     'startTime', '00:00',
@@ -335,7 +342,8 @@ set name = $2,
     venue_name = $9,
     description = $10,
     tracks_members = $11::boolean,
-    sessions = $12::jsonb
+    presbyter_only = $12::boolean,
+    sessions = $13::jsonb
 where id = $1
 `;
 
@@ -489,6 +497,7 @@ function etagFor(row: EventRowCore): string {
     row.status,
     row.source,
     row.tracks_members,
+    row.presbyter_only,
     parseJsonArray(row.sessions),
   ]);
   return `"e${createHash('sha256').update(payload).digest('hex').slice(0, 24)}"`;
@@ -555,6 +564,7 @@ export class EventRepository {
         input.venueName ?? null,
         input.description ?? null,
         input.tracksMembers,
+        input.presbyterOnly,
         JSON.stringify(sessions),
       ]);
       id = row!.id;
@@ -583,8 +593,13 @@ export class EventRepository {
     if (from > to) throw new ValidationError('from must not be after to');
 
     return this.db.transaction(async (tx) => {
-      const series = await tx.query<{ id: string; name: string; timezone: string }>(
-        'select id, name, timezone from event_series where archived_at is null order by id',
+      const series = await tx.query<{
+        id: string;
+        name: string;
+        timezone: string;
+        presbyter_only: boolean;
+      }>(
+        'select id, name, timezone, presbyter_only from event_series where archived_at is null order by id',
       );
 
       const eventIds: string[] = [];
@@ -627,6 +642,7 @@ export class EventRepository {
             row.name,
             row.timezone,
             date,
+            row.presbyter_only,
           ]);
 
           if (inserted) {
@@ -698,6 +714,7 @@ export class EventRepository {
       input.venueName !== undefined ? input.venueName : current.venue_name,
       input.description !== undefined ? input.description : current.description,
       input.tracksMembers ?? current.tracks_members,
+      input.presbyterOnly ?? current.presbyter_only,
       JSON.stringify(sessions),
     ]);
 
@@ -707,10 +724,11 @@ export class EventRepository {
   async getAttendance(eventId: string, date: string): Promise<EventAttendance> {
     const sessionDate = assertDate(date);
 
-    const [event] = await this.db.query<{ id: string; sessions: unknown }>(
-      'select id, sessions from event_instances where id = $1',
-      [eventId],
-    );
+    const [event] = await this.db.query<{
+      id: string;
+      sessions: unknown;
+      presbyter_only: boolean;
+    }>('select id, sessions, presbyter_only from event_instances where id = $1', [eventId]);
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
     if (!findSession(event.sessions, sessionDate)) {
       throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
@@ -740,8 +758,9 @@ export class EventRepository {
        from members
        where coalesce(joined_on, created_at::date) <= $1::date
          and archived_at is null
-         and purged_at is null`,
-      [sessionDate],
+         and purged_at is null
+         and ($2::boolean = false or is_presbyter)`,
+      [sessionDate, event.presbyter_only],
     );
 
     return {
@@ -775,8 +794,12 @@ export class EventRepository {
       const [event] = await tx.query<{
         status: string;
         tracks_members: boolean;
+        presbyter_only: boolean;
         sessions: unknown;
-      }>('select status, tracks_members, sessions from event_instances where id = $1', [eventId]);
+      }>(
+        'select status, tracks_members, presbyter_only, sessions from event_instances where id = $1',
+        [eventId],
+      );
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
       if (event.status === 'cancelled' || event.status === 'archived') {
         throw new ConflictError('A cancelled or archived event is read-only');
@@ -803,13 +826,17 @@ export class EventRepository {
         last_name: string | null;
         gender: Gender;
         dob: string | Date | null;
+        is_presbyter: boolean;
       }>(
-        `select id, member_no, first_name, last_name, gender, dob
+        `select id, member_no, first_name, last_name, gender, dob, is_presbyter
          from members
          where lower(member_no) = lower($1) and purged_at is null and archived_at is null`,
         [memberNo],
       );
       if (!member) throw new NotFoundError(`Member ${memberNo} was not found`);
+      if (event.presbyter_only && !member.is_presbyter) {
+        throw new ValidationError('A presbyter-only session accepts only presbyters');
+      }
 
       const [existing] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
         `select id, source
@@ -865,10 +892,10 @@ export class EventRepository {
 
   async deleteAttendance(eventId: string, attendanceId: string, actor: string): Promise<void> {
     await this.db.transaction(async (tx) => {
-      const [event] = await tx.query<{ status: string; sessions: unknown }>(
-        'select status, sessions from event_instances where id = $1',
-        [eventId],
-      );
+      const [event] = await tx.query<{
+        status: string;
+        sessions: unknown;
+      }>('select status, sessions from event_instances where id = $1', [eventId]);
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
       if (event.status === 'cancelled' || event.status === 'archived') {
         throw new ConflictError('A cancelled or archived event is read-only');
@@ -977,6 +1004,7 @@ export class EventRepository {
       status,
       source: row.source as EventSource,
       tracksMembers: row.tracks_members,
+      presbyterOnly: row.presbyter_only,
       sessions,
       offerings,
       stats: { ...emptyOfferingStats(), attachedEvents: offerings.length },

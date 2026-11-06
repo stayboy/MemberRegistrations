@@ -58,8 +58,9 @@ import {
   eventGenerationSchema,
   eventListSchema,
   eventSchema,
-  expectedInputSchema,
-  expectedSchema,
+  headcountInputSchema,
+  headcountListSchema,
+  headcountSchema,
   issueCodeSchema,
   issuedCodeSchema,
   updateEventSchema,
@@ -297,8 +298,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         CodeIssued: toSchema(issuedCodeSchema, 'output'),
         CodeItem: toSchema(codeItemSchema, 'output'),
         CodeList: toSchema(codeListSchema, 'output'),
-        ExpectedHeadcount: toSchema(expectedSchema, 'output'),
-        ExpectedInput: toSchema(expectedInputSchema, 'input'),
+        Headcount: toSchema(headcountSchema, 'output'),
+        HeadcountList: toSchema(headcountListSchema, 'output'),
+        HeadcountInput: toSchema(headcountInputSchema, 'input'),
         Delegation: toSchema(delegationSchema, 'output'),
         DelegationList: toSchema(delegationListSchema, 'output'),
         DelegationInput: toSchema(delegationInputSchema, 'input'),
@@ -1429,7 +1431,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'Attendance report for one event session',
           description:
-            'Lists the stored rows as present and reports expected as the register at the session date. A date outside the event sessions is a validation error.',
+            'Lists the stored rows as present and reports expected as the register-derived roster at the session date. A presbyter-only session roster counts only active presbyters. A date outside the event sessions is a validation error.',
           parameters: [
             {
               name: 'date',
@@ -2466,10 +2468,12 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
-      '/v1/events/{eventId}/expected': {
+      '/v1/events/{eventId}/headcounts': {
         parameters: [idParam('eventId')],
         get: {
-          summary: 'Read the operator expected headcount for one session',
+          summary: 'List one session’s headcount observations',
+          description:
+            'Returns the current non-superseded observation and the full history, newest first by asOf then recordedAt. A superseded observation stays valid for its own asOf. Operator-only and no-store; no member DTO returns a headcount.',
           parameters: [
             {
               name: 'sessionDate',
@@ -2479,26 +2483,38 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             },
           ],
           responses: {
-            200: json(
-              'Headcounts; a missing row is zeros with null recorded fields.',
-              'ExpectedHeadcount',
-            ),
+            200: json('The current observation, or null, and the observations.', 'HeadcountList'),
             401: unauthorized,
             404: notFound,
             422: validation,
           },
         },
-        put: {
-          summary: 'Record or correct the expected headcount for one session',
+        post: {
+          summary: 'Record a headcount observation or correct the current one',
           description:
-            'Each bucket is 0-10000 and the total must not exceed 30000; children is a separate bucket. The response restates the total.',
+            'Without supersedesId this appends an observation with asOf (default now) inside the session day in the event timezone. With supersedesId it corrects the current non-superseded observation of the same session, keeps that observation’s asOf, may change the mode, and leaves the corrected row in history. Each bucket is 0-10000, the total is the sum and at most 30000, all-zero is allowed, and a mode-violating bucket is 422. A second supersede of the same row is 422.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('ExpectedInput') } },
+            content: { 'application/json': { schema: ref('HeadcountInput') } },
           },
           responses: {
-            200: json('The recorded headcount and total.', 'ExpectedHeadcount'),
+            201: json('The recorded observation; Location names it.', 'Headcount'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/headcounts/{headcountId}': {
+        parameters: [idParam('eventId'), idParam('headcountId')],
+        get: {
+          summary: 'Read one headcount observation',
+          description:
+            'Returns the observation named by the Location of a create or correction, including its supersession links. An unknown id, or one belonging to another event, is 404. Operator-only and no-store.',
+          responses: {
+            200: json('The observation with its supersession links.', 'Headcount'),
             401: unauthorized,
             404: notFound,
             422: validation,

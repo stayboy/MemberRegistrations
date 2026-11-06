@@ -254,6 +254,7 @@ describe('GET /v1/events', () => {
       status: 'held',
       source: 'series',
       tracksMembers: true,
+      presbyterOnly: false,
       sessions: [
         {
           date: '2026-01-04',

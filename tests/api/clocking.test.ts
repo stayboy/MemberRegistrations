@@ -175,69 +175,20 @@ describe('delegation', () => {
   });
 });
 
-describe('expected headcount', () => {
-  it('reads zeros before anything is recorded', async () => {
+describe('expected headcount route removal', () => {
+  it('answers 404 for the retired /expected route', async () => {
     const response = await request(app)
       .get(`/v1/events/${eventId}/expected`)
       .query({ sessionDate: sessions.expected })
-      .set(readHeaders)
-      .expect(200);
+      .set(readHeaders);
+    expect(response.status).toBe(404);
 
-    expect(response.body).toEqual({
-      male: 0,
-      female: 0,
-      children: 0,
-      total: 0,
-      recordedBy: null,
-      recordedAt: null,
-    });
-  });
-
-  it('upserts the buckets and restates the total', async () => {
-    const first = await request(app)
+    const write = await request(app)
       .put(`/v1/events/${eventId}/expected`)
       .query({ sessionDate: sessions.expected })
       .set(writeHeaders)
-      .send({ male: 20, female: 30, children: 40 })
-      .expect(200);
-    expect(first.body).toMatchObject({
-      male: 20,
-      female: 30,
-      children: 40,
-      total: 90,
-      recordedBy: 'test-admin',
-    });
-
-    const second = await request(app)
-      .put(`/v1/events/${eventId}/expected`)
-      .query({ sessionDate: sessions.expected })
-      .set(writeHeaders)
-      .send({ male: 1, female: 2, children: 3 })
-      .expect(200);
-    expect(second.body.total).toBe(6);
-
-    const read = await request(app)
-      .get(`/v1/events/${eventId}/expected`)
-      .query({ sessionDate: sessions.expected })
-      .set(readHeaders)
-      .expect(200);
-    expect(read.body).toMatchObject({ male: 1, female: 2, children: 3, total: 6 });
-  });
-
-  it('enforces the per-bucket bounds', async () => {
-    const tooLarge = await request(app)
-      .put(`/v1/events/${eventId}/expected`)
-      .query({ sessionDate: sessions.expected })
-      .set(writeHeaders)
-      .send({ male: 10_001, female: 0, children: 0 });
-    expect(tooLarge.status).toBe(422);
-
-    const negative = await request(app)
-      .put(`/v1/events/${eventId}/expected`)
-      .query({ sessionDate: sessions.expected })
-      .set(writeHeaders)
-      .send({ male: -1, female: 0, children: 0 });
-    expect(negative.status).toBe(422);
+      .send({ male: 20, female: 30, children: 40 });
+    expect(write.status).toBe(404);
   });
 });
 

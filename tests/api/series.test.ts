@@ -36,6 +36,7 @@ describe('series through Drizzle', () => {
       id: expect.any(String),
       name: 'Sunday Service',
       ministry: { code: 'CHOIR', name: 'Choir' },
+      presbyterOnly: false,
       timezone: 'Africa/Lagos',
       description: 'Weekly gathering',
       archivedAt: null,

@@ -21,6 +21,7 @@ import { AuthRepository } from './repos/auth.js';
 import { ClockingRepository } from './repos/clocking.js';
 import { ContributionRepository } from './repos/contributions.js';
 import { EventRepository } from './repos/events.js';
+import { HeadcountRepository } from './repos/headcounts.js';
 import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
 import { RegistrationRequestRepository } from './repos/registration-requests.js';
@@ -86,6 +87,7 @@ export function createApp(options: AppOptions): Express {
   const imports = new ImportRepository(options.db);
   const shepherding = new ShepherdingRepository(options.db);
   const events = new EventRepository(options.db);
+  const headcounts = new HeadcountRepository(options.db);
   const offerings = new OfferingRepository(options.db);
   const visitorPhonePepper = options.visitorPhonePepper ?? DEFAULT_VISITOR_PHONE_PEPPER;
   const contributions = new ContributionRepository(options.db, visitorPhonePepper);
@@ -139,6 +141,7 @@ export function createApp(options: AppOptions): Express {
     pledges,
     paymentGroups,
     events,
+    headcounts,
     attendanceCodes,
     clocking,
     subscriptionProducts,
@@ -224,7 +227,7 @@ export function createApp(options: AppOptions): Express {
   v1.use('/imports', importsRouter(imports));
   // Registered before /events so /events/:eventId/codes reaches this router.
   v1.use(attendanceCodesRouter(attendanceCodes));
-  v1.use('/events', eventsRouter(events, clocking));
+  v1.use('/events', eventsRouter(events, clocking, headcounts));
   v1.use('/registration-requests', registrationRequestsRouter(registrationRequests));
   v1.use('/shepherding', shepherdingRouter(shepherding));
 

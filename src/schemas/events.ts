@@ -63,6 +63,8 @@ export const createEventSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   // False = headcount-only: no per-member attendance, imports, codes or clock-ins.
   tracksMembers: z.boolean().default(true),
+  // Presbyter-only events are hidden on member-facing surfaces and roster the presbyters.
+  presbyterOnly: z.boolean().default(false),
   sessions: z.array(eventSessionInputSchema).min(1),
 });
 
@@ -72,9 +74,9 @@ export const createEventSchema = z.object({
  * it is; `.partial()` alone would keep applying the default.
  */
 export const updateEventSchema = createEventSchema
-  .omit({ eventNo: true, tracksMembers: true })
+  .omit({ eventNo: true, tracksMembers: true, presbyterOnly: true })
   .partial()
-  .extend({ tracksMembers: z.boolean().optional() });
+  .extend({ tracksMembers: z.boolean().optional(), presbyterOnly: z.boolean().optional() });
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
@@ -127,6 +129,8 @@ export const eventSchema = z.object({
   source: z.enum(EVENT_SOURCES),
   /** False = headcount-only; per-member attendance does not apply. */
   tracksMembers: z.boolean(),
+  /** Presbyter-only events are hidden on member-facing surfaces and roster the presbyters. */
+  presbyterOnly: z.boolean(),
   sessions: z.array(eventSessionSchema),
   offerings: z.array(eventOfferingSchema),
   stats: offeringStatsSchema,
@@ -225,34 +229,76 @@ export const codeListSchema = z.object({
   items: z.array(codeItemSchema),
 });
 
-export const expectedQuerySchema = z.object({
+export const sessionDateQuerySchema = z.object({
   sessionDate: dateStringSchema,
 });
 
-export const expectedInputSchema = z
+export const HEADCOUNT_MODES = ['adults', 'children', 'mixed'] as const;
+export type HeadcountMode = (typeof HEADCOUNT_MODES)[number];
+
+const headcountBucketSchema = z.number().int().min(0).max(10_000);
+
+/**
+ * The client sends buckets; `total` is derived by the repository. Mode
+ * consistency (which buckets must be zero) needs the mode and the six buckets
+ * together, so the repository owns that rule and the database repeats it.
+ */
+export const headcountInputSchema = z
   .object({
-    male: z.number().int().min(0).max(10_000),
-    female: z.number().int().min(0).max(10_000),
-    children: z.number().int().min(0).max(10_000),
+    sessionDate: dateStringSchema,
+    mode: z.enum(HEADCOUNT_MODES),
+    adultMale: headcountBucketSchema.default(0),
+    adultFemale: headcountBucketSchema.default(0),
+    adultUnspecified: headcountBucketSchema.default(0),
+    childMale: headcountBucketSchema.default(0),
+    childFemale: headcountBucketSchema.default(0),
+    childUnspecified: headcountBucketSchema.default(0),
+    asOf: z.string().datetime({ offset: true }).optional(),
+    supersedesId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.male + value.female + value.children > 30_000) {
+    const total =
+      value.adultMale +
+      value.adultFemale +
+      value.adultUnspecified +
+      value.childMale +
+      value.childFemale +
+      value.childUnspecified;
+    if (total > 30_000) {
       ctx.addIssue({
         code: 'custom',
-        path: ['children'],
-        message: 'male + female + children must not exceed 30000',
+        path: ['childUnspecified'],
+        message: 'the six buckets must not exceed 30000',
       });
     }
   });
 
-export const expectedSchema = z.object({
-  male: z.number().int(),
-  female: z.number().int(),
-  children: z.number().int(),
+export const headcountSchema = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  sessionDate: z.string(),
+  asOf: z.string(),
+  mode: z.enum(HEADCOUNT_MODES),
+  adultMale: z.number().int(),
+  adultFemale: z.number().int(),
+  adultUnspecified: z.number().int(),
+  childMale: z.number().int(),
+  childFemale: z.number().int(),
+  childUnspecified: z.number().int(),
   total: z.number().int(),
-  recordedBy: z.string().nullable(),
-  recordedAt: z.string().nullable(),
+  recordedBy: z.string(),
+  recordedAt: z.string(),
+  supersedesId: z.string().nullable(),
+  supersededBy: z.string().nullable(),
 });
+
+export const headcountListSchema = z.object({
+  sessionDate: z.string(),
+  current: headcountSchema.nullable(),
+  observations: z.array(headcountSchema),
+});
+
+export type HeadcountInput = z.infer<typeof headcountInputSchema>;
 
 export const delegationInputSchema = z.object({
   fromMemberNo: memberNoParamSchema,

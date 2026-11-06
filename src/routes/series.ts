@@ -26,6 +26,7 @@ export function seriesRouter(repo: SeriesRepository): Router {
       {
         name: input.name,
         ministryCode: input.ministryCode ?? null,
+        presbyterOnly: input.presbyterOnly,
         timezone: input.timezone,
         description: input.description ?? null,
         effectiveFrom: input.schedule.effectiveFrom,

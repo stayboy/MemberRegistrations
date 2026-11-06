@@ -37,6 +37,12 @@ export interface TouchSessionInput {
   expiresAt: string;
 }
 
+/** A provider's gateway session id, scoped to that provider. */
+export interface ExternalSessionKey {
+  provider: string;
+  externalId: string;
+}
+
 function contextFrom(value: unknown): UssdContext {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as UssdContext;
@@ -125,6 +131,31 @@ export class UssdRepository {
       [id],
     );
     return row ? sessionFromRow(row) : null;
+  }
+
+  /**
+   * Re-delivery resolves the gateway's session id to the internal uuid. The
+   * pair is unique only while the external id is present; the internal id
+   * remains the session key everywhere else.
+   */
+  async loadSessionByExternalId(key: ExternalSessionKey): Promise<UssdSessionRow | null> {
+    const [row] = await this.db.query<SessionDbRow>(
+      `select id, phone_hash, member_id, anonymous, state, context, last_input_seq, expires_at
+         from ussd_sessions
+        where provider = $1 and external_id = $2`,
+      [key.provider, key.externalId],
+    );
+    return row ? sessionFromRow(row) : null;
+  }
+
+  /** Attaches the gateway session id to an existing internal session. */
+  async attachExternalId(id: string, key: ExternalSessionKey): Promise<void> {
+    await this.db.query(
+      `update ussd_sessions
+          set provider = $2, external_id = $3, updated_at = now()
+        where id = $1`,
+      [id, key.provider, key.externalId],
+    );
   }
 
   async touchSession(id: string, input: TouchSessionInput): Promise<void> {

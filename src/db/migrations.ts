@@ -936,4 +936,65 @@ alter table members add constraint members_membership_card_no_trimmed
   );
 `,
   },
+  {
+    version: '0016_ussd_headcount_presbytery',
+    sql: `
+-- A provider gateway session id resolves to the internal uuid. Today the only
+-- provider is the HMAC reference entry, so every existing row defaults to
+-- 'hmac'; slice B adds the Nalo adapter against the same pair. The internal id
+-- stays the session key, and the gateway SESSIONID is what re-delivery resolves.
+alter table ussd_sessions add column provider text not null default 'hmac';
+alter table ussd_sessions add column external_id text;
+create unique index ussd_sessions_provider_external_id
+  on ussd_sessions (provider, external_id)
+  where external_id is not null;
+
+-- Presbyter-only events are hidden from non-presbyters on every member-facing
+-- reading surface and their roster is the active presbyter set. An officer's
+-- bearer read sees the whole register. A series flag only
+-- templates future generated instances; existing instances keep their own.
+alter table event_instances add column presbyter_only boolean not null default false;
+alter table event_series add column presbyter_only boolean not null default false;
+
+-- Operator-entered headcounts are append-only observations. A correction is a
+-- new row whose supersedes_id names the row it corrects; the corrected row is
+-- never deleted or rewritten. as_of is validated against the event timezone in
+-- the repository because the database cannot join the event row in a check.
+create table event_session_headcounts (
+  id uuid primary key default gen_random_uuid(),
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  as_of timestamptz not null,
+  mode text not null check (mode in ('adults', 'children', 'mixed')),
+  adult_male integer not null default 0 check (adult_male between 0 and 10000),
+  adult_female integer not null default 0 check (adult_female between 0 and 10000),
+  adult_unspecified integer not null default 0 check (adult_unspecified between 0 and 10000),
+  child_male integer not null default 0 check (child_male between 0 and 10000),
+  child_female integer not null default 0 check (child_female between 0 and 10000),
+  child_unspecified integer not null default 0 check (child_unspecified between 0 and 10000),
+  total integer not null check (total between 0 and 30000),
+  recorded_by text not null,
+  recorded_at timestamptz not null default now(),
+  supersedes_id uuid references event_session_headcounts(id),
+  check (
+    total = adult_male + adult_female + adult_unspecified
+          + child_male + child_female + child_unspecified
+  ),
+  check (
+    (mode = 'adults' and child_male = 0 and child_female = 0 and adult_unspecified = 0)
+    or (mode = 'children' and adult_male = 0 and adult_female = 0 and child_unspecified = 0)
+    or mode = 'mixed'
+  )
+);
+create unique index event_session_headcounts_supersedes
+  on event_session_headcounts (supersedes_id)
+  where supersedes_id is not null;
+create index event_session_headcounts_session
+  on event_session_headcounts (event_instance_id, session_date);
+
+-- The operator's "expected headcount" is retired; the register-derived
+-- expected count is computed from the roster and keeps its wire name.
+drop table event_session_expected;
+`,
+  },
 ];

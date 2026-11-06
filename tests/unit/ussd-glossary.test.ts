@@ -158,7 +158,30 @@ function contextFor(state: (typeof STATES)[number]): UssdContext {
     delegateMemberNo: 'M-1002',
     delegateName: 'Kofi Boateng',
     doneLabel: 'Kofi Boateng',
-    expected: { male: 20, female: 30, children: 40, total: 90 },
+    headcount: {
+      id: 'hc1',
+      mode: 'adults',
+      asOf: '2026-12-12T09:15:00.000Z',
+      total: 90,
+      adultMale: 20,
+      adultFemale: 30,
+      adultUnspecified: 0,
+      childMale: 0,
+      childFemale: 0,
+      childUnspecified: 40,
+    },
+    headcountMode: 'adults',
+    headcountCorrecting: false,
+    headcountPending: {
+      mode: 'adults',
+      adultMale: 20,
+      adultFemale: 30,
+      adultUnspecified: 0,
+      childMale: 0,
+      childFemale: 0,
+      childUnspecified: 40,
+    },
+    headcountTotal: 90,
     requestReference: 'REG-ABCDEF',
     welfareProducts: [1, 2, 3, 4].map((index) => ({
       code: `W-${index}`,
@@ -248,7 +271,13 @@ describe('USSD display glossary', () => {
   it('keeps static menu labels at 16 characters and prompt lines at 60', () => {
     for (const key of GLOSSARY_KEYS) {
       const entry = GLOSSARY[key];
-      if (key.startsWith('menu.') || key.startsWith('nav.') || key.startsWith('action.')) {
+      if (
+        key.startsWith('menu.') ||
+        key.startsWith('nav.') ||
+        key.startsWith('action.') ||
+        key.startsWith('headcount.') ||
+        key === 'status.no_headcount'
+      ) {
         expect(entry.short.length, `${key} short`).toBeLessThanOrEqual(16);
       }
       if (key.startsWith('prompt.')) {
@@ -400,7 +429,7 @@ describe('USSD display glossary', () => {
       name: 'Headcount Rally Service',
       sessionDate: '2026-12-12',
       tracksMembers: false,
-      headcountOnlyExpected: 30000,
+      headcount: 30000,
     }));
     context.activitiesMore = true;
     const rendered = render('activities', context, memberSession, services);
@@ -408,26 +437,135 @@ describe('USSD display glossary', () => {
     expect(rendered.text).toContain('(30000)');
   });
 
-  it('renders both attendance.done variants inside the budget', () => {
+  it('renders the attendance.done clock-in variant inside the budget', () => {
     const clocked = render(
       'attendance.done',
-      { ...contextFor('attendance.done'), expected: undefined },
+      contextFor('attendance.done'),
       memberSession,
       services,
     );
     expect(clocked.text).toContain('Recorded');
     expect(clocked.text).toContain('Kofi Boateng');
     expect(clocked.text.length).toBeLessThanOrEqual(182);
+  });
 
-    const expected = render(
-      'attendance.done',
-      contextFor('attendance.done'),
+  it('renders the headcount screens inside the budget', () => {
+    for (const state of [
+      'attendance.headcount',
+      'attendance.headcount.mode',
+      'attendance.headcount.entry',
+      'attendance.headcount.confirm',
+      'attendance.headcount.done',
+    ] as const) {
+      const rendered = render(state, contextFor(state), memberSession, services);
+      expect(rendered.text.length, `${state}: ${rendered.text}`).toBeLessThanOrEqual(182);
+    }
+    const current = render(
+      'attendance.headcount',
+      contextFor('attendance.headcount'),
       memberSession,
       services,
     );
-    expect(expected.text).toContain('20 Male, 30 Female, 40 Children');
-    expect(expected.text).toContain('90 Expected');
-    expect(expected.text.length).toBeLessThanOrEqual(182);
+    expect(current.text).toContain('Adult service');
+    expect(current.text).toContain('Total 90');
+    expect(current.text).toContain('1 New count');
+    expect(current.text).toContain('2 Correct');
+
+    const mixed = render(
+      'attendance.headcount',
+      {
+        ...contextFor('attendance.headcount'),
+        headcount: {
+          id: 'hc2',
+          mode: 'mixed',
+          asOf: '2026-12-12T23:59:00.000Z',
+          total: 30_000,
+          adultMale: 7_500,
+          adultFemale: 7_500,
+          adultUnspecified: 0,
+          childMale: 7_500,
+          childFemale: 7_500,
+          childUnspecified: 0,
+        },
+      },
+      memberSession,
+      services,
+    );
+    expect(mixed.text).toContain('Mixed service');
+    expect(mixed.text.length).toBeLessThanOrEqual(182);
+  });
+
+  it('pages activities at the channel-declared event size, not a hard-coded three', () => {
+    const context = contextFor('activities');
+    context.activities = Array.from({ length: 5 }, (_, index) => ({
+      id: `p${index}`,
+      name: `Paged Event ${index + 1}`,
+      sessionDate: '2026-12-12',
+      tracksMembers: true,
+    }));
+    context.activitiesMore = false;
+    const narrow: UssdSessionInfo = { ...memberSession, pageSize: { events: 2, offerings: 5 } };
+
+    const rendered = render('activities', context, narrow, services);
+    expect(rendered.text).toContain('1 Paged Event 1');
+    expect(rendered.text).toContain('2 Paged Event 2');
+    expect(rendered.text).not.toContain('3 Paged Event 3');
+    expect(rendered.text).toContain('0 More');
+    expect(rendered.text.length).toBeLessThanOrEqual(182);
+
+    const wide = render('activities', context, memberSession, services);
+    expect(wide.text).toContain('3 Paged Event 3');
+  });
+
+  it('renders the zero-today horizon and the empty week inside the budget', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const shift = (days: number) => {
+      const date = new Date(`${today}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+    const zero = (next: { date: string; count: number } | null) =>
+      render(
+        'activities',
+        {
+          ...contextFor('activities'),
+          activities: [],
+          activitiesDate: today,
+          activitiesNext: next,
+        },
+        memberSession,
+        services,
+      );
+
+    const tomorrow = zero({ date: shift(1), count: 2 });
+    expect(tomorrow.text).toContain('0 events today');
+    expect(tomorrow.text).toContain('2 events tomorrow');
+    expect(tomorrow.text).toContain('1 View');
+    expect(tomorrow.text).toContain('2 This week');
+    expect(tomorrow.text.length).toBeLessThanOrEqual(182);
+
+    const dayTwo = zero({ date: shift(2), count: 2 });
+    expect(dayTwo.text).toContain('2 events in 2 days');
+
+    const dayFourteen = zero({ date: shift(14), count: 1 });
+    expect(dayFourteen.text).toContain('1 event in 14 days');
+    expect(dayFourteen.text.length).toBeLessThanOrEqual(182);
+
+    const dayFifteen = zero(null);
+    expect(dayFifteen.text).toContain('No upcoming events');
+    expect(dayFifteen.text).not.toContain('1 View');
+    expect(dayFifteen.text.length).toBeLessThanOrEqual(182);
+
+    const emptyWeek = render(
+      'activities.week',
+      { ...contextFor('activities.week'), weekActivities: [] },
+      memberSession,
+      services,
+    );
+    expect(emptyWeek.text).toContain('0 events this week');
+    expect(emptyWeek.text).toContain('1 Date');
+    expect(emptyWeek.text).toContain('9 Back');
+    expect(emptyWeek.text.length).toBeLessThanOrEqual(182);
   });
 
   it('uses the short glossary form and dynamic truncation only by kind', () => {

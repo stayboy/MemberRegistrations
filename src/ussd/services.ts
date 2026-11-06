@@ -4,6 +4,7 @@ import { todayIn } from '../domain/series.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventRepository } from '../repos/events.js';
+import type { HeadcountRepository } from '../repos/headcounts.js';
 import type { MemberRepository } from '../repos/members.js';
 import { eventOfferingsFor, type EventOfferingItem } from '../repos/offerings.js';
 import type { OfferingRepository } from '../repos/offerings.js';
@@ -21,9 +22,10 @@ import type {
   MemberPayments,
   UssdActivities,
   UssdActivity,
+  UssdActivityViewer,
   UssdAttendance,
   UssdEvent,
-  UssdExpected,
+  UssdHeadcount,
   UssdMemberContext,
   UssdOffering,
   UssdPledge,
@@ -41,6 +43,7 @@ export interface UssdServiceDeps {
   pledges: PledgeRepository;
   paymentGroups: PaymentGroupRepository;
   events: EventRepository;
+  headcounts: HeadcountRepository;
   attendanceCodes: AttendanceCodeRepository;
   clocking: ClockingRepository;
   subscriptionProducts: SubscriptionProductRepository;
@@ -141,39 +144,105 @@ async function findCurrentEvent(db: Db): Promise<UssdEvent | null> {
   return { id: row.id, name: row.name, sessionDate };
 }
 
+async function memberIdOf(db: Db, memberNo: string | null): Promise<string | null> {
+  if (!memberNo) return null;
+  const [row] = await db.query<{ id: string }>(
+    `select id from members
+      where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+    [memberNo],
+  );
+  return row?.id ?? null;
+}
+
+interface ActivityRow extends Row {
+  id: string;
+  name: string;
+  event_no: string | null;
+  session_date: string | Date;
+  session_start: string | null;
+  tracks_members: boolean;
+}
+
+/**
+ * The applicable sessions in [from, to], ordered date -> priority tier ->
+ * start time -> event number. A general event is tier 2, a presbyter-only
+ * event tier 1, and an event tied to one of the caller's active ministries
+ * tier 0. Anonymous callers see general events only.
+ */
 async function activitiesBetween(
-  events: EventRepository,
-  clocking: ClockingRepository,
+  db: Db,
+  headcounts: HeadcountRepository,
+  viewer: UssdActivityViewer,
   from: string,
   to: string,
+  enrichHeadcount = true,
 ): Promise<UssdActivity[]> {
-  const list = await events.list({ from, to, limit: 100, offset: 0 });
-  const items: Array<{ activity: UssdActivity; startTime: string }> = [];
-  for (const event of list) {
-    for (const session of event.sessions) {
-      if (session.status === 'cancelled') continue;
-      if (session.date < from || session.date > to) continue;
-      const activity: UssdActivity = {
-        id: event.id,
-        name: event.name,
-        sessionDate: session.date,
-        tracksMembers: event.tracksMembers,
-      };
-      if (!event.tracksMembers) {
-        const expected = await clocking.getExpected(event.id, session.date);
-        activity.headcountOnlyExpected = expected.total;
-      }
-      items.push({ activity, startTime: session.startTime ?? event.startTime });
+  const memberId = await memberIdOf(db, viewer.memberNo);
+  const rows = await db.query<ActivityRow>(
+    `select e.id, e.name, e.event_no,
+            (session->>'date')::date as session_date,
+            coalesce(session->>'startTime', e.start_time, '') as session_start,
+            e.tracks_members,
+            case
+              when se.ministry_id is not null and exists (
+                select 1
+                  from member_ministries mm
+                  join ministries mi on mi.id = mm.ministry_id
+                 where mm.member_id = $1::uuid
+                   and mm.ministry_id = se.ministry_id
+                   and mm.assigned_on <= (session->>'date')::date
+                   and mi.active
+              ) then 0
+              when e.presbyter_only then 1
+              else 2
+            end as priority_tier
+       from event_instances e
+       left join event_series se on se.id = e.series_id
+       cross join lateral jsonb_array_elements(e.sessions) session
+      where e.status not in ('cancelled', 'archived')
+        and coalesce(session->>'status', 'scheduled') <> 'cancelled'
+        and (session->>'date')::date between $2::date and $3::date
+        and (not e.presbyter_only or $4::boolean)
+        and (
+          se.id is null
+          or se.ministry_id is null
+          or (
+            $1::uuid is not null
+            and exists (
+              select 1
+                from member_ministries mm
+                join ministries mi on mi.id = mm.ministry_id
+               where mm.member_id = $1::uuid
+                 and mm.ministry_id = se.ministry_id
+                 and mm.assigned_on <= (session->>'date')::date
+                 and mi.active
+            )
+          )
+        )
+      order by (session->>'date')::date,
+               priority_tier,
+               coalesce(session->>'startTime', e.start_time, ''),
+               e.event_no nulls last,
+               e.id`,
+    [memberId, from, to, viewer.isPresbyter],
+  );
+
+  const items: UssdActivity[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    sessionDate: dateOf(row.session_date)!,
+    tracksMembers: row.tracks_members,
+  }));
+
+  if (enrichHeadcount) {
+    // At most one page of headcount reads, matching the screen's row count.
+    for (const item of items.slice(0, Math.max(1, viewer.pageSize))) {
+      if (item.tracksMembers) continue;
+      const current = await headcounts.current(item.id, item.sessionDate);
+      item.headcount = current?.total ?? 0;
     }
   }
-  return items
-    .sort(
-      (a, b) =>
-        a.activity.sessionDate.localeCompare(b.activity.sessionDate) ||
-        a.startTime.localeCompare(b.startTime) ||
-        a.activity.id.localeCompare(b.activity.id),
-    )
-    .map((entry) => entry.activity);
+  return items;
 }
 
 async function requireMemberId(db: Db, memberNo: string): Promise<string> {
@@ -373,14 +442,36 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
         : { isPresbyter: false, presbyterRank: null };
     },
 
-    async activities(date: string): Promise<UssdActivities> {
-      const items = (await activitiesBetween(deps.events, deps.clocking, date, date)).slice(0, 4);
-      const week = await activitiesBetween(deps.events, deps.clocking, date, addDays(date, 6));
-      return { items, moreThisWeek: week.length > items.length };
+    async activities(date: string, viewer: UssdActivityViewer): Promise<UssdActivities> {
+      const items = await activitiesBetween(deps.db, deps.headcounts, viewer, date, date);
+      const week = await activitiesBetween(
+        deps.db,
+        deps.headcounts,
+        viewer,
+        date,
+        addDays(date, 6),
+      );
+      let next: { date: string; count: number } | null = null;
+      if (items.length === 0) {
+        const horizon = await activitiesBetween(
+          deps.db,
+          deps.headcounts,
+          viewer,
+          addDays(date, 1),
+          addDays(date, 14),
+          false,
+        );
+        const first = horizon[0];
+        if (first) {
+          const count = horizon.filter((item) => item.sessionDate === first.sessionDate).length;
+          next = { date: first.sessionDate, count };
+        }
+      }
+      return { items, moreThisWeek: week.length > items.length, next };
     },
 
-    async activitiesWeek(date: string): Promise<UssdActivity[]> {
-      return activitiesBetween(deps.events, deps.clocking, date, addDays(date, 6));
+    async activitiesWeek(date: string, viewer: UssdActivityViewer): Promise<UssdActivity[]> {
+      return activitiesBetween(deps.db, deps.headcounts, viewer, date, addDays(date, 6));
     },
 
     async attendance(memberNo: string, from: string, to: string): Promise<UssdAttendance> {
@@ -479,25 +570,62 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
       return { toMemberNo: delegation.toMemberNo, toName: delegation.toName };
     },
 
-    async recordExpected(input: {
+    async recordHeadcount(input: {
       eventId: string;
       sessionDate: string;
-      male: number;
-      female: number;
-      children: number;
+      mode: 'adults' | 'children';
+      adultMale: number;
+      adultFemale: number;
+      adultUnspecified: number;
+      childMale: number;
+      childFemale: number;
+      childUnspecified: number;
+      supersedesId?: string;
       phoneHash: string;
-    }): Promise<UssdExpected> {
-      const expected = await deps.clocking.recordExpected(
+    }): Promise<UssdHeadcount> {
+      const headcount = await deps.headcounts.record(
         input.eventId,
-        input.sessionDate,
-        { male: input.male, female: input.female, children: input.children },
+        {
+          sessionDate: input.sessionDate,
+          mode: input.mode,
+          adultMale: input.adultMale,
+          adultFemale: input.adultFemale,
+          adultUnspecified: input.adultUnspecified,
+          childMale: input.childMale,
+          childFemale: input.childFemale,
+          childUnspecified: input.childUnspecified,
+          supersedesId: input.supersedesId,
+        },
         `ussd:${input.phoneHash}`,
       );
       return {
-        male: expected.male,
-        female: expected.female,
-        children: expected.children,
-        total: expected.total,
+        id: headcount.id,
+        mode: headcount.mode,
+        asOf: headcount.asOf,
+        total: headcount.total,
+        adultMale: headcount.adultMale,
+        adultFemale: headcount.adultFemale,
+        adultUnspecified: headcount.adultUnspecified,
+        childMale: headcount.childMale,
+        childFemale: headcount.childFemale,
+        childUnspecified: headcount.childUnspecified,
+      };
+    },
+
+    async currentHeadcount(eventId: string, sessionDate: string): Promise<UssdHeadcount | null> {
+      const headcount = await deps.headcounts.current(eventId, sessionDate);
+      if (!headcount) return null;
+      return {
+        id: headcount.id,
+        mode: headcount.mode,
+        asOf: headcount.asOf,
+        total: headcount.total,
+        adultMale: headcount.adultMale,
+        adultFemale: headcount.adultFemale,
+        adultUnspecified: headcount.adultUnspecified,
+        childMale: headcount.childMale,
+        childFemale: headcount.childFemale,
+        childUnspecified: headcount.childUnspecified,
       };
     },
 

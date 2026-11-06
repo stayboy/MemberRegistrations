@@ -9,15 +9,17 @@ import {
   eventAttendanceQuerySchema,
   eventGenerateQuerySchema,
   eventListQuerySchema,
-  expectedInputSchema,
-  expectedQuerySchema,
+  headcountInputSchema,
+  sessionDateQuerySchema,
   updateEventSchema,
 } from '../schemas/events.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventDetail, EventRepository } from '../repos/events.js';
+import type { HeadcountRepository } from '../repos/headcounts.js';
 
 const eventIdSchema = z.string().uuid();
 const attendanceIdSchema = z.string().uuid();
+const headcountIdSchema = z.string().uuid();
 
 /** `If-Match: *` means "any current version"; an absent header skips the check. */
 function expectedEtag(req: Request): string | null {
@@ -32,7 +34,15 @@ function sendEvent(res: Response, detail: EventDetail, status = 200): void {
   res.status(status).json(detail.event);
 }
 
-export function eventsRouter(repo: EventRepository, clocking: ClockingRepository): Router {
+/**
+ * The bearer token is shared by officers and reads the whole register. Member
+ * identity lives on the USSD session, never on this surface.
+ */
+export function eventsRouter(
+  repo: EventRepository,
+  clocking: ClockingRepository,
+  headcounts: HeadcountRepository,
+): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
@@ -85,26 +95,38 @@ export function eventsRouter(repo: EventRepository, clocking: ClockingRepository
     res.status(204).end();
   });
 
-  router.get('/:id/expected', async (req, res) => {
+  router.get('/:id/headcounts', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
-    const { sessionDate } = expectedQuerySchema.parse(req.query);
-    const expected = await clocking.getExpected(id, sessionDate);
+    const { sessionDate } = sessionDateQuerySchema.parse(req.query);
+    const page = await headcounts.get(id, sessionDate);
     res.setHeader('Cache-Control', 'no-store');
-    res.json(expected);
+    res.json(page);
   });
 
-  router.put('/:id/expected', async (req, res) => {
+  router.get('/:id/headcounts/:headcountId', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
-    const { sessionDate } = expectedQuerySchema.parse(req.query);
-    const input = expectedInputSchema.parse(req.body);
-    const expected = await clocking.recordExpected(id, sessionDate, input, actorOf(req));
+    const headcountId = headcountIdSchema.parse(req.params.headcountId);
+    const headcount = await headcounts.getById(id, headcountId);
+    if (!headcount) throw new NotFoundError(`Headcount ${headcountId} was not found`);
     res.setHeader('Cache-Control', 'no-store');
-    res.json(expected);
+    res.json(headcount);
+  });
+
+  router.post('/:id/headcounts', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = headcountInputSchema.parse(req.body);
+    const headcount = await headcounts.record(id, input, actorOf(req));
+    res.setHeader(
+      'Location',
+      `/v1/events/${encodeURIComponent(id)}/headcounts/${encodeURIComponent(headcount.id)}`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(headcount);
   });
 
   router.get('/:id/delegations', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
-    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const { sessionDate } = sessionDateQuerySchema.parse(req.query);
     const page = await clocking.listDelegations(id, sessionDate);
     res.setHeader('Cache-Control', 'no-store');
     res.json(page);
@@ -112,11 +134,12 @@ export function eventsRouter(repo: EventRepository, clocking: ClockingRepository
 
   router.post('/:id/delegations', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
-    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const { sessionDate } = sessionDateQuerySchema.parse(req.query);
     const input = delegationInputSchema.parse(req.body);
     const delegation = await clocking.delegate(
       { eventId: id, sessionDate, ...input },
       actorOf(req),
+      { surface: 'operator' },
     );
     res.setHeader('Cache-Control', 'no-store');
     res.status(201).json(delegation);
