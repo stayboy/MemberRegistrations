@@ -844,31 +844,33 @@ export interface Event {
 
 ### Offerings and giving
 
-| Method       | Path                                                                 | Result                                                   |
-| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------- |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1            |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only           |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)             |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                        |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                 |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences    |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                   |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                        |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                        |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)              | ticket 21  |
-| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)          | ticket 24a |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                        | ticket 21  |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                    | ticket 21  |
-| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                 | ticket 22  |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                 | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                    | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                    | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason             | ticket 22  |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                        | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`          | ticket 24a |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                    |
-| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec | ticket 24a |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                    | ticket 24a |
+| Method       | Path                                                                 | Result                                                         |
+| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1                  |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                 |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)                   |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                              |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                       |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences          |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                         |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                              |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                              |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                    | ticket 21  |
+| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)                | ticket 24a |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                              | ticket 21  |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                          | ticket 21  |
+| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                       | ticket 22  |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                       | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                          | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                          | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason                   | ticket 22  |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                              | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`                | ticket 24a |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                          |
+| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec       | ticket 24a |
+| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry (`USERID` auth, not bearer); see the USSD spec | ticket 24d |
+| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway; refuses in production              | ticket 24d |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                          | ticket 24a |
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
@@ -1019,7 +1021,7 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
 `headcount_only`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
-`officer_required`, `pledge_already_terminal`, `payment_failed`, `code_invalid`, `code_expired`,
+`officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled`, `code_invalid`, `code_expired`,
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
 `registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
 `delegate_required`, `delegation_exists`, `cors_rejected`.
@@ -1049,7 +1051,7 @@ All money is `bigint` minor units plus an ISO currency. History tables are appen
 | `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                        |
 | `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                      |
 | `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                    |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                           | 3-minute idle TTL; no raw phone; defined in the USSD spec                                                                                                                                                                             |
+| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `external_id` (nullable), `last_input_seq`, `expires_at`, timestamps                                                                                                 | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present; defined in the USSD spec                                                                                                      |
 | `ussd_nonces`              | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                            | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                       |
 | `payment_groups`           | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                   | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge); defined in the USSD spec                                                                                    |
 | `payment_intents`          | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                             | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                      |

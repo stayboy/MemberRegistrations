@@ -485,6 +485,97 @@ duplicate: false }`; when the group carries `pledge_id`, the same transaction al
   verified and idempotent by gateway reference. No card data is stored, ever.
 - USSD is disabled in production by configuration until a real aggregator and gateway exist.
 
+### 24d: the operator app, the simulator and provider adapters
+
+**Scope.** This subsection specifies the operator-app simulator and the provider-adapter layer. The
+operator pages themselves — **Codes**, **Registrations**, **Clocking**, **Expected headcounts**,
+**Products** and **Claims** (Complaints once 24e lands) — are scoped in ticket 24d and specified there;
+only their existence as one USSD nav section is fixed here.
+
+**One pipeline, per-provider adapters.** A USSD provider is reached through a thin adapter route. The
+adapter converts the provider's wire format into the internal frame `{ phone, sessionId?, input, seq }`
+— an absent `sessionId` means a fresh session, existing behaviour — runs the **same** session pipeline
+as `POST /ussd/session` (the route handler is factored to expose that pipeline; the session machine,
+glossary, repositories and services are untouched) and converts the internal render `{ sessionId, text,
+done, state, options? }` back into the provider's wire DTO. An adapter is a declaration — `{ id, route,
+authenticator, toFrame, toWire, maxMsgChars }` — not a branch in the machine. Adding provider C is one
+adapter plus one registration; nothing else changes.
+
+- `id` — a stable provider identifier (`nalo`, `hmac`).
+- `route` — the mount path the provider's gateway calls.
+- `authenticator` — verifies the inbound request against configured secrets before any session work; a
+  failure answers `401 unauthorized` and writes nothing.
+- `toFrame` — maps the provider wire to the internal frame.
+- `toWire` — maps the internal render to the provider wire DTO.
+- `maxMsgChars` — the provider's published per-message character cap, overridable in configuration.
+
+**The two adapters.** Two adapters ship: the **Nalo** adapter (below) and the existing **HMAC reference
+adapter** — the current `POST /ussd/session` entry, which authenticates with the HMAC-SHA-256 signature
+over `timestamp + nonce + body` using `USSD_GATEWAY_SECRET` and keeps its nonce replay guard. The
+simulator offers both in a provider dropdown.
+
+**Nalo adapter** (`POST /ussd/nalo`, provider Nalo Solutions). The inbound request is JSON and carries
+`USERID` (the Nalo-issued client id), `MSISDN` (the caller number), `USERDATA` (the keypress/text, at
+most 120 characters, empty or absent on the first request), `MSGTYPE` (a boolean — `true` on a
+first-time request, `false` on a continuation), `NETWORK` and `SESSIONID` (the gateway session id,
+reliably present). There is no signature and no HMAC; trust is the configured `USERID` alone, and no
+shared-secret header is invented.
+
+- **Authentication.** `USERID` is matched against the configured `USSD_NALO_USER_ID` (1–32 characters,
+  dev default `NALOTest`, production required and must differ from the default; this is a client
+  identifier, not a secret, so it does not use the `.min(16)` secret rule). A mismatch answers `401
+unauthorized`; a malformed body answers `422 validation_error`; neither writes anything.
+- **To the internal frame.** `MSISDN` becomes `phone` (normalised); `USERDATA` becomes `input`;
+  `MSGTYPE` becomes the fresh/continue signal (`true` → no `sessionId`; `false` → the resolved session).
+  `USERDATA` longer than the pipeline's 64-character input cap is `422 validation_error` — a documented
+  narrowing of Nalo's 120-character allowance. Nalo sends no frame counter, so the adapter assigns the
+  next sequence number from the stored session counter.
+- **Session correlation.** The gateway `SESSIONID` is the session's identity. Migration `0016` adds
+  `ussd_sessions.external_id` (`text`, partial unique when present); the adapter stores the gateway id
+  there on the first frame and resolves it to the internal uuid on continuations, so replay and
+  duplicate semantics match the gateway. The response omits `SESSIONID` exactly as the provider
+  documents; the gateway correlates server-side.
+- **Re-delivery.** Nalo's frames carry no counter, so the pipeline's `seq` replay guard cannot
+  distinguish a gateway re-delivery from a repeated keypress. Each continuation advances exactly once.
+  A re-delivered money commit is still safe: the pending commit key is created when the confirmation
+  screen is rendered and stored in the session context, so every Accept frame for that confirmation
+  reuses the same key and returns the same payment group. A re-delivered non-money frame may advance
+  one screen; this provider limitation is documented, not papered over.
+- **To the wire.** The response is JSON and carries `USERID` (echo, mandatory), `MSISDN` (optional
+  echo), `MSG` (mandatory) and `MSGTYPE` (boolean). `MSG` is the internal `text` truncated to
+  `maxMsgChars` (Nalo publishes 120) with `…` when it is longer. `MSGTYPE` is `!done`: `true` keeps the
+  session open, `false` releases it.
+
+**Message limits and truncation.** The machine renders to the internal budget (menu label ≤ 16, prompt
+line ≤ 60, screen ≤ 182 including the footer) and is unaware of any provider cap. An adapter truncates
+its `MSG` to its own `maxMsgChars` with `…` **only** when the cap is smaller than the rendered text; a
+screen within the internal budget passes through unchanged. Nalo's published cap is 120, overridable by
+`USSD_NALO_MAX_MSG_CHARS` (integer 1–182, default 120). The simulator shows the real truncation, not an
+idealised one.
+
+**`POST /dev/ussd/session` — the dev-only gateway.** This entry plays the gateway for the simulator. Its
+request is `{ provider: 'nalo' | 'hmac', phone, input, sessionId? }`, where `sessionId` is the value the
+previous response returned (omitted on the first frame); its response is `{ provider, sessionId, text,
+done, state, wire }`, where `wire` is the exact provider wire object the adapter produced (for Nalo
+`{ USERID, MSISDN?, MSG, MSGTYPE }`; for the HMAC adapter the canonical render the signed entry
+returns). It builds the provider wire **server-side** — a fresh HMAC timestamp and nonce per forwarded
+frame, or the Nalo JSON — forwards to the matching provider route, and does not rewrite the route's
+status: `401`, `422`, `429` and `503 ussd_disabled` propagate as the same problem+json. It refuses
+whenever `NODE_ENV=production`, independent of the `USSD_ENABLED` switch. The gateway secret is never
+sent to the browser.
+
+**Production off-switch.** Every provider route sits behind `USSD_ENABLED`, which defaults to `false`;
+when off the route answers `503 ussd_disabled` and writes nothing. USSD is forced off in production
+until a real aggregator contract exists. `POST /dev/ussd/session` additionally refuses in production as
+above. Both gates are tested.
+
+**The Simulator page.** A dev-only page in the operator app offers a provider dropdown (Nalo, HMAC
+reference) and a handset-style display. It posts each keypress to `POST /dev/ussd/session`, renders the
+returned screen text as a caller would see it — including the provider's real truncation — and exposes
+the stub payment gateway's callback so a commit can be completed end to end. It drives the real adapters
+and the real session pipeline; it is never a mock for acceptance. The static `mockups/ussd` simulator
+remains a review artifact.
+
 ## Data model additions
 
 | Table / column                    | Shape                                                                                                                                                                                                                                                                | Constraints                                                                                                                       |
@@ -492,7 +583,7 @@ duplicate: false }`; when the group carries `pledge_id`, the same transaction al
 | `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                   | admin-set; requires `is_presbyter`                                                                                                |
 | `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                                                                                                 |
 | `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                                                                                                 |
-| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `last_input_seq`, `expires_at`, timestamps                                                                                                                                          | 3-minute idle TTL; no raw phone                                                                                                   |
+| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `external_id` nullable, `last_input_seq`, `expires_at`, timestamps                                                                                                                  | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present                            |
 | `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                         | replay guard; pruned after 10 minutes                                                                                             |
 | `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                                                                                                        |
 | `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                                                                                                          |
@@ -522,7 +613,11 @@ duplicate: false }`; when the group carries `pledge_id`, the same transaction al
   reused, but the new operations get their own bearer-route seams: the payment-group commit (split
   contributions plus one intent), pledge settlement, the windowed member attendance and payment
   summaries, and the profile aggregate. Code redemption and registration-request creation stay inside
-  `POST /ussd/session`. The gateway callback is a new signature-verified seam at
+  `POST /ussd/session`. The 24d provider routes (`POST /ussd/nalo`) and the dev-only
+  `POST /dev/ussd/session` are tested through the real app: the Nalo wire in and out, the `USSD_ENABLED`
+  `503 ussd_disabled` gate, the production refusal, `maxMsgChars` truncation at the exact cap, the
+  `external_id` mapping, and a re-delivered Accept returning the same group. The gateway callback is a
+  new signature-verified seam at
   `/v1/payments/callback` with its own idempotency tests. Code issuance/void, registration
   approval/rejection, delegation, expected counts and claims are bearer-protected admin seams, tested
   there.
@@ -575,6 +670,18 @@ duplicate: false }`; when the group carries `pledge_id`, the same transaction al
 
 ## Change log
 
+- 2026-11-05: the provider-adapter layer is settled. USSD is served through per-provider thin adapter
+  routes behind a declaration contract (`{ id, route, authenticator, toFrame, toWire, maxMsgChars }`);
+  the Nalo adapter maps the Nalo Solutions wire (`USERID`-only auth against `USSD_NALO_USER_ID`,
+  `MSGTYPE`/`SESSIONID` session correlation, `MSG` ← `text` with `MSGTYPE` ← `!done`) and the existing
+  HMAC entry is the reference adapter. Migration `0016` adds `ussd_sessions.external_id` so the gateway
+  session id is the session identity; the internal uuid stays the pipeline key. The machine renders to
+  the internal budget and each adapter truncates to its own `maxMsgChars` (Nalo 120 via
+  `USSD_NALO_MAX_MSG_CHARS`, config-overridable) with `…`. Each Nalo continuation advances once — there
+  is no frame counter to replay-guard — while a re-delivered money commit reuses the per-confirmation
+  key stored in the session context, so it cannot double-charge. Provider routes sit behind
+  `USSD_ENABLED` (default off → `503 ussd_disabled`, no writes), and `/dev/ussd/session` refuses in
+  production; the gateway secret never reaches the browser.
 - 2026-11-05: Activities pages at most four events plus `0 More` (the fifth is reachable through More),
   because the screen also carries a headcount-only event's expected total inside the 182-character
   budget. This narrows the earlier "at most five" wording for the Activities list only; event and
