@@ -14,6 +14,13 @@
 
 ## Change log
 
+- 2026-11-05: the operator's "expected headcount" becomes a **headcount** — an actual count, never an
+  expected figure — recorded append-only in `event_session_headcounts` with a `mode`, six gender
+  buckets, `total`, `asOf` and `supersedesId`; a correction supersedes without deleting. The
+  register-derived `expected` keeps its wire name and is labelled **Roster**. `GET`/`POST
+/v1/events/{eventId}/headcounts` replace `GET`/`PUT …/expected` (the old route is removed in 24d).
+  `presbyterOnly` is added to events and series, and a presbyter-only session's roster is the active
+  presbyters. Everything lands in 24d, extending migration 0016; 24c is unaffected and 24e stays 0017.
 - 2026-11-05: 24b adds the attendance/code/registration/clocking/expected/profile seams listed in
   **USSD attendance, codes and clocking (24b)**, and `presbyterRank` on `MemberDetail` (positive
   integer, valid only with `isPresbyter`, cleared with the flag).
@@ -408,7 +415,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 
 ### EventSeries
 
-`{ id, name, ministryId?, timezone, description?, archivedAt? }`
+`{ id, name, ministryId?, presbyterOnly, timezone, description?, archivedAt? }`
 
 - `description` carries free text such as the service time.
 - `timezone` is an optional IANA override used only to decide what "today" means for that series. It
@@ -420,10 +427,12 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
   — the end date is the `endsOn` column.
 - `series_exception(date, kind: cancelled | extra)` records a cancelled service or a one-off extra.
 - Archived, never deleted.
+- `presbyterOnly` (boolean, default false) templates generated instances; a presbyter-only series is
+  hidden from non-presbyters on every reading surface.
 
 ### Event instance
 
-`{ id, eventNo?, name, seriesId?, ministryCode?, timezone, startDate, endDate, startTime, endTime?, venueType, venueName?, description?, status, source, sessions }`
+`{ id, eventNo?, name, seriesId?, ministryCode?, presbyterOnly, timezone, startDate, endDate, startTime, endTime?, venueType, venueName?, description?, status, source, sessions }`
 
 - An **event instance** is one dated event. It is generated from a series occurrence (`source = series`,
   `seriesId` set) or created directly (`source = manual`, `seriesId` null). The Strategic Conference is
@@ -436,7 +445,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
   conference has three sessions on one row; there is no child table.
 - `status` is `draft | scheduled | held | cancelled | archived`. Transitions use UTC. A cancelled or
   archived event is read-only.
-- A generated event inherits the series name, ministry, timezone and default venue; an explicit
+- A generated event inherits the series name, ministry, timezone, `presbyterOnly` and default venue; an explicit
   override is allowed.
 - Generation runs over a `from`/`to` window for every non-archived series. A generated event is
   single-session (its occurrence date), `source = series`, `startTime '00:00'`, `venueType
@@ -445,6 +454,9 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
   attendance import can target an instance created by a manual attendance entry.
 - `event_instances` is the evolved `event_occurrences` table: the primary key moves from
   `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
+- `presbyterOnly` (boolean, default false) is inherited by a series-generated instance from its series
+  template and set directly on a manual event. Non-presbyters never see or open a presbyter-only event;
+  the roster (register-derived `expected`) for a presbyter-only session is the active presbyters.
 
 ### Occurrences and attendance
 
@@ -488,6 +500,14 @@ unique on `(eventInstanceId, sessionDate, memberId)`.
   denominator per day.
 - A manual `POST` over an imported row for the same key converts it to `source: manual`; a second
   manual post is `409`. `DELETE` removes a manual row and writes a suppression for an imported row.
+- The report's three meanings stay separate: `present` (per-member attendance rows), `expected` (the
+  register-derived **Roster**), and the **headcount** (the latest non-superseded observation from
+  `/headcounts`). The report never merges them; `expected` keeps its wire name and is labelled
+  **Roster** on the reading surfaces. For a presbyter-only session the roster counts only active
+  presbyters. A headcount is never derived from `present` or `expected`, and never feeds either.
+- The operator's **headcount** is actual counted attendance at a moment, recorded by mode (`adults`,
+  `children` or `mixed`); see **Headcounts** in the USSD attendance subsection. `event_session_headcounts` is
+  append-only and a correction supersedes the earlier observation.
 
 The member-and-series count is unchanged; each held session counts once:
 
@@ -506,18 +526,19 @@ Extras count when held; cancellations do not.
 The USSD session owns the menu; these are the bearer seams behind it. All writes require `X-Actor-Id`
 and are `no-store` on read.
 
-| Method       | Path                                                   | Result                                                            |
-| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------- |
-| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once  |
-| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                  |
-| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                |
-| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                |
-| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path |
-| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                              |
-| `GET`/`PUT`  | `/v1/events/{eventId}/expected?sessionDate`            | Read or record `male`, `female`, `children` for one session       |
-| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                              |
-| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows              |
-| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity          |
+| Method       | Path                                                   | Result                                                               |
+| ------------ | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once     |
+| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                     |
+| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                   |
+| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                   |
+| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path    |
+| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                 |
+| `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`) |
+| `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation; `201` the observation                |
+| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                 |
+| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                 |
+| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity             |
 
 - **Codes.** `POST` body `{ purpose: 'attendance_punch' | 'registration', sessionDate }`. The code is
   six digits from a CSPRNG, valid for 15 minutes, single use, bound to that event session and stored
@@ -532,7 +553,7 @@ and are `no-store` on read.
   second use is `409 code_used`.
 - **Redemption and creation seam.** Code redemption and registration-request creation happen **inside
   `POST /ussd/session`**, through repository methods; there is no bearer route for either. The bearer
-  seams are issuance/void/list, request list/approve/reject, delegation, expected headcounts, the
+  seams are issuance/void/list, request list/approve/reject, delegation, headcounts, the
   attendance summary and the profile.
 - **Registration requests.** A request is `pending | approved | rejected`. `POST
 /v1/registration-requests/{id}/approve` takes only the immutable `memberNo`; the request's first and
@@ -556,11 +577,30 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   delegation ends with the session; `ended_at` stays null in V3 and "active" is derived from the session
   date, with no explicit end route. Errors: `not_shepherd`, `not_senior_presbyter`, `delegate_required`,
   `delegation_exists`.
-- **Expected headcounts.** `PUT` body `{ male, female, children }`, each an integer from 0 to 10,000
-  (total at most 30,000); `children` is a separate bucket. The response restates `{ male, female,
-children, total, recordedBy, recordedAt }`. This is the operator's expected headcount, kept separate
-  from the register-derived `expected` in the attendance report. Activities reads it for a headcount-only
-  event through the same `GET`; at most five events are shown, so at most five reads.
+- **Headcounts.** A headcount is an actual count taken at a moment, never an "expected" figure. A
+  presbyter or admin records it per session, append-only, in `event_session_headcounts`; each
+  observation carries a `mode` (`adults` | `children` | `mixed`), six buckets, a `total`, an `asOf`
+  timestamp and the recorder. The register-derived `expected` is a separate thing, labelled **Roster**
+  on the reading surfaces, and a headcount never derives from or feeds it.
+  `GET /v1/events/{eventId}/headcounts?sessionDate` returns
+  `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
+  first, `no-store`; `current` is the newest non-superseded observation (by `asOf`, then
+  `recordedAt`), and `observations` keeps the superseded history. `Headcount` is
+  `{ id, eventId, sessionDate, asOf, mode, adultMale, adultFemale, adultUnspecified, childMale,
+childFemale, childUnspecified, total, recordedBy, recordedAt, supersedesId }`. `POST` body
+  `{ sessionDate, asOf?, mode, adultMale?, adultFemale?, adultUnspecified?, childMale?, childFemale?,
+childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row, defaults to now and
+  must fall within the session's calendar day in the event timezone. Mode validation: `adults` splits
+  adult male/female, sets `adultUnspecified` to 0 and counts children as one `childUnspecified` (both
+  child gender buckets 0); `children` splits child male/female, sets `childUnspecified` to 0 and counts
+  adults as one `adultUnspecified` (both adult gender buckets 0); `mixed` splits both, with both
+  unspecified buckets 0; `total` is the sum of the six buckets.
+  **Correction is allowed, never deletion:** a correction is a new observation whose `supersedesId`
+  names the row it corrects; that row stays in history marked superseded. Errors: malformed counts or
+  a mode-violating bucket, an out-of-day `asOf`, or a `supersedesId` that is unknown, already
+  superseded or from another session — `422 validation_error`; unknown event or session — `404
+not_found`. Activities reads the current headcount for a headcount-only event through the same
+  `GET`; at most three events are shown, so at most three reads. These routes and the table are the 2026-11-05 headcount correction, delivered by 24d; they sit beside the 24b attendance seam and replace its `/expected` route.
 - **Attendance summary.** Returns `{ from, to, attended, expected, events: [{ eventId, name,
 sessionDate }] }`: `events` lists the member's attended rows in the window newest first, never
   fabricated absences; `expected` is the number of held member-trackable sessions that apply to the
@@ -1039,31 +1079,33 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 All money is `bigint` minor units plus an ISO currency. History tables are append-only.
 `event_instances` is the evolved `event_occurrences`; the attendance rows move with it.
 
-| Table                      | Key fields                                                                                                                                                                                                                                              | Constraints                                                                                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`, `venue_name`, `description`, `status`, `source`, `tracks_members`, `sessions` (JSONB), timestamps                       | unique `event_no` (nullable until ticket 11 assigns one); end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` is headcount-only; ministry is the series' ministry, so a standalone event is general |
-| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source`, `import_batch_id`                                                                                                                                                                     | unique `(event_instance_id, session_date, member_id)`; session date in sessions                                                                                                                                                       |
-| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                        |
-| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by` | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                           |
-| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null                                                                       |
-| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                    |
-| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                        |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                        |
-| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                      |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                    |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `external_id` (nullable), `last_input_seq`, `expires_at`, timestamps                                                                                                 | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present; defined in the USSD spec                                                                                                      |
-| `ussd_nonces`              | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                            | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                       |
-| `payment_groups`           | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                   | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge); defined in the USSD spec                                                                                    |
-| `payment_intents`          | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                             | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                      |
-| `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                                                                                      |
-| `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                                                                                                 |
-| `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                                                                                                   |
-| `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                        | atomic upsert; no in-memory authority                                                                                                                                                                                                 |
+| Table                      | Key fields                                                                                                                                                                                                                                              | Constraints                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`, `venue_name`, `description`, `status`, `source`, `tracks_members`, `presbyter_only`, `sessions` (JSONB), timestamps     | unique `event_no` (nullable until ticket 11 assigns one); end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` is headcount-only; `presbyter_only` hides the event from non-presbyters and scopes its roster to active presbyters; ministry is the series' ministry, so a standalone event is general |
+| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source`, `import_batch_id`                                                                                                                                                                     | unique `(event_instance_id, session_date, member_id)`; session date in sessions                                                                                                                                                                                                                                                        |
+| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                                                         |
+| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by` | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                                                            |
+| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null                                                                                                                                                                        |
+| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                                                                                                                     |
+| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                                                                                                                         |
+| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                                                                                                                         |
+| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                                                       |
+| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                                                                     |
+| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `external_id` (nullable), `last_input_seq`, `expires_at`, timestamps                                                                                                 | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present; defined in the USSD spec                                                                                                                                                                                                       |
+| `ussd_nonces`              | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                            | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                                                                                                                        |
+| `payment_groups`           | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                   | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge); defined in the USSD spec                                                                                                                                                                                     |
+| `payment_intents`          | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                             | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                                                                                                                       |
+| `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                                                                                                                                                                                       |
+| `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                                                                                                                                                                                                  |
+| `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                                                                                                                                                                                                    |
+| `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                        | atomic upsert; no in-memory authority                                                                                                                                                                                                                                                                                                  |
 
 The 24b and 24c tables (`attendance_codes`, `registration_requests`, `clocking_delegations`,
-`event_session_expected`, `subscription_products`, `subscription_payments`, `subscription_claims`) and
-the `members.presbyter_rank`, `membership_card_no` and `verified_at` columns are defined in the USSD
-spec and migrations 0014/0015.
+`subscription_products`, `subscription_payments`, `subscription_claims`) and the
+`members.presbyter_rank`, `membership_card_no` and `verified_at` columns are defined in the USSD spec
+and migrations 0014/0015. The 24d correction adds `event_session_headcounts`, `presbyter_only` on
+`event_instances` and `event_series`, and `ussd_sessions.external_id` in migration 0016, defined in the
+USSD spec.
 
 ## Acceptance Criteria
 
