@@ -106,3 +106,7 @@ recording this round as Tier 2.
 - **README `curl` continuation.** The magic-link example keeps the shell `\` continuation used by the
   README's existing blocks; it is not copy-paste-safe in PowerShell, but consistency with the file
   won over a one-line variant.
+- **Pre-commit hook bypassed on the commit.** `.githooks/pre-commit` runs `verify:fast`; the hook hit
+  the Windows fork-pool crash twice with no failing assertion, so after the single allowed retry the
+  commit was made with `--no-verify` and the PR's `verify` job is the gate. §7 permits the bypass; it
+  is recorded here rather than left implicit.
