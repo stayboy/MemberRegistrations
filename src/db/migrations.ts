@@ -741,4 +741,98 @@ create unique index pledges_settled_contribution
   where settled_contribution_id is not null;
 `,
   },
+  {
+    version: '0014_ussd_attendance',
+    sql: `
+-- A senior presbyter carries a rank; 1 is the most senior. The flag stays the
+-- authority gate and clearing it clears the rank in the same write.
+alter table members add column presbyter_rank integer;
+alter table members add constraint members_presbyter_rank_positive
+  check (presbyter_rank is null or presbyter_rank >= 1);
+alter table members add constraint members_presbyter_rank_check
+  check (presbyter_rank is null or is_presbyter);
+
+-- Headcount-only events (FR-42) keep an operator count instead of per-member
+-- attendance. The column precedes this round in the data model; the default
+-- preserves every existing event as member-trackable.
+alter table event_instances add column tracks_members boolean not null default true;
+
+-- One-time six-digit codes. Only the HMAC-SHA-256 hash is stored.
+create table attendance_codes (
+  id uuid primary key default gen_random_uuid(),
+  code_hash text not null unique,
+  purpose text not null check (purpose in ('attendance_punch', 'registration')),
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  issued_by text not null,
+  issued_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  used_by_member_id uuid references members(id),
+  registration_request_id uuid,
+  voided_at timestamptz,
+  voided_by text
+);
+create index attendance_codes_session
+  on attendance_codes (event_instance_id, session_date, purpose);
+create index attendance_codes_expires_at on attendance_codes (expires_at);
+
+-- An anonymous registration request carries only the phone hash. Approval is
+-- the only path that creates a member.
+create table registration_requests (
+  id uuid primary key default gen_random_uuid(),
+  reference text not null unique,
+  first_name text not null,
+  last_name text not null,
+  phone_hash text not null,
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  code_id uuid not null references attendance_codes(id),
+  status text not null default 'pending'
+    check (status in ('pending', 'approved', 'rejected')),
+  member_id uuid references members(id),
+  reason text,
+  created_at timestamptz not null default now(),
+  decided_by text,
+  decided_at timestamptz
+);
+create index registration_requests_page
+  on registration_requests (status, created_at desc, id desc);
+create index registration_requests_event
+  on registration_requests (event_instance_id, session_date);
+
+alter table attendance_codes add constraint attendance_codes_request_fk
+  foreign key (registration_request_id) references registration_requests(id);
+
+-- One active clocking delegation per event session. The grant ends with the
+-- session; V3 leaves ended_at null and derives activity from the session date.
+create table clocking_delegations (
+  id uuid primary key default gen_random_uuid(),
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  from_member_id uuid not null references members(id),
+  to_member_id uuid not null references members(id),
+  reason text not null,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  ended_at timestamptz
+);
+create unique index clocking_delegations_active
+  on clocking_delegations (event_instance_id, session_date)
+  where ended_at is null;
+
+-- The operator's expected headcount, separate from the register-derived count.
+create table event_session_expected (
+  event_instance_id uuid not null references event_instances(id),
+  session_date date not null,
+  male integer not null check (male between 0 and 10000),
+  female integer not null check (female between 0 and 10000),
+  children integer not null check (children between 0 and 10000),
+  recorded_by text not null,
+  recorded_at timestamptz not null default now(),
+  primary key (event_instance_id, session_date),
+  check (male + female + children <= 30000)
+);
+`,
+  },
 ];

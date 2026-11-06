@@ -15,9 +15,11 @@ import {
   contactInputSchema,
   contactResponseSchema,
   createMemberSchema,
+  memberAttendanceWindowSchema,
   memberContributionsSummarySchema,
   memberDetailSchema,
   memberListSchema,
+  memberProfileSchema,
   memberSummarySchema,
   purgeSchema,
   relationshipInputSchema,
@@ -44,15 +46,31 @@ import {
   memberImportSchema,
 } from './schemas/imports.js';
 import {
+  codeItemSchema,
+  codeListSchema,
   createEventSchema,
+  delegationInputSchema,
+  delegationListSchema,
+  delegationSchema,
   eventAttendanceEntrySchema,
   eventAttendanceInputSchema,
   eventAttendanceSchema,
   eventGenerationSchema,
   eventListSchema,
   eventSchema,
+  expectedInputSchema,
+  expectedSchema,
+  issueCodeSchema,
+  issuedCodeSchema,
   updateEventSchema,
+  voidCodeSchema,
 } from './schemas/events.js';
+import {
+  registrationApproveSchema,
+  registrationRejectSchema,
+  registrationRequestListSchema,
+  registrationRequestSchema,
+} from './schemas/registration-requests.js';
 import {
   attachSchema,
   exceptionInputSchema,
@@ -208,6 +226,8 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         MemberDetail: toSchema(memberDetailSchema, 'output'),
         MemberList: toSchema(memberListSchema, 'output'),
         MemberContributionsSummary: toSchema(memberContributionsSummarySchema, 'output'),
+        MemberAttendanceWindow: toSchema(memberAttendanceWindowSchema, 'output'),
+        MemberProfile: toSchema(memberProfileSchema, 'output'),
         CreateMember: toSchema(createMemberSchema, 'input'),
         UpdateMember: toSchema(updateMemberSchema, 'input'),
         PurgeMember: toSchema(purgeSchema, 'input'),
@@ -238,6 +258,20 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventAttendance: toSchema(eventAttendanceSchema, 'output'),
         EventAttendanceEntry: toSchema(eventAttendanceEntrySchema, 'output'),
         EventAttendanceInput: toSchema(eventAttendanceInputSchema, 'input'),
+        CodeIssue: toSchema(issueCodeSchema, 'input'),
+        CodeVoid: toSchema(voidCodeSchema, 'input'),
+        CodeIssued: toSchema(issuedCodeSchema, 'output'),
+        CodeItem: toSchema(codeItemSchema, 'output'),
+        CodeList: toSchema(codeListSchema, 'output'),
+        ExpectedHeadcount: toSchema(expectedSchema, 'output'),
+        ExpectedInput: toSchema(expectedInputSchema, 'input'),
+        Delegation: toSchema(delegationSchema, 'output'),
+        DelegationList: toSchema(delegationListSchema, 'output'),
+        DelegationInput: toSchema(delegationInputSchema, 'input'),
+        RegistrationRequest: toSchema(registrationRequestSchema, 'output'),
+        RegistrationRequestList: toSchema(registrationRequestListSchema, 'output'),
+        RegistrationApprove: toSchema(registrationApproveSchema, 'input'),
+        RegistrationReject: toSchema(registrationRejectSchema, 'input'),
         OfferingTerms: toSchema(termsSchema, 'output'),
         Offering: toSchema(offeringSchema, 'output'),
         OfferingList: toSchema(offeringListSchema, 'output'),
@@ -2048,6 +2082,262 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: "A member's shepherd, assignment history and calls",
           responses: {
             200: json('Current shepherd, history, counts and recent calls.', 'MemberShepherding'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/codes': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'List the session codes without the plain value',
+          parameters: [
+            {
+              name: 'sessionDate',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            {
+              name: 'status',
+              in: 'query',
+              schema: { type: 'string', enum: ['active', 'used', 'expired', 'voided'] },
+            },
+          ],
+          responses: {
+            200: json('Codes for the session, newest first.', 'CodeList'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Issue a six-digit single-use code for one session',
+          description:
+            'The plain code appears only in the 201 response; only its HMAC-SHA-256 hash under USSD_CODE_PEPPER is stored. The code expires after 15 minutes.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CodeIssue') } },
+          },
+          responses: {
+            201: json('The issued code, shown once.', 'CodeIssued'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/codes/{id}/void': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Void an unused, unexpired code',
+          description: 'A second void, or a used or expired code, is 409.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: false,
+            content: { 'application/json': { schema: ref('CodeVoid') } },
+          },
+          responses: {
+            200: json('The voided code.', 'CodeItem'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/registration-requests': {
+        get: {
+          summary: 'List anonymous registration requests',
+          description:
+            'Requests carry only the one-way phone hash, never the raw phone. Responses carry Cache-Control: no-store.',
+          parameters: [
+            {
+              name: 'status',
+              in: 'query',
+              schema: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+            },
+            { name: 'eventId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+            { name: 'sessionDate', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('Requests, newest first.', 'RegistrationRequestList'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/registration-requests/{id}': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Read one registration request',
+          responses: {
+            200: json('The request and its decision.', 'RegistrationRequest'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/registration-requests/{id}/approve': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Approve a request and create the member',
+          description:
+            'The request names seed the ordinary member create path; gender is undisclosed, joinedOn is today in UTC and no contacts are written. A decided request, including a second approval, is 409 registration_not_pending.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RegistrationApprove') } },
+          },
+          responses: {
+            200: json('The approved request linked to the member.', 'RegistrationRequest'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/registration-requests/{id}/reject': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Reject a request without creating a member',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RegistrationReject') } },
+          },
+          responses: {
+            200: json('The rejected request with its reason.', 'RegistrationRequest'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/expected': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'Read the operator expected headcount for one session',
+          parameters: [
+            {
+              name: 'sessionDate',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            200: json(
+              'Headcounts; a missing row is zeros with null recorded fields.',
+              'ExpectedHeadcount',
+            ),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        put: {
+          summary: 'Record or correct the expected headcount for one session',
+          description:
+            'Each bucket is 0-10000 and the total must not exceed 30000; children is a separate bucket. The response restates the total.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ExpectedInput') } },
+          },
+          responses: {
+            200: json('The recorded headcount and total.', 'ExpectedHeadcount'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/delegations': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'List the active clocking delegation for a session',
+          parameters: [
+            {
+              name: 'sessionDate',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            200: json('Active delegations.', 'DelegationList'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Delegate clocking duty for one session',
+          description:
+            'The grantor must be an active senior presbyter and the delegate an active presbyter; one active delegation exists per session.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('DelegationInput') } },
+          },
+          responses: {
+            201: json('The delegation.', 'Delegation'),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/attendance/summary': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'Windowed attendance over held sessions that apply to the member',
+          description:
+            'Counts held, member-trackable, general and member-ministry sessions in the window with the join-date and ministry-assignment floors. `events` lists attended rows only, newest first; absences are never fabricated. Responses carry Cache-Control: no-store.',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json(
+              'Attended count, expected count and attended event rows.',
+              'MemberAttendanceWindow',
+            ),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/profile': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'Identity, ministries, shepherd and attendance regularity',
+          description:
+            'Regularity uses the last five held scoped sessions ending today, the join-date and ministry-assignment floors, and fewer than three sessions is not_enough_data. Responses carry Cache-Control: no-store.',
+          responses: {
+            200: json('The profile aggregate.', 'MemberProfile'),
             401: unauthorized,
             404: notFound,
           },

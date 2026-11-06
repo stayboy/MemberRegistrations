@@ -16,11 +16,14 @@ import {
 import { errorHandler, notFoundHandler, sendProblem } from './errors/problem.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { StubPaymentGateway, type PaymentGateway } from './payments/gateway.js';
+import { AttendanceCodeRepository } from './repos/attendance-codes.js';
 import { AuthRepository } from './repos/auth.js';
+import { ClockingRepository } from './repos/clocking.js';
 import { ContributionRepository } from './repos/contributions.js';
 import { EventRepository } from './repos/events.js';
 import { ImportRepository } from './repos/imports.js';
 import { MemberRepository } from './repos/members.js';
+import { RegistrationRequestRepository } from './repos/registration-requests.js';
 import { MinistryRepository } from './repos/ministries.js';
 import { OfferingRepository } from './repos/offerings.js';
 import { PaymentGroupRepository } from './repos/payment-groups.js';
@@ -28,6 +31,7 @@ import { PledgeRepository } from './repos/pledges.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
 import { UssdRepository } from './repos/ussd.js';
+import { attendanceCodesRouter } from './routes/attendance-codes.js';
 import { contributionsRouter } from './routes/contributions.js';
 import { eventsRouter } from './routes/events.js';
 import { importsRouter } from './routes/imports.js';
@@ -37,6 +41,7 @@ import { offeringsRouter } from './routes/offerings.js';
 import { paymentGroupsRouter } from './routes/payment-groups.js';
 import { paymentsRouter } from './routes/payments.js';
 import { pledgesRouter } from './routes/pledges.js';
+import { registrationRequestsRouter } from './routes/registration-requests.js';
 import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
@@ -90,13 +95,6 @@ export function createApp(options: AppOptions): Express {
     visitorPhonePepper,
   );
   const ussdRepository = new UssdRepository(options.db);
-  const ussdServices = createUssdServices({
-    db: options.db,
-    members,
-    offerings,
-    pledges,
-    paymentGroups,
-  });
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -126,6 +124,19 @@ export function createApp(options: AppOptions): Express {
     codePepper:
       options.ussd?.codePepper ?? process.env.USSD_CODE_PEPPER ?? DEFAULT_USSD_CODE_PEPPER,
   };
+  const attendanceCodes = new AttendanceCodeRepository(options.db, ussd.codePepper);
+  const registrationRequests = new RegistrationRequestRepository(options.db, members);
+  const clocking = new ClockingRepository(options.db);
+  const ussdServices = createUssdServices({
+    db: options.db,
+    members,
+    offerings,
+    pledges,
+    paymentGroups,
+    events,
+    attendanceCodes,
+    clocking,
+  });
 
   app.disable('x-powered-by');
   // Vercel appends the client address to X-Forwarded-For; trust one hop so a
@@ -203,7 +214,10 @@ export function createApp(options: AppOptions): Express {
   v1.use('/ministries', ministriesRouter(ministries));
   v1.use('/series', seriesRouter(series));
   v1.use('/imports', importsRouter(imports));
-  v1.use('/events', eventsRouter(events));
+  // Registered before /events so /events/:eventId/codes reaches this router.
+  v1.use(attendanceCodesRouter(attendanceCodes));
+  v1.use('/events', eventsRouter(events, clocking));
+  v1.use('/registration-requests', registrationRequestsRouter(registrationRequests));
   v1.use('/shepherding', shepherdingRouter(shepherding));
 
   app.use('/v1', gate, v1);

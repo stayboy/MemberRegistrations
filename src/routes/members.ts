@@ -7,6 +7,7 @@ import {
   contactInputSchema,
   createMemberSchema,
   listQuerySchema,
+  memberAttendanceWindowQuerySchema,
   purgeSchema,
   relationshipInputSchema,
   subscriptionInputSchema,
@@ -92,6 +93,19 @@ export function membersRouter(repo: MemberRepository): Router {
     const { confirm } = purgeSchema.parse(req.body);
     await repo.purge(memberNo(req), confirm, actorOf(req));
     res.status(204).end();
+  });
+
+  router.get('/:memberNo/attendance/summary', async (req, res) => {
+    const { from, to } = memberAttendanceWindowQuerySchema.parse(req.query);
+    const summary = await repo.attendanceSummary(memberNo(req), from, to);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(summary);
+  });
+
+  router.get('/:memberNo/profile', async (req, res) => {
+    const profile = await repo.profile(memberNo(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(profile);
   });
 
   router.get('/:memberNo/attendance', async (req, res) => {

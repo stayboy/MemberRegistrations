@@ -253,6 +253,7 @@ describe('GET /v1/events', () => {
       description: 'Weekly service',
       status: 'held',
       source: 'series',
+      tracksMembers: true,
       sessions: [
         {
           date: '2026-01-04',
@@ -589,6 +590,63 @@ describe('POST /v1/events', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('conflict');
+  });
+
+  it('creates a headcount-only event and refuses per-member attendance', async () => {
+    const created = await createEvent({
+      ...validBody,
+      eventNo: 'SC-HEADCOUNT',
+      name: 'Headcount-only Rally',
+      tracksMembers: false,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.tracksMembers).toBe(false);
+
+    const id = created.body.id as string;
+    const detail = await readEvent(id);
+    expect(detail.status).toBe(200);
+    expect(detail.body.tracksMembers).toBe(false);
+
+    const manual = await request(harness.app)
+      .post(`/v1/events/${id}/attendance`)
+      .set(writeHeaders)
+      .send({ memberNo: 'EL-001', date: '2026-12-01' });
+    expect(manual.status).toBe(422);
+    expect(manual.body.code).toBe('headcount_only');
+
+    // The per-session report still reads, with no fabricated rows.
+    const report = await request(harness.app)
+      .get(`/v1/events/${id}/attendance`)
+      .query({ date: '2026-12-01' })
+      .set(readHeaders)
+      .expect(200);
+    expect(report.body.rows).toEqual([]);
+  });
+
+  it('keeps tracksMembers when an update omits it and lets an update change it', async () => {
+    const created = await createEvent({
+      ...validBody,
+      eventNo: 'SC-HEADCOUNT-UPDATE',
+      name: 'Headcount-only Update',
+      tracksMembers: false,
+    });
+    expect(created.status).toBe(201);
+
+    const renamed = await updateEvent(
+      created.body.id as string,
+      { name: 'Still headcount-only' },
+      created.headers.etag as string,
+    );
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.tracksMembers).toBe(false);
+
+    const tracked = await updateEvent(
+      created.body.id as string,
+      { tracksMembers: true },
+      renamed.headers.etag as string,
+    );
+    expect(tracked.status).toBe(200);
+    expect(tracked.body.tracksMembers).toBe(true);
   });
 });
 

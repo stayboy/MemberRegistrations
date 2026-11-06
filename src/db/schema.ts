@@ -47,6 +47,7 @@ export const members = pgTable(
     addressLine: text('address_line'),
     joinedOn: date('joined_on'),
     isPresbyter: boolean('is_presbyter').notNull().default(false),
+    presbyterRank: integer('presbyter_rank'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     purgedAt: timestamp('purged_at', { withTimezone: true }),
     version: integer('version').notNull().default(1),

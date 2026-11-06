@@ -167,3 +167,94 @@ export class DuplicateImportError extends ConflictError {
     super(message);
   }
 }
+
+/** A one-time code matched no stored hash, or its purpose did not match. */
+export class CodeInvalidError extends ValidationError {
+  constructor(message = 'The code is not valid for this action') {
+    super(message, 'code_invalid');
+  }
+}
+
+/** A one-time code is past its 15-minute TTL. */
+export class CodeExpiredError extends ValidationError {
+  constructor(message = 'The code has expired') {
+    super(message, 'code_expired');
+  }
+}
+
+/** A one-time code has already been redeemed. */
+export class CodeUsedError extends ConflictError {
+  constructor(message = 'The code has already been used') {
+    super(message, 'code_used');
+  }
+}
+
+/** A one-time code was voided before it could be redeemed. */
+export class CodeVoidedError extends ValidationError {
+  constructor(message = 'The code has been voided') {
+    super(message, 'code_voided');
+  }
+}
+
+/** The code exists but belongs to a different event session. */
+export class CodeWrongSessionError extends ValidationError {
+  constructor(message = 'The code belongs to a different event session') {
+    super(message, 'code_wrong_session');
+  }
+}
+
+/** Too many code attempts from one phone hash in the fixed window. */
+export class TooManyTriesError extends DomainError {
+  constructor(message = 'Too many attempts; try again later') {
+    super(message, 'too_many_tries');
+  }
+}
+
+/** The member already has an attendance row for that event session. */
+export class AlreadyClockedError extends ConflictError {
+  constructor(message = 'Attendance is already recorded for this member and session') {
+    super(message, 'already_clocked');
+  }
+}
+
+/** A registration request is decided once. */
+export class RegistrationNotPendingError extends ConflictError {
+  constructor(message = 'This registration request has already been decided') {
+    super(message, 'registration_not_pending');
+  }
+}
+
+/** The acting presbyter does not shepherd the member they tried to clock in. */
+export class NotShepherdError extends ValidationError {
+  constructor(message = 'The member is not actively shepherded by this presbyter') {
+    super(message, 'not_shepherd');
+  }
+}
+
+/** The actor is not a presbyter at all, so clocking authority cannot apply. */
+export class NotPresbyterError extends ValidationError {
+  constructor(message = 'This action requires a presbyter') {
+    super(message, 'not_presbyter');
+  }
+}
+
+/** Only a ranked senior presbyter may perform this clocking action. */
+export class NotSeniorPresbyterError extends ValidationError {
+  constructor(message = 'This action requires a senior presbyter') {
+    super(message, 'not_senior_presbyter');
+  }
+}
+
+/** A senior presbyter who is not recorded present must delegate clocking first. */
+export class DelegateRequiredError extends ValidationError {
+  constructor(message = 'Delegate clocking for this session before clocking members in') {
+    super(message, 'delegate_required');
+  }
+}
+
+/** One active clocking delegation already exists for the event session. */
+export class DelegationExistsError extends ConflictError {
+  constructor(message = 'A clocking delegation already exists for this event session') {
+    super(message, 'delegation_exists');
+  }
+}

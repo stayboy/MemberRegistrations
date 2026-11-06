@@ -29,6 +29,7 @@ export const createMemberSchema = z.object({
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
   isPresbyter: z.boolean().optional(),
+  presbyterRank: z.number().int().min(1).nullable().optional(),
   contacts: z.array(contactInputSchema).max(20).optional(),
   ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
 });
@@ -45,6 +46,7 @@ export const updateMemberSchema = z.object({
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
   isPresbyter: z.boolean().optional(),
+  presbyterRank: z.number().int().min(1).nullable().optional(),
 });
 
 export const relationshipInputSchema = z.object({
@@ -219,6 +221,7 @@ export const memberSummarySchema = z.object({
 
 export const memberDetailSchema = memberSummarySchema.extend({
   id: z.string(),
+  presbyterRank: z.number().int().nullable(),
   maidenName: z.string().nullable(),
   alias: z.string().nullable(),
   dob: z.string().nullable(),
@@ -262,6 +265,50 @@ export const attendanceListSchema = z.object({
   memberNo: z.string(),
   series: z.array(attendanceSeriesSchema),
 });
+
+export const memberAttendanceWindowQuerySchema = z.object({
+  from: dateStringSchema,
+  to: dateStringSchema,
+});
+
+export const memberAttendanceWindowSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  attended: z.number().int(),
+  expected: z.number().int(),
+  events: z.array(
+    z.object({
+      eventId: z.string(),
+      name: z.string(),
+      sessionDate: z.string(),
+    }),
+  ),
+});
+
+const profileShepherdSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
+});
+
+export const memberProfileSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
+  ministries: z.array(z.string()),
+  shepherd: profileShepherdSchema.nullable(),
+  attendance: z.object({
+    status: z.enum(['regular', 'non_regular', 'not_enough_data']),
+    attended: z.number().int(),
+    expected: z.number().int(),
+    window: z.literal(5),
+    lastAttendedOn: z.string().nullable(),
+  }),
+});
+
+export type MemberAttendanceWindowQuery = z.infer<typeof memberAttendanceWindowQuerySchema>;
 
 export const contactResponseSchema = contactSchema;
 export const subscriptionResponseSchema = subscriptionSchema;

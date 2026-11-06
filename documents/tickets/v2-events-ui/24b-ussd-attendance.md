@@ -8,8 +8,10 @@ profile aggregate with attendance regularity.
 
 **Blocked by:** 24a. Migration **0014** (`members.presbyter_rank`, `attendance_codes`,
 `registration_requests`, `clocking_delegations`, `event_session_expected`) and the bearer seams for code
-issuance/void, registration approve/reject, delegation and expected headcounts are authorised for this
-round by the owner (2026-11-05).
+issuance/list/void, registration request list/approve/reject, delegation, expected headcounts, the
+windowed attendance summary and the profile aggregate are authorised for this round by the owner
+(2026-11-05). Code redemption and registration-request creation stay inside `POST /ussd/session`; no
+new bearer route is added for them.
 
 **Status:** ready-for-agent
 

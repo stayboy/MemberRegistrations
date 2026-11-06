@@ -61,11 +61,20 @@ export const createEventSchema = z.object({
   venueType: venueTypeSchema,
   venueName: z.string().max(200).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
+  // False = headcount-only: no per-member attendance, imports, codes or clock-ins.
+  tracksMembers: z.boolean().default(true),
   sessions: z.array(eventSessionInputSchema).min(1),
 });
 
-/** `eventNo` is unique and is never reused, so it is not mutable. */
-export const updateEventSchema = createEventSchema.omit({ eventNo: true }).partial();
+/**
+ * `eventNo` is unique and is never reused, so it is not mutable. `tracksMembers`
+ * is re-declared without the create default so an omitted update leaves it as
+ * it is; `.partial()` alone would keep applying the default.
+ */
+export const updateEventSchema = createEventSchema
+  .omit({ eventNo: true, tracksMembers: true })
+  .partial()
+  .extend({ tracksMembers: z.boolean().optional() });
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
@@ -116,6 +125,8 @@ export const eventSchema = z.object({
   description: z.string().nullable(),
   status: eventStatusSchema,
   source: z.enum(EVENT_SOURCES),
+  /** False = headcount-only; per-member attendance does not apply. */
+  tracksMembers: z.boolean(),
   sessions: z.array(eventSessionSchema),
   offerings: z.array(eventOfferingSchema),
   stats: offeringStatsSchema,
@@ -172,3 +183,93 @@ export const eventAttendanceEntrySchema = z.object({
 
 export type EventAttendanceQuery = z.infer<typeof eventAttendanceQuerySchema>;
 export type EventAttendanceInput = z.infer<typeof eventAttendanceInputSchema>;
+
+export const CODE_PURPOSES = ['attendance_punch', 'registration'] as const;
+export const CODE_STATUSES = ['active', 'used', 'expired', 'voided'] as const;
+
+export const issueCodeSchema = z.object({
+  purpose: z.enum(CODE_PURPOSES),
+  sessionDate: dateStringSchema,
+});
+
+export const codeListQuerySchema = z.object({
+  sessionDate: dateStringSchema,
+  status: z.enum(CODE_STATUSES).optional(),
+});
+
+export const voidCodeSchema = z.object({
+  reason: z.string().max(500).nullable().optional(),
+});
+
+export const issuedCodeSchema = z.object({
+  id: z.string(),
+  code: z.string().regex(/^\d{6}$/),
+  purpose: z.enum(CODE_PURPOSES),
+  sessionDate: z.string(),
+  expiresAt: z.string(),
+});
+
+export const codeItemSchema = z.object({
+  id: z.string(),
+  purpose: z.enum(CODE_PURPOSES),
+  sessionDate: z.string(),
+  issuedAt: z.string(),
+  expiresAt: z.string(),
+  status: z.enum(CODE_STATUSES),
+  usedAt: z.string().nullable(),
+  usedByMemberNo: z.string().nullable(),
+  voidedAt: z.string().nullable(),
+});
+
+export const codeListSchema = z.object({
+  items: z.array(codeItemSchema),
+});
+
+export const expectedQuerySchema = z.object({
+  sessionDate: dateStringSchema,
+});
+
+export const expectedInputSchema = z
+  .object({
+    male: z.number().int().min(0).max(10_000),
+    female: z.number().int().min(0).max(10_000),
+    children: z.number().int().min(0).max(10_000),
+  })
+  .superRefine((value, ctx) => {
+    if (value.male + value.female + value.children > 30_000) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['children'],
+        message: 'male + female + children must not exceed 30000',
+      });
+    }
+  });
+
+export const expectedSchema = z.object({
+  male: z.number().int(),
+  female: z.number().int(),
+  children: z.number().int(),
+  total: z.number().int(),
+  recordedBy: z.string().nullable(),
+  recordedAt: z.string().nullable(),
+});
+
+export const delegationInputSchema = z.object({
+  fromMemberNo: memberNoParamSchema,
+  toMemberNo: memberNoParamSchema,
+  reason: z.string().min(3).max(500),
+});
+
+export const delegationSchema = z.object({
+  id: z.string(),
+  fromMemberNo: z.string(),
+  fromName: z.string(),
+  toMemberNo: z.string(),
+  toName: z.string(),
+  reason: z.string(),
+  createdAt: z.string(),
+});
+
+export const delegationListSchema = z.object({
+  items: z.array(delegationSchema),
+});

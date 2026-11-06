@@ -277,7 +277,10 @@ describe('POST /ussd/session authentication and identity', () => {
     expect(member.status).toBe(200);
     expect(member.body).toMatchObject({ done: false, state: 'main' });
     expect(member.body.text).toContain('1 Offerings');
-    expect(member.body.text).toContain('2 Exit');
+    expect(member.body.text).toContain('2 Activities');
+    expect(member.body.text).toContain('3 Attendance');
+    expect(member.body.text).toContain('4 Profile');
+    expect(member.body.text).toContain('5 Exit');
     expect(member.body.sessionId).toBeTruthy();
     expect(JSON.stringify(member.body)).not.toContain('8012345678');
 
@@ -391,14 +394,14 @@ describe('USSD menu navigation', () => {
     const started = await start(harness.app, '0899 000 0401', ip);
     const sessionId = started.body.sessionId as string;
 
-    const hub = await frame(harness.app, sessionId, '0899 000 0401', '1', 2, ip);
+    const hub = await frame(harness.app, sessionId, '0899 000 0401', '2', 2, ip);
     expect(hub.body.state).toBe('offerings');
     expect(hub.body.text).toContain('1 Give');
 
     const back = await frame(harness.app, sessionId, '0899 000 0401', '9', 3, ip);
     expect(back.body.state).toBe('main');
 
-    const hubAgain = await frame(harness.app, sessionId, '0899 000 0401', '1', 4, ip);
+    const hubAgain = await frame(harness.app, sessionId, '0899 000 0401', '2', 4, ip);
     expect(hubAgain.body.state).toBe('offerings');
     const home = await frame(harness.app, sessionId, '0899 000 0401', '00', 5, ip);
     expect(home.body.state).toBe('main');
@@ -408,17 +411,17 @@ describe('USSD menu navigation', () => {
     const ip = '10.2.2.1';
     const started = await start(harness.app, '0899 000 0402', ip);
     const sessionId = started.body.sessionId as string;
-    await frame(harness.app, sessionId, '0899 000 0402', '1', 2, ip);
+    await frame(harness.app, sessionId, '0899 000 0402', '2', 2, ip);
     const invalid = await frame(harness.app, sessionId, '0899 000 0402', '5', 3, ip);
     expect(invalid.body.state).toBe('offerings');
     expect(invalid.body.text).toContain('Invalid');
   });
 
-  it('exits with 2 at main and with 9 at main', async () => {
+  it('exits with 5 at main and with 9 at main', async () => {
     const ip = '10.2.3.1';
     const started = await start(harness.app, '0899 000 0403', ip);
     const sessionId = started.body.sessionId as string;
-    const exit = await frame(harness.app, sessionId, '0899 000 0403', '2', 2, ip);
+    const exit = await frame(harness.app, sessionId, '0899 000 0403', '5', 2, ip);
     expect(exit.body.done).toBe(true);
     expect(exit.body.text).toBe('Exit');
 
@@ -455,7 +458,70 @@ describe('USSD menu navigation', () => {
     expect(response.body.state).toBe('main');
     expect(response.body.done).toBe(false);
     expect(response.body.text).toContain('Session expired');
-    expect(response.body.text).toContain('1 Offerings');
+    expect(response.body.text).toContain('1 Register');
+    expect(response.body.text).toContain('2 Offerings');
+  });
+});
+
+describe('USSD anonymous registration', () => {
+  it('redeems a registration code against its own event session', async () => {
+    const pastDate = shiftDate(today, -1);
+    const registrationEvent = await insertEvent('Past Registration Day', pastDate);
+    const issued = await request(harness.app)
+      .post(`/v1/events/${registrationEvent}/codes`)
+      .set(writeHeaders)
+      .send({ purpose: 'registration', sessionDate: pastDate });
+    expect(issued.status).toBe(201);
+
+    const phone = '0899 000 0510';
+    const ip = '10.2.7.1';
+    const started = await start(harness.app, phone, ip);
+    const sessionId = started.body.sessionId as string;
+
+    const prompt = await frame(harness.app, sessionId, phone, '1', 2, ip);
+    expect(prompt.body.state).toBe('register.code');
+
+    const code = await frame(harness.app, sessionId, phone, issued.body.code, 3, ip);
+    expect(code.body.state).toBe('register.first');
+
+    const first = await frame(harness.app, sessionId, phone, 'Ama', 4, ip);
+    expect(first.body.state).toBe('register.last');
+
+    const last = await frame(harness.app, sessionId, phone, 'Owusu', 5, ip);
+    expect(last.body.done).toBe(true);
+    expect(last.body.state).toBe('register.done');
+    expect(last.body.text).toContain('Registered');
+    const reference = /Ref (REG-[A-Z2-7]{6})/.exec(last.body.text)![1]!;
+
+    const [requestRow] = await harness.db.query<{
+      event_instance_id: string;
+      session_date: string | Date;
+      status: string;
+      code_id: string;
+    }>(
+      `select event_instance_id, session_date, status, code_id
+         from registration_requests where reference = $1`,
+      [reference],
+    );
+    expect(requestRow!.event_instance_id).toBe(registrationEvent);
+    expect(new Date(requestRow!.session_date).toISOString().slice(0, 10)).toBe(pastDate);
+    expect(requestRow!.status).toBe('pending');
+    expect(requestRow!.code_id).toBe(issued.body.id);
+
+    const [codeRow] = await harness.db.query<{
+      used_at: Date | null;
+      registration_request_id: string | null;
+      event_instance_id: string;
+      session_date: string | Date;
+    }>(
+      `select used_at, registration_request_id, event_instance_id, session_date
+         from attendance_codes where id = $1`,
+      [issued.body.id],
+    );
+    expect(codeRow!.used_at).toBeTruthy();
+    expect(codeRow!.registration_request_id).toBeTruthy();
+    expect(codeRow!.event_instance_id).toBe(registrationEvent);
+    expect(new Date(codeRow!.session_date).toISOString().slice(0, 10)).toBe(pastDate);
   });
 });
 
@@ -579,7 +645,8 @@ describe('USSD giving', () => {
     const started = await start(harness.app, phone, ip);
     const sessionId = started.body.sessionId as string;
 
-    const hub = await frame(harness.app, sessionId, phone, '1', 2, ip);
+    const hub = await frame(harness.app, sessionId, phone, '2', 2, ip);
+    expect(hub.body.state).toBe('offerings');
     expect(hub.body.text).not.toContain('2 Pledge');
     const name = await frame(harness.app, sessionId, phone, '1', 3, ip);
     expect(name.body.state).toBe('offerings.name');

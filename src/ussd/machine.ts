@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { t, type GlossaryKey } from './glossary.js';
 import { money, parseAmount, parseUssdDate, shortDate, truncate } from './format.js';
 
-/** Every state the shipped 24a menu tree can occupy, in registry order. */
+/** Every state the shipped menu tree can occupy, in registry order. */
 export const STATES = [
   'main',
   'offerings',
@@ -18,6 +18,27 @@ export const STATES = [
   'pledges.confirm',
   'pledges.done',
   'payments.summary',
+  'activities',
+  'activities.week',
+  'activities.date',
+  'activities.event',
+  'attendance',
+  'attendance.day',
+  'attendance.period',
+  'attendance.status',
+  'attendance.event',
+  'attendance.code',
+  'attendance.clocking',
+  'attendance.clock',
+  'attendance.expected',
+  'attendance.delegate',
+  'attendance.delegate_reason',
+  'attendance.done',
+  'profile',
+  'register.code',
+  'register.first',
+  'register.last',
+  'register.done',
   'error',
 ] as const;
 
@@ -59,6 +80,73 @@ export interface MemberPayments {
   quarter: PaidWindow;
   year: PaidWindow;
   topEvents: Array<{ eventId: string; name: string; paidMinor: number }>;
+}
+
+export type UssdGender = 'male' | 'female' | 'other' | 'undisclosed';
+
+/** One held event session in Activities. */
+export interface UssdActivity {
+  id: string;
+  name: string;
+  sessionDate: string;
+  tracksMembers: boolean;
+  /** The operator's expected headcount; present only for a headcount-only event. */
+  headcountOnlyExpected?: number;
+}
+
+export interface UssdActivities {
+  /** At most five for the requested date. */
+  items: UssdActivity[];
+  /** There are more sessions in the seven-day window. */
+  moreThisWeek: boolean;
+}
+
+export interface UssdAttendance {
+  from: string;
+  to: string;
+  attended: number;
+  expected: number;
+  events: Array<{ eventId: string; name: string; sessionDate: string }>;
+}
+
+export interface UssdProfile {
+  memberNo: string;
+  name: string;
+  gender: UssdGender;
+  age: number | null;
+  ministries: string[];
+  shepherd: {
+    memberNo: string;
+    name: string;
+    gender: UssdGender;
+    age: number | null;
+  } | null;
+  attendance: {
+    status: 'regular' | 'non_regular' | 'not_enough_data';
+    attended: number;
+    expected: number;
+    window: 5;
+    lastAttendedOn: string | null;
+  };
+}
+
+export interface UssdMemberContext {
+  isPresbyter: boolean;
+  presbyterRank: number | null;
+}
+
+export interface UssdExpected {
+  male: number;
+  female: number;
+  children: number;
+  total: number;
+}
+
+/** The selected event's register count and the caller's own presence. */
+export interface UssdEventAttendance {
+  present: number;
+  expected: number;
+  memberPresent: boolean;
 }
 
 /** What the caller's phone identified; never persisted beyond the hash. */
@@ -106,6 +194,50 @@ export interface UssdServices {
   listPledges(memberNo: string): Promise<UssdPledge[]>;
   paymentsSummary(memberNo: string): Promise<MemberPayments>;
   offeringById(id: string): Promise<UssdOffering | null>;
+  memberContext(memberNo: string): Promise<UssdMemberContext>;
+  activities(date: string): Promise<UssdActivities>;
+  /** Every session in the seven days from `date`, newest first is not required. */
+  activitiesWeek(date: string): Promise<UssdActivity[]>;
+  attendance(memberNo: string, from: string, to: string): Promise<UssdAttendance>;
+  profile(memberNo: string): Promise<UssdProfile>;
+  redeemCode(input: {
+    code: string;
+    memberNo: string;
+    phoneHash: string;
+    eventId?: string;
+    sessionDate?: string;
+  }): Promise<{ eventId: string; sessionDate: string }>;
+  createRegistration(input: {
+    code: string;
+    firstName: string;
+    lastName: string;
+    phoneHash: string;
+  }): Promise<{ reference: string }>;
+  clockIn(input: {
+    eventId: string;
+    sessionDate: string;
+    memberNo: string;
+    actorMemberNo: string;
+    phoneHash: string;
+  }): Promise<{ memberNo: string; name: string }>;
+  delegate(input: {
+    eventId: string;
+    sessionDate: string;
+    fromMemberNo: string;
+    toMemberNo: string;
+    reason: string;
+    phoneHash: string;
+  }): Promise<{ toMemberNo: string; toName: string }>;
+  recordExpected(input: {
+    eventId: string;
+    sessionDate: string;
+    male: number;
+    female: number;
+    children: number;
+    phoneHash: string;
+  }): Promise<UssdExpected>;
+  memberByNo(memberNo: string): Promise<{ memberNo: string; name: string }>;
+  isSenior(memberNo: string): Promise<boolean>;
 }
 
 /** Everything a screen needs that survives the frame; the raw phone never does. */
@@ -131,6 +263,33 @@ export interface UssdContext {
   returnState?: UssdState;
   messageKey?: GlossaryKey;
   terminal?: boolean;
+  activities?: UssdActivity[];
+  activitiesPage?: number;
+  activitiesDate?: string;
+  activitiesMore?: boolean;
+  activitiesBack?: UssdState;
+  weekActivities?: UssdActivity[];
+  weekPage?: number;
+  activity?: UssdActivity;
+  attendanceSession?: UssdEvent;
+  attendanceEvent?: UssdEventAttendance;
+  attendanceSummary?: UssdAttendance;
+  attendanceToday?: UssdAttendance;
+  attendanceBack?: UssdState;
+  attendanceDate?: string;
+  attendanceFrom?: string;
+  attendanceTo?: string;
+  memberContext?: UssdMemberContext;
+  profile?: UssdProfile;
+  code?: string;
+  firstName?: string;
+  lastName?: string;
+  delegateMemberNo?: string;
+  delegateName?: string;
+  doneLabel?: string;
+  doneKind?: 'clock' | 'delegate' | 'code';
+  expected?: UssdExpected;
+  requestReference?: string;
 }
 
 export interface UssdOption {
@@ -157,6 +316,84 @@ export interface AdvanceResult {
 const OFFERING_PAGE_SIZE = 5;
 /** Three rows fit the 182-character budget with all three fields. */
 const PLEDGE_PAGE_SIZE = 3;
+const ACTIVITY_PAGE_SIZE = 4;
+/** Two full event rows fit the 182-character budget beside the actions. */
+const ATTENDANCE_EVENT_LINES = 2;
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthStart(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function quarterStart(date: string): string {
+  const month = Number(date.slice(5, 7));
+  const first = Math.floor((month - 1) / 3) * 3 + 1;
+  return `${date.slice(0, 4)}-${String(first).padStart(2, '0')}-01`;
+}
+
+function yearStart(date: string): string {
+  return `${date.slice(0, 4)}-01-01`;
+}
+
+/** The shared identity label: `FullName (Gender, Ny)`; undisclosed and null age are omitted. */
+function identityLabel(
+  name: string,
+  gender: UssdGender | undefined,
+  age: number | null | undefined,
+): string {
+  const parts: string[] = [];
+  if (gender && gender !== 'undisclosed') {
+    parts.push(gender.charAt(0).toUpperCase() + gender.slice(1));
+  }
+  if (age !== null && age !== undefined) parts.push(`${age}y`);
+  return parts.length > 0 ? `${name} (${parts.join(', ')})` : name;
+}
+
+function memberName(firstName: string | null, lastName: string | null): string {
+  return [firstName, lastName].filter(Boolean).join(' ').trim();
+}
+
+/** A code error never reveals whether an unknown, expired, used or voided code exists. */
+function codeErrorKey(error: unknown, usedKey: GlossaryKey = 'error.code_invalid'): GlossaryKey {
+  const code = (error as { code?: string }).code;
+  switch (code) {
+    case 'too_many_tries':
+      return 'error.too_many_tries';
+    case 'already_clocked':
+      return 'error.already_clocked';
+    case 'code_used':
+      return usedKey;
+    case 'not_shepherd':
+      return 'error.not_shepherd';
+    case 'not_senior_presbyter':
+      return 'error.not_senior';
+    case 'delegate_required':
+      return 'error.delegate_required';
+    case 'delegation_exists':
+      return 'error.delegate_required';
+    default:
+      return 'error.code_invalid';
+  }
+}
+
+function clockingErrorKey(error: unknown): GlossaryKey {
+  const code = (error as { code?: string }).code;
+  switch (code) {
+    case 'not_shepherd':
+      return 'error.not_shepherd';
+    case 'not_senior_presbyter':
+      return 'error.not_senior';
+    case 'delegate_required':
+      return 'error.delegate_required';
+    case 'already_clocked':
+      return 'error.already_clocked';
+    default:
+      return 'error.try_again';
+  }
+}
 
 const PARENTS: Record<UssdState, UssdState | null> = {
   main: null,
@@ -173,11 +410,36 @@ const PARENTS: Record<UssdState, UssdState | null> = {
   'pledges.confirm': 'pledges.list',
   'pledges.done': 'main',
   'payments.summary': 'offerings',
+  activities: 'main',
+  'activities.week': 'activities',
+  'activities.date': 'activities',
+  'activities.event': 'activities',
+  attendance: 'main',
+  'attendance.day': 'attendance',
+  'attendance.period': 'attendance',
+  'attendance.status': 'attendance',
+  'attendance.event': 'attendance',
+  'attendance.code': 'attendance',
+  'attendance.clocking': 'attendance',
+  'attendance.clock': 'attendance.clocking',
+  'attendance.expected': 'attendance.clocking',
+  'attendance.delegate': 'attendance.clocking',
+  'attendance.delegate_reason': 'attendance.delegate',
+  'attendance.done': 'main',
+  profile: 'main',
+  'register.code': 'main',
+  'register.first': 'register.code',
+  'register.last': 'register.first',
+  'register.done': 'main',
   error: null,
 };
 
 export function parentOf(state: UssdState, context: UssdContext = {}): UssdState | null {
   if (state === 'error') return context.returnState ?? 'main';
+  if (state === 'activities.event' && context.activitiesBack) return context.activitiesBack;
+  if ((state === 'attendance.event' || state === 'attendance.code') && context.attendanceBack) {
+    return context.attendanceBack;
+  }
   return PARENTS[state];
 }
 
@@ -456,6 +718,263 @@ function renderedError(context: UssdContext): Rendered {
   return screen('error', context, [...lines, ...nav.lines], nav.options);
 }
 
+function activityLine(index: number, activity: UssdActivity): string {
+  const suffix =
+    activity.headcountOnlyExpected === undefined ? '' : ` (${activity.headcountOnlyExpected})`;
+  return `${index} ${truncate('event', activity.name)}${suffix}`;
+}
+
+function listActivities(
+  state: 'activities' | 'activities.week',
+  context: UssdContext,
+  all: UssdActivity[],
+  page: number,
+  more: boolean,
+): Rendered {
+  const heading =
+    state === 'activities.week'
+      ? t('activities.this_week')
+      : (context.activitiesDate ?? todayIso()) === todayIso()
+        ? t('activities.today')
+        : shortDate(context.activitiesDate ?? todayIso());
+  const lines = [...noticeLines(context), heading];
+  const options: UssdOption[] = [];
+  all
+    .slice(page * ACTIVITY_PAGE_SIZE, (page + 1) * ACTIVITY_PAGE_SIZE)
+    .forEach((activity, index) => {
+      const key = String(index + 1);
+      lines.push(activityLine(index + 1, activity));
+      options.push({ key, label: truncate('event', activity.name) });
+    });
+  if (more) {
+    lines.push(`0 ${t('nav.more')}`);
+    options.push({ key: '0', label: t('nav.more') });
+  }
+  if (state === 'activities') {
+    lines.push(`8 ${t('activities.a_date')}`);
+    options.push({ key: '8', label: t('activities.a_date') });
+  }
+  const nav = navLines(state, context, false);
+  return screen(state, context, [...lines, ...nav.lines], [...options, ...nav.options]);
+}
+
+function attendanceCountLines(summary: UssdAttendance | undefined): string[] {
+  const lines = [
+    `${t('label.attended')} ${summary?.attended ?? 0} ${t('label.expected_count')} ${summary?.expected ?? 0}`,
+  ];
+  const events = summary?.events ?? [];
+  for (const event of events.slice(0, ATTENDANCE_EVENT_LINES)) {
+    lines.push(`${shortDate(event.sessionDate)} ${truncate('event', event.name)}`);
+  }
+  return lines;
+}
+
+function noAttendance(summary: UssdAttendance | undefined): boolean {
+  return !summary || (summary.expected === 0 && summary.events.length === 0);
+}
+
+function renderedAttendance(context: UssdContext, withActions: boolean): Rendered {
+  const summary = withActions
+    ? (context.attendanceToday ?? context.attendanceSummary)
+    : context.attendanceSummary;
+  const lines = [...noticeLines(context), t('menu.attendance')];
+  if (noAttendance(summary)) {
+    lines.push(t('attendance.no_data'));
+  } else {
+    lines.push(...attendanceCountLines(summary));
+  }
+  const options: UssdOption[] = [];
+  if (withActions) {
+    lines.push(
+      `1 ${t('attendance.day')}`,
+      `2 ${t('attendance.period')}`,
+      `3 ${t('attendance.present')}`,
+    );
+    options.push(
+      { key: '1', label: t('attendance.day') },
+      { key: '2', label: t('attendance.period') },
+      { key: '3', label: t('attendance.present') },
+    );
+    if (context.memberContext?.isPresbyter) {
+      lines.push(`4 ${t('attendance.clocking')}`);
+      options.push({ key: '4', label: t('attendance.clocking') });
+    }
+    const nav = navLines('attendance', context, false);
+    return screen('attendance', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  }
+  const nav = navLines('attendance.status', context, false);
+  return screen('attendance.status', context, [...lines, ...nav.lines], nav.options);
+}
+
+function renderedAttendancePeriod(context: UssdContext): Rendered {
+  const lines = [
+    ...noticeLines(context),
+    t('attendance.period'),
+    `1 ${t('label.month')}`,
+    `2 ${t('label.quarter')}`,
+    `3 ${t('label.year')}`,
+  ];
+  const nav = navLines('attendance.period', context, false);
+  return screen(
+    'attendance.period',
+    context,
+    [...lines, ...nav.lines],
+    [
+      { key: '1', label: t('label.month') },
+      { key: '2', label: t('label.quarter') },
+      { key: '3', label: t('label.year') },
+      ...nav.options,
+    ],
+  );
+}
+
+function renderedAttendanceEvent(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const event = context.attendanceSession;
+  const report = context.attendanceEvent;
+  const lines = [
+    ...noticeLines(context),
+    t('menu.attendance'),
+    truncate('event', event?.name ?? ''),
+    shortDate(event?.sessionDate ?? ''),
+    `${t('label.attended')} ${report?.present ?? 0} ${t('label.expected_count')} ${report?.expected ?? 0}`,
+  ];
+  const member = session.member;
+  if (member) {
+    const label = memberName(member.firstName, member.lastName);
+    lines.push(
+      `${truncate('member', label)}${report?.memberPresent ? ` ${t('label.attended')}` : ''}`,
+    );
+  }
+  const options: UssdOption[] = [];
+  if (!report?.memberPresent) {
+    lines.push(`1 ${t('attendance.present')}`);
+    options.push({ key: '1', label: t('attendance.present') });
+  }
+  const nav = navLines('attendance.event', context, false);
+  return screen(
+    'attendance.event',
+    context,
+    [...lines, ...nav.lines],
+    [...options, ...nav.options],
+  );
+}
+
+function renderedProfile(context: UssdContext): Rendered {
+  const profile = context.profile;
+  const lines = [...noticeLines(context)];
+  if (profile) {
+    lines.push(
+      identityLabel(truncate('member', profile.name), profile.gender, profile.age),
+      `${t('profile.member_no')} ${profile.memberNo}`,
+    );
+    if (profile.ministries.length > 0) {
+      lines.push(`${t('profile.ministries')} ${truncate('member', profile.ministries.join(', '))}`);
+    }
+    const attendance = profile.attendance;
+    if (attendance.expected === 0 && attendance.attended === 0 && !attendance.lastAttendedOn) {
+      lines.push(t('attendance.no_data'));
+    } else {
+      const status =
+        attendance.status === 'regular'
+          ? t('status.regular')
+          : attendance.status === 'non_regular'
+            ? t('status.non_regular')
+            : t('status.not_enough_data');
+      const date = attendance.lastAttendedOn ? ` · ${shortDate(attendance.lastAttendedOn)}` : '';
+      lines.push(`${status} · ${attendance.attended} of ${attendance.expected}${date}`);
+    }
+    lines.push(
+      `${t('profile.shepherd')} ${
+        profile.shepherd
+          ? identityLabel(
+              truncate('member', profile.shepherd.name),
+              profile.shepherd.gender,
+              profile.shepherd.age,
+            )
+          : t('profile.not_assigned')
+      }`,
+    );
+  }
+  const nav = navLines('profile', context, false);
+  return screen('profile', context, [...lines, ...nav.lines], nav.options);
+}
+
+function renderedAttendanceDone(context: UssdContext): Rendered {
+  const lines = [...noticeLines(context), t('status.attendance_recorded')];
+  if (context.expected) {
+    const expected = context.expected;
+    lines.push(
+      `${expected.male} ${t('label.male')}, ${expected.female} ${t('label.female')}, ${expected.children} ${t('label.children')}`,
+      `${expected.total} ${t('label.expected_count')}`,
+    );
+  } else {
+    if (context.doneKind === 'delegate') {
+      lines.push(`${t('attendance.delegate')} ${truncate('member', context.doneLabel ?? '')}`);
+    } else if (context.doneLabel) {
+      lines.push(truncate('member', context.doneLabel));
+    }
+    if (context.attendanceSession) {
+      lines.push(
+        `${truncate('event', context.attendanceSession.name)} ${shortDate(context.attendanceSession.sessionDate)}`,
+      );
+    }
+  }
+  return screen('attendance.done', context, lines, [], true);
+}
+
+function renderedClocking(context: UssdContext): Rendered {
+  const lines = [
+    ...noticeLines(context),
+    t('attendance.clocking'),
+    `1 ${t('attendance.clock_in')}`,
+    `2 ${t('attendance.expected')}`,
+    `3 ${t('attendance.delegate')}`,
+  ];
+  const nav = navLines('attendance.clocking', context, false);
+  return screen(
+    'attendance.clocking',
+    context,
+    [...lines, ...nav.lines],
+    [
+      { key: '1', label: t('attendance.clock_in') },
+      { key: '2', label: t('attendance.expected') },
+      { key: '3', label: t('attendance.delegate') },
+      ...nav.options,
+    ],
+  );
+}
+
+function renderedPrompt(
+  state: UssdState,
+  context: UssdContext,
+  heading: string,
+  prompt: string,
+): Rendered {
+  const lines = [...noticeLines(context), heading, prompt];
+  const nav = navLines(state, context, false);
+  return screen(state, context, [...lines, ...nav.lines], nav.options);
+}
+
+function renderedRegister(
+  state: 'register.code' | 'register.first' | 'register.last' | 'register.done',
+  context: UssdContext,
+): Rendered {
+  if (state === 'register.done') {
+    const lines = [
+      ...noticeLines(context),
+      t('status.registered'),
+      `${t('label.reference')} ${truncate('reference', context.requestReference ?? '')}`,
+    ];
+    return screen(state, context, lines, [], true);
+  }
+  return renderedPrompt(
+    state,
+    context,
+    t('menu.register'),
+    state === 'register.code' ? t('prompt.code') : t('prompt.name'),
+  );
+}
+
 /**
  * The pure screen renderer. Everything it needs is in the context; `services`
  * is part of the signature so a later state can read without widening it.
@@ -468,16 +987,26 @@ export function render(
 ): Rendered {
   switch (state) {
     case 'main': {
-      const lines = [
-        ...noticeLines(context),
-        t('nav.main'),
-        `1 ${t('menu.offerings')}`,
-        `2 ${t('menu.exit')}`,
-      ];
-      return screen('main', context, lines, [
-        { key: '1', label: t('menu.offerings') },
-        { key: '2', label: t('menu.exit') },
-      ]);
+      const lines = [...noticeLines(context), t('nav.main')];
+      const options: UssdOption[] = [];
+      const entries = session.anonymous
+        ? [
+            { key: '1', label: t('menu.register') },
+            { key: '2', label: t('menu.offerings') },
+            { key: '3', label: t('menu.activities') },
+            { key: '4', label: t('menu.attendance') },
+            { key: '5', label: t('menu.exit') },
+          ]
+        : [
+            { key: '1', label: t('menu.offerings') },
+            { key: '2', label: t('menu.activities') },
+            { key: '3', label: t('menu.attendance') },
+            { key: '4', label: t('menu.profile') },
+            { key: '5', label: t('menu.exit') },
+          ];
+      for (const entry of entries) lines.push(`${entry.key} ${entry.label}`);
+      options.push(...entries);
+      return screen('main', context, lines, options);
     }
     case 'offerings':
       return renderedOfferings(context, session.anonymous);
@@ -512,6 +1041,91 @@ export function render(
       return renderedDone('pledges.done', context);
     case 'payments.summary':
       return renderedPayments(context);
+    case 'activities':
+      return listActivities(
+        'activities',
+        context,
+        context.activities ?? [],
+        context.activitiesPage ?? 0,
+        context.activitiesMore ?? false,
+      );
+    case 'activities.week':
+      return listActivities(
+        'activities.week',
+        context,
+        context.weekActivities ?? [],
+        context.weekPage ?? 0,
+        (context.weekActivities ?? []).length > ((context.weekPage ?? 0) + 1) * ACTIVITY_PAGE_SIZE,
+      );
+    case 'activities.date':
+      return renderedPrompt('activities.date', context, t('activities.a_date'), t('prompt.date'));
+    case 'activities.event':
+      return screen(
+        'activities.event',
+        context,
+        [
+          ...noticeLines(context),
+          truncate('event', context.activity?.name ?? ''),
+          shortDate(context.activity?.sessionDate ?? ''),
+          `1 ${t('action.give')}`,
+          `2 ${t('menu.attendance')}`,
+        ],
+        [
+          { key: '1', label: t('action.give') },
+          { key: '2', label: t('menu.attendance') },
+        ],
+      );
+    case 'attendance':
+      return renderedAttendance(context, true);
+    case 'attendance.day':
+      return renderedPrompt('attendance.day', context, t('attendance.day'), t('prompt.date'));
+    case 'attendance.period':
+      return renderedAttendancePeriod(context);
+    case 'attendance.status':
+      return renderedAttendance(context, false);
+    case 'attendance.event':
+      return renderedAttendanceEvent(context, session);
+    case 'attendance.code':
+      return renderedPrompt('attendance.code', context, t('attendance.present'), t('prompt.code'));
+    case 'attendance.clocking':
+      return renderedClocking(context);
+    case 'attendance.clock':
+      return renderedPrompt(
+        'attendance.clock',
+        context,
+        t('attendance.clock_in'),
+        t('profile.member_no'),
+      );
+    case 'attendance.expected':
+      return renderedPrompt(
+        'attendance.expected',
+        context,
+        t('attendance.expected'),
+        `${t('label.male')}, ${t('label.female')}, ${t('label.children')}`,
+      );
+    case 'attendance.delegate':
+      return renderedPrompt(
+        'attendance.delegate',
+        context,
+        t('attendance.delegate'),
+        t('profile.member_no'),
+      );
+    case 'attendance.delegate_reason':
+      return renderedPrompt(
+        'attendance.delegate_reason',
+        context,
+        t('attendance.delegate'),
+        t('prompt.reason'),
+      );
+    case 'attendance.done':
+      return renderedAttendanceDone(context);
+    case 'profile':
+      return renderedProfile(context);
+    case 'register.code':
+    case 'register.first':
+    case 'register.last':
+    case 'register.done':
+      return renderedRegister(state, context);
     case 'error':
       return renderedError(context);
   }
@@ -535,12 +1149,96 @@ function invalid(state: UssdState, context: UssdContext, key: GlossaryKey): Adva
   return { state, context: { ...context, invalid: invalidCount, notice: key }, done: false };
 }
 
+function noEvent(context: UssdContext, returnState: UssdState): AdvanceResult {
+  return {
+    state: 'error',
+    context: {
+      ...context,
+      returnState,
+      messageKey: 'error.no_event',
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
+async function openActivities(
+  context: UssdContext,
+  services: UssdServices,
+  date: string,
+): Promise<AdvanceResult> {
+  const activities = await services.activities(date);
+  if (activities.items.length === 0)
+    return noEvent({ ...context, activitiesDate: date }, 'activities');
+  return {
+    state: 'activities',
+    context: {
+      ...baseContext(context),
+      activities: activities.items,
+      activitiesPage: 0,
+      activitiesDate: date,
+      activitiesMore: activities.moreThisWeek,
+      activity: undefined,
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
+async function openAttendance(
+  context: UssdContext,
+  services: UssdServices,
+  session: UssdSessionInfo,
+): Promise<AdvanceResult> {
+  const memberNo = session.member!.memberNo;
+  const today = todayIso();
+  const [memberContext, event, summary] = await Promise.all([
+    services.memberContext(memberNo),
+    services.currentEvent(),
+    services.attendance(memberNo, today, today),
+  ]);
+  return {
+    state: 'attendance',
+    context: {
+      ...baseContext(context),
+      memberContext,
+      event: event ?? undefined,
+      attendanceSummary: summary,
+      attendanceToday: summary,
+      attendanceDate: today,
+      attendanceFrom: today,
+      attendanceTo: today,
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
+async function openProfile(
+  context: UssdContext,
+  services: UssdServices,
+  session: UssdSessionInfo,
+): Promise<AdvanceResult> {
+  const profile = await services.profile(session.member!.memberNo);
+  return {
+    state: 'profile',
+    context: { ...baseContext(context), profile, notice: undefined },
+    done: false,
+  };
+}
+
 function parseSelection(input: string, count: number): number[] | null {
   const parts = input.split(',').map((part) => part.trim());
   if (parts.length === 0 || parts.some((part) => !/^\d+$/.test(part))) return null;
   const indices = [...new Set(parts.map(Number))];
   if (indices.some((index) => index < 1 || index > count)) return null;
   return indices;
+}
+
+function parseIndex(input: string, count: number): number | null {
+  if (!/^\d+$/.test(input.trim())) return null;
+  const index = Number(input);
+  return index >= 1 && index <= count ? index : null;
 }
 
 function parseSplit(input: string, count: number): number[] | null {
@@ -601,15 +1299,43 @@ export async function advance(
     };
   }
 
-  if (state === 'offerings.done' || state === 'pledges.done') {
+  if (
+    state === 'offerings.done' ||
+    state === 'pledges.done' ||
+    state === 'attendance.done' ||
+    state === 'register.done'
+  ) {
     return { state, context, done: true };
   }
   if (state === 'error' && context.terminal) {
     return { state, context, done: true };
   }
 
+  if (
+    session.anonymous &&
+    (state === 'profile' ||
+      state === 'attendance' ||
+      state.startsWith('attendance.') ||
+      state.startsWith('pledges.') ||
+      state === 'payments.summary')
+  ) {
+    return {
+      state: 'error',
+      context: {
+        ...baseContext(context),
+        returnState: 'main',
+        messageKey: 'error.invalid_choice',
+      },
+      done: false,
+    };
+  }
+
+  if (!session.anonymous && state.startsWith('register.')) {
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
   if (state === 'main') {
-    if (value === '2') {
+    if (value === '5') {
       return {
         state: 'main',
         context: baseContext(context),
@@ -617,24 +1343,53 @@ export async function advance(
         text: t('menu.exit'),
       };
     }
-    if (value !== '1') return invalid(state, context, 'error.invalid_choice');
-    const event = await services.currentEvent();
-    if (!event) {
+
+    if (session.anonymous) {
+      if (value === '1') {
+        return {
+          state: 'register.code',
+          context: { ...baseContext(context), notice: undefined },
+          done: false,
+        };
+      }
+      if (value === '2') {
+        const event = await services.currentEvent();
+        if (!event) return noEvent(context, 'main');
+        return {
+          state: 'offerings',
+          context: { ...baseContext(context), event, notice: undefined },
+          done: false,
+        };
+      }
+      if (value === '3') return openActivities(context, services, todayIso());
+      // Attendance needs a member; the anonymous entry answers Invalid choice.
+      if (value === '4') {
+        return {
+          state: 'error',
+          context: {
+            ...baseContext(context),
+            returnState: 'main',
+            messageKey: 'error.invalid_choice',
+          },
+          done: false,
+        };
+      }
+      return invalid(state, context, 'error.invalid_choice');
+    }
+
+    if (value === '1') {
+      const event = await services.currentEvent();
+      if (!event) return noEvent(context, 'main');
       return {
-        state: 'error',
-        context: {
-          ...baseContext(context),
-          returnState: 'main',
-          messageKey: 'error.no_event',
-        },
+        state: 'offerings',
+        context: { ...baseContext(context), event, notice: undefined },
         done: false,
       };
     }
-    return {
-      state: 'offerings',
-      context: { ...baseContext(context), event, notice: undefined },
-      done: false,
-    };
+    if (value === '2') return openActivities(context, services, todayIso());
+    if (value === '3') return openAttendance(context, services, session);
+    if (value === '4') return openProfile(context, services, session);
+    return invalid(state, context, 'error.invalid_choice');
   }
 
   if (state === 'offerings') {
@@ -1017,6 +1772,499 @@ export async function advance(
       };
     } catch (error) {
       return invalid(state, context, errorKey(error));
+    }
+  }
+
+  if (state === 'activities') {
+    if (value === '0') {
+      if (!context.activitiesMore) return invalid(state, context, 'error.invalid_choice');
+      const week = await services.activitiesWeek(context.activitiesDate ?? todayIso());
+      return {
+        state: 'activities.week',
+        context: { ...context, weekActivities: week, weekPage: 0, notice: undefined },
+        done: false,
+      };
+    }
+    if (value === '8') {
+      return {
+        state: 'activities.date',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    const index = parseIndex(value, context.activities?.length ?? 0);
+    const activity = index === null ? undefined : context.activities?.[index - 1];
+    if (!activity) return invalid(state, context, 'error.invalid_choice');
+    return {
+      state: 'activities.event',
+      context: {
+        ...context,
+        activity,
+        activitiesDate: activity.sessionDate,
+        activitiesBack: 'activities',
+        attendanceSession: {
+          id: activity.id,
+          name: activity.name,
+          sessionDate: activity.sessionDate,
+        },
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'activities.week') {
+    const week = context.weekActivities ?? [];
+    const page = context.weekPage ?? 0;
+    const more = week.length > (page + 1) * ACTIVITY_PAGE_SIZE;
+    if (value === '0') {
+      if (!more) return invalid(state, context, 'error.invalid_choice');
+      return {
+        state,
+        context: { ...context, weekPage: page + 1, notice: undefined },
+        done: false,
+      };
+    }
+    const visible = week.slice(page * ACTIVITY_PAGE_SIZE, (page + 1) * ACTIVITY_PAGE_SIZE);
+    const index = parseIndex(value, visible.length);
+    const activity = index === null ? undefined : visible[index - 1];
+    if (!activity) return invalid(state, context, 'error.invalid_choice');
+    return {
+      state: 'activities.event',
+      context: {
+        ...context,
+        activity,
+        activitiesDate: activity.sessionDate,
+        activitiesBack: 'activities.week',
+        attendanceSession: {
+          id: activity.id,
+          name: activity.name,
+          sessionDate: activity.sessionDate,
+        },
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'activities.date') {
+    const date = parseUssdDate(value, '0000-01-01');
+    if (!date) return invalid(state, context, 'error.invalid_date');
+    return openActivities(context, services, date);
+  }
+
+  if (state === 'activities.event') {
+    const activity = context.activity;
+    if (!activity) return invalid(state, context, 'error.invalid_choice');
+    if (value === '1') {
+      return {
+        state: session.anonymous ? 'offerings.name' : 'offerings.amount',
+        context: {
+          ...context,
+          flow: 'give',
+          event: {
+            id: activity.id,
+            name: activity.name,
+            sessionDate: activity.sessionDate,
+          },
+          amountMinor: undefined,
+          selected: undefined,
+          split: undefined,
+          idempotencyKey: undefined,
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    if (value === '2') {
+      if (session.anonymous) return invalid(state, context, 'error.invalid_choice');
+      const summary = await services.attendance(
+        session.member!.memberNo,
+        activity.sessionDate,
+        activity.sessionDate,
+      );
+      return {
+        state: 'attendance.event',
+        context: {
+          ...context,
+          attendanceSession: {
+            id: activity.id,
+            name: activity.name,
+            sessionDate: activity.sessionDate,
+          },
+          attendanceBack: 'activities.event',
+          attendanceEvent: {
+            present: summary.attended,
+            expected: summary.expected,
+            memberPresent: summary.events.some((event) => event.eventId === activity.id),
+          },
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'attendance') {
+    if (value === '1') {
+      return { state: 'attendance.day', context: { ...context, notice: undefined }, done: false };
+    }
+    if (value === '2') {
+      return {
+        state: 'attendance.period',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    if (value === '3') {
+      return {
+        state: 'attendance.code',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    if (value === '4') {
+      if (!context.memberContext?.isPresbyter) {
+        return {
+          state: 'error',
+          context: {
+            ...context,
+            returnState: 'attendance',
+            messageKey: 'error.not_senior',
+            notice: undefined,
+          },
+          done: false,
+        };
+      }
+      return {
+        state: 'attendance.clocking',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'attendance.day') {
+    const date = parseUssdDate(value, '0000-01-01');
+    if (!date) return invalid(state, context, 'error.invalid_date');
+    const summary = await services.attendance(session.member!.memberNo, date, date);
+    return {
+      state: 'attendance.status',
+      context: {
+        ...context,
+        attendanceSummary: summary,
+        attendanceDate: date,
+        attendanceFrom: date,
+        attendanceTo: date,
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.period') {
+    const today = todayIso();
+    const from =
+      value === '1'
+        ? monthStart(today)
+        : value === '2'
+          ? quarterStart(today)
+          : value === '3'
+            ? yearStart(today)
+            : null;
+    if (!from) return invalid(state, context, 'error.invalid_choice');
+    const summary = await services.attendance(session.member!.memberNo, from, today);
+    return {
+      state: 'attendance.status',
+      context: {
+        ...context,
+        attendanceSummary: summary,
+        attendanceFrom: from,
+        attendanceTo: today,
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.status') {
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'attendance.event') {
+    if (value !== '1') return invalid(state, context, 'error.invalid_choice');
+    if (context.attendanceEvent?.memberPresent) {
+      return invalid(state, context, 'error.already_clocked');
+    }
+    return {
+      state: 'attendance.code',
+      context: { ...context, notice: undefined },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.code') {
+    if (!/^\d{6}$/.test(value)) return invalid(state, context, 'error.code_invalid');
+    const event = context.attendanceSession ?? context.event;
+    if (!event) return noEvent(context, 'attendance');
+    try {
+      const result = await services.redeemCode({
+        code: value,
+        memberNo: session.member!.memberNo,
+        phoneHash: session.phoneHash,
+        eventId: event.id,
+        sessionDate: event.sessionDate,
+      });
+      return {
+        state: 'attendance.done',
+        context: {
+          ...context,
+          attendanceSession: {
+            id: event.id,
+            name: event.name,
+            sessionDate: result.sessionDate,
+          },
+          doneLabel: memberName(session.member!.firstName, session.member!.lastName),
+          doneKind: 'code',
+          notice: undefined,
+        },
+        done: true,
+      };
+    } catch (error) {
+      const key = codeErrorKey(error);
+      if (key === 'error.too_many_tries') {
+        return {
+          state: 'error',
+          context: {
+            ...context,
+            returnState: 'attendance',
+            messageKey: key,
+            notice: undefined,
+          },
+          done: false,
+        };
+      }
+      return invalid(state, context, key);
+    }
+  }
+
+  if (state === 'attendance.clocking') {
+    if (!context.memberContext?.isPresbyter) {
+      return {
+        state: 'error',
+        context: {
+          ...context,
+          returnState: 'attendance',
+          messageKey: 'error.not_senior',
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    if (value === '1') {
+      return { state: 'attendance.clock', context: { ...context, notice: undefined }, done: false };
+    }
+    if (value === '2') {
+      return {
+        state: 'attendance.expected',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    if (value === '3') {
+      if (!(await services.isSenior(session.member!.memberNo))) {
+        return {
+          state: 'error',
+          context: {
+            ...context,
+            returnState: 'attendance.clocking',
+            messageKey: 'error.not_senior',
+            notice: undefined,
+          },
+          done: false,
+        };
+      }
+      return {
+        state: 'attendance.delegate',
+        context: { ...context, notice: undefined },
+        done: false,
+      };
+    }
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'attendance.clock') {
+    let target: { memberNo: string; name: string };
+    try {
+      target = await services.memberByNo(value);
+    } catch {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    const event = context.event;
+    if (!event) return noEvent(context, 'attendance');
+    try {
+      const entry = await services.clockIn({
+        eventId: event.id,
+        sessionDate: event.sessionDate,
+        memberNo: target.memberNo,
+        actorMemberNo: session.member!.memberNo,
+        phoneHash: session.phoneHash,
+      });
+      return {
+        state: 'attendance.done',
+        context: {
+          ...context,
+          attendanceSession: event,
+          doneLabel: entry.name,
+          doneKind: 'clock',
+          notice: undefined,
+        },
+        done: true,
+      };
+    } catch (error) {
+      return invalid(state, context, clockingErrorKey(error));
+    }
+  }
+
+  if (state === 'attendance.expected') {
+    const parts = value.split(',').map((part) => part.trim());
+    if (parts.length !== 3 || parts.some((part) => !/^\d+$/.test(part))) {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    const [male, female, children] = parts.map(Number) as [number, number, number];
+    if (male > 10000 || female > 10000 || children > 10000) {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    const event = context.event;
+    if (!event) return noEvent(context, 'attendance');
+    try {
+      const expected = await services.recordExpected({
+        eventId: event.id,
+        sessionDate: event.sessionDate,
+        male,
+        female,
+        children,
+        phoneHash: session.phoneHash,
+      });
+      return {
+        state: 'attendance.done',
+        context: {
+          ...context,
+          attendanceSession: event,
+          expected,
+          doneLabel: undefined,
+          doneKind: undefined,
+          notice: undefined,
+        },
+        done: true,
+      };
+    } catch (error) {
+      return invalid(state, context, clockingErrorKey(error));
+    }
+  }
+
+  if (state === 'attendance.delegate') {
+    let target: { memberNo: string; name: string };
+    try {
+      target = await services.memberByNo(value);
+    } catch {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    return {
+      state: 'attendance.delegate_reason',
+      context: {
+        ...context,
+        delegateMemberNo: target.memberNo,
+        delegateName: target.name,
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'attendance.delegate_reason') {
+    const reason = value.trim();
+    if (reason.length < 3) return invalid(state, context, 'error.invalid_choice');
+    const event = context.event;
+    if (!event) return noEvent(context, 'attendance');
+    try {
+      const delegation = await services.delegate({
+        eventId: event.id,
+        sessionDate: event.sessionDate,
+        fromMemberNo: session.member!.memberNo,
+        toMemberNo: context.delegateMemberNo ?? '',
+        reason,
+        phoneHash: session.phoneHash,
+      });
+      return {
+        state: 'attendance.done',
+        context: {
+          ...context,
+          attendanceSession: event,
+          doneLabel: delegation.toName,
+          doneKind: 'delegate',
+          notice: undefined,
+        },
+        done: true,
+      };
+    } catch (error) {
+      return invalid(state, context, clockingErrorKey(error));
+    }
+  }
+
+  if (state === 'profile') {
+    return invalid(state, context, 'error.invalid_choice');
+  }
+
+  if (state === 'register.code') {
+    if (!session.anonymous) return invalid(state, context, 'error.invalid_choice');
+    if (!/^\d{6}$/.test(value)) return invalid(state, context, 'error.code_invalid');
+    // The registration code owns its event and session; the menu does not.
+    return {
+      state: 'register.first',
+      context: {
+        ...baseContext(context),
+        code: value,
+        event: undefined,
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'register.first') {
+    const firstName = value.slice(0, 64).trim();
+    if (!firstName) return invalid(state, context, 'error.invalid_choice');
+    return {
+      state: 'register.last',
+      context: { ...context, firstName, notice: undefined },
+      done: false,
+    };
+  }
+
+  if (state === 'register.last') {
+    const lastName = value.slice(0, 64).trim();
+    if (!lastName) return invalid(state, context, 'error.invalid_choice');
+    try {
+      const result = await services.createRegistration({
+        code: context.code ?? '',
+        firstName: context.firstName ?? '',
+        lastName,
+        phoneHash: session.phoneHash,
+      });
+      return {
+        state: 'register.done',
+        context: {
+          ...context,
+          requestReference: result.reference,
+          notice: undefined,
+        },
+        done: true,
+      };
+    } catch (error) {
+      return invalid(state, context, codeErrorKey(error, 'error.code_used'));
     }
   }
 

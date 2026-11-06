@@ -18,6 +18,13 @@ const memberSession: UssdSessionInfo = {
   anonymous: false,
 };
 
+const anonymousSession: UssdSessionInfo = {
+  phone: '8099999999',
+  phoneHash: 'b'.repeat(64),
+  member: null,
+  anonymous: true,
+};
+
 function offerings(): NonNullable<UssdContext['offerings']> {
   return [
     { id: 'o1', name: 'Welfare Fund Appeal 1', currency: 'GHS' },
@@ -76,6 +83,83 @@ function contextFor(state: (typeof STATES)[number]): UssdContext {
     },
     returnState: 'offerings',
     messageKey: 'error.no_event',
+    activities: [
+      {
+        id: 'e1',
+        name: 'Sunday Celebration Service',
+        sessionDate: '2026-12-12',
+        tracksMembers: true,
+      },
+      {
+        id: 'e2',
+        name: 'Midweek Bible Teaching',
+        sessionDate: '2026-12-12',
+        tracksMembers: true,
+      },
+    ],
+    activitiesDate: '2026-12-12',
+    activitiesMore: true,
+    weekActivities: [1, 2, 3, 4, 5, 6].map((index) => ({
+      id: `e${index}`,
+      name: `Week Event ${index}`,
+      sessionDate: '2026-12-13',
+      tracksMembers: true,
+    })),
+    weekPage: 0,
+    activity: {
+      id: 'e1',
+      name: 'Sunday Celebration Service',
+      sessionDate: '2026-12-12',
+      tracksMembers: true,
+    },
+    attendanceSession: {
+      id: 'e1',
+      name: 'Sunday Celebration Service',
+      sessionDate: '2026-12-12',
+    },
+    attendanceEvent: { present: 2, expected: 10, memberPresent: false },
+    attendanceSummary: {
+      from: '2026-12-12',
+      to: '2026-12-12',
+      attended: 2,
+      expected: 3,
+      events: [
+        { eventId: 'e1', name: 'Sunday Celebration Service', sessionDate: '2026-12-12' },
+        { eventId: 'e2', name: 'Midweek Bible Teaching', sessionDate: '2026-12-10' },
+      ],
+    },
+    attendanceDate: '2026-12-12',
+    attendanceFrom: '2026-12-12',
+    attendanceTo: '2026-12-12',
+    memberContext: { isPresbyter: true, presbyterRank: 1 },
+    profile: {
+      memberNo: 'M-1001',
+      name: 'Ama Mensah',
+      gender: 'female',
+      age: 32,
+      ministries: ['Welfare', 'Music'],
+      shepherd: {
+        memberNo: 'M-2001',
+        name: 'Grace Okafor',
+        gender: 'female',
+        age: 40,
+      },
+      attendance: {
+        status: 'regular',
+        attended: 4,
+        expected: 5,
+        window: 5,
+        lastAttendedOn: '2026-12-10',
+      },
+    },
+    code: '123456',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    delegateMemberNo: 'M-1002',
+    delegateName: 'Kofi Boateng',
+    doneLabel: 'Kofi Boateng',
+    expected: { male: 20, female: 30, children: 40, total: 90 },
+    requestReference: 'REG-ABCDEF',
   };
 
   if (state === 'offerings.pledge_date' || state === 'offerings.pledge_confirm') {
@@ -143,8 +227,16 @@ describe('USSD display glossary', () => {
 
   it('shows the fixed footer keys where a parent or a page exists', () => {
     const main = render('main', contextFor('main'), memberSession, services);
-    expect(main.options.map((option) => option.key)).toEqual(['1', '2']);
+    expect(main.options.map((option) => option.key)).toEqual(['1', '2', '3', '4', '5']);
+    expect(main.text).toContain('2 Activities');
+    expect(main.text).toContain('3 Attendance');
+    expect(main.text).toContain('4 Profile');
+    expect(main.text).toContain('5 Exit');
     expect(main.text).not.toContain('00 Main');
+
+    const anonymous = render('main', contextFor('main'), anonymousSession, services);
+    expect(anonymous.text).toContain('1 Register');
+    expect(anonymous.text).toContain('5 Exit');
 
     const select = render(
       'offerings.select',
@@ -160,6 +252,43 @@ describe('USSD display glossary', () => {
     const name = render('offerings.name', contextFor('offerings.name'), memberSession, services);
     expect(name.options.map((option) => option.key)).toContain('9');
     expect(name.options.map((option) => option.key)).toContain('00');
+  });
+
+  it('renders a five-event headcount day inside the budget', () => {
+    const context = contextFor('activities');
+    context.activities = Array.from({ length: 5 }, (_, index) => ({
+      id: `h${index}`,
+      name: 'Headcount Rally Service',
+      sessionDate: '2026-12-12',
+      tracksMembers: false,
+      headcountOnlyExpected: 30000,
+    }));
+    context.activitiesMore = true;
+    const rendered = render('activities', context, memberSession, services);
+    expect(rendered.text.length, rendered.text).toBeLessThanOrEqual(182);
+    expect(rendered.text).toContain('(30000)');
+  });
+
+  it('renders both attendance.done variants inside the budget', () => {
+    const clocked = render(
+      'attendance.done',
+      { ...contextFor('attendance.done'), expected: undefined },
+      memberSession,
+      services,
+    );
+    expect(clocked.text).toContain('Recorded');
+    expect(clocked.text).toContain('Kofi Boateng');
+    expect(clocked.text.length).toBeLessThanOrEqual(182);
+
+    const expected = render(
+      'attendance.done',
+      contextFor('attendance.done'),
+      memberSession,
+      services,
+    );
+    expect(expected.text).toContain('20 Male, 30 Female, 40 Children');
+    expect(expected.text).toContain('90 Expected');
+    expect(expected.text.length).toBeLessThanOrEqual(182);
   });
 
   it('uses the short glossary form and dynamic truncation only by kind', () => {
