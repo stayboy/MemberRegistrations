@@ -428,7 +428,9 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 - `series_exception(date, kind: cancelled | extra)` records a cancelled service or a one-off extra.
 - Archived, never deleted.
 - `presbyterOnly` (boolean, default false) templates generated instances; a presbyter-only series is
-  hidden from non-presbyters on every reading surface.
+  hidden from non-presbyters on every reading surface. Changing the flag affects **future generated
+  occurrences only**; already-generated events keep their own flag and their history, and can be edited
+  individually.
 
 ### Event instance
 
@@ -585,9 +587,11 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   `GET /v1/events/{eventId}/headcounts?sessionDate` returns
   `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
   first, `no-store`; `current` is the newest non-superseded observation (by `asOf`, then
-  `recordedAt`), and `observations` keeps the superseded history. `Headcount` is
+  `recordedAt`), and `observations` keeps the superseded history. A superseded observation is **not
+  invalid**: it remains the valid record of the count at its `asOf`, and its `supersededBy` names the
+  correcting row. `Headcount` is
   `{ id, eventId, sessionDate, asOf, mode, adultMale, adultFemale, adultUnspecified, childMale,
-childFemale, childUnspecified, total, recordedBy, recordedAt, supersedesId }`. `POST` body
+childFemale, childUnspecified, total, recordedBy, recordedAt, supersedesId, supersededBy }`. `POST` body
   `{ sessionDate, asOf?, mode, adultMale?, adultFemale?, adultUnspecified?, childMale?, childFemale?,
 childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row, defaults to now and
   must fall within the session's calendar day in the event timezone. Mode validation: `adults` splits
@@ -596,10 +600,17 @@ childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row
   adults as one `adultUnspecified` (both adult gender buckets 0); `mixed` splits both, with both
   unspecified buckets 0; `total` is the sum of the six buckets.
   **Correction is allowed, never deletion:** a correction is a new observation whose `supersedesId`
-  names the row it corrects; that row stays in history marked superseded. Errors: malformed counts or
+  names the row it corrects, keeps that row's `asOf` (the moment counted), and records a fresh
+  `recordedBy`/`recordedAt`; the corrected row stays in history marked superseded. `supersedesId` is
+  unique when present, so one row can be corrected once and corrections form a single chain. A correction
+  **may change the mode** (a wrong service mode is itself an erroneous entry): the new row validates
+  against its own mode and still keeps the target's `asOf`. `supersededBy` is derived as the unique row
+  whose `supersedesId` points at this observation, never stored twice. Errors:
+  malformed counts or
   a mode-violating bucket, an out-of-day `asOf`, or a `supersedesId` that is unknown, already
   superseded or from another session — `422 validation_error`; unknown event or session — `404
-not_found`. Activities reads the current headcount for a headcount-only event through the same
+not_found`. Each bucket is 0–10,000, the total is at most 30,000, and an all-zero observation is
+  allowed. Headcounts are operator-only: no member DTO, profile or summary returns them. Activities reads the current headcount for a headcount-only event through the same
   `GET`; at most three events are shown, so at most three reads. These routes and the table are the 2026-11-05 headcount correction, delivered by 24d; they sit beside the 24b attendance seam and replace its `/expected` route.
 - **Attendance summary.** Returns `{ from, to, attended, expected, events: [{ eventId, name,
 sessionDate }] }`: `events` lists the member's attended rows in the window newest first, never

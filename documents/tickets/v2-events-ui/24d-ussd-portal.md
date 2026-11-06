@@ -6,7 +6,9 @@
 pages behind the 24a–24c seams, plus a dev-only simulator that drives the real API. The dev-only
 simulator drives the **real per-provider adapters** (Nalo and the HMAC reference adapter, chosen by a
 provider dropdown) and the real session pipeline; `/dev/ussd/session` plays the gateway for the selected
-provider, signing/authenticating server-side. The gateway secret never reaches the browser.
+provider, signing/authenticating server-side. The gateway secret never reaches the browser. Two
+sequential slices: **A** migration 0016, headcount/activities/presbyter-only semantics, the API and USSD
+screens; **B** the operator pages and the simulator.
 
 **Blocked by:** 24a, 24b, 24c. Migration **0016** (`ussd_sessions.external_id`, text, partial unique
 when present) is authorised by name for this round (owner, 2026-11-05); 24e's expected migration is now 0017. Uses the existing shell, session and officer gate. The Nalo adapter follows the published provider
@@ -25,14 +27,18 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
 - [ ] **Clocking** shows session attendance and delegations, records a clock-in for a member, and records
       a delegation from a senior presbyter to another presbyter for one session.
 - [ ] **Headcount** records the operator's actual counted attendance per session: a mode selector
-      (Adults / Children / Mixed), an `asOf` timestamp defaulting to now, the three-number entry (four in
-      Mixed), the observation history newest first, and a **Correct** action on the current observation
-      that supersedes it without deleting it. The register-derived `expected` is shown alongside as
-      **Roster** and never merged with the headcount; the USSD presbyter flow uses the same seam.
+      labelled **Adult service / Children service / Mixed service**, an `asOf` timestamp defaulting to
+      now, the three-number entry (four in Mixed), the observation history newest first (a superseded
+      observation stays readable and remains valid for its `asOf`), and a **Correct** action on the
+      current observation that keeps its `asOf` and supersedes it without deleting it. The register-derived
+      `expected` is shown alongside as **Roster** and never merged with the headcount; headcounts are
+      operator-only. The USSD presbyter flow offers `1 New count` / `2 Correct` on the same seam and
+      remembers the last mode.
 - [ ] **Activities** mirrors the USSD eligibility and ordering: general events, the officer's active
       ministries, and presbyter-only events for presbyters; date → priority tier → start time → event
-      number, three plus `More`, with the zero-events-today next-events prompt (`0 events today`,
-      `2 events in 2 days`, `1 View` / `2 This week`).
+      number, three plus `More` (two at the 120-character provider cap), with the zero-events-today
+      two-week next-events prompt (`0 events today`, `2 events in 2 days`, `1 View` / `2 This week`),
+      `No upcoming events` beyond two weeks, and the empty-week state.
 - [ ] **Events** gains `presbyterOnly` on the event form and the series template; non-presbyters never
       see or open such an event, and its roster is the active presbyters.
 - [ ] **Products** manages welfare products and their eligibility, payer, period, cover and dependent
@@ -47,7 +53,7 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
 - [ ] Tests cover the pages' rendering, the officer gate, the production guard on `/dev/ussd/session`,
       and one end-to-end simulate → pay → callback journey against the stub gateway.
 - [ ] (addition) A provider-adapter layer: a declaration
-      `{ id, route, authenticator, toFrame, toWire, maxMsgChars }` plus a thin route per provider, all
+      `{ id, route, authenticator, toFrame, toWire, maxMsgChars, pageSize `{ events, offerings }` }` plus a thin route per provider, all
       over the existing session pipeline (machine, glossary, repos and services untouched). Adding a
       provider is one adapter + one registration.
 - [ ] (addition) Migration `0016` adds `ussd_sessions.external_id` (`text`, partial unique when
@@ -155,7 +161,7 @@ callback. The gateway secret never leaves the server.
 18. As an operator, I want the configured `USSD_NALO_USER_ID` to gate the Nalo route, so that only the
     real aggregator's client id is accepted.
 19. As an operator/back-office officer, I want one USSD nav section (Codes, Registrations, Clocking,
-    Expected headcounts, Products, Claims) behind the existing shell and officer gate, so that USSD
+    Headcount, Products, Claims) behind the existing shell and officer gate, so that USSD
     operations reuse the app's authentication rather than a separate app.
 20. As an admin, I want the USSD operations that are otherwise handset-only (codes, registrations,
     clocking, headcounts, products, claims) to have a back-office home in the portal, so that a
@@ -170,7 +176,7 @@ callback. The gateway secret never leaves the server.
 #### Adapter declaration and the seam
 
 - A provider is a declaration, not a code branch. The declaration holds `id`, `route`,
-  `authenticator`, `toFrame`, `toWire` and `maxMsgChars`. Adding a provider is one declaration plus one
+  `authenticator`, `toFrame`, `toWire`, `maxMsgChars` and the per-list `pageSize`. Adding a provider is one declaration plus one
   registration; the session machine, glossary, repositories and services are never modified.
 - The internal frame is `{ phone, sessionId?, input, seq }`; an absent `sessionId` means a fresh
   session. The internal render is `{ sessionId, text, done, state, options? }`. The adapter is the only
@@ -260,7 +266,7 @@ validation_error`); `MSGTYPE` → the fresh/continue signal (`true` → no `sess
 
 ### Out of Scope
 
-- The detail of the operator pages (Codes, Registrations, Clocking, Expected headcounts, Products,
+- The detail of the operator pages (Codes, Registrations, Clocking, Headcount, Products,
   Claims) beyond the checklist items above.
 - The payment gateway and money paths — unchanged, already specified.
 - Real aggregator certification, credentials, shortcodes or deployment — the adapters and routes remain
@@ -302,7 +308,7 @@ register-derived `expected` as a distinct, relabelled **Roster**. Model headcoun
 it corrects, never a delete or overwrite. Expose `GET`/`POST /v1/events/{eventId}/headcounts` and remove
 the old `/expected` route. Gate Activities to events the caller may attend — general, the member's
 active ministries, and presbyter-only events for presbyters — ordered by date, then priority tier, then
-start time, then event number, showing three events plus More; when today is empty, show `0 events today`
+start time, then event number, showing three events plus More (two at the 120-character channel page); when today is empty, show `0 events today`
 and the next applicable day's count with `1 View` and `2 This week`. Add `presbyterOnly` to events and
 their series template, and keep headcounts fully independent of per-member attendance and regularity.
 
@@ -331,7 +337,7 @@ their series template, and keep headcounts fully independent of per-member atten
     so the list opens with what is relevant to me.
 11. As a member, I want the Activities list ordered by date, then relevance, then start time, so today's
     relevant events come first.
-12. As a member, I want three events plus More on the Activities screen, so the screen stays within the
+12. As a member, I want three events plus More (two at the 120-character channel page) on the Activities screen, so the screen stays within the
     handset budget.
 13. As a member, I want a day with no events to say `0 events today` and tell me when the next applicable
     events are (`2 events in 2 days`), with `1 View` to open them and `2 This week` for the week, so I am
@@ -364,30 +370,36 @@ their series template, and keep headcounts fully independent of per-member atten
   `adultUnspecified` (adult gender buckets zero); `mixed` splits both (both unspecified buckets zero).
 - **`asOf`.** Required on the row, defaults to now, and must fall within the session's calendar day in the
   event timezone.
-- **Correction.** A correction is a new observation with `supersedesId` naming the row it corrects; the
-  corrected row stays marked superseded. The current observation is the newest non-superseded row by
-  `asOf`, then `recordedAt`. USSD correction is re-entry; the portal offers an explicit Correct action
-  and, separately, appending a fresh observation. Corrections are available in the back-office admin UI.
+- **Correction.** A correction is a new observation with `supersedesId` naming the row it corrects,
+  keeps that row's `asOf` (the moment counted), records a fresh `recordedBy`/`recordedAt`, and leaves the
+  corrected row marked superseded but **not invalid** — it remains the valid record of the count at its
+  `asOf`. `supersedesId` is unique when present (one chain). The current observation is the newest
+  non-superseded row by `asOf`, then `recordedAt`. USSD offers `1 New count` (append, `asOf` now) and `2
+Correct` (supersede the current, keep its `asOf`); the portal offers the same Correct action.
 - **Who records.** A presbyter or admin; the USSD actor rules apply. No senior/delegate rule for
   headcounts.
 - **API.** `GET`/`POST /v1/events/{eventId}/headcounts`; the `/expected` route is deleted this round.
   Malformed counts or a mode-violating bucket, an out-of-day `asOf`, or a bad `supersedesId` are `422
 validation_error`; an unknown event or session is `404 not_found`.
-- **Entry stays simple.** USSD asks mode then one three-number prompt (never `asOf`); `mixed` is
-  portal-only.
+- **Entry stays simple.** USSD labels the modes **Adult service** / **Children service** (and shows
+  **Mixed service** when that is the current observation), remembers the last mode for the session, then
+  asks one labelled three-number line with tolerant separators; `mixed` is a portal-only four-number
+  entry. Buckets are 0–10,000 with a 30,000 total; all-zero is allowed.
 - **Activities eligibility and ordering.** Only events the caller may attend; ordered date (today first),
   then priority tier (the member's ministry events, and a presbyter's own presbyter-only events, before
-  general), then start time, then event number; three events plus More. Anonymous callers see general
-  events only.
-- **Zero-events state.** When the selected day has no applicable event, show `0 events today`, the next
-  applicable day's count (`2 events in 2 days` or `1 event tomorrow`), `1 View` those events and `2 This
-week`; the week list is always reachable.
+  general), then start time, then event number; three events plus More, or two when the selected
+  provider caps messages at 120. Anonymous callers see general events only.
+- **Zero-events state.** Within a two-week horizon, show `0 events today`, the next applicable day's count
+  (`2 events in 2 days` or `1 event tomorrow`), `1 View` those events and `2 This week`; beyond two weeks
+  show `No upcoming events`; an empty week shows `0 events this week` with `1 A date` / `9 Back`.
 - **Presbyter-only events.** `presbyterOnly` (default false) on events and series templates;
   non-presbyters never see or open them and they are excluded from a non-presbyter's roster and
-  regularity; the roster for a presbyter-only session is the active presbyters.
-- **Independence.** Headcounts never derive from or feed per-member attendance or regularity.
-- **Round placement.** All of this lands in 24d, extending migration 0016; 24c is unaffected and 24e
-  stays at 0017.
+  regularity; the roster for a presbyter-only session is the active presbyters. Changing a series flag
+  affects future generated occurrences only.
+- **Independence and visibility.** Headcounts never derive from or feed per-member attendance or
+  regularity, and they are operator-only — no member DTO, profile or summary returns them.
+- **Round placement.** All of this lands in 24d slice A (data/semantics/API/USSD) and slice B (operator
+  pages/simulator), extending migration 0016; 24c is unaffected and 24e stays at 0017.
 
 ### Testing Decisions
 
@@ -399,10 +411,14 @@ week`; the week list is always reachable.
   `GET`/`POST /headcounts` (create, list newest-first, `current` resolution, `no-store`), mode-mismatch
   `422`, out-of-day `asOf` `422`, superseding across sessions, an unknown or already-superseded
   `supersedesId` `422`, unknown event/session `404`,
-  append-only correction (the original stays, marked superseded), independence (a headcount changes
-  neither `present` nor `expected` nor regularity), the `/expected` route returning `404`, the USSD
-  Activities filtering/ordering (general, active ministry, presbyter-only; three + More), the
-  zero-events-today next-events prompt, and the headcount mode/entry/correction screens.
+  append-only correction (the original stays, marked superseded but valid for its `asOf`; a correction
+  keeps that `asOf`; a second supersede of the same row is `422`), bucket bounds (0–10,000, total
+  ≤30,000) and an all-zero observation, independence (a headcount changes neither `present` nor
+  `expected` nor regularity), operator-only visibility (no member DTO returns a headcount), the
+  `/expected` route returning `404`, the USSD Activities filtering/ordering (general, active ministry,
+  presbyter-only; three plus More, two at the 120 cap), the two-week next-events prompt and the
+  no-upcoming/empty-week states, the series `presbyterOnly` change affecting future occurrences only, and
+  the headcount mode/entry/correction screens.
 - **Prior art.** Route-level Supertest + PGlite tests like the existing attendance and USSD tests
   (`tests/api/attendances`, `tests/api/ussd*.test.ts`), which drive the menu as a sequence of frames and
   assert prompts, and the display-glossary budget test that renders every screen and fails on an exceeded
