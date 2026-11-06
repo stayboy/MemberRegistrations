@@ -29,6 +29,8 @@ export interface TestAppOptions {
     gatewaySecret?: string;
     phonePepper?: string;
     codePepper?: string;
+    naloUserId?: string;
+    naloMaxMsgChars?: number;
   };
 }
 

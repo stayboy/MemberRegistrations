@@ -10,6 +10,8 @@ import {
   DEFAULT_PAYMENT_GATEWAY_SECRET,
   DEFAULT_USSD_CODE_PEPPER,
   DEFAULT_USSD_GATEWAY_SECRET,
+  DEFAULT_USSD_NALO_MAX_MSG_CHARS,
+  DEFAULT_USSD_NALO_USER_ID,
   DEFAULT_USSD_PHONE_PEPPER,
   DEFAULT_VISITOR_PHONE_PEPPER,
 } from './config/env.js';
@@ -49,7 +51,9 @@ import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionProductsRouter } from './routes/subscription-products.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
+import { devUssdRouter } from './routes/dev-ussd.js';
 import { ussdRouter } from './routes/ussd.js';
+import { buildUssdAdapters } from './ussd/adapters.js';
 import { createUssdServices } from './ussd/services.js';
 import type { Db } from './db/sql.js';
 
@@ -70,6 +74,8 @@ export interface AppOptions {
     gatewaySecret?: string;
     phonePepper?: string;
     codePepper?: string;
+    naloUserId?: string;
+    naloMaxMsgChars?: number;
   };
 }
 
@@ -130,6 +136,11 @@ export function createApp(options: AppOptions): Express {
       options.ussd?.phonePepper ?? process.env.USSD_PHONE_PEPPER ?? DEFAULT_USSD_PHONE_PEPPER,
     codePepper:
       options.ussd?.codePepper ?? process.env.USSD_CODE_PEPPER ?? DEFAULT_USSD_CODE_PEPPER,
+    naloUserId:
+      options.ussd?.naloUserId ?? process.env.USSD_NALO_USER_ID ?? DEFAULT_USSD_NALO_USER_ID,
+    naloMaxMsgChars:
+      options.ussd?.naloMaxMsgChars ??
+      Number(process.env.USSD_NALO_MAX_MSG_CHARS ?? DEFAULT_USSD_NALO_MAX_MSG_CHARS),
   };
   const attendanceCodes = new AttendanceCodeRepository(options.db, ussd.codePepper);
   const registrationRequests = new RegistrationRequestRepository(options.db, members);
@@ -173,10 +184,32 @@ export function createApp(options: AppOptions): Express {
     next();
   });
 
-  // The USSD aggregator HMAC covers the exact raw frame. It is mounted outside
-  // the bearer namespace and before the global JSON parser.
+  // The USSD aggregator HMAC covers the exact raw frame. The provider routes
+  // are mounted outside the bearer namespace and before the global JSON parser.
+  const ussdAdapters = buildUssdAdapters({
+    repo: ussdRepository,
+    gatewaySecret: ussd.gatewaySecret,
+    naloUserId: ussd.naloUserId,
+    naloMaxMsgChars: ussd.naloMaxMsgChars,
+  });
+  const ussdDeps = {
+    repo: ussdRepository,
+    services: ussdServices,
+    phonePepper: ussd.phonePepper,
+  };
   app.use('/ussd', express.raw({ type: 'application/json', limit: '64kb' }));
-  app.use('/ussd', ussdRouter(ussdRepository, ussdServices, ussd));
+  app.use(ussdRouter(ussdAdapters, ussdDeps, { enabled: ussd.enabled }));
+
+  // The dev-only simulator gateway builds the provider wire server-side. It is
+  // registered before the global JSON parser so its production refusal cannot
+  // be pre-empted by a body-parse error.
+  app.use(
+    devUssdRouter(ussdAdapters, ussdDeps, {
+      enabled: ussd.enabled,
+      gatewaySecret: ussd.gatewaySecret,
+      naloUserId: ussd.naloUserId,
+    }),
+  );
 
   // The callback HMAC covers the exact raw body, so this route is mounted
   // before the global JSON parser and before the bearer gate.

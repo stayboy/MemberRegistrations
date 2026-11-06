@@ -3,6 +3,8 @@ import {
   DEFAULT_PAYMENT_GATEWAY_SECRET,
   DEFAULT_USSD_CODE_PEPPER,
   DEFAULT_USSD_GATEWAY_SECRET,
+  DEFAULT_USSD_NALO_MAX_MSG_CHARS,
+  DEFAULT_USSD_NALO_USER_ID,
   DEFAULT_USSD_PHONE_PEPPER,
   DEFAULT_VISITOR_PHONE_PEPPER,
   loadEnv,
@@ -21,6 +23,7 @@ const productionSecrets = {
   USSD_GATEWAY_SECRET: 'production-ussd-gateway-secret',
   USSD_PHONE_PEPPER: 'production-ussd-phone-pepper',
   USSD_CODE_PEPPER: 'production-ussd-code-pepper',
+  USSD_NALO_USER_ID: 'production-nalo-client',
   PAYMENT_GATEWAY_SECRET: 'production-payment-gateway-secret',
 };
 
@@ -51,9 +54,43 @@ describe('environment', () => {
       loadEnv({
         ...production,
         ...productionSecrets,
+        USSD_NALO_USER_ID: DEFAULT_USSD_NALO_USER_ID,
+      }),
+    ).toThrow(/USSD_NALO_USER_ID/);
+    expect(() =>
+      loadEnv({
+        ...production,
+        ...productionSecrets,
         PAYMENT_GATEWAY_SECRET: DEFAULT_PAYMENT_GATEWAY_SECRET,
       }),
     ).toThrow(/PAYMENT_GATEWAY_SECRET/);
+  });
+
+  it('validates the Nalo client id and message cap bounds', () => {
+    expect(loadEnv({ NODE_ENV: 'test' }).USSD_NALO_USER_ID).toBe(DEFAULT_USSD_NALO_USER_ID);
+    expect(loadEnv({ NODE_ENV: 'test' }).USSD_NALO_MAX_MSG_CHARS).toBe(
+      DEFAULT_USSD_NALO_MAX_MSG_CHARS,
+    );
+    expect(loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'a' }).USSD_NALO_USER_ID).toBe('a');
+    expect(
+      loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(32) }).USSD_NALO_USER_ID,
+    ).toHaveLength(32);
+    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: '' })).toThrow(/USSD_NALO_USER_ID/);
+    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(33) })).toThrow(
+      /USSD_NALO_USER_ID/,
+    );
+    expect(
+      loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '1' }).USSD_NALO_MAX_MSG_CHARS,
+    ).toBe(1);
+    expect(
+      loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '182' }).USSD_NALO_MAX_MSG_CHARS,
+    ).toBe(182);
+    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '0' })).toThrow(
+      /USSD_NALO_MAX_MSG_CHARS/,
+    );
+    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '183' })).toThrow(
+      /USSD_NALO_MAX_MSG_CHARS/,
+    );
   });
 
   it('accepts production with explicit secrets and USSD disabled', () => {

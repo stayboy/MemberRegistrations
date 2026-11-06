@@ -947,8 +947,133 @@ async function runScenario() {
     openapi.status === 200 &&
       openapi.body.info?.version === '2.2.0' &&
       Boolean(openapi.body.paths?.['/auth/magic-link']) &&
-      Boolean(openapi.body.paths?.['/v1/subscription-products']),
+      Boolean(openapi.body.paths?.['/v1/subscription-products']) &&
+      Boolean(openapi.body.paths?.['/ussd/nalo']) &&
+      !openapi.body.paths?.['/dev/ussd/session'],
   );
+
+  // The Nalo provider route authenticates on USERID alone and resolves a
+  // continuation through its SESSIONID; the dev gateway never leaks a secret.
+  const naloSession = `smoke-nalo-${Date.now()}`;
+  const naloStart = await request('/ussd/nalo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      USERID: 'NALOTest',
+      MSISDN: '0801 777 0001',
+      USERDATA: '',
+      MSGTYPE: true,
+      NETWORK: 'smoke',
+      SESSIONID: naloSession,
+    }),
+  });
+  check(
+    'nalo route authenticates USERID',
+    naloStart.status === 200 &&
+      naloStart.body.MSGTYPE === true &&
+      typeof naloStart.body.MSG === 'string' &&
+      naloStart.body.MSG.includes('1 Register') &&
+      !('SESSIONID' in naloStart.body),
+    JSON.stringify(naloStart.body),
+  );
+
+  const naloDenied = await request('/ussd/nalo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      USERID: 'NotTheClient',
+      MSISDN: '0801 777 0002',
+      USERDATA: '',
+      MSGTYPE: true,
+      NETWORK: 'smoke',
+      SESSIONID: `smoke-nalo-denied-${Date.now()}`,
+    }),
+  });
+  check(
+    'nalo route rejects a wrong USERID',
+    naloDenied.status === 401 && naloDenied.body.code === 'unauthorized',
+    JSON.stringify(naloDenied.body),
+  );
+
+  const devNalo = await request('/dev/ussd/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: 'nalo', phone: '0801 777 0003', input: '' }),
+  });
+  check(
+    'dev simulator plays the nalo adapter without a secret',
+    devNalo.status === 200 &&
+      devNalo.body.provider === 'nalo' &&
+      devNalo.body.wire?.MSGTYPE === true &&
+      !JSON.stringify(devNalo.body).includes(USSD_SECRET),
+    JSON.stringify(devNalo.body),
+  );
+
+  const devHmac = await request('/dev/ussd/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: 'hmac', phone: '0801 777 0004', input: '' }),
+  });
+  check(
+    'dev simulator signs the hmac frame server-side without a secret',
+    devHmac.status === 200 &&
+      devHmac.body.provider === 'hmac' &&
+      typeof devHmac.body.wire?.sessionId === 'string' &&
+      !JSON.stringify(devHmac.body).includes(USSD_SECRET),
+    JSON.stringify(devHmac.body),
+  );
+
+  await checkDisabledSwitch();
+}
+
+/**
+ * The off posture needs its own boot because `USSD_ENABLED` is read once at
+ * startup. NODE_ENV=production cannot be smoke-tested here: it requires a real
+ * database and email configuration and refuses USSD_ENABLED=true, so the
+ * production refusal stays covered by `tests/api/ussd-nalo.test.ts`.
+ */
+async function checkDisabledSwitch() {
+  const disabledPort = await freePort();
+  const disabledChild = spawn(process.execPath, ['dist/index.js'], {
+    env: {
+      ...withoutDatabaseUrl(process.env),
+      NODE_ENV: 'development',
+      PORT: String(disabledPort),
+      API_BEARER_TOKEN: TOKEN,
+      LOG_LEVEL: 'silent',
+      USSD_ENABLED: 'false',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let disabledOutput = '';
+  disabledChild.stdout.on('data', (chunk) => (disabledOutput += chunk));
+  disabledChild.stderr.on('data', (chunk) => (disabledOutput += chunk));
+  try {
+    await waitForHealthOn(disabledChild, disabledPort);
+    const nalo = await requestOn(disabledPort, '/ussd/nalo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ USERID: 'NALOTest', MSISDN: '0801 777 0005', SESSIONID: 'x' }),
+    });
+    const dev = await requestOn(disabledPort, '/dev/ussd/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'nalo', phone: '0801 777 0005', input: '' }),
+    });
+    check(
+      'disabled switch answers ussd_disabled on both entries',
+      nalo.status === 503 &&
+        nalo.body.code === 'ussd_disabled' &&
+        dev.status === 503 &&
+        dev.body.code === 'ussd_disabled',
+      `${nalo.status}/${dev.status}`,
+    );
+  } catch (error) {
+    if (disabledOutput.trim()) console.error(disabledOutput.trim());
+    throw error;
+  } finally {
+    disabledChild.kill();
+  }
 }
 
 function shiftDate(date, days) {
@@ -983,10 +1108,14 @@ function ussdFrame(body, ip) {
 }
 
 async function waitForHealth() {
+  await waitForHealthOn(child, port);
+}
+
+async function waitForHealthOn(server, serverPort) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (child.exitCode !== null) throw new Error(`server exited early (code ${child.exitCode})`);
+    if (server.exitCode !== null) throw new Error(`server exited early (code ${server.exitCode})`);
     try {
-      const response = await request('/health');
+      const response = await requestOn(serverPort, '/health');
       if (response.status === 200) return;
     } catch {
       // Not listening yet.
@@ -996,8 +1125,12 @@ async function waitForHealth() {
   throw new Error('server did not become healthy within 10s');
 }
 
-async function request(path, init) {
-  const response = await fetch(`http://127.0.0.1:${port}${path}`, init);
+function request(path, init) {
+  return requestOn(port, path, init);
+}
+
+async function requestOn(serverPort, path, init) {
+  const response = await fetch(`http://127.0.0.1:${serverPort}${path}`, init);
   const text = await response.text();
   let body = text;
   try {

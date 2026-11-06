@@ -505,6 +505,58 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
+      '/ussd/nalo': {
+        post: {
+          summary: 'Nalo USSD entry (USERID auth, not bearer)',
+          description:
+            'Nalo Solutions sends `USERID` (matched against USSD_NALO_USER_ID, no signature), `MSISDN`, `USERDATA`, `MSGTYPE` and `SESSIONID`. `SESSIONID` is stored as `external_id` under provider `nalo` so a continuation resolves the internal uuid; `USERDATA` over 64 characters is 422. The response omits `SESSIONID`, echoes `USERID`/`MSISDN`, truncates `MSG` to maxMsgChars with `…` only when needed, and sets `MSGTYPE` to `!done`. USSD is disabled by configuration (503 ussd_disabled).',
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['USERID', 'MSISDN', 'MSGTYPE', 'SESSIONID'],
+                  properties: {
+                    USERID: { type: 'string', minLength: 1, maxLength: 32 },
+                    MSISDN: { type: 'string' },
+                    USERDATA: { type: 'string', maxLength: 64 },
+                    MSGTYPE: { type: 'boolean' },
+                    NETWORK: { type: 'string' },
+                    SESSIONID: { type: 'string', minLength: 1, maxLength: 128 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description:
+                'The screen as Nalo wire, with Cache-Control: no-store; SESSIONID is omitted.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['USERID', 'MSG', 'MSGTYPE'],
+                    properties: {
+                      USERID: { type: 'string' },
+                      MSISDN: { type: 'string' },
+                      MSG: { type: 'string' },
+                      MSGTYPE: { type: 'boolean' },
+                    },
+                  },
+                },
+              },
+            },
+            401: problem('The USERID is absent or does not match USSD_NALO_USER_ID.'),
+            422: validation,
+            429: problem('The phone hash or client address is over the rate limit.'),
+            503: problem('USSD is disabled by configuration.'),
+          },
+        },
+      },
+
       '/v1/members': {
         get: {
           summary: 'List member registrations',

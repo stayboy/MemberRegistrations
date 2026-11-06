@@ -10,6 +10,8 @@ export const DEFAULT_VISITOR_PHONE_PEPPER = 'dev-only-visitor-phone-pepper';
 export const DEFAULT_USSD_GATEWAY_SECRET = 'dev-only-ussd-gateway-secret';
 export const DEFAULT_USSD_PHONE_PEPPER = 'dev-only-ussd-phone-pepper';
 export const DEFAULT_USSD_CODE_PEPPER = 'dev-only-ussd-code-pepper';
+export const DEFAULT_USSD_NALO_USER_ID = 'NALOTest';
+export const DEFAULT_USSD_NALO_MAX_MSG_CHARS = 120;
 export const DEFAULT_PAYMENT_GATEWAY_SECRET = 'dev-only-payment-gateway-secret';
 
 const envSchema = z.object({
@@ -35,6 +37,14 @@ const envSchema = z.object({
   USSD_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_USSD_GATEWAY_SECRET),
   USSD_PHONE_PEPPER: z.string().min(16).default(DEFAULT_USSD_PHONE_PEPPER),
   USSD_CODE_PEPPER: z.string().min(16).default(DEFAULT_USSD_CODE_PEPPER),
+  // A client identifier, not a secret: it does not take the .min(16) secret rule.
+  USSD_NALO_USER_ID: z.string().min(1).max(32).default(DEFAULT_USSD_NALO_USER_ID),
+  USSD_NALO_MAX_MSG_CHARS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(182)
+    .default(DEFAULT_USSD_NALO_MAX_MSG_CHARS),
   PAYMENT_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_PAYMENT_GATEWAY_SECRET),
 });
 
@@ -68,6 +78,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
     if (env.USSD_CODE_PEPPER === DEFAULT_USSD_CODE_PEPPER) {
       throw new Error('USSD_CODE_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.USSD_NALO_USER_ID === DEFAULT_USSD_NALO_USER_ID) {
+      throw new Error('USSD_NALO_USER_ID is required when NODE_ENV=production');
     }
     if (env.PAYMENT_GATEWAY_SECRET === DEFAULT_PAYMENT_GATEWAY_SECRET) {
       throw new Error('PAYMENT_GATEWAY_SECRET is required when NODE_ENV=production');
