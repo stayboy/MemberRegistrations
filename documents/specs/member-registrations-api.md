@@ -14,6 +14,10 @@
 
 ## Change log
 
+- 2026-11-06: 24d slice B1 implements both provider adapters over `POST /ussd/session`, with Nalo at
+  `POST /ussd/nalo` (the route table already carried the row). `ussd_disabled` is recorded with its
+  `503` status in the canonical error list. The dev-only `POST /dev/ussd/session` is not part of the
+  browser API surface and stays out of OpenAPI.
 - 2026-11-06: 24d slice A review follow-up. The headcount `Location` gains its read target
   `GET /v1/events/{eventId}/headcounts/{headcountId}` (one observation, `no-store`, `404` for an
   unknown id or another event's row). The presbyter-only hiding rule is scoped to the **member**
@@ -768,8 +772,11 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 
 ## API Contracts
 
-All routes are under `/v1` except `/health` and `/openapi.json`. Every route requires bearer auth;
-every write requires `X-Actor-Id`.
+Business routes are under `/v1`, with the public `/auth/*` sign-in routes and the USSD entries
+(`/ussd/session`, `/ussd/nalo`) outside it; `/health`, `/openapi.json` and the development-only
+`/dev/ussd/session` are unversioned too. Bearer auth guards `/v1` except the signature-verified
+`/v1/payments/callback`; `/gateway/v1` uses the gateway token; the USSD entries authenticate with the
+HMAC signature or the Nalo `USERID`. Every bearer write requires `X-Actor-Id`.
 
 The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 `GET /v1/events/{eventId}/attendance?date=`; the V3 additions include `POST /v1/contributions` and
@@ -1196,7 +1203,7 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
 `headcount_only`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
-`officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled`, `code_invalid`, `code_expired`,
+`officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled` (`503`), `code_invalid`, `code_expired`,
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
 `registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
 `delegate_required`, `delegation_exists`, `not_eligible`, `subscription_not_active`,

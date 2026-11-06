@@ -421,7 +421,6 @@ export interface AdvanceResult {
 }
 
 const OFFERING_PAGE_SIZE = 5;
-/** Three rows fit the 182-character budget with all three fields. */
 const PLEDGE_PAGE_SIZE = 3;
 /** Two full event rows fit the 182-character budget beside the actions. */
 const ATTENDANCE_EVENT_LINES = 2;
@@ -443,6 +442,11 @@ function todayIso(): string {
 /** The channel declares the row count; the reference is three, Nalo two. */
 function activityPageSize(session: UssdSessionInfo): number {
   return Math.max(1, session.pageSize?.events ?? 3);
+}
+
+/** The channel declares the offering rows; the reference is five, Nalo three. */
+function offeringPageSize(session: UssdSessionInfo): number {
+  return Math.max(1, session.pageSize?.offerings ?? OFFERING_PAGE_SIZE);
 }
 
 /** `HH:MM` from an ISO instant; the headcount screen shows the as-of time. */
@@ -716,11 +720,12 @@ function renderedAmount(context: UssdContext): Rendered {
   return screen('offerings.amount', context, [...lines, ...nav.lines], nav.options);
 }
 
-function renderedSelect(context: UssdContext): Rendered {
+function renderedSelect(context: UssdContext, session: UssdSessionInfo): Rendered {
   const page = context.offeringPage ?? 0;
   const all = context.offerings ?? [];
-  const visible = all.slice(page * OFFERING_PAGE_SIZE, (page + 1) * OFFERING_PAGE_SIZE);
-  const more = all.length > (page + 1) * OFFERING_PAGE_SIZE;
+  const size = offeringPageSize(session);
+  const visible = all.slice(page * size, (page + 1) * size);
+  const more = all.length > (page + 1) * size;
   const lines = [...noticeLines(context), t('prompt.offerings')];
   const options: UssdOption[] = [];
   visible.forEach((offering, index) => {
@@ -1534,7 +1539,7 @@ export function render(
     case 'offerings.amount':
       return renderedAmount(context);
     case 'offerings.select':
-      return renderedSelect(context);
+      return renderedSelect(context, session);
     case 'offerings.split':
       return renderedSplit(context);
     case 'offerings.confirm':
@@ -2115,9 +2120,10 @@ export async function advance(
   if (state === 'offerings.select') {
     const page = context.offeringPage ?? 0;
     const all = context.offerings ?? [];
-    const visible = all.slice(page * OFFERING_PAGE_SIZE, (page + 1) * OFFERING_PAGE_SIZE);
+    const size = offeringPageSize(session);
+    const visible = all.slice(page * size, (page + 1) * size);
     if (value === '0') {
-      if (!(all.length > (page + 1) * OFFERING_PAGE_SIZE)) {
+      if (!(all.length > (page + 1) * size)) {
         return invalid(state, context, 'error.invalid_choice');
       }
       return {

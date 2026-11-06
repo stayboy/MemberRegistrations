@@ -592,16 +592,18 @@ shared-secret header is invented.
   dev default `NALOTest`, production required and must differ from the default; this is a client
   identifier, not a secret, so it does not use the `.min(16)` secret rule). A mismatch answers `401
 unauthorized`; a malformed body answers `422 validation_error`; neither writes anything.
-- **To the internal frame.** `MSISDN` becomes `phone` (normalised); `USERDATA` becomes `input`;
-  `MSGTYPE` becomes the fresh/continue signal (`true` → no `sessionId`; `false` → the resolved session).
-  `USERDATA` longer than the pipeline's 64-character input cap is `422 validation_error` — a documented
+- **To the internal frame.** `MSISDN` becomes `phone` (normalised); `USERDATA` becomes `input`.
+  `MSGTYPE` is accepted as the provider's fresh/continue signal, but resolution is by `SESSIONID`
+  against `(provider, external_id)`: a present id that resolves to a live session continues it even
+  on a re-delivered first frame, and only an unresolvable id starts a fresh session. `USERDATA`
+  longer than the pipeline's 64-character input cap is `422 validation_error` - a documented
   narrowing of Nalo's 120-character allowance. Nalo sends no frame counter, so the adapter assigns the
   next sequence number from the stored session counter.
 - **Session correlation.** The gateway `SESSIONID` is the session's identity. Migration `0016` adds
   `ussd_sessions.external_id` (`text`, partial unique when present); the adapter stores the gateway id
-  there on the first frame and resolves it to the internal uuid on continuations, so replay and
-  duplicate semantics match the gateway. The response omits `SESSIONID` exactly as the provider
-  documents; the gateway correlates server-side.
+  there when it creates the session (the first frame) and resolves it to the internal uuid on
+  continuations, so replay and duplicate semantics match the gateway. The response omits `SESSIONID`
+  exactly as the provider documents; the gateway correlates server-side.
 - **Re-delivery.** Nalo's frames carry no counter, so the pipeline's `seq` replay guard cannot
   distinguish a gateway re-delivery from a repeated keypress. Each continuation advances exactly once.
   A re-delivered money commit is still safe: the pending commit key is created when the confirmation
@@ -622,15 +624,18 @@ correctly declared page size never drops an action. Nalo's published cap is 120,
 idealised one.
 
 **`POST /dev/ussd/session` — the dev-only gateway.** This entry plays the gateway for the simulator. Its
-request is `{ provider: 'nalo' | 'hmac', phone, input, sessionId? }`, where `sessionId` is the value the
-previous response returned (omitted on the first frame); its response is `{ provider, sessionId, text,
-done, state, wire }`, where `wire` is the exact provider wire object the adapter produced (for Nalo
+request is `{ provider: 'nalo' | 'hmac', phone, input, sessionId?, seq? }`, where `sessionId` is the value
+the previous response returned (omitted on the first frame) and `seq` is the optional HMAC frame counter
+(absent → the next stored sequence); its response is `{ provider, sessionId, text, done, state, wire }`,
+where `text` is the provider's display text (`MSG` for Nalo, `text` for HMAC) and `wire` is the exact
+provider wire object the adapter produced (for Nalo
 `{ USERID, MSISDN?, MSG, MSGTYPE }`; for the HMAC adapter the canonical render the signed entry
 returns). It builds the provider wire **server-side** — a fresh HMAC timestamp and nonce per forwarded
-frame, or the Nalo JSON — forwards to the matching provider route, and does not rewrite the route's
-status: `401`, `422`, `429` and `503 ussd_disabled` propagate as the same problem+json. It refuses
-whenever `NODE_ENV=production`, independent of the `USSD_ENABLED` switch. The gateway secret is never
-sent to the browser.
+frame, or the Nalo JSON — runs the matching adapter through the same execution seam as its provider
+route, and does not rewrite the route's status: `401`, `422`, `429` and `503 ussd_disabled` propagate
+as the same problem+json. It refuses when `NODE_ENV=production` (`404 not_found`), independent of the
+`USSD_ENABLED` switch. The gateway secret is never sent to the browser. It is a development-only tool,
+not part of the browser API surface, so it stays out of OpenAPI.
 
 **Production off-switch.** Every provider route sits behind `USSD_ENABLED`, which defaults to `false`;
 when off the route answers `503 ussd_disabled` and writes nothing. USSD is forced off in production
@@ -743,6 +748,15 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-06: 24d slice B1 implements the adapter layer. `POST /ussd/nalo` and
+  `POST /ussd/session` are thin declarations over one shared session pipeline; the Nalo adapter
+  authenticates on `USERID` alone, stores `SESSIONID` as `external_id` under provider `nalo`, assigns
+  the next stored sequence on each continuation, omits `SESSIONID` from the reply and truncates `MSG`
+  to `USSD_NALO_MAX_MSG_CHARS` (default 120) with `…` only when needed. The declared `pageSize` now
+  reaches both paged lists: Activities renders `events` rows and the offering list renders `offerings`
+  rows. `POST /dev/ussd/session` plays the gateway server-side and accepts an optional `seq` for the
+  HMAC frame counter; its production refusal is `404 not_found`. The response `text` is the provider's
+  display text (Nalo `MSG`, HMAC `text`), so the simulator shows the real truncation.
 - 2026-11-06: 24d slice A lands the headcount/activities/presbyter-only refinements. `ussd_sessions`
   gains `provider` (default `hmac`) alongside `external_id`, so the gateway session id is resolved on
   `(provider, external_id)`; the reference adapter is the only provider in slice A. Headcount

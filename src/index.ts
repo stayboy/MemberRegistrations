@@ -39,6 +39,8 @@ const app = createApp({
     gatewaySecret: env.USSD_GATEWAY_SECRET,
     phonePepper: env.USSD_PHONE_PEPPER,
     codePepper: env.USSD_CODE_PEPPER,
+    naloUserId: env.USSD_NALO_USER_ID,
+    naloMaxMsgChars: env.USSD_NALO_MAX_MSG_CHARS,
   },
 });
 

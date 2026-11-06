@@ -70,8 +70,9 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
       **Roster**.
 - [ ] (addition) The **Nalo** adapter at `POST /ussd/nalo`: `USERID`-only auth against
       `USSD_NALO_USER_ID` (1–32 chars, dev default `NALOTest`, production required and distinct;
-      mismatch `401 unauthorized`, malformed body `422 validation_error`), `MSGTYPE` → fresh/continue,
-      `SESSIONID` → `external_id`, `USERDATA` over 64 → `422 validation_error`, response `MSG` ←
+      mismatch `401 unauthorized`, malformed body `422 validation_error`), `MSGTYPE` accepted as the
+      fresh/continue signal while `SESSIONID` resolves `(provider, external_id)`, `USERDATA` over 64
+      → `422 validation_error`, response `MSG` ←
       truncated `text` and `MSGTYPE` ← `!done`, response omits `SESSIONID`.
 - [ ] (addition) Nalo re-delivery semantics: each continuation advances once (no frame counter to
       replay-guard); the per-confirmation commit key in the session context makes a re-delivered money
@@ -79,10 +80,10 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
 - [ ] (addition) The **HMAC reference adapter** is the existing `/ussd/session` entry, unchanged, exposed
       as the second simulator provider.
 - [ ] (addition) `POST /dev/ussd/session` plays the gateway for a selected provider: request
-      `{ provider, phone, input, sessionId? }`, response `{ provider, sessionId, text, done, state, wire }`,
-      builds the wire server-side (fresh HMAC nonce/timestamp per frame, or Nalo JSON), propagates the
-      provider route's status unchanged, and refuses in production (`NODE_ENV=production` → 503)
-      regardless of the switch.
+      `{ provider, phone, input, sessionId?, seq? }`, response `{ provider, sessionId, text, done, state, wire }`,
+      builds the wire server-side (fresh HMAC nonce/timestamp per frame, or Nalo JSON), runs the real
+      adapter through the same execution seam, propagates its status unchanged, and refuses in
+      production (`NODE_ENV=production` → `404 not_found`) regardless of the switch.
 - [ ] (addition) Provider routes sit behind `USSD_ENABLED` (default false → `503 ussd_disabled`, no
       writes); both the switch gate and the production refusal on `/dev/ussd/session` are tested.
 - [ ] (addition) The **Simulator** page gains a provider dropdown (Nalo / HMAC reference), a
@@ -230,9 +231,10 @@ validation_error`); `MSGTYPE` → the fresh/continue signal (`true` → no `sess
 #### Dev entry and production gating
 
 - `POST /dev/ussd/session` is the dev-only gateway player: request
-  `{ provider, phone, input, sessionId? }`, response `{ provider, sessionId, text, done, state, wire }`.
-  It builds the provider wire server-side (a fresh HMAC nonce/timestamp per frame, or Nalo JSON),
-  forwards to the matching provider route, and propagates that route's status unchanged.
+  `{ provider, phone, input, sessionId?, seq? }`, response `{ provider, sessionId, text, done, state, wire }`.
+  It builds the provider wire server-side (a fresh HMAC nonce/timestamp per frame, or Nalo JSON), runs
+  the real adapter through the same execution seam as its provider route, and propagates that route's
+  status unchanged.
 - Every provider route sits behind `USSD_ENABLED` (default `false`); off → `503 ussd_disabled`, no
   writes. `POST /dev/ussd/session` additionally refuses whenever `NODE_ENV=production`, independent of
   the switch. Both gates are the tested off posture until a real aggregator contract exists.
@@ -282,9 +284,10 @@ validation_error`); `MSGTYPE` → the fresh/continue signal (`true` → no `sess
   is real.
 - **The simulator is not a mock.** It drives the real adapters and the real session pipeline; the static
   `mockups/ussd` simulator stays a review artifact and is never the acceptance path.
-- **Secret server-side.** The gateway secret and `USSD_NALO_USER_ID` live only in configuration and are
-  consumed by `/dev/ussd/session` and the routes; neither value is ever returned to or derivable from the
-  browser.
+- **Secret server-side.** The gateway secret lives only in configuration and is consumed by
+  `/dev/ussd/session` and the HMAC route; it is never returned to or derivable from the browser. The
+  Nalo client identifier (`USSD_NALO_USER_ID`) is also configuration-only, but it is not a secret and the
+  provider contract echoes it as `USERID` in the Nalo response and the dev gateway's `wire`.
 
 ## Spec record — headcount and activities (to-spec, 2026-11-05)
 
