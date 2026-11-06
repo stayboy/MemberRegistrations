@@ -174,125 +174,132 @@ fits.
   completeness test covers every key the shipped screens use, and a key no shipped screen uses is
   allowed until its part lands. An admin-editable glossary is a backlog item, not V3.
 
-| Key                          | Full                   | Short           |
-| ---------------------------- | ---------------------- | --------------- |
-| `menu.offerings`             | Offerings              | Offerings       |
-| `menu.activities`            | Activities             | Activities      |
-| `menu.attendance`            | Attendance             | Attendance      |
-| `menu.welfare`               | Welfare & Services     | Welfare         |
-| `menu.profile`               | My Profile             | Profile         |
-| `menu.register`              | Register               | Register        |
-| `menu.exit`                  | Exit                   | Exit            |
-| `nav.back`                   | Back                   | Back            |
-| `nav.more`                   | More                   | More            |
-| `nav.main`                   | Main menu              | Main            |
-| `action.give`                | Give                   | Give            |
-| `action.pledge`              | Pledge                 | Pledge          |
-| `action.my_pledges`          | My pledges             | Pledges         |
-| `action.my_payments`         | My payments            | Payments        |
-| `action.redeem`              | Redeem                 | Redeem          |
-| `action.accept`              | Accept                 | Accept          |
-| `action.change`              | Change                 | Change          |
-| `action.pay`                 | Pay                    | Pay             |
-| `prompt.amount`              | Enter amount           | Amount          |
-| `prompt.offerings`           | Choose offering(s)     | Offering(s)     |
-| `prompt.split`               | Split amount           | Split           |
-| `prompt.date`                | Enter date DDMMYYYY    | Date (DDMMYYYY) |
-| `prompt.expected_date`       | Expected date          | Due date        |
-| `prompt.phone`               | Enter phone number     | Phone           |
-| `prompt.code`                | Enter code             | Code            |
-| `prompt.name`                | Enter name             | Name            |
-| `label.total`                | Total                  | Total           |
-| `label.reference`            | Reference              | Ref             |
-| `label.code`                 | Confirmation code      | Code            |
-| `label.event`                | Event                  | Event           |
-| `label.day`                  | Day                    | Day             |
-| `label.offering`             | Offering               | Offering        |
-| `label.amount`               | Amount                 | Amount          |
-| `label.currency`             | Currency               | Currency        |
-| `activities.today`           | Today                  | Today           |
-| `activities.this_week`       | This week              | This week       |
-| `activities.a_date`          | A date                 | Date            |
-| `activities.summary`         | Attendance summary     | Attendance      |
-| `activities.give`            | Give to an offering    | Give            |
-| `attendance.day`             | A specific day         | Day             |
-| `attendance.period`          | Period summary         | Period          |
-| `attendance.present`         | I was present          | Present         |
-| `attendance.clocking`        | Clocking               | Clock           |
-| `attendance.clock_in`        | Clock in               | Clock in        |
-| `attendance.headcount`       | Headcount              | Headcount       |
-| `attendance.delegate`        | Delegate               | Delegate        |
-| `attendance.no_data`         | No attendance yet      | No attendance   |
-| `label.attended`             | Attended               | Present         |
-| `label.roster`               | Roster                 | Roster          |
-| `label.male`                 | Male                   | Male            |
-| `label.female`               | Female                 | Female          |
-| `label.children`             | Children               | Children        |
-| `label.window`               | Last 5                 | Last 5          |
-| `label.month`                | This month             | Month           |
-| `prompt.reason`              | Enter reason           | Reason          |
-| `status.registered`          | Registration sent      | Registered      |
-| `status.attendance_recorded` | Attendance recorded    | Recorded        |
-| `error.code_invalid`         | Invalid code           | Bad code        |
-| `error.code_used`            | Code already used      | Code used       |
-| `error.not_shepherd`         | Not your member        | Not yours       |
-| `error.not_senior`           | Not a senior presbyter | Not senior      |
-| `error.delegate_required`    | Delegate first         | Delegate        |
-| `error.already_clocked`      | Already clocked in     | Clocked         |
-| `status.regular`             | Regular                | Regular         |
-| `status.non_regular`         | Non-Regular            | Non-reg         |
-| `status.not_enough_data`     | Not enough data        | No data         |
-| `welfare.my_services`        | My services            | My plans        |
-| `welfare.subscribe`          | Subscribe              | Join            |
-| `welfare.eligible`           | Eligible               | Eligible        |
-| `welfare.not_eligible`       | Not eligible           | Not eligible    |
-| `welfare.premium`            | Premium                | Premium         |
-| `welfare.payer_member`       | You pay                | You pay         |
-| `welfare.payer_church`       | Church pays            | Church          |
-| `welfare.cover`              | Cover                  | Cover           |
-| `welfare.claimed`            | Total claimed          | Claimed         |
-| `welfare.expired`            | Expired                | Expired         |
-| `welfare.until`              | Until                  | Until           |
-| `profile.member_no`          | Member no.             | Member no.      |
-| `profile.gender`             | Gender                 | Gender          |
-| `profile.age`                | Age                    | Age             |
-| `profile.dob`                | Date of birth          | DOB             |
-| `profile.ministries`         | Ministries             | Ministries      |
-| `profile.shepherd`           | Shepherd               | Shepherd        |
-| `profile.not_assigned`       | Not assigned           | Not assigned    |
-| `error.session_expired`      | Session expired        | Session expired |
-| `error.too_many_tries`       | Too many attempts      | Too many tries  |
-| `error.invalid_amount`       | Invalid amount         | Bad amount      |
-| `error.invalid_date`         | Invalid date           | Bad date        |
-| `error.invalid_choice`       | Invalid choice         | Invalid         |
-| `error.one_offering`         | Choose one offering    | One only        |
-| `error.no_event`             | No event today         | No event        |
-| `error.no_offering`          | No offerings today     | No offering     |
-| `error.officer_required`     | No follow-up officer   | No officer      |
-| `error.no_pledges`           | No pending pledges     | No pledges      |
-| `status.payment_pending`     | Payment pending        | Pending         |
-| `label.week`                 | This week              | Week            |
-| `label.adults`               | Adults                 | Adults          |
-| `label.as_of`                | As of                  | As of           |
-| `headcount.adult_service`    | Adult service          | Adult           |
-| `headcount.children_service` | Children service       | Children        |
-| `headcount.mixed_service`    | Mixed service          | Mixed           |
-| `action.new_count`           | New count              | New             |
-| `action.correct`             | Correct                | Correct         |
-| `activities.zero_today`      | 0 events today         | None today      |
-| `activities.zero_week`       | 0 events this week     | None this week  |
-| `label.event`                | Event                  | Event           |
-| `label.events`               | Events                 | Events          |
-| `label.tomorrow`             | Tomorrow               | Tomorrow        |
-| `label.in_days`              | in {n} days            | {n} days        |
-| `label.no_upcoming`          | No upcoming events     | None upcoming   |
-| `action.view`                | View                   | View            |
-| `status.headcount_recorded`  | Headcount recorded     | Recorded        |
-| `label.quarter`              | This quarter           | Quarter         |
-| `label.year`                 | This year              | Year            |
-| `error.not_eligible`         | Not eligible           | Not eligible    |
-| `error.already_paid`         | Already paid           | Already paid    |
-| `error.try_again`            | Try again              | Try again       |
+| Key                          | Full                         | Short           |
+| ---------------------------- | ---------------------------- | --------------- |
+| `menu.offerings`             | Offerings                    | Offerings       |
+| `menu.activities`            | Activities                   | Activities      |
+| `menu.attendance`            | Attendance                   | Attendance      |
+| `menu.welfare`               | Welfare & Services           | Welfare         |
+| `menu.profile`               | My Profile                   | Profile         |
+| `menu.register`              | Register                     | Register        |
+| `menu.exit`                  | Exit                         | Exit            |
+| `nav.back`                   | Back                         | Back            |
+| `nav.more`                   | More                         | More            |
+| `nav.main`                   | Main menu                    | Main            |
+| `action.give`                | Give                         | Give            |
+| `action.pledge`              | Pledge                       | Pledge          |
+| `action.my_pledges`          | My pledges                   | Pledges         |
+| `action.my_payments`         | My payments                  | Payments        |
+| `action.redeem`              | Redeem                       | Redeem          |
+| `action.accept`              | Accept                       | Accept          |
+| `action.change`              | Change                       | Change          |
+| `action.pay`                 | Pay                          | Pay             |
+| `prompt.amount`              | Enter amount                 | Amount          |
+| `prompt.offerings`           | Choose offering(s)           | Offering(s)     |
+| `prompt.split`               | Split amount                 | Split           |
+| `prompt.date`                | Enter date DDMMYYYY          | Date (DDMMYYYY) |
+| `prompt.expected_date`       | Expected date                | Due date        |
+| `prompt.phone`               | Enter phone number           | Phone           |
+| `prompt.code`                | Enter code                   | Code            |
+| `prompt.name`                | Enter name                   | Name            |
+| `label.total`                | Total                        | Total           |
+| `label.reference`            | Reference                    | Ref             |
+| `label.code`                 | Confirmation code            | Code            |
+| `label.event`                | Event                        | Event           |
+| `label.day`                  | Day                          | Day             |
+| `label.offering`             | Offering                     | Offering        |
+| `label.amount`               | Amount                       | Amount          |
+| `label.currency`             | Currency                     | Currency        |
+| `activities.today`           | Today                        | Today           |
+| `activities.this_week`       | This week                    | This week       |
+| `activities.a_date`          | A date                       | Date            |
+| `activities.summary`         | Attendance summary           | Attendance      |
+| `activities.give`            | Give to an offering          | Give            |
+| `attendance.day`             | A specific day               | Day             |
+| `attendance.period`          | Period summary               | Period          |
+| `attendance.present`         | I was present                | Present         |
+| `attendance.clocking`        | Clocking                     | Clock           |
+| `attendance.clock_in`        | Clock in                     | Clock in        |
+| `attendance.headcount`       | Headcount                    | Headcount       |
+| `attendance.delegate`        | Delegate                     | Delegate        |
+| `attendance.no_data`         | No attendance yet            | No attendance   |
+| `label.attended`             | Attended                     | Present         |
+| `label.roster`               | Roster                       | Roster          |
+| `label.male`                 | Male                         | Male            |
+| `label.female`               | Female                       | Female          |
+| `label.children`             | Children                     | Children        |
+| `label.window`               | Last 5                       | Last 5          |
+| `label.month`                | This month                   | Month           |
+| `prompt.reason`              | Enter reason                 | Reason          |
+| `status.registered`          | Registration sent            | Registered      |
+| `status.attendance_recorded` | Attendance recorded          | Recorded        |
+| `error.code_invalid`         | Invalid code                 | Bad code        |
+| `error.code_used`            | Code already used            | Code used       |
+| `error.not_shepherd`         | Not your member              | Not yours       |
+| `error.not_senior`           | Not a senior presbyter       | Not senior      |
+| `error.delegate_required`    | Delegate first               | Delegate        |
+| `error.already_clocked`      | Already clocked in           | Clocked         |
+| `status.regular`             | Regular                      | Regular         |
+| `status.non_regular`         | Non-Regular                  | Non-reg         |
+| `status.not_enough_data`     | Not enough data              | No data         |
+| `welfare.my_services`        | My services                  | My plans        |
+| `welfare.subscribe`          | Subscribe                    | Join            |
+| `welfare.eligible`           | Eligible                     | Eligible        |
+| `welfare.not_eligible`       | Not eligible                 | Not eligible    |
+| `welfare.premium`            | Premium                      | Premium         |
+| `welfare.payer_member`       | You pay                      | You pay         |
+| `welfare.payer_church`       | Church pays                  | Church          |
+| `welfare.cover`              | Cover                        | Cover           |
+| `welfare.claimed`            | Total claimed                | Claimed         |
+| `welfare.expired`            | Expired                      | Expired         |
+| `welfare.until`              | Until                        | Until           |
+| `welfare.paid_by_church`     | Paid by the church           | Church          |
+| `welfare.cover_dependents`   | Cover dependents? 1 Yes 2 No | Dependents?     |
+| `welfare.no_dependents`      | No dependents                | None            |
+| `action.yes`                 | Yes                          | Yes             |
+| `action.no`                  | No                           | No              |
+| `label.spouse_husband`       | Husband                      | Husband         |
+| `label.spouse_wife`          | Wife                         | Wife            |
+| `profile.member_no`          | Member no.                   | Member no.      |
+| `profile.gender`             | Gender                       | Gender          |
+| `profile.age`                | Age                          | Age             |
+| `profile.dob`                | Date of birth                | DOB             |
+| `profile.ministries`         | Ministries                   | Ministries      |
+| `profile.shepherd`           | Shepherd                     | Shepherd        |
+| `profile.not_assigned`       | Not assigned                 | Not assigned    |
+| `error.session_expired`      | Session expired              | Session expired |
+| `error.too_many_tries`       | Too many attempts            | Too many tries  |
+| `error.invalid_amount`       | Invalid amount               | Bad amount      |
+| `error.invalid_date`         | Invalid date                 | Bad date        |
+| `error.invalid_choice`       | Invalid choice               | Invalid         |
+| `error.one_offering`         | Choose one offering          | One only        |
+| `error.no_event`             | No event today               | No event        |
+| `error.no_offering`          | No offerings today           | No offering     |
+| `error.officer_required`     | No follow-up officer         | No officer      |
+| `error.no_pledges`           | No pending pledges           | No pledges      |
+| `status.payment_pending`     | Payment pending              | Pending         |
+| `label.week`                 | This week                    | Week            |
+| `label.adults`               | Adults                       | Adults          |
+| `label.as_of`                | As of                        | As of           |
+| `headcount.adult_service`    | Adult service                | Adult           |
+| `headcount.children_service` | Children service             | Children        |
+| `headcount.mixed_service`    | Mixed service                | Mixed           |
+| `action.new_count`           | New count                    | New             |
+| `action.correct`             | Correct                      | Correct         |
+| `activities.zero_today`      | 0 events today               | None today      |
+| `activities.zero_week`       | 0 events this week           | None this week  |
+| `label.event`                | Event                        | Event           |
+| `label.events`               | Events                       | Events          |
+| `label.tomorrow`             | Tomorrow                     | Tomorrow        |
+| `label.in_days`              | in {n} days                  | {n} days        |
+| `label.no_upcoming`          | No upcoming events           | None upcoming   |
+| `action.view`                | View                         | View            |
+| `status.headcount_recorded`  | Headcount recorded           | Recorded        |
+| `label.quarter`              | This quarter                 | Quarter         |
+| `label.year`                 | This year                    | Year            |
+| `error.not_eligible`         | Not eligible                 | Not eligible    |
+| `error.already_paid`         | Already paid                 | Already paid    |
+| `error.try_again`            | Try again                    | Try again       |
 
 ### Giving: events, offerings, splits
 
@@ -435,7 +442,7 @@ USSD.
 - Members gain `membership_card_no` and `verified_at` (null = unverified); both are back-office fields
   and appear in the member DTO.
 - A product also carries **how it is paid and who is covered**: `paymentMode` (`member`, `church` or
-  `either`), `periodMonths` (1, 3, 6 or 12), `covers` (`individual` or `household`), `maxDependents`
+  `either`), `periodMonths` (1, 2, 3, 6 or 12), `covers` (`individual` or `household`), `maxDependents`
   and `allowedRelationships` (a subset of `spouse`, `child`, `parent`, `guardian`, `other`).
 - A subscription records the **payer** (`paidBy`: `member` or `church`), the covered period
   (`periodStart`, `periodEnd`) and the premium (`premiumMinor`, null for a church-paid period).
@@ -635,32 +642,35 @@ remains a review artifact.
 
 ## Data model additions
 
-| Table / column                    | Shape                                                                                                                                                                                                                                                                | Constraints                                                                                                                                                                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                   | admin-set; requires `is_presbyter`                                                                                                                                                                                                            |
-| `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                                                                                                                                                                                                             |
-| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                                                                                                                                                                                                             |
-| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `external_id` nullable, `last_input_seq`, `expires_at`, timestamps                                                                                                                  | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present                                                                                                                                        |
-| `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                         | replay guard; pruned after 10 minutes                                                                                                                                                                                                         |
-| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                                                                                                                                                                                                                    |
-| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                                                                                                                                                                                                                      |
-| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `created_by`, `ended_at`                                                                                                                                        | one active per session; ends with the session                                                                                                                                                                                                 |
-| `event_session_headcounts`        | `id`, `event_instance_id`, `session_date`, `as_of`, `mode` (`adults`/`children`/`mixed`), `adult_male`, `adult_female`, `adult_unspecified`, `child_male`, `child_female`, `child_unspecified`, `total`, `recorded_by`, `recorded_at`, `supersedes_id` nullable      | append-only; buckets check against `mode`, each 0–10,000, `total` = sum of six and ≤30,000; `as_of` within the session day; `supersedes_id` unique when present, same session, non-superseded; a superseded row remains valid for its `as_of` |
-| `event_instances.presbyter_only`  | `boolean` not null default `false`                                                                                                                                                                                                                                   | non-presbyters cannot attend or open; the roster is the active presbyters                                                                                                                                                                     |
-| `event_series.presbyter_only`     | `boolean` not null default `false`                                                                                                                                                                                                                                   | templates generated instances                                                                                                                                                                                                                 |
-| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                                | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge)                                                                                                                      |
-| `payment_intents`                 | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                          | unique gateway reference; one per group                                                                                                                                                                                                       |
-| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                      | FK to `payment_groups`                                                                                                                                                                                                                        |
-| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | unique when present; set once when settled by USSD                                                                                                                                                                                            |
-| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age` | rules evaluated server-side                                                                                                                                                                                                                   |
-| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                      | existing rows stay valid                                                                                                                                                                                                                      |
-| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                    | null for a church-paid period                                                                                                                                                                                                                 |
-| `subscriptions.paid_by`           | `text` (`member` / `church`), not null                                                                                                                                                                                                                               | `member` for a member-paid product, `church` for a church-paid product, and the back-office choice for `either`; never the member                                                                                                             |
-| `subscriptions.period_start`      | `date` not null                                                                                                                                                                                                                                                      | cover period start                                                                                                                                                                                                                            |
-| `subscriptions.period_end`        | `date` not null                                                                                                                                                                                                                                                      | cover lapses here unless renewed                                                                                                                                                                                                              |
-| `subscription_payments`           | `id`, `subscription_id`, `period_start`, `period_end`, `amount_minor`, `currency`, `channel`, `reference`, `paid_at`, `recorded_by`, `status`                                                                                                                        | member-paid periods; one row per paid period                                                                                                                                                                                                  |
-| `subscription_coverage`           | `subscription_id`, `member_id`                                                                                                                                                                                                                                       | existing: explicit covered members, never derived                                                                                                                                                                                             |
-| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status`, `recorded_by`, `recorded_at`, `decided_by`, `decided_at`                                                                                                                                   | approved + paid sum to "total claimed"                                                                                                                                                                                                        |
+| Table / column                    | Shape                                                                                                                                                                                                                                                                                                          | Constraints                                                                                                                                                                                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                                                             | admin-set; requires `is_presbyter`                                                                                                                                                                                                            |
+| `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                                                                | back-office field                                                                                                                                                                                                                             |
+| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                                                                         | null = unverified                                                                                                                                                                                                                             |
+| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `external_id` nullable, `last_input_seq`, `expires_at`, timestamps                                                                                                                                                            | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present                                                                                                                                        |
+| `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                                                                   | replay guard; pruned after 10 minutes                                                                                                                                                                                                         |
+| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                                                              | hash only; single use; TTL                                                                                                                                                                                                                    |
+| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                                                          | no member until approved                                                                                                                                                                                                                      |
+| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `created_by`, `ended_at`                                                                                                                                                                                  | one active per session; ends with the session                                                                                                                                                                                                 |
+| `event_session_headcounts`        | `id`, `event_instance_id`, `session_date`, `as_of`, `mode` (`adults`/`children`/`mixed`), `adult_male`, `adult_female`, `adult_unspecified`, `child_male`, `child_female`, `child_unspecified`, `total`, `recorded_by`, `recorded_at`, `supersedes_id` nullable                                                | append-only; buckets check against `mode`, each 0–10,000, `total` = sum of six and ≤30,000; `as_of` within the session day; `supersedes_id` unique when present, same session, non-superseded; a superseded row remains valid for its `as_of` |
+| `event_instances.presbyter_only`  | `boolean` not null default `false`                                                                                                                                                                                                                                                                             | non-presbyters cannot attend or open; the roster is the active presbyters                                                                                                                                                                     |
+| `event_series.presbyter_only`     | `boolean` not null default `false`                                                                                                                                                                                                                                                                             | templates generated instances                                                                                                                                                                                                                 |
+| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                                                                          | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge)                                                                                                                      |
+| `payment_intents`                 | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                                                                    | unique gateway reference; one per group                                                                                                                                                                                                       |
+| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                                                                | FK to `payment_groups`                                                                                                                                                                                                                        |
+| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                                                                | unique when present; set once when settled by USSD                                                                                                                                                                                            |
+| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age`, `created_by`, `updated_by`, `updated_at` | rules evaluated server-side; code unique case-insensitively; product active-toggle is audited                                                                                                                                                 |
+| `subscriptions.kind`              | `text` nullable                                                                                                                                                                                                                                                                                                | legacy `life_insurance`/`credit_union` rows keep it; product rows leave it null (exactly one of `kind`/`product_id` is set)                                                                                                                   |
+| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                                                                | existing rows stay valid                                                                                                                                                                                                                      |
+| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                                                              | null for a church-paid period and legacy rows                                                                                                                                                                                                 |
+| `subscriptions.paid_by`           | `text` (`member` / `church`), nullable                                                                                                                                                                                                                                                                         | product rows set `member` or `church`; legacy rows stay null; never the member's choice                                                                                                                                                       |
+| `subscriptions.period_start`      | `date` nullable                                                                                                                                                                                                                                                                                                | cover period start; null on legacy rows                                                                                                                                                                                                       |
+| `subscriptions.period_end`        | `date` nullable                                                                                                                                                                                                                                                                                                | cover lapses here unless renewed; null on legacy rows                                                                                                                                                                                         |
+| `subscriptions.updated_by`        | `text` nullable                                                                                                                                                                                                                                                                                                | officer or actor that last changed the subscription                                                                                                                                                                                           |
+| `subscriptions.updated_at`        | `timestamptz` nullable                                                                                                                                                                                                                                                                                         | set on create, renew, end and coverage changes                                                                                                                                                                                                |
+| `subscription_payments`           | `id`, `subscription_id`, `period_start`, `period_end`, `amount_minor`, `currency`, `channel` (`app`/`ussd`/`manual`), `reference`, `paid_at`, `recorded_by`, `idempotency_key`                                                                                                                                 | member-paid periods; unique `(subscription_id, period_start)`; unique `idempotency_key`; premiums recorded, not transacted                                                                                                                    |
+| `subscription_coverage`           | `subscription_id`, `member_id`                                                                                                                                                                                                                                                                                 | existing: explicit covered members, never derived                                                                                                                                                                                             |
+| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status` (`pending`/`approved`/`rejected`/`paid`), `recorded_by`, `recorded_at`, `decided_by`, `decided_at`, `decision_note`                                                                                                                   | `pending → approved/rejected`, `approved → paid`; approved + paid sum to "total claimed"                                                                                                                                                      |
 
 ## Testing Decisions
 
@@ -729,6 +739,11 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-05: 24c adds the Welfare & Services wire surface: products with server-side eligibility, a
+  member-paid-only self-subscription list, renew/payments/claims routes, the owned+inherited subscription
+  read, and the glossary keys `welfare.paid_by_church`, `welfare.cover_dependents`,
+  `welfare.no_dependents`, `action.yes`/`action.no` and the spouse labels. Premiums are recorded, not
+  transacted; legacy `life_insurance`/`credit_union` rows stay readable with a null `kind` product model.
 - 2026-11-05: headcount entry is refined. The current screen names **Adult service**, **Children
   service** or **Mixed service**; USSD offers `1 New count` and `2 Correct`; a correction keeps the
   corrected observation's `asOf` and supersedes exactly one row (`supersedes_id` unique when present);

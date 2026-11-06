@@ -14,6 +14,14 @@
 
 ## Change log
 
+- 2026-11-05: 24c settles the welfare wire contract: `subscription_products` (server-evaluated
+  eligibility, `paymentMode`, period and dependent rules), product CRUD with an active-only `PUT`,
+  self-subscription that resolves the payer server-side, renew from `max(periodEnd, today)`,
+  `subscription_payments` (idempotent, one row per period; premiums recorded, not transacted),
+  `subscription_claims` (`pending → approved/rejected`, `approved → paid`), the owned+inherited
+  subscription read, and the detail-only `membership_card_no`/`verified_at` fields. Migration 0015 is
+  pre-authorised for this round; legacy `life_insurance`/`credit_union` rows stay readable with a null
+  `kind` product model.
 - 2026-11-05: the operator's "expected headcount" becomes a **headcount** — an actual count, never an
   expected figure — recorded append-only in `event_session_headcounts` with a `mode`, six gender
   buckets, `total`, `asOf` and `supersedesId`; a correction supersedes without deleting. The
@@ -282,7 +290,7 @@ positive integer (0 and negatives are `422`), and clearing the flag clears the r
 Ranks need not be unique: a tie is allowed, and
 any non-null rank counts as a senior presbyter for clocking. `membershipCardNo` is trimmed, 1–32
 characters, and unique case-insensitively when present (a partial unique index), so a second member
-claiming the same card is `409 conflict`; reissuing a card is two
+claiming the same card is `409 card_in_use`; reissuing a card is two
 edits (clear, then set). `verifiedAt` is set by an officer: the write payload takes `verified: boolean`,
 which sets the timestamp to now or clears it; a repeated verification refreshes the timestamp. Card and
 verification are independent, and neither is required for the other. `requires_card` and
@@ -300,8 +308,8 @@ preference.
 
 ### Subscription
 
-`{ id, kind: life_insurance | credit_union, policyholderMemberId, scope: individual | household,
-status, reference?, startedOn, endedOn?, productId?, premiumMinor?, paidBy: member | church,
+`{ id, kind: life_insurance | credit_union | null, policyholderMemberId, scope: individual | household,
+status, reference?, startedOn, endedOn?, productId?, premiumMinor?, paidBy: member | church | null,
 periodStart, periodEnd }`
 
 - `individual`: coverage is the policyholder.
@@ -771,6 +779,16 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 | `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                           |
 | `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                       |
 | `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                    |
+| `POST`   | `/v1/subscriptions/{id}/renew`                      | Renew one period from `max(periodEnd, today)`                                              |
+| `GET`    | `/v1/subscriptions/{id}/payments`                   | List recorded member-paid periods (`no-store`)                                             |
+| `POST`   | `/v1/subscriptions/{id}/payments`                   | Record one member-paid period (idempotent)                                                 |
+| `GET`    | `/v1/subscriptions/{id}/claims`                     | List claims (`no-store`)                                                                   |
+| `POST`   | `/v1/subscriptions/{id}/claims`                     | Record a claim                                                                             |
+| `POST`   | `/v1/subscriptions/{id}/claims/{claimId}/decide`    | Decide a claim (`approved`/`rejected`/`paid`)                                              |
+| `GET`    | `/v1/subscription-products`                         | List products; active only unless `?includeInactive=true`                                  |
+| `GET`    | `/v1/subscription-products/{code}`                  | Product detail                                                                             |
+| `POST`   | `/v1/subscription-products`                         | Create a product; `201` + `Location`                                                       |
+| `PUT`    | `/v1/subscription-products/{code}`                  | Set `active` only                                                                          |
 | `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                                  |
 | `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                   |
 | `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                              |
@@ -788,6 +806,84 @@ detail adds `dob` and reports the same `age`.
 remaining, status, lastAttendedOn }`, computed for the page in one aggregate (FR-8).
 - `include=subscriptions` adds `subscriptions: [{ id, kind, scope, status, role,
 policyholderMemberNo, coveredCount }]`, computed for the page in one query.
+
+### Subscriptions, payments and claims (24c)
+
+All 24c routes are bearer-protected, writes carry `X-Actor-Id`, and reads send `Cache-Control: no-store`.
+
+**Products.** `GET /v1/subscription-products` (active only by default; `?includeInactive=true` for
+all), `GET /v1/subscription-products/{code}`, `POST /v1/subscription-products`, and
+`PUT /v1/subscription-products/{code}` which sets `active` only (no `ETag`; the product is reference
+data and eligibility/pricing are fixed at creation). Create body
+`{ code, name, description?, premiumMinor, currency, active?, minMembershipDays, requiresCard,
+requiresVerified, gender?, minAge?, maxAge?, paymentMode, periodMonths, covers, maxDependents?,
+allowedRelationships? }`. `code` is trimmed, stored uppercase and matched case-insensitively (`409
+conflict` on a repeat); `premiumMinor > 0` (`422 invalid_amount`); `periodMonths ∈ {1,2,3,6,12}`;
+`paymentMode ∈ {member, church, either}`; `covers ∈ {individual, household}`; `maxDependents ≥ 1` is
+required for `household` and forced to 0 for `individual`; `allowedRelationships` is a non-empty subset
+of `{spouse, child, parent, guardian, other}`, required for `household` and ignored for `individual`
+(`422 validation_error`). `201` carries `Location: /v1/subscription-products/{code}`; `PUT` answers
+`200` with the product DTO.
+
+**Subscribe.** `POST /v1/members/{memberNo}/subscriptions` body
+`{ productCode, paidBy?, coveredMemberNos? }`. Eligibility is evaluated first; a failure is `422
+not_eligible` and the product is hidden from USSD rather than offered then refused. `paidBy` is resolved
+server-side: forced to `member` for a `member` product, `church` for a `church` product, and required
+only for `either` (the back office resolves it per subscription; the member never chooses). The USSD
+Subscribe list never contains an `either` product; a direct `either` subscribe is a back-office action
+and must supply `paidBy`. The
+subscription starts with `periodStart = today (UTC)`, `periodEnd = periodStart + periodMonths`.
+Member-paid writes one `subscription_payments` row for the first period and advances `periodEnd` in the
+same transaction; church-paid writes no payment and leaves `premiumMinor` null. `household` validates
+each `coveredMemberNos` entry (active member, an existing allowed relationship edge to the policyholder,
+within `maxDependents`) and writes explicit `subscription_coverage` rows; `individual` requires the
+array empty/absent. `201` with `Location: /v1/members/{memberNo}/subscriptions/{id}`. Errors: `422
+validation_error` (cap, relationship, inactive member, individual with dependents), `422 not_eligible`,
+`409 conflict` (already covered).
+
+**Renew.** `POST /v1/subscriptions/{id}/renew` body `{ paidBy? }`; `paidBy` defaults to the stored payer
+and is required for an `either` product. The period extends from `max(periodEnd, today)` by
+`periodMonths`; member-paid records the payment row and advances `periodEnd`, church-paid advances with
+no payment. `200` with the subscription DTO; `422 not_eligible`; `409 subscription_not_active` when the
+subscription has ended. The standalone coverage routes enforce the same product rules: household only,
+the `maxDependents` cap, an allowed existing relationship and an active member (`422 validation_error`),
+`409 conflict` when already covered, and `409 subscription_not_active` on an ended subscription.
+
+**Payments.** `GET`/`POST /v1/subscriptions/{id}/payments`. Record body
+`{ amountMinor, currency, channel: 'app'|'ussd'|'manual', reference?, paidAt?, idempotencyKey }`; `201`
+with `Location: /v1/subscriptions/{id}/payments/{paymentId}` (an identical repeat answers `200`), one row
+per unpaid period advances `periodEnd` from `max(periodEnd, today)`. `amountMinor > 0` and `currency` must
+equal the product/subscription currency (`422 invalid_amount` / `422 validation_error`). `paidAt` is when
+the payment was received or recorded and is informational: it never anchors the period, so a back-dated
+`paidAt` cannot reopen a lapsed gap. `period_already_paid` means the subscription is not yet expired
+(`periodEnd >= today`), so there is no unpaid period to record. Idempotent by `idempotencyKey`: an
+identical repeat returns `200` with the stored row and advances nothing; a different payload under the
+same key is `409 idempotency_conflict`; a reused `reference` is `409 conflict`; `409
+subscription_not_active`; `422 not_eligible`. Welfare premiums are **recorded, not transacted** — no
+gateway intent and no `payment_groups` row in V3.
+
+**Claims.** `GET`/`POST /v1/subscriptions/{id}/claims` and `POST
+/v1/subscriptions/{id}/claims/{claimId}/decide`. Record body `{ memberNo, amountMinor, reason }`; the
+claimant must be the policyholder or an actively covered member (`404 not_covered` otherwise),
+`amountMinor > 0`, reason required; stores `recordedBy`/`recordedAt` and `status = 'pending'`; `409
+subscription_not_active`. Decide body `{ status: 'approved'|'rejected'|'paid', note? }`; transitions are
+`pending → approved`, `pending → rejected` and `approved → paid`, anything else is `409
+claim_not_pending`. `201` with `Location: /v1/subscriptions/{id}/claims/{claimId}` for a record and `200`
+with the claim for a decision. "Total claimed" is the sum of `approved` and `paid` amounts. There is no payout rail
+and no member self-service claim entry.
+
+**Member subscription read.** `GET /v1/members/{memberNo}/subscriptions` returns `{ items: [...] }`
+with owned and inherited rows, `no-store`; each row is
+`{ id, source: 'owned'|'inherited', role, status: 'active'|'expired'|'ended', kind: string|null,
+productCode: string|null, productName: string|null, paidBy: 'member'|'church'|null, premiumMinor:
+number|null, currency: string|null, periodStart: string|null, periodEnd: string|null, startedOn,
+endedOn, scope, coveredMemberNos, claimedTotalMinor, createdBy, updatedBy, updatedAt, policyholder:
+{ memberNo, name, gender, age }|null, relationship: string|null }`. `status` is `ended` when `endedOn` is
+set, `expired` when a product row's `periodEnd < today`, and `active` otherwise; a legacy row with null
+`periodEnd` is `active` unless ended. Legacy rows carry a `kind` and null product/payer/period fields. An
+inherited row labels the relationship from the covered member to the policyholder (spouse renders
+Husband/Wife by gender). `createdBy` is the existing `subscriptions.created_by` column. There is no
+standalone `GET /v1/subscriptions/{id}`: the member aggregate and the renew response are the reads.
 
 ### Shepherding
 
@@ -1075,7 +1171,8 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled`, `code_invalid`, `code_expired`,
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
 `registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
-`delegate_required`, `delegation_exists`, `cors_rejected`.
+`delegate_required`, `delegation_exists`, `not_eligible`, `subscription_not_active`,
+`period_already_paid`, `not_covered`, `claim_not_pending`, `card_in_use`, `cors_rejected`.
 
 ### Concurrency and caching
 
