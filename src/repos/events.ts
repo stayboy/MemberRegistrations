@@ -51,6 +51,8 @@ export interface EventItem {
   description: string | null;
   status: EventStatus;
   source: EventSource;
+  /** False = headcount-only; per-member attendance does not apply. */
+  tracksMembers: boolean;
   sessions: EventSessionItem[];
   offerings: EventOfferingItem[];
   stats: OfferingStatsItem;
@@ -143,6 +145,7 @@ type EventRow = {
   description: string | null;
   status: string;
   source: string;
+  tracks_members: boolean;
   sessions: unknown;
   ministry_code: string | null;
   ministry_name: string | null;
@@ -171,6 +174,7 @@ const EVENT_COLUMNS = `
   e.description,
   e.status,
   e.source,
+  e.tracks_members,
   e.sessions,
   m.code as ministry_code,
   m.name as ministry_name`;
@@ -277,6 +281,7 @@ select e.id,
        e.description,
        e.status,
        e.source,
+       e.tracks_members,
        e.sessions
 from event_instances e
 where e.id = $1
@@ -285,18 +290,21 @@ where e.id = $1
 const INSERT_SQL = `
 insert into event_instances (
   event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, sessions
-) values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual', $11::jsonb)
+  venue_type, venue_name, description, status, source, tracks_members, sessions
+) values (
+  $1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual',
+  $11::boolean, $12::jsonb
+)
 returning id
 `;
 
 const GENERATE_INSERT_SQL = `
 insert into event_instances (
   event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, sessions
+  venue_type, venue_name, description, status, source, tracks_members, sessions
 ) values (
   $1, $2, $3, $4, $5, $5, '00:00', null,
-  'auditorium', null, null, 'scheduled', 'series',
+  'auditorium', null, null, 'scheduled', 'series', true,
   jsonb_build_array(jsonb_build_object(
     'date', $5::date,
     'startTime', '00:00',
@@ -326,7 +334,8 @@ set name = $2,
     venue_type = $8,
     venue_name = $9,
     description = $10,
-    sessions = $11::jsonb
+    tracks_members = $11::boolean,
+    sessions = $12::jsonb
 where id = $1
 `;
 
@@ -479,6 +488,7 @@ function etagFor(row: EventRowCore): string {
     row.description,
     row.status,
     row.source,
+    row.tracks_members,
     parseJsonArray(row.sessions),
   ]);
   return `"e${createHash('sha256').update(payload).digest('hex').slice(0, 24)}"`;
@@ -544,6 +554,7 @@ export class EventRepository {
         input.venueType,
         input.venueName ?? null,
         input.description ?? null,
+        input.tracksMembers,
         JSON.stringify(sessions),
       ]);
       id = row!.id;
@@ -686,6 +697,7 @@ export class EventRepository {
       input.venueType ?? asVenueType(current.venue_type),
       input.venueName !== undefined ? input.venueName : current.venue_name,
       input.description !== undefined ? input.description : current.description,
+      input.tracksMembers ?? current.tracks_members,
       JSON.stringify(sessions),
     ]);
 
@@ -760,10 +772,11 @@ export class EventRepository {
     const sessionDate = assertDate(date);
 
     return this.db.transaction(async (tx) => {
-      const [event] = await tx.query<{ status: string; sessions: unknown }>(
-        'select status, sessions from event_instances where id = $1',
-        [eventId],
-      );
+      const [event] = await tx.query<{
+        status: string;
+        tracks_members: boolean;
+        sessions: unknown;
+      }>('select status, tracks_members, sessions from event_instances where id = $1', [eventId]);
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
       if (event.status === 'cancelled' || event.status === 'archived') {
         throw new ConflictError('A cancelled or archived event is read-only');
@@ -775,6 +788,12 @@ export class EventRepository {
       }
       if (session.status === 'cancelled') {
         throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
+      if (!event.tracks_members) {
+        throw new ValidationError(
+          'This event is headcount-only; per-member attendance is not recorded',
+          'headcount_only',
+        );
       }
 
       const [member] = await tx.query<{
@@ -957,6 +976,7 @@ export class EventRepository {
       description: row.description,
       status,
       source: row.source as EventSource,
+      tracksMembers: row.tracks_members,
       sessions,
       offerings,
       stats: { ...emptyOfferingStats(), attachedEvents: offerings.length },

@@ -4,12 +4,16 @@ import { actorOf } from '../actor.js';
 import { NotFoundError } from '../errors/domain-errors.js';
 import {
   createEventSchema,
+  delegationInputSchema,
   eventAttendanceInputSchema,
   eventAttendanceQuerySchema,
   eventGenerateQuerySchema,
   eventListQuerySchema,
+  expectedInputSchema,
+  expectedQuerySchema,
   updateEventSchema,
 } from '../schemas/events.js';
+import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventDetail, EventRepository } from '../repos/events.js';
 
 const eventIdSchema = z.string().uuid();
@@ -28,7 +32,7 @@ function sendEvent(res: Response, detail: EventDetail, status = 200): void {
   res.status(status).json(detail.event);
 }
 
-export function eventsRouter(repo: EventRepository): Router {
+export function eventsRouter(repo: EventRepository, clocking: ClockingRepository): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
@@ -79,6 +83,43 @@ export function eventsRouter(repo: EventRepository): Router {
     const attendanceId = attendanceIdSchema.parse(req.params.attendanceId);
     await repo.deleteAttendance(id, attendanceId, actorOf(req));
     res.status(204).end();
+  });
+
+  router.get('/:id/expected', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const expected = await clocking.getExpected(id, sessionDate);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(expected);
+  });
+
+  router.put('/:id/expected', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const input = expectedInputSchema.parse(req.body);
+    const expected = await clocking.recordExpected(id, sessionDate, input, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(expected);
+  });
+
+  router.get('/:id/delegations', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const page = await clocking.listDelegations(id, sessionDate);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(page);
+  });
+
+  router.post('/:id/delegations', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const { sessionDate } = expectedQuerySchema.parse(req.query);
+    const input = delegationInputSchema.parse(req.body);
+    const delegation = await clocking.delegate(
+      { eventId: id, sessionDate, ...input },
+      actorOf(req),
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(delegation);
   });
 
   router.get('/:id', async (req, res) => {

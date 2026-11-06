@@ -7,6 +7,7 @@ import {
   NotFoundError,
   PaymentFailedError,
   ReassignmentRequiredError,
+  TooManyTriesError,
   UnauthorizedError,
   ValidationError,
 } from './domain-errors.js';
@@ -102,6 +103,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof PaymentFailedError) {
     sendProblem(res, 502, 'Payment failed', error.message, 'payment_failed');
+    return;
+  }
+
+  if (error instanceof TooManyTriesError) {
+    sendProblem(res, 429, 'Too Many Requests', error.message, 'too_many_tries');
     return;
   }
 

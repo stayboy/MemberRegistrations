@@ -14,6 +14,9 @@
 
 ## Change log
 
+- 2026-11-05: 24b adds the attendance/code/registration/clocking/expected/profile seams listed in
+  **USSD attendance, codes and clocking (24b)**, and `presbyterRank` on `MemberDetail` (positive
+  integer, valid only with `isPresbyter`, cleared with the flag).
 - 2026-11-05: presbyter ranks, membership cards and verification are settled. `presbyterRank` is an
   admin-set integer (1 = most senior) valid only with `isPresbyter`; any non-null rank is a senior
   presbyter for clocking, ties are allowed, and clearing the flag clears the rank. `membershipCardNo`
@@ -475,8 +478,8 @@ unique on `(eventInstanceId, sessionDate, memberId)`.
 - `present` is the number of attendance rows for that session; `rows` lists exactly those members with
   `status: 'present'` and their `import | manual` source. The data model has no absence row, so the
   report never invents an absent member; `expected - present` is the only absence signal.
-- Each `rows` entry carries the member's `name`, `gender` and `age` (current, not the age at the
-  session) alongside `id`, the **`attendance.id` primary key** (not the member id), so the UI can
+- Each `rows` entry carries the member's `memberNo`, `name`, `gender` and `age` (current, not the age
+  at the session) alongside `id`, the **`attendance.id` primary key** (not the member id), so the UI can
   render the identity label and call `DELETE /v1/events/{eventId}/attendance/{attendanceId}` without a
   second lookup. The report and the delete share the same id; the events route table's `{id}` is the
   event id.
@@ -497,6 +500,75 @@ attended    = |occurrences in that window with at least one attendance row|
 
 The DTO reports `attended`, `expected`, `remaining` and `status: ongoing | completed | in_progress`.
 Extras count when held; cancellations do not.
+
+### USSD attendance, codes and clocking (24b)
+
+The USSD session owns the menu; these are the bearer seams behind it. All writes require `X-Actor-Id`
+and are `no-store` on read.
+
+| Method       | Path                                                   | Result                                                            |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------- |
+| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once  |
+| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                  |
+| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                |
+| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                |
+| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path |
+| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                              |
+| `GET`/`PUT`  | `/v1/events/{eventId}/expected?sessionDate`            | Read or record `male`, `female`, `children` for one session       |
+| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                              |
+| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows              |
+| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity          |
+
+- **Codes.** `POST` body `{ purpose: 'attendance_punch' | 'registration', sessionDate }`. The code is
+  six digits from a CSPRNG, valid for 15 minutes, single use, bound to that event session and stored
+  only as an HMAC-SHA-256 hash under `USSD_CODE_PEPPER`; the plain value appears only in the `201`
+  response. A code is refused when it matches no stored hash (`code_invalid`), is expired
+  (`code_expired`), used (`code_used`), voided (`code_voided`) or for another session
+  (`code_wrong_session`). Five failed attempts per phone hash in 15 minutes answer `429 too_many_tries`
+  without revealing whether a code exists; the counter is the shared `auth_rate_limits` key
+  `ussd:code:<phoneHash>`. A valid `attendance_punch` writes the attendance row and marks the code used;
+  if the member already has a row for that session the answer is `409 already_clocked` and the code is
+  not consumed. A valid `registration` code creates the pending request and marks the code used; a
+  second use is `409 code_used`.
+- **Redemption and creation seam.** Code redemption and registration-request creation happen **inside
+  `POST /ussd/session`**, through repository methods; there is no bearer route for either. The bearer
+  seams are issuance/void/list, request list/approve/reject, delegation, expected headcounts, the
+  attendance summary and the profile.
+- **Registration requests.** A request is `pending | approved | rejected`. `POST
+/v1/registration-requests/{id}/approve` takes only the immutable `memberNo`; the request's first and
+  last name seed the member, gender defaults to `undisclosed`, `joinedOn` defaults to the approval date,
+  and the member starts with **no contacts** because the stored value is a one-way phone hash. The
+  ordinary member create path runs (duplicate numbers, validation and audit unchanged). The request
+  becomes `approved` with `decidedBy`/`decidedAt` and links the created member. `reject` takes a reason
+  and creates nothing. A request is decided once; a second decision is `409
+registration_not_pending`. The request carries only `phoneHash`, never the raw phone.
+- **Clocking.** The existing `POST /v1/events/{eventId}/attendance` remains the write; the USSD layer
+  enforces the actor rules before calling it. The presence read is the event attendance report
+  `GET /v1/events/{eventId}/attendance?date=`, whose rows carry `memberNo` (add it to the report DTO if
+  it is absent). A presbyter may clock only a member they actively shepherd. A senior presbyter
+  (`presbyterRank` non-null) may clock anyone for a session when they are themselves recorded present;
+  otherwise they must first delegate. A delegation body is `{ fromMemberNo, toMemberNo, reason }`
+  with `sessionDate` supplied only as the query parameter; `fromMemberNo` is the senior presbyter (the
+  USSD session's member, or the portal's chosen senior), `toMemberNo` the delegate. Both must be active
+  presbyters, the grantor senior, and the delegation is
+  unique per `(eventInstanceId, sessionDate)` while active. The delegate
+  inherits the senior's broad clocking authority for that session only and may clock any member. The
+  delegation ends with the session; `ended_at` stays null in V3 and "active" is derived from the session
+  date, with no explicit end route. Errors: `not_shepherd`, `not_senior_presbyter`, `delegate_required`,
+  `delegation_exists`.
+- **Expected headcounts.** `PUT` body `{ male, female, children }`, each an integer from 0 to 10,000
+  (total at most 30,000); `children` is a separate bucket. The response restates `{ male, female,
+children, total, recordedBy, recordedAt }`. This is the operator's expected headcount, kept separate
+  from the register-derived `expected` in the attendance report. Activities reads it for a headcount-only
+  event through the same `GET`; at most five events are shown, so at most five reads.
+- **Attendance summary.** Returns `{ from, to, attended, expected, events: [{ eventId, name,
+sessionDate }] }`: `events` lists the member's attended rows in the window newest first, never
+  fabricated absences; `expected` is the number of held member-trackable sessions that apply to the
+  member in the same window (general events plus their ministries, with the join-date and
+  ministry-assignment floors). Headcount-only events never count.
+- **Profile.** Returns `{ memberNo, name, gender, age, ministries: [name], shepherd: { memberNo, name,
+gender, age } | null, attendance: { status, attended, expected, window: 5, lastAttendedOn } }` exactly
+  as the USSD spec defines the regularity window and floors.
 
 ### Import batch
 
@@ -947,7 +1019,10 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
 `headcount_only`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
-`officer_required`, `pledge_already_terminal`, `payment_failed`, `cors_rejected`.
+`officer_required`, `pledge_already_terminal`, `payment_failed`, `code_invalid`, `code_expired`,
+`code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
+`registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
+`delegate_required`, `delegation_exists`, `cors_rejected`.
 
 ### Concurrency and caching
 

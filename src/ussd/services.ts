@@ -1,5 +1,9 @@
 import type { Db, Row } from '../db/sql.js';
+import { ValidationError } from '../errors/domain-errors.js';
 import { todayIn } from '../domain/series.js';
+import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
+import type { ClockingRepository } from '../repos/clocking.js';
+import type { EventRepository } from '../repos/events.js';
 import type { MemberRepository } from '../repos/members.js';
 import { eventOfferingsFor, type EventOfferingItem } from '../repos/offerings.js';
 import type { OfferingRepository } from '../repos/offerings.js';
@@ -9,9 +13,15 @@ import type {
   CreateGroupInput,
   CreatePledgeInput,
   MemberPayments,
+  UssdActivities,
+  UssdActivity,
+  UssdAttendance,
   UssdEvent,
+  UssdExpected,
+  UssdMemberContext,
   UssdOffering,
   UssdPledge,
+  UssdProfile,
   UssdServices,
 } from './machine.js';
 
@@ -21,6 +31,9 @@ export interface UssdServiceDeps {
   offerings: OfferingRepository;
   pledges: PledgeRepository;
   paymentGroups: PaymentGroupRepository;
+  events: EventRepository;
+  attendanceCodes: AttendanceCodeRepository;
+  clocking: ClockingRepository;
 }
 
 interface EventRow extends Row {
@@ -65,8 +78,101 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function displayName(
+  first: string | null | undefined,
+  last: string | null | undefined,
+  other: string | null | undefined,
+): string {
+  return [first?.trim(), last?.trim()].filter(Boolean).join(' ') || (other?.trim() ?? '');
+}
+
 function offeringName(item: EventOfferingItem): string {
   return item.name.trim();
+}
+
+async function findCurrentEvent(db: Db): Promise<UssdEvent | null> {
+  const rows = await db.query<EventRow>(
+    `select e.id, e.name, e.timezone, e.sessions
+       from event_instances e
+      where e.status not in ('cancelled', 'archived')
+        and exists (
+          select 1
+            from jsonb_array_elements(e.sessions) s
+           where (s->>'date')::date >= (now() at time zone e.timezone)::date
+             and coalesce(s->>'status', 'scheduled') <> 'cancelled'
+        )
+      order by
+        (exists (
+          select 1
+            from jsonb_array_elements(e.sessions) s
+           where (s->>'date')::date = (now() at time zone e.timezone)::date
+             and coalesce(s->>'status', 'scheduled') <> 'cancelled'
+        )) desc,
+        e.start_date, e.id
+      limit 1`,
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const today = todayIn(row.timezone);
+  const dates = sessionDates(row.sessions)
+    .filter((session) => session.status !== 'cancelled')
+    .map((session) => session.date);
+  const sessionDate = dates.includes(today) ? today : (dates.find((date) => date >= today) ?? null);
+  if (!sessionDate) return null;
+
+  return { id: row.id, name: row.name, sessionDate };
+}
+
+async function activitiesBetween(
+  events: EventRepository,
+  clocking: ClockingRepository,
+  from: string,
+  to: string,
+): Promise<UssdActivity[]> {
+  const list = await events.list({ from, to, limit: 100, offset: 0 });
+  const items: Array<{ activity: UssdActivity; startTime: string }> = [];
+  for (const event of list) {
+    for (const session of event.sessions) {
+      if (session.status === 'cancelled') continue;
+      if (session.date < from || session.date > to) continue;
+      const activity: UssdActivity = {
+        id: event.id,
+        name: event.name,
+        sessionDate: session.date,
+        tracksMembers: event.tracksMembers,
+      };
+      if (!event.tracksMembers) {
+        const expected = await clocking.getExpected(event.id, session.date);
+        activity.headcountOnlyExpected = expected.total;
+      }
+      items.push({ activity, startTime: session.startTime ?? event.startTime });
+    }
+  }
+  return items
+    .sort(
+      (a, b) =>
+        a.activity.sessionDate.localeCompare(b.activity.sessionDate) ||
+        a.startTime.localeCompare(b.startTime) ||
+        a.activity.id.localeCompare(b.activity.id),
+    )
+    .map((entry) => entry.activity);
+}
+
+async function requireMemberId(db: Db, memberNo: string): Promise<string> {
+  const [row] = await db.query<{ id: string }>(
+    `select id from members
+      where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+    [memberNo],
+  );
+  if (!row) throw new ValidationError(`Member ${memberNo} was not found`);
+  return row.id;
 }
 
 /**
@@ -76,39 +182,7 @@ function offeringName(item: EventOfferingItem): string {
 export function createUssdServices(deps: UssdServiceDeps): UssdServices {
   return {
     async currentEvent(): Promise<UssdEvent | null> {
-      const rows = await deps.db.query<EventRow>(
-        `select e.id, e.name, e.timezone, e.sessions
-           from event_instances e
-          where e.status not in ('cancelled', 'archived')
-            and exists (
-              select 1
-                from jsonb_array_elements(e.sessions) s
-               where (s->>'date')::date >= (now() at time zone e.timezone)::date
-                 and coalesce(s->>'status', 'scheduled') <> 'cancelled'
-            )
-          order by
-            (exists (
-              select 1
-                from jsonb_array_elements(e.sessions) s
-               where (s->>'date')::date = (now() at time zone e.timezone)::date
-                 and coalesce(s->>'status', 'scheduled') <> 'cancelled'
-            )) desc,
-            e.start_date, e.id
-          limit 1`,
-      );
-      const row = rows[0];
-      if (!row) return null;
-
-      const today = todayIn(row.timezone);
-      const dates = sessionDates(row.sessions)
-        .filter((session) => session.status !== 'cancelled')
-        .map((session) => session.date);
-      const sessionDate = dates.includes(today)
-        ? today
-        : (dates.find((date) => date >= today) ?? null);
-      if (!sessionDate) return null;
-
-      return { id: row.id, name: row.name, sessionDate };
+      return findCurrentEvent(deps.db);
     },
 
     async offeringsFor(eventId: string, date: string): Promise<UssdOffering[]> {
@@ -205,6 +279,178 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
       } catch {
         return null;
       }
+    },
+
+    async memberContext(memberNo: string): Promise<UssdMemberContext> {
+      const [row] = await deps.db.query<{
+        is_presbyter: boolean;
+        presbyter_rank: number | null;
+      }>(
+        `select is_presbyter, presbyter_rank
+           from members
+          where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+        [memberNo],
+      );
+      return row
+        ? { isPresbyter: row.is_presbyter, presbyterRank: row.presbyter_rank }
+        : { isPresbyter: false, presbyterRank: null };
+    },
+
+    async activities(date: string): Promise<UssdActivities> {
+      const items = (await activitiesBetween(deps.events, deps.clocking, date, date)).slice(0, 4);
+      const week = await activitiesBetween(deps.events, deps.clocking, date, addDays(date, 6));
+      return { items, moreThisWeek: week.length > items.length };
+    },
+
+    async activitiesWeek(date: string): Promise<UssdActivity[]> {
+      return activitiesBetween(deps.events, deps.clocking, date, addDays(date, 6));
+    },
+
+    async attendance(memberNo: string, from: string, to: string): Promise<UssdAttendance> {
+      return deps.members.attendanceSummary(memberNo, from, to);
+    },
+
+    async profile(memberNo: string): Promise<UssdProfile> {
+      return deps.members.profile(memberNo);
+    },
+
+    async redeemCode(input: {
+      code: string;
+      memberNo: string;
+      phoneHash: string;
+      eventId?: string;
+      sessionDate?: string;
+    }): Promise<{ eventId: string; sessionDate: string }> {
+      const memberId = await requireMemberId(deps.db, input.memberNo);
+      const event =
+        input.eventId && input.sessionDate
+          ? { id: input.eventId, sessionDate: input.sessionDate }
+          : await findCurrentEvent(deps.db);
+      if (!event) throw new ValidationError('No event session is open for the code');
+
+      const result = await deps.attendanceCodes.redeem({
+        code: input.code.trim(),
+        purpose: 'attendance_punch',
+        phoneHash: input.phoneHash,
+        memberId,
+        eventId: event.id,
+        sessionDate: event.sessionDate,
+        actor: `ussd:${input.phoneHash}`,
+      });
+      if (result.kind !== 'attendance') {
+        throw new ValidationError('The code is not an attendance code');
+      }
+      return { eventId: result.eventId, sessionDate: result.sessionDate };
+    },
+
+    async createRegistration(input: {
+      code: string;
+      firstName: string;
+      lastName: string;
+      phoneHash: string;
+    }): Promise<{ reference: string }> {
+      const result = await deps.attendanceCodes.redeem({
+        code: input.code.trim(),
+        purpose: 'registration',
+        phoneHash: input.phoneHash,
+        memberId: null,
+        actor: `ussd:${input.phoneHash}`,
+        firstName: input.firstName,
+        lastName: input.lastName,
+      });
+      if (result.kind !== 'registration') {
+        throw new ValidationError('The code is not a registration code');
+      }
+      return { reference: result.reference };
+    },
+
+    async clockIn(input: {
+      eventId: string;
+      sessionDate: string;
+      memberNo: string;
+      actorMemberNo: string;
+      phoneHash: string;
+    }): Promise<{ memberNo: string; name: string }> {
+      const entry = await deps.clocking.clockIn({
+        eventId: input.eventId,
+        sessionDate: input.sessionDate,
+        memberNo: input.memberNo,
+        actorMemberNo: input.actorMemberNo,
+        actor: `ussd:${input.phoneHash}`,
+      });
+      return { memberNo: entry.memberNo, name: entry.name };
+    },
+
+    async delegate(input: {
+      eventId: string;
+      sessionDate: string;
+      fromMemberNo: string;
+      toMemberNo: string;
+      reason: string;
+      phoneHash: string;
+    }): Promise<{ toMemberNo: string; toName: string }> {
+      const delegation = await deps.clocking.delegate(
+        {
+          eventId: input.eventId,
+          sessionDate: input.sessionDate,
+          fromMemberNo: input.fromMemberNo,
+          toMemberNo: input.toMemberNo,
+          reason: input.reason,
+        },
+        `ussd:${input.phoneHash}`,
+      );
+      return { toMemberNo: delegation.toMemberNo, toName: delegation.toName };
+    },
+
+    async recordExpected(input: {
+      eventId: string;
+      sessionDate: string;
+      male: number;
+      female: number;
+      children: number;
+      phoneHash: string;
+    }): Promise<UssdExpected> {
+      const expected = await deps.clocking.recordExpected(
+        input.eventId,
+        input.sessionDate,
+        { male: input.male, female: input.female, children: input.children },
+        `ussd:${input.phoneHash}`,
+      );
+      return {
+        male: expected.male,
+        female: expected.female,
+        children: expected.children,
+        total: expected.total,
+      };
+    },
+
+    async memberByNo(memberNo: string): Promise<{ memberNo: string; name: string }> {
+      const [row] = await deps.db.query<{
+        member_no: string;
+        first_name: string | null;
+        last_name: string | null;
+        other_names: string | null;
+      }>(
+        `select member_no, first_name, last_name, other_names
+           from members
+          where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+        [memberNo.trim()],
+      );
+      if (!row) throw new ValidationError(`Member ${memberNo} was not found`);
+      return {
+        memberNo: row.member_no,
+        name: displayName(row.first_name, row.last_name, row.other_names),
+      };
+    },
+
+    async isSenior(memberNo: string): Promise<boolean> {
+      const [row] = await deps.db.query<{ presbyter_rank: number | null }>(
+        `select presbyter_rank
+           from members
+          where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+        [memberNo],
+      );
+      return (row?.presbyter_rank ?? null) !== null;
     },
   };
 }

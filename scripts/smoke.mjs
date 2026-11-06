@@ -94,6 +94,18 @@ async function runScenario() {
   });
   check('second member created', pledgeMember.status === 201);
 
+  const punchMember = await request('/v1/members', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      memberNo: 'M-9004',
+      firstName: 'Akosua',
+      lastName: 'Darko',
+      contacts: [{ kind: 'phone', value: '0803 456 7890' }],
+    }),
+  });
+  check('punch member created', punchMember.status === 201);
+
   const assignment = await request('/v1/shepherding/assignments', {
     method: 'POST',
     headers: write,
@@ -524,6 +536,127 @@ async function runScenario() {
       ussdPledge?.amountMinor === 7000 &&
       ussdPledge?.followUpOfficerMemberNo === 'P-9001',
     JSON.stringify(pledges.body),
+  );
+
+  // An attendance code issued through the bearer seam, redeemed inside the
+  // USSD session, writes the attendance row.
+  const punchCode = await request(`/v1/events/${todayEvent.body.id}/codes`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ sessionDate: TODAY, purpose: 'attendance_punch' }),
+  });
+  check(
+    'attendance code issued',
+    punchCode.status === 201 && /^\d{6}$/.test(punchCode.body.code),
+    JSON.stringify(punchCode.body),
+  );
+
+  const punchStart = await ussdFrame({ phone: '0803 456 7890', input: '', seq: 1 });
+  const punchSession = punchStart.body.sessionId;
+  let punchSeq = 2;
+  await ussdFrame({
+    phone: '0803 456 7890',
+    sessionId: punchSession,
+    input: '3',
+    seq: punchSeq++,
+  });
+  const punchPrompt = await ussdFrame({
+    phone: '0803 456 7890',
+    sessionId: punchSession,
+    input: '3',
+    seq: punchSeq++,
+  });
+  check(
+    'ussd attendance code prompt',
+    punchPrompt.body.state === 'attendance.code',
+    JSON.stringify(punchPrompt.body),
+  );
+  const punched = await ussdFrame({
+    phone: '0803 456 7890',
+    sessionId: punchSession,
+    input: punchCode.body.code,
+    seq: punchSeq,
+  });
+  check(
+    'ussd attendance code redeemed',
+    punched.body.done === true && punched.body.text.includes('Recorded'),
+    JSON.stringify(punched.body),
+  );
+
+  const attendanceReport = await request(
+    `/v1/events/${todayEvent.body.id}/attendance?date=${TODAY}`,
+    { headers: read },
+  );
+  const attendanceRow = attendanceReport.body.rows?.find((row) => row.memberNo === 'M-9004');
+  check(
+    'ussd code punch persisted',
+    attendanceReport.status === 200 && Boolean(attendanceRow),
+    JSON.stringify(attendanceReport.body),
+  );
+
+  // A registration code and two names create a pending request; no member row.
+  const registrationCode = await request(`/v1/events/${todayEvent.body.id}/codes`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ sessionDate: TODAY, purpose: 'registration' }),
+  });
+  check(
+    'registration code issued',
+    registrationCode.status === 201 && /^\d{6}$/.test(registrationCode.body.code),
+    JSON.stringify(registrationCode.body),
+  );
+
+  const registerStart = await ussdFrame({ phone: '0899 000 0001', input: '', seq: 1 });
+  const registerSession = registerStart.body.sessionId;
+  let registerSeq = 2;
+  const registerEntry = await ussdFrame({
+    phone: '0899 000 0001',
+    sessionId: registerSession,
+    input: '1',
+    seq: registerSeq++,
+  });
+  check(
+    'ussd register prompt',
+    registerEntry.body.state === 'register.code',
+    JSON.stringify(registerEntry.body),
+  );
+  await ussdFrame({
+    phone: '0899 000 0001',
+    sessionId: registerSession,
+    input: registrationCode.body.code,
+    seq: registerSeq++,
+  });
+  await ussdFrame({
+    phone: '0899 000 0001',
+    sessionId: registerSession,
+    input: 'Yaa',
+    seq: registerSeq++,
+  });
+  const registered = await ussdFrame({
+    phone: '0899 000 0001',
+    sessionId: registerSession,
+    input: 'Asante',
+    seq: registerSeq,
+  });
+  check(
+    'ussd registration pending with a reference',
+    registered.body.done === true && /Ref REG-[A-Z2-7]{6}/.test(registered.body.text),
+    JSON.stringify(registered.body),
+  );
+  const registrationReference = /Ref (REG-[A-Z2-7]{6})/.exec(registered.body.text)[1];
+
+  const requests = await request(
+    `/v1/registration-requests?status=pending&eventId=${todayEvent.body.id}&sessionDate=${TODAY}`,
+    { headers: read },
+  );
+  const requestRow = requests.body.items?.find((item) => item.reference === registrationReference);
+  check(
+    'ussd registration request persisted',
+    requests.status === 200 &&
+      requestRow?.firstName === 'Yaa' &&
+      requestRow?.lastName === 'Asante' &&
+      requestRow?.status === 'pending',
+    JSON.stringify(requests.body),
   );
 
   const openapi = await request('/openapi.json');

@@ -102,6 +102,43 @@ export interface MemberContributionSummary {
   topEvents: Array<{ eventId: string; name: string; paidMinor: number }>;
 }
 
+export interface MemberAttendanceWindow {
+  from: string;
+  to: string;
+  attended: number;
+  expected: number;
+  events: Array<{ eventId: string; name: string; sessionDate: string }>;
+}
+
+export interface MemberProfile {
+  memberNo: string;
+  name: string;
+  gender: Gender;
+  age: number | null;
+  ministries: string[];
+  shepherd: {
+    memberNo: string;
+    name: string;
+    gender: Gender;
+    age: number | null;
+  } | null;
+  attendance: {
+    status: 'regular' | 'non_regular' | 'not_enough_data';
+    attended: number;
+    expected: number;
+    window: 5;
+    lastAttendedOn: string | null;
+  };
+}
+
+interface ScopedSession {
+  eventId: string;
+  name: string;
+  sessionDate: string;
+  startTime: string | null;
+  attended: boolean;
+}
+
 export interface MemberSummary {
   memberNo: string;
   firstName: string;
@@ -125,6 +162,8 @@ export interface MemberSummary {
 
 export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscriptions'> {
   id: string;
+  /** Senior presbyter rank; valid only while `isPresbyter` is true. */
+  presbyterRank: number | null;
   maidenName: string | null;
   alias: string | null;
   dob: string | null;
@@ -158,6 +197,7 @@ export interface CreateMemberInput {
   addressLine?: string | null;
   joinedOn?: string | null;
   isPresbyter?: boolean;
+  presbyterRank?: number | null;
   contacts?: ContactInput[];
   ministries?: string[];
 }
@@ -211,6 +251,7 @@ interface MemberRow extends Row {
   address_line: string | null;
   joined_on: string | null;
   is_presbyter: boolean;
+  presbyter_rank: number | null;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
   version: number;
@@ -235,6 +276,7 @@ const memberColumns = {
   address_line: members.addressLine,
   joined_on: members.joinedOn,
   is_presbyter: members.isPresbyter,
+  presbyter_rank: members.presbyterRank,
   archived_at: members.archivedAt,
   purged_at: members.purgedAt,
   version: members.version,
@@ -286,6 +328,18 @@ function requiredText(value: string | null | undefined, field: string): string {
 function optionalText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+/** First + last, with other names only when both are empty. */
+function displayName(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  otherNames: string | null | undefined,
+): string {
+  const first = firstName?.trim() ?? '';
+  const last = lastName?.trim() ?? '';
+  if (first || last) return [first, last].filter(Boolean).join(' ');
+  return otherNames?.trim() ?? '';
 }
 
 function assertMemberNo(value: string): string {
@@ -531,46 +585,230 @@ export class MemberRepository {
     };
   }
 
+  /**
+   * Windowed attendance over held, member-trackable sessions that apply to the
+   * member. Absences are never fabricated: `events` carries attended rows only.
+   */
+  async attendanceSummary(
+    memberNo: string,
+    from: string,
+    to: string,
+  ): Promise<MemberAttendanceWindow> {
+    const row = await this.requireRow(memberNo);
+    const fromDate = assertDate(from, 'from');
+    const toDate = assertDate(to, 'to');
+    if (fromDate > toDate) throw new ValidationError('from must not be after to');
+
+    const sessions = await this.scopedSessions(row.id, fromDate, toDate, null);
+    const attended = sessions
+      .filter((session) => session.attended)
+      .sort(
+        (a, b) =>
+          b.sessionDate.localeCompare(a.sessionDate) ||
+          (b.startTime ?? '').localeCompare(a.startTime ?? '') ||
+          a.eventId.localeCompare(b.eventId),
+      );
+
+    return {
+      from: fromDate,
+      to: toDate,
+      attended: attended.length,
+      expected: sessions.length,
+      events: attended.map((session) => ({
+        eventId: session.eventId,
+        name: session.name,
+        sessionDate: session.sessionDate,
+      })),
+    };
+  }
+
+  /**
+   * Identity, up to three ministries, the active shepherd and regularity over
+   * the last five held scoped sessions. Floors are shared with the summary.
+   */
+  async profile(memberNo: string): Promise<MemberProfile> {
+    const row = await this.requireRow(memberNo);
+
+    const ministries = (await this.ministriesFor(row.id)).slice(0, 3).map((item) => item.name);
+    const sessions = await this.scopedSessions(row.id, null, null, 5);
+    const attended = sessions.filter((session) => session.attended);
+    const lastAttendedOn = attended.length
+      ? attended
+          .map((session) => session.sessionDate)
+          .reduce((latest, date) => (date > latest ? date : latest))
+      : null;
+
+    const status: MemberProfile['attendance']['status'] =
+      sessions.length < 3
+        ? 'not_enough_data'
+        : attended.length / sessions.length >= 0.6
+          ? 'regular'
+          : 'non_regular';
+
+    const [shepherd] = await this.db.query<{
+      member_no: string;
+      first_name: string | null;
+      last_name: string | null;
+      other_names: string | null;
+      gender: Gender;
+      dob: string | Date | null;
+    }>(
+      `select o.member_no, o.first_name, o.last_name, o.other_names, o.gender, o.dob
+         from shepherding_assignments a
+         join members o on o.id = a.officer_member_id
+        where a.member_id = $1 and a.ended_on is null
+        order by a.assigned_on desc, a.created_at desc
+        limit 1`,
+      [row.id],
+    );
+
+    return {
+      memberNo: row.member_no,
+      name: displayName(row.first_name, row.last_name, row.other_names),
+      gender: row.gender,
+      age: ageInYears(isoDate(row.dob)),
+      ministries,
+      shepherd: shepherd
+        ? {
+            memberNo: shepherd.member_no,
+            name: displayName(shepherd.first_name, shepherd.last_name, shepherd.other_names),
+            gender: shepherd.gender,
+            age: ageInYears(isoDate(shepherd.dob)),
+          }
+        : null,
+      attendance: {
+        status,
+        attended: attended.length,
+        expected: sessions.length,
+        window: 5,
+        lastAttendedOn,
+      },
+    };
+  }
+
+  /**
+   * One scoped-session read shared by the window and the profile. A session is
+   * in scope when it is held (on or before the event's today), not cancelled,
+   * member-trackable, and either general or in one of the member's active
+   * ministries; join and ministry-assignment floors drop sessions entirely.
+   */
+  private async scopedSessions(
+    memberId: string,
+    from: string | null,
+    to: string | null,
+    limit: number | null,
+  ): Promise<ScopedSession[]> {
+    const rows = await this.db.query<{
+      event_id: string;
+      name: string;
+      session_date: string | Date;
+      start_time: string | null;
+      attended: boolean;
+    }>(
+      `select e.id as event_id,
+              e.name,
+              (session->>'date')::date as session_date,
+              e.start_time,
+              exists (
+                select 1 from attendance a
+                 where a.event_instance_id = e.id
+                   and a.session_date = (session->>'date')::date
+                   and a.member_id = m.id
+              ) as attended
+         from members m
+         join event_instances e on true
+         left join event_series se on se.id = e.series_id
+         cross join lateral jsonb_array_elements(e.sessions) session
+        where m.id = $1
+          and e.status not in ('cancelled', 'archived')
+          and coalesce(e.tracks_members, true)
+          and coalesce(session->>'status', 'scheduled') <> 'cancelled'
+          and (session->>'date')::date <= (now() at time zone e.timezone)::date
+          and ($2::date is null or (session->>'date')::date >= $2::date)
+          and ($3::date is null or (session->>'date')::date <= $3::date)
+          and (m.joined_on is null or m.joined_on <= (session->>'date')::date)
+          and (
+            se.id is null
+            or se.ministry_id is null
+            or exists (
+              select 1 from member_ministries mm
+              join ministries mi on mi.id = mm.ministry_id
+               where mm.member_id = m.id
+                 and mm.ministry_id = se.ministry_id
+                 and mm.assigned_on <= (session->>'date')::date
+                 and mi.active
+            )
+          )
+        order by (session->>'date')::date desc,
+                 coalesce(e.start_time, '') desc,
+                 e.id desc
+        ${limit === null ? '' : 'limit $4'}`,
+      limit === null ? [memberId, from, to] : [memberId, from, to, limit],
+    );
+
+    return rows.map((row) => ({
+      eventId: row.event_id,
+      name: row.name,
+      sessionDate: isoDate(row.session_date)!,
+      startTime: row.start_time,
+      attended: row.attended,
+    }));
+  }
+
   async create(input: CreateMemberInput, actor: string): Promise<MemberDetail> {
+    const id = await this.db.transaction((tx) => this.createWithin(tx, input, actor));
+    const detail = await this.findById(id);
+    return detail!;
+  }
+
+  /**
+   * The member create path inside a caller-owned transaction, so approval can
+   * create the member and mark its request in one unit of work.
+   */
+  async createWithin(db: DbClient, input: CreateMemberInput, actor: string): Promise<string> {
     const memberNo = assertMemberNo(requiredText(input.memberNo, 'memberNo'));
     const gender = input.gender ?? 'undisclosed';
     if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
     const joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : todayIn('UTC');
     const dob = input.dob ? assertDate(input.dob, 'dob') : null;
+    const isPresbyter = input.isPresbyter ?? false;
+    const presbyterRank = input.presbyterRank ?? null;
+    if (presbyterRank !== null && !isPresbyter) {
+      throw new ValidationError('presbyterRank is valid only when isPresbyter is true');
+    }
+    if (presbyterRank !== null && (!Number.isInteger(presbyterRank) || presbyterRank < 1)) {
+      throw new ValidationError('presbyterRank must be a positive integer');
+    }
 
     try {
-      const id = await this.db.transaction(async (tx) => {
-        const [row] = await tx.orm
-          .insert(members)
-          .values({
-            memberNo,
-            firstName: requiredText(input.firstName, 'firstName'),
-            lastName: requiredText(input.lastName, 'lastName'),
-            otherNames: optionalText(input.otherNames),
-            maidenName: optionalText(input.maidenName),
-            alias: optionalText(input.alias),
-            dob,
-            gender,
-            placeOfResidence: optionalText(input.placeOfResidence),
-            addressLine: optionalText(input.addressLine),
-            joinedOn,
-            isPresbyter: input.isPresbyter ?? false,
-            createdBy: actor,
-            updatedBy: actor,
-          })
-          .returning({ id: members.id });
+      const [row] = await db.orm
+        .insert(members)
+        .values({
+          memberNo,
+          firstName: requiredText(input.firstName, 'firstName'),
+          lastName: requiredText(input.lastName, 'lastName'),
+          otherNames: optionalText(input.otherNames),
+          maidenName: optionalText(input.maidenName),
+          alias: optionalText(input.alias),
+          dob,
+          gender,
+          placeOfResidence: optionalText(input.placeOfResidence),
+          addressLine: optionalText(input.addressLine),
+          joinedOn,
+          isPresbyter,
+          presbyterRank,
+          createdBy: actor,
+          updatedBy: actor,
+        })
+        .returning({ id: members.id });
 
-        for (const [index, contact] of (input.contacts ?? []).entries()) {
-          await this.insertContact(tx, row!.id, contact, index);
-        }
-        for (const code of input.ministries ?? []) {
-          await this.assignMinistryTx(tx, row!.id, code);
-        }
-        return row!.id;
-      });
-
-      const detail = await this.findById(id);
-      return detail!;
+      for (const [index, contact] of (input.contacts ?? []).entries()) {
+        await this.insertContact(db, row!.id, contact, index);
+      }
+      for (const code of input.ministries ?? []) {
+        await this.assignMinistryTx(db, row!.id, code);
+      }
+      return row!.id;
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError(`A member with number ${memberNo} already exists`);
@@ -628,6 +866,24 @@ export class MemberRepository {
       fields.joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
     }
     if (input.isPresbyter !== undefined) fields.isPresbyter = input.isPresbyter;
+
+    const nextIsPresbyter = input.isPresbyter ?? row.is_presbyter;
+    if (input.isPresbyter === false) {
+      // Clearing the flag clears the rank in the same write.
+      fields.presbyterRank = null;
+    }
+    if (input.presbyterRank !== undefined) {
+      if (
+        input.presbyterRank !== null &&
+        (!Number.isInteger(input.presbyterRank) || input.presbyterRank < 1)
+      ) {
+        throw new ValidationError('presbyterRank must be a positive integer');
+      }
+      if (input.presbyterRank !== null && !nextIsPresbyter) {
+        throw new ValidationError('presbyterRank is valid only when isPresbyter is true');
+      }
+      fields.presbyterRank = input.presbyterRank;
+    }
 
     if (Object.keys(fields).length === 0) throw new ValidationError('No fields to update');
 
@@ -749,6 +1005,7 @@ export class MemberRepository {
           addressLine: null,
           gender: 'undisclosed',
           isPresbyter: false,
+          presbyterRank: null,
           archivedAt: sql`now()`,
           purgedAt: sql`now()`,
           version: sql`${members.version} + 1`,
@@ -1261,6 +1518,7 @@ export class MemberRepository {
     return {
       ...this.toSummary(row, contacts.length, ministries),
       id: row.id,
+      presbyterRank: row.presbyter_rank,
       maidenName: row.maiden_name,
       alias: row.alias,
       dob: isoDate(row.dob),
