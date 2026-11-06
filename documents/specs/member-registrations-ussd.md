@@ -274,13 +274,18 @@ fits.
 | `label.week`                 | This week              | Week            |
 | `label.adults`               | Adults                 | Adults          |
 | `label.as_of`                | As of                  | As of           |
-| `headcount.adults`           | Adults                 | Adults          |
-| `headcount.children`         | Children               | Children        |
+| `headcount.adult_service`    | Adult service          | Adult           |
+| `headcount.children_service` | Children service       | Children        |
+| `headcount.mixed_service`    | Mixed service          | Mixed           |
+| `action.new_count`           | New count              | New             |
+| `action.correct`             | Correct                | Correct         |
 | `activities.zero_today`      | 0 events today         | None today      |
+| `activities.zero_week`       | 0 events this week     | None this week  |
 | `label.event`                | Event                  | Event           |
 | `label.events`               | Events                 | Events          |
 | `label.tomorrow`             | Tomorrow               | Tomorrow        |
 | `label.in_days`              | in {n} days            | {n} days        |
+| `label.no_upcoming`          | No upcoming events     | None upcoming   |
 | `action.view`                | View                   | View            |
 | `status.headcount_recorded`  | Headcount recorded     | Recorded        |
 | `label.quarter`              | This quarter           | Quarter         |
@@ -297,14 +302,21 @@ fits.
   (today first, then ascending), then **priority tier** — the member's ministry events, and a presbyter's
   own presbyter-only events, before general events — then start time, then event number. At most three
   are shown plus `0 More` for the week. An assignment to a deactivated ministry does not count;
-  deactivating a ministry drops its events from scope like removing the membership.
+  deactivating a ministry drops its events from scope like removing the membership. Paged lists render
+  the channel's declared `pageSize.events`: three for the 182 reference, two for Nalo's 120, so a declared page
+  never drops an action; message truncation stays a fallback, not the pagination rule. Mixed service
+  headcounts are portal-only.
 - **Zero events today.** When the selected day has no applicable event, the screen says `0 events today`
-  and names the next applicable day — `2 events in 2 days`, or `1 event tomorrow` — with `1 View` to open
-  those events and `2 This week` for the week list. The count and day phrase are computed values; the
-  static words come from `label.event`, `label.events`, `label.tomorrow` and `label.in_days`, composed
+  and names the next applicable day within a **14-day** horizon: day 1 renders `1 event tomorrow`/`2
+events tomorrow`, days 2–14 render `in N days` (`2 events in 2 days` ... `2 events in 14 days`), and
+  beyond 14 days it says `No upcoming events`. The line offers `1 View` those events and `2 This week`
+  for the week list; an empty week says `0 events this week` (`activities.zero_week`) with `1 A date` and
+  `9 Back`. The count and day phrase are computed values; the static words come from `label.event`,
+  `label.events`, `label.tomorrow`, `label.in_days` and `label.no_upcoming`, composed
   with the count (`1 event`, `2 events`). The week list is always reachable, even when today is empty.
 - Offerings are the active attachments of the chosen event and its series, minus detached, expired,
-  skipped on that date or opted-out; at most five are shown plus `0 More`. The resolved display name is
+  skipped on that date or opted-out; at most five are shown plus `0 More` on the 182 reference, three on
+  a channel whose offerings page size is three. The resolved display name is
   the API's, never composed by USSD.
 - The caller enters the amount first, then selects one or more offerings (`1,2`). One offering takes the
   whole amount silently. Several offerings trigger a split prompt (`20,30`), which must sum to the
@@ -377,28 +389,39 @@ fits.
   presbyter is not themselves recorded present at the session, they must first delegate clocking duty for
   that session to another presbyter; the delegation is recorded with the grantor, delegate, session and
   reason, and expires with the session. The delegate may then clock in members for that session only.
-- **Headcounts.** A presbyter or admin captures a headcount for one session in a single entry, chosen by
-  mode. USSD asks the mode first (`1 Adults`, `2 Children`), then one three-number prompt; the `mixed`
-  mode is a portal-only four-number entry. Adults mode: `male,female,children` → `adultMale`,
-  `adultFemale`, `childUnspecified`. Children mode: `male,female,adults` → `childMale`, `childFemale`,
-  `adultUnspecified`. The model is append-only with an `asOf` timestamp; a correction supersedes the
-  earlier observation without deleting it, and the current observation is the newest non-superseded row.
-  The register-derived `expected` stays separate and is labelled **Roster** on the reading surfaces. A
-  headcount is never derived from or fed into per-member attendance or regularity.
+- **Headcounts.** A presbyter or admin records a headcount for one session, shown as a labelled service
+  mode: **Adult service** (`male,female,children`), **Children service** (`male,female,adults`) or
+  **Mixed service** (portal-only four numbers: `adult male,adult female,child male,child female`). The
+  current observation screen names the mode, the `asOf` time and the count. USSD offers `1 New count` and
+  `2 Correct`: a new count appends an observation with `asOf` now; a correction supersedes the current
+  observation and keeps its original `asOf` (the moment counted), recording who corrected it and when.
+  The session remembers the last mode for that event/session and preselects it on the mode prompt. The
+  entry is one labelled three-number line, accepting comma, slash or space separators, with a re-prompt
+  on a malformed or out-of-range value and a lay restatement before save. Each bucket is 0–10,000 and the
+  total at most 30,000; an all-zero observation is allowed. The model is append-only: a superseded
+  observation is **not invalid** — it stays the valid record of the count at its `asOf` — and only the
+  newest non-superseded row is "current". The register-derived `expected` stays separate and is labelled
+  **Roster**. A headcount is never derived from or fed into per-member attendance or regularity, and it
+  is operator-only: a member never sees the aggregate headcount.
 - Attendance summaries are read through one member-scoped aggregate for a window and a day, with the
   USSD rendering counts and the latest event first.
 
 **24b screens.** Activities opens the applicable events for today (at most three plus `0 More` for the
-week, ordered date → priority tier → start time → event number; `8 A date` accepts `DDMMYYYY`). With no
-event today it shows `0 events today`, the next applicable day's count (`2 events in 2 days` or `1 event
-tomorrow`), and `1 View` those events, plus `2 This week`; the week list is always reachable. A selected
+week — two when the channel's declared `pageSize.events` is two; ordered date → priority tier → start time →
+event number; `8 A date` accepts `DDMMYYYY`). With no
+event today it shows `0 events today`, the next applicable day's count within a **two-week** horizon
+(`2 events in 2 days`, or `1 event tomorrow`), and `1 View` those events, plus `2 This week`; beyond two
+weeks it says `No upcoming events`. An empty week says `0 events this week` with `1 A date` and `9 Back`.
+The week list is always reachable. A selected
 event offers `1 Give` (the 24a giving flow with that event) and `2 Attendance`. Attendance opens today's
 status; `1` a day, `2` a period (`1 Month`, `2 Quarter`,
 `3 Year`), `3` I was present (six-digit code) and, for presbyters, `4` Clocking. Clocking offers `1`
 Clock in (member number), `2` Headcount and `3` Delegate (member number then
-reason). Headcount asks the mode (`1 Adults`, `2 Children`) then one three-number prompt
-(`male,female,children` for Adults, `male,female,adults` for Children), shows the current observation
-with its as-of time, and a re-entry supersedes it (correction, never deletion). My Profile renders the
+reason). Headcount shows the current observation as `Adult service` / `Children service` /
+`Mixed service` with its `asOf` time, then offers `1 New count` and `2 Correct`; the mode prompt labels
+the two handset modes clearly and preselects the session's last mode, then one labelled three-number
+prompt follows. A new count appends with `asOf` now; a correction keeps the corrected observation's
+`asOf` and supersedes it. Mixed service is portal-only. My Profile renders the
 shared identity label, member number, up to three ministries, the
 attendance line and the shepherd. The anonymous Register entry prompts code, first name, last name and
 returns the request reference. Registration approval and code issuance are portal actions (24d), not
@@ -528,7 +551,7 @@ adapter converts the provider's wire format into the internal frame `{ phone, se
 as `POST /ussd/session` (the route handler is factored to expose that pipeline; the session machine,
 glossary, repositories and services are untouched) and converts the internal render `{ sessionId, text,
 done, state, options? }` back into the provider's wire DTO. An adapter is a declaration — `{ id, route,
-authenticator, toFrame, toWire, maxMsgChars }` — not a branch in the machine. Adding provider C is one
+authenticator, toFrame, toWire, maxMsgChars, pageSize }` — not a branch in the machine. Adding provider C is one
 adapter plus one registration; nothing else changes.
 
 - `id` — a stable provider identifier (`nalo`, `hmac`).
@@ -538,6 +561,9 @@ adapter plus one registration; nothing else changes.
 - `toFrame` — maps the provider wire to the internal frame.
 - `toWire` — maps the internal render to the provider wire DTO.
 - `maxMsgChars` — the provider's published per-message character cap, overridable in configuration.
+- `pageSize` — how many paged rows the channel renders, per list: `{ events, offerings }` is
+  `{ 3, 5 }` for the 182 reference and `{ 2, 3 }` for Nalo's 120. The machine renders exactly the
+  supplied size; it never inspects a message cap.
 
 **The two adapters.** Two adapters ship: the **Nalo** adapter (below) and the existing **HMAC reference
 adapter** — the current `POST /ussd/session` entry, which authenticates with the HMAC-SHA-256 signature
@@ -577,9 +603,10 @@ unauthorized`; a malformed body answers `422 validation_error`; neither writes a
   session open, `false` releases it.
 
 **Message limits and truncation.** The machine renders to the internal budget (menu label ≤ 16, prompt
-line ≤ 60, screen ≤ 182 including the footer) and is unaware of any provider cap. An adapter truncates
-its `MSG` to its own `maxMsgChars` with `…` **only** when the cap is smaller than the rendered text; a
-screen within the internal budget passes through unchanged. Nalo's published cap is 120, overridable by
+line ≤ 60, screen ≤ 182 including the footer). It is unaware of provider message caps; the channel
+supplies its declared `pageSize`, and an adapter truncates its `MSG` to its own `maxMsgChars` with `…`
+**only** as a fallback when the cap is smaller than the rendered text. Screens are laid out so a
+correctly declared page size never drops an action. Nalo's published cap is 120, overridable by
 `USSD_NALO_MAX_MSG_CHARS` (integer 1–182, default 120). The simulator shows the real truncation, not an
 idealised one.
 
@@ -608,32 +635,32 @@ remains a review artifact.
 
 ## Data model additions
 
-| Table / column                    | Shape                                                                                                                                                                                                                                                                | Constraints                                                                                                                                     |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                   | admin-set; requires `is_presbyter`                                                                                                              |
-| `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                                                                                                               |
-| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                                                                                                               |
-| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `external_id` nullable, `last_input_seq`, `expires_at`, timestamps                                                                                                                  | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present                                          |
-| `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                         | replay guard; pruned after 10 minutes                                                                                                           |
-| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                                                                                                                      |
-| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                                                                                                                        |
-| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `created_by`, `ended_at`                                                                                                                                        | one active per session; ends with the session                                                                                                   |
-| `event_session_headcounts`        | `id`, `event_instance_id`, `session_date`, `as_of`, `mode` (`adults`/`children`/`mixed`), `adult_male`, `adult_female`, `adult_unspecified`, `child_male`, `child_female`, `child_unspecified`, `total`, `recorded_by`, `recorded_at`, `supersedes_id` nullable      | append-only; buckets check against `mode`; `total` = sum of six; `as_of` within the session day; `supersedes_id` → same session, non-superseded |
-| `event_instances.presbyter_only`  | `boolean` not null default `false`                                                                                                                                                                                                                                   | non-presbyters cannot attend or open; the roster is the active presbyters                                                                       |
-| `event_series.presbyter_only`     | `boolean` not null default `false`                                                                                                                                                                                                                                   | templates generated instances                                                                                                                   |
-| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                                | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge)                        |
-| `payment_intents`                 | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                          | unique gateway reference; one per group                                                                                                         |
-| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                      | FK to `payment_groups`                                                                                                                          |
-| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | unique when present; set once when settled by USSD                                                                                              |
-| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age` | rules evaluated server-side                                                                                                                     |
-| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                      | existing rows stay valid                                                                                                                        |
-| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                    | null for a church-paid period                                                                                                                   |
-| `subscriptions.paid_by`           | `text` (`member` / `church`), not null                                                                                                                                                                                                                               | `member` for a member-paid product, `church` for a church-paid product, and the back-office choice for `either`; never the member               |
-| `subscriptions.period_start`      | `date` not null                                                                                                                                                                                                                                                      | cover period start                                                                                                                              |
-| `subscriptions.period_end`        | `date` not null                                                                                                                                                                                                                                                      | cover lapses here unless renewed                                                                                                                |
-| `subscription_payments`           | `id`, `subscription_id`, `period_start`, `period_end`, `amount_minor`, `currency`, `channel`, `reference`, `paid_at`, `recorded_by`, `status`                                                                                                                        | member-paid periods; one row per paid period                                                                                                    |
-| `subscription_coverage`           | `subscription_id`, `member_id`                                                                                                                                                                                                                                       | existing: explicit covered members, never derived                                                                                               |
-| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status`, `recorded_by`, `recorded_at`, `decided_by`, `decided_at`                                                                                                                                   | approved + paid sum to "total claimed"                                                                                                          |
+| Table / column                    | Shape                                                                                                                                                                                                                                                                | Constraints                                                                                                                                                                                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `members.presbyter_rank`          | `integer` nullable                                                                                                                                                                                                                                                   | admin-set; requires `is_presbyter`                                                                                                                                                                                                            |
+| `members.membership_card_no`      | `text` nullable                                                                                                                                                                                                                                                      | back-office field                                                                                                                                                                                                                             |
+| `members.verified_at`             | `timestamptz` nullable                                                                                                                                                                                                                                               | null = unverified                                                                                                                                                                                                                             |
+| `ussd_sessions`                   | `id`, `phone_hash`, `member_id` nullable, `anonymous`, `state`, `context` jsonb, `external_id` nullable, `last_input_seq`, `expires_at`, timestamps                                                                                                                  | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present                                                                                                                                        |
+| `ussd_nonces`                     | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                         | replay guard; pruned after 10 minutes                                                                                                                                                                                                         |
+| `attendance_codes`                | `id`, `code_hash`, `purpose`, `event_instance_id`, `session_date`, `issued_by`, `issued_at`, `expires_at`, `used_at`, `used_by_member_id`, `registration_request_id`, `voided_at`                                                                                    | hash only; single use; TTL                                                                                                                                                                                                                    |
+| `registration_requests`           | `id`, `reference` unique, `first_name`, `last_name`, `phone_hash`, `event_instance_id`, `session_date`, `code_id`, `status`, `created_at`, `decided_by`, `decided_at`                                                                                                | no member until approved                                                                                                                                                                                                                      |
+| `clocking_delegations`            | `id`, `event_instance_id`, `session_date`, `from_member_id`, `to_member_id`, `reason`, `created_at`, `created_by`, `ended_at`                                                                                                                                        | one active per session; ends with the session                                                                                                                                                                                                 |
+| `event_session_headcounts`        | `id`, `event_instance_id`, `session_date`, `as_of`, `mode` (`adults`/`children`/`mixed`), `adult_male`, `adult_female`, `adult_unspecified`, `child_male`, `child_female`, `child_unspecified`, `total`, `recorded_by`, `recorded_at`, `supersedes_id` nullable      | append-only; buckets check against `mode`, each 0–10,000, `total` = sum of six and ≤30,000; `as_of` within the session day; `supersedes_id` unique when present, same session, non-superseded; a superseded row remains valid for its `as_of` |
+| `event_instances.presbyter_only`  | `boolean` not null default `false`                                                                                                                                                                                                                                   | non-presbyters cannot attend or open; the roster is the active presbyters                                                                                                                                                                     |
+| `event_series.presbyter_only`     | `boolean` not null default `false`                                                                                                                                                                                                                                   | templates generated instances                                                                                                                                                                                                                 |
+| `payment_groups`                  | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                                | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge)                                                                                                                      |
+| `payment_intents`                 | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                          | unique gateway reference; one per group                                                                                                                                                                                                       |
+| `contributions.payment_group_id`  | `uuid` nullable                                                                                                                                                                                                                                                      | FK to `payment_groups`                                                                                                                                                                                                                        |
+| `pledges.settled_contribution_id` | `uuid` nullable                                                                                                                                                                                                                                                      | unique when present; set once when settled by USSD                                                                                                                                                                                            |
+| `subscription_products`           | `id`, `code` unique, `name`, `description`, `active`, `premium_minor`, `currency`, `payment_mode`, `period_months`, `covers`, `max_dependents`, `allowed_relationships`, `min_membership_days`, `requires_card`, `requires_verified`, `gender`, `min_age`, `max_age` | rules evaluated server-side                                                                                                                                                                                                                   |
+| `subscriptions.product_id`        | `uuid` nullable                                                                                                                                                                                                                                                      | existing rows stay valid                                                                                                                                                                                                                      |
+| `subscriptions.premium_minor`     | `bigint` nullable                                                                                                                                                                                                                                                    | null for a church-paid period                                                                                                                                                                                                                 |
+| `subscriptions.paid_by`           | `text` (`member` / `church`), not null                                                                                                                                                                                                                               | `member` for a member-paid product, `church` for a church-paid product, and the back-office choice for `either`; never the member                                                                                                             |
+| `subscriptions.period_start`      | `date` not null                                                                                                                                                                                                                                                      | cover period start                                                                                                                                                                                                                            |
+| `subscriptions.period_end`        | `date` not null                                                                                                                                                                                                                                                      | cover lapses here unless renewed                                                                                                                                                                                                              |
+| `subscription_payments`           | `id`, `subscription_id`, `period_start`, `period_end`, `amount_minor`, `currency`, `channel`, `reference`, `paid_at`, `recorded_by`, `status`                                                                                                                        | member-paid periods; one row per paid period                                                                                                                                                                                                  |
+| `subscription_coverage`           | `subscription_id`, `member_id`                                                                                                                                                                                                                                       | existing: explicit covered members, never derived                                                                                                                                                                                             |
+| `subscription_claims`             | `id`, `subscription_id`, `member_id`, `amount_minor`, `reason`, `status`, `recorded_by`, `recorded_at`, `decided_by`, `decided_at`                                                                                                                                   | approved + paid sum to "total claimed"                                                                                                                                                                                                        |
 
 ## Testing Decisions
 
@@ -702,6 +729,13 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-05: headcount entry is refined. The current screen names **Adult service**, **Children
+  service** or **Mixed service**; USSD offers `1 New count` and `2 Correct`; a correction keeps the
+  corrected observation's `asOf` and supersedes exactly one row (`supersedes_id` unique when present);
+  the session remembers the last mode; entry is one labelled three-number line with tolerant separators;
+  buckets are 0–10,000 with a 30,000 total and all-zero is allowed; a superseded observation remains
+  valid for its `asOf`, and headcounts are operator-only. Activities uses a two-week next-events horizon,
+  an empty-week state, and a declared per-list `pageSize` (`{ events, offerings }` = `{ 3, 5 }` reference, `{ 2, 3 }` Nalo).
 - 2026-11-05: the operator's "expected headcount" becomes a **headcount** — an actual count, never an
   expected figure — append-only with a mode (`adults`/`children`/`mixed`), six gender buckets, `total`,
   `asOf` and `supersedesId`; a correction supersedes without deleting. The register-derived `expected`
@@ -711,7 +745,7 @@ remains a review artifact.
   day's count and `1 View` / `2 This week`. Events and series gain `presbyterOnly`. This lands in 24d,
   extending migration 0016; 24c is unaffected and 24e stays at 0017.
 - 2026-11-05: the provider-adapter layer is settled. USSD is served through per-provider thin adapter
-  routes behind a declaration contract (`{ id, route, authenticator, toFrame, toWire, maxMsgChars }`);
+  routes behind a declaration contract (`{ id, route, authenticator, toFrame, toWire, maxMsgChars, pageSize }`);
   the Nalo adapter maps the Nalo Solutions wire (`USERID`-only auth against `USSD_NALO_USER_ID`,
   `MSGTYPE`/`SESSIONID` session correlation, `MSG` ← `text` with `MSGTYPE` ← `!done`) and the existing
   HMAC entry is the reference adapter. Migration `0016` adds `ussd_sessions.external_id` so the gateway

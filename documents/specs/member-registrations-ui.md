@@ -112,13 +112,15 @@ under `ui/`, not lifted from the prototype.
 
 The operator app gains one **USSD** top-level section (Codes, Registrations, Clocking, Headcount,
 Products, Claims; Complaints after 24e). The **Headcount** panel records the operator's actual counted
-attendance per session: a mode selector (Adults / Children / Mixed), an `asOf` timestamp defaulting to
-now, the three-number entry (four in Mixed), the observation history newest first, and a **Correct**
-action on the current observation that supersedes it without deleting it. The register-derived
-`expected` is shown alongside as **Roster**, never merged with the headcount. The operator's activity
-list mirrors the USSD eligibility and ordering: general events, the officer's active ministries, and
-presbyter-only events for presbyters; date → priority tier → start time → event number, three plus
-`More`, with the same zero-events-today and next-events prompt.
+attendance per session: a mode selector labelled **Adult service / Children service / Mixed service**, an
+`asOf` timestamp defaulting to now, the three-number entry (four in Mixed), the observation history newest
+first (superseded observations stay readable and remain valid for their `asOf`), and a **Correct** action
+on the current observation that keeps its `asOf` and supersedes it without deleting it. The register-derived
+`expected` is shown alongside as **Roster**, never merged with the headcount; headcounts are operator-only
+and never appear in member surfaces. The operator's activity list mirrors the USSD eligibility and
+ordering: general events, the officer's active ministries, and presbyter-only events for presbyters;
+date → priority tier → start time → event number, three plus `More` (two when the selected provider caps
+messages at 120), with the same zero-events-today, two-week next-events prompt and empty-week state.
 
 ## Users and Jobs
 
