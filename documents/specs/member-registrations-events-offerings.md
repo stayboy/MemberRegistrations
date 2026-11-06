@@ -485,7 +485,7 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-32: **Given** an offering with no custom name, **When** it is displayed, **Then** the label falls back to the event name + kind; `availableUntil` is event end or the explicit date; after expiry new gifts are rejected but a pending pledge can still be honored. (FR-19)
 
-### AC-33: **Given** a headcount-only event, **When** per-member attendance, an attendance import, a USSD clock-in or an attendance code is attempted, **Then** it is rejected and no per-member row is created, while expected headcounts still record. (FR-42)
+### AC-33: **Given** a headcount-only event, **When** per-member attendance, an attendance import, a USSD clock-in or an attendance code is attempted, **Then** it is rejected and no per-member row is created, while headcounts still record. (FR-42)
 
 ## Edge Cases
 
