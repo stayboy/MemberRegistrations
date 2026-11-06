@@ -18,6 +18,12 @@ export const STATES = [
   'pledges.confirm',
   'pledges.done',
   'payments.summary',
+  'welfare.list',
+  'welfare.product',
+  'welfare.dependents',
+  'welfare.confirm',
+  'welfare.done',
+  'welfare.services',
   'activities',
   'activities.week',
   'activities.date',
@@ -130,6 +136,49 @@ export interface UssdProfile {
   };
 }
 
+/** One eligible member-payable welfare product in the Subscribe list. */
+export interface UssdWelfareProduct {
+  code: string;
+  name: string;
+  premiumMinor: number;
+  currency: string;
+  periodMonths: number;
+  covers: 'individual' | 'household';
+  maxDependents: number;
+  allowedRelationships: string[];
+}
+
+/** A dependent the policyholder may add, already filtered by the product rules. */
+export interface UssdWelfareDependent {
+  memberNo: string;
+  name: string;
+  relationship: string;
+}
+
+/** One owned or inherited row in "My services". */
+export interface UssdWelfareService {
+  id: string;
+  name: string;
+  status: 'active' | 'expired' | 'ended';
+  source: 'owned' | 'inherited';
+  paidBy: 'member' | 'church' | null;
+  periodEnd: string | null;
+  claimedTotalMinor: number;
+  currency: string | null;
+  policyholder: {
+    memberNo: string;
+    name: string;
+    gender: UssdGender;
+    age: number | null;
+  } | null;
+  relationship: string | null;
+}
+
+export interface UssdWelfareSubscription {
+  id: string;
+  paidBy: 'member' | 'church';
+}
+
 export interface UssdMemberContext {
   isPresbyter: boolean;
   presbyterRank: number | null;
@@ -160,6 +209,8 @@ export interface UssdSessionInfo {
     lastName: string | null;
   } | null;
   anonymous: boolean;
+  /** The channel's declared paged-list sizes; the reference is 3 events and 5 offerings. */
+  pageSize?: { events: number; offerings: number };
 }
 
 export interface CreateGroupInput {
@@ -238,6 +289,16 @@ export interface UssdServices {
   }): Promise<UssdExpected>;
   memberByNo(memberNo: string): Promise<{ memberNo: string; name: string }>;
   isSenior(memberNo: string): Promise<boolean>;
+  /** Active, eligible products whose paymentMode is member, in code order. */
+  welfareProducts(memberNo: string): Promise<UssdWelfareProduct[]>;
+  welfareDependents(memberNo: string, productCode: string): Promise<UssdWelfareDependent[]>;
+  subscribeWelfare(input: {
+    memberNo: string;
+    productCode: string;
+    coveredMemberNos?: string[];
+    phoneHash: string;
+  }): Promise<UssdWelfareSubscription>;
+  welfareServices(memberNo: string): Promise<UssdWelfareService[]>;
 }
 
 /** Everything a screen needs that survives the frame; the raw phone never does. */
@@ -290,6 +351,15 @@ export interface UssdContext {
   doneKind?: 'clock' | 'delegate' | 'code';
   expected?: UssdExpected;
   requestReference?: string;
+  welfareProducts?: UssdWelfareProduct[];
+  welfarePage?: number;
+  welfareProduct?: UssdWelfareProduct;
+  welfareDependents?: UssdWelfareDependent[];
+  welfareDependentsPhase?: 'ask' | 'list' | 'none';
+  welfareSelectedDependents?: string[];
+  welfareServices?: UssdWelfareService[];
+  welfareServicesPage?: number;
+  welfareSubscription?: UssdWelfareSubscription;
 }
 
 export interface UssdOption {
@@ -319,6 +389,16 @@ const PLEDGE_PAGE_SIZE = 3;
 const ACTIVITY_PAGE_SIZE = 4;
 /** Two full event rows fit the 182-character budget beside the actions. */
 const ATTENDANCE_EVENT_LINES = 2;
+/** The reference Subscribe list shows three eligible services plus More. */
+const WELFARE_PRODUCT_PAGE_SIZE = 3;
+/**
+ * My services renders one row per screen: status, payer, period, claimed total
+ * and an inherited policyholder identity cannot fit two rows at the maximum
+ * dynamic widths inside 182 characters. One row is within the channel's
+ * declared events page size (three reference, two Nalo) and still pages with
+ * `0 More`.
+ */
+const WELFARE_SERVICE_PAGE_SIZE = 1;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -410,6 +490,12 @@ const PARENTS: Record<UssdState, UssdState | null> = {
   'pledges.confirm': 'pledges.list',
   'pledges.done': 'main',
   'payments.summary': 'offerings',
+  'welfare.list': 'main',
+  'welfare.product': 'welfare.list',
+  'welfare.dependents': 'welfare.product',
+  'welfare.confirm': 'welfare.product',
+  'welfare.done': 'main',
+  'welfare.services': 'welfare.list',
   activities: 'main',
   'activities.week': 'activities',
   'activities.date': 'activities',
@@ -710,6 +796,192 @@ function renderedPayments(context: UssdContext): Rendered {
   return screen('payments.summary', context, [...lines, ...nav.lines], nav.options);
 }
 
+/** Spouse renders Husband/Wife from the policyholder's gender; other types stay as named. */
+function welfareRelationshipLabel(
+  relationship: string | null,
+  policyholder: UssdWelfareService['policyholder'],
+): string | null {
+  if (!relationship) return null;
+  if (relationship === 'spouse') {
+    if (policyholder?.gender === 'female') return t('label.spouse_wife');
+    if (policyholder?.gender === 'male') return t('label.spouse_husband');
+    return 'Spouse';
+  }
+  return relationship.charAt(0).toUpperCase() + relationship.slice(1);
+}
+
+function welfareCoverLabel(covers: 'individual' | 'household'): string {
+  return covers === 'household' ? 'Household' : 'Individual';
+}
+
+function renderedWelfareList(context: UssdContext): Rendered {
+  const page = context.welfarePage ?? 0;
+  const all = context.welfareProducts ?? [];
+  const visible = all.slice(
+    page * WELFARE_PRODUCT_PAGE_SIZE,
+    (page + 1) * WELFARE_PRODUCT_PAGE_SIZE,
+  );
+  const more = all.length > (page + 1) * WELFARE_PRODUCT_PAGE_SIZE;
+  const lines = [...noticeLines(context), t('menu.welfare')];
+  const options: UssdOption[] = [];
+  if (all.length === 0) {
+    lines.push(t('welfare.not_eligible'));
+  } else {
+    visible.forEach((product, index) => {
+      const key = String(index + 1);
+      const name = truncate('offering', product.name);
+      lines.push(`${key} ${name}`);
+      options.push({ key, label: name });
+    });
+  }
+  if (more) {
+    lines.push(`0 ${t('nav.more')}`);
+    options.push({ key: '0', label: t('nav.more') });
+  }
+  lines.push(`8 ${t('welfare.my_services')}`);
+  options.push({ key: '8', label: t('welfare.my_services') });
+  const nav = navLines('welfare.list', context, false);
+  return screen('welfare.list', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+}
+
+function renderedWelfareProduct(context: UssdContext): Rendered {
+  const product = context.welfareProduct;
+  const lines = [
+    ...noticeLines(context),
+    truncate('event', product?.name ?? ''),
+    `${t('welfare.premium')} ${money(product?.premiumMinor ?? 0, product?.currency)}`,
+    `${t('welfare.cover')} ${welfareCoverLabel(product?.covers ?? 'individual')} · ${
+      product?.periodMonths ?? 1
+    } ${t('label.month')}`,
+    `1 ${t('welfare.subscribe')}`,
+  ];
+  const nav = navLines('welfare.product', context, false);
+  return screen(
+    'welfare.product',
+    context,
+    [...lines, ...nav.lines],
+    [{ key: '1', label: t('welfare.subscribe') }, ...nav.options],
+  );
+}
+
+function renderedWelfareDependents(context: UssdContext): Rendered {
+  const phase = context.welfareDependentsPhase ?? 'none';
+  const lines = [...noticeLines(context), t('welfare.cover_dependents')];
+  const options: UssdOption[] = [];
+  if (phase === 'none') {
+    lines.push(t('welfare.no_dependents'), `1 ${t('welfare.subscribe')}`);
+    options.push({ key: '1', label: t('welfare.subscribe') });
+  } else if (phase === 'ask') {
+    lines.push(`1 ${t('action.yes')}`, `2 ${t('action.no')}`);
+    options.push({ key: '1', label: t('action.yes') }, { key: '2', label: t('action.no') });
+  } else {
+    (context.welfareDependents ?? []).forEach((dependent, index) => {
+      const key = String(index + 1);
+      const name = truncate('member', dependent.name);
+      lines.push(`${key} ${name}`);
+      options.push({ key, label: name });
+    });
+  }
+  const nav = navLines('welfare.dependents', context, false);
+  return screen(
+    'welfare.dependents',
+    context,
+    [...lines, ...nav.lines],
+    [...options, ...nav.options],
+  );
+}
+
+function renderedWelfareConfirm(context: UssdContext): Rendered {
+  const product = context.welfareProduct;
+  const selected = context.welfareSelectedDependents ?? [];
+  const lines = [
+    ...noticeLines(context),
+    t('welfare.subscribe'),
+    truncate('offering', product?.name ?? ''),
+    `${t('welfare.premium')} ${money(product?.premiumMinor ?? 0, product?.currency)}`,
+    `${t('welfare.cover')} ${welfareCoverLabel(product?.covers ?? 'individual')}${
+      selected.length > 0 ? ` (${selected.length})` : ''
+    }`,
+    `1 ${t('action.accept')}`,
+    `2 ${t('action.change')}`,
+  ];
+  const nav = navLines('welfare.confirm', context, false);
+  return screen(
+    'welfare.confirm',
+    context,
+    [...lines, ...nav.lines],
+    [
+      { key: '1', label: t('action.accept') },
+      { key: '2', label: t('action.change') },
+      ...nav.options,
+    ],
+  );
+}
+
+function renderedWelfareDone(context: UssdContext): Rendered {
+  const subscription = context.welfareSubscription;
+  const payer =
+    subscription?.paidBy === 'church' ? t('welfare.paid_by_church') : t('welfare.payer_member');
+  const lines = [
+    ...noticeLines(context),
+    t('welfare.subscribe'),
+    `${t('label.reference')} ${truncate('reference', subscription?.id ?? '')}`,
+    payer,
+  ];
+  return screen('welfare.done', context, lines, [], true);
+}
+
+function welfareServicePageSize(_services: UssdWelfareService[], session: UssdSessionInfo): number {
+  const declared = Math.max(1, session.pageSize?.events ?? 3);
+  return Math.min(WELFARE_SERVICE_PAGE_SIZE, declared);
+}
+
+function renderedWelfareServices(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const all = context.welfareServices ?? [];
+  const size = welfareServicePageSize(all, session);
+  const page = context.welfareServicesPage ?? 0;
+  const visible = all.slice(page * size, (page + 1) * size);
+  const more = all.length > (page + 1) * size;
+  const lines = [...noticeLines(context), t('welfare.my_services')];
+  if (all.length === 0) {
+    lines.push(t('welfare.no_services'));
+  }
+  for (const [index, service] of visible.entries()) {
+    const relationship =
+      service.source === 'inherited'
+        ? welfareRelationshipLabel(service.relationship, service.policyholder)
+        : null;
+    const status = service.status === 'expired' ? ` ${t('welfare.expired')}` : '';
+    lines.push(
+      `${index + 1} ${truncate('offering', service.name)}${
+        relationship ? ` (${relationship})` : ''
+      }${status}`,
+    );
+    if (service.source === 'inherited' && service.policyholder) {
+      lines.push(
+        identityLabel(
+          truncate('member', service.policyholder.name),
+          service.policyholder.gender,
+          service.policyholder.age,
+        ),
+      );
+    }
+    const payer =
+      service.paidBy === 'church'
+        ? t('welfare.paid_by_church')
+        : service.paidBy === 'member'
+          ? t('welfare.payer_member')
+          : '';
+    const until = service.periodEnd ? shortDate(service.periodEnd) : '-';
+    lines.push(`${payer ? `${payer} · ` : ''}${t('welfare.until')} ${until}`);
+    lines.push(
+      `${t('welfare.claimed')} ${money(service.claimedTotalMinor, service.currency ?? 'GHS')}`,
+    );
+  }
+  const nav = navLines('welfare.services', context, more);
+  return screen('welfare.services', context, [...lines, ...nav.lines], nav.options);
+}
+
 function renderedError(context: UssdContext): Rendered {
   const done = context.terminal ?? false;
   const lines = [t(context.messageKey ?? 'error.try_again')];
@@ -1001,8 +1273,9 @@ export function render(
             { key: '1', label: t('menu.offerings') },
             { key: '2', label: t('menu.activities') },
             { key: '3', label: t('menu.attendance') },
-            { key: '4', label: t('menu.profile') },
-            { key: '5', label: t('menu.exit') },
+            { key: '4', label: t('menu.welfare') },
+            { key: '5', label: t('menu.profile') },
+            { key: '6', label: t('menu.exit') },
           ];
       for (const entry of entries) lines.push(`${entry.key} ${entry.label}`);
       options.push(...entries);
@@ -1041,6 +1314,18 @@ export function render(
       return renderedDone('pledges.done', context);
     case 'payments.summary':
       return renderedPayments(context);
+    case 'welfare.list':
+      return renderedWelfareList(context);
+    case 'welfare.product':
+      return renderedWelfareProduct(context);
+    case 'welfare.dependents':
+      return renderedWelfareDependents(context);
+    case 'welfare.confirm':
+      return renderedWelfareConfirm(context);
+    case 'welfare.done':
+      return renderedWelfareDone(context);
+    case 'welfare.services':
+      return renderedWelfareServices(context, session);
     case 'activities':
       return listActivities(
         'activities',
@@ -1227,6 +1512,46 @@ async function openProfile(
   };
 }
 
+async function openWelfare(
+  context: UssdContext,
+  services: UssdServices,
+  session: UssdSessionInfo,
+): Promise<AdvanceResult> {
+  const products = await services.welfareProducts(session.member!.memberNo);
+  return {
+    state: 'welfare.list',
+    context: {
+      ...baseContext(context),
+      welfareProducts: products,
+      welfarePage: 0,
+      welfareProduct: undefined,
+      welfareDependents: undefined,
+      welfareDependentsPhase: undefined,
+      welfareSelectedDependents: undefined,
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
+async function openWelfareServices(
+  context: UssdContext,
+  services: UssdServices,
+  session: UssdSessionInfo,
+): Promise<AdvanceResult> {
+  const servicesList = await services.welfareServices(session.member!.memberNo);
+  return {
+    state: 'welfare.services',
+    context: {
+      ...baseContext(context),
+      welfareServices: servicesList,
+      welfareServicesPage: 0,
+      notice: undefined,
+    },
+    done: false,
+  };
+}
+
 function parseSelection(input: string, count: number): number[] | null {
   const parts = input.split(',').map((part) => part.trim());
   if (parts.length === 0 || parts.some((part) => !/^\d+$/.test(part))) return null;
@@ -1303,6 +1628,7 @@ export async function advance(
     state === 'offerings.done' ||
     state === 'pledges.done' ||
     state === 'attendance.done' ||
+    state === 'welfare.done' ||
     state === 'register.done'
   ) {
     return { state, context, done: true };
@@ -1317,6 +1643,7 @@ export async function advance(
       state === 'attendance' ||
       state.startsWith('attendance.') ||
       state.startsWith('pledges.') ||
+      state.startsWith('welfare.') ||
       state === 'payments.summary')
   ) {
     return {
@@ -1335,7 +1662,7 @@ export async function advance(
   }
 
   if (state === 'main') {
-    if (value === '5') {
+    if ((session.anonymous && value === '5') || (!session.anonymous && value === '6')) {
       return {
         state: 'main',
         context: baseContext(context),
@@ -1388,7 +1715,8 @@ export async function advance(
     }
     if (value === '2') return openActivities(context, services, todayIso());
     if (value === '3') return openAttendance(context, services, session);
-    if (value === '4') return openProfile(context, services, session);
+    if (value === '4') return openWelfare(context, services, session);
+    if (value === '5') return openProfile(context, services, session);
     return invalid(state, context, 'error.invalid_choice');
   }
 
@@ -2212,6 +2540,173 @@ export async function advance(
     } catch (error) {
       return invalid(state, context, clockingErrorKey(error));
     }
+  }
+
+  if (state === 'welfare.list') {
+    const page = context.welfarePage ?? 0;
+    const all = context.welfareProducts ?? [];
+    const visible = all.slice(
+      page * WELFARE_PRODUCT_PAGE_SIZE,
+      (page + 1) * WELFARE_PRODUCT_PAGE_SIZE,
+    );
+    if (value === '0') {
+      if (!(all.length > (page + 1) * WELFARE_PRODUCT_PAGE_SIZE)) {
+        return invalid(state, context, 'error.invalid_choice');
+      }
+      return {
+        state,
+        context: { ...context, welfarePage: page + 1, notice: undefined },
+        done: false,
+      };
+    }
+    if (value === '8') return openWelfareServices(context, services, session);
+    if (!/^\d+$/.test(value)) return invalid(state, context, 'error.invalid_choice');
+    const index = Number(value);
+    if (index < 1 || index > visible.length) {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    return {
+      state: 'welfare.product',
+      context: {
+        ...context,
+        welfareProduct: visible[index - 1]!,
+        welfareDependents: undefined,
+        welfareDependentsPhase: undefined,
+        welfareSelectedDependents: undefined,
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'welfare.product') {
+    if (value !== '1') return invalid(state, context, 'error.invalid_choice');
+    const product = context.welfareProduct;
+    if (!product) return invalid(state, context, 'error.invalid_choice');
+    if (product.covers === 'household') {
+      const dependents = await services.welfareDependents(session.member!.memberNo, product.code);
+      return {
+        state: 'welfare.dependents',
+        context: {
+          ...context,
+          welfareDependents: dependents,
+          welfareDependentsPhase: dependents.length === 0 ? 'none' : 'ask',
+          welfareSelectedDependents: [],
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    return {
+      state: 'welfare.confirm',
+      context: {
+        ...context,
+        welfareDependents: undefined,
+        welfareDependentsPhase: undefined,
+        welfareSelectedDependents: [],
+        notice: undefined,
+      },
+      done: false,
+    };
+  }
+
+  if (state === 'welfare.dependents') {
+    const phase = context.welfareDependentsPhase ?? 'none';
+    const confirm = (selected: string[]): AdvanceResult => ({
+      state: 'welfare.confirm',
+      context: {
+        ...context,
+        welfareSelectedDependents: selected,
+        notice: undefined,
+      },
+      done: false,
+    });
+
+    if (phase === 'none') {
+      if (value !== '1') return invalid(state, context, 'error.invalid_choice');
+      return confirm([]);
+    }
+    if (phase === 'ask') {
+      if (value === '1') {
+        return {
+          state,
+          context: { ...context, welfareDependentsPhase: 'list', notice: undefined },
+          done: false,
+        };
+      }
+      if (value === '2') return confirm([]);
+      return invalid(state, context, 'error.invalid_choice');
+    }
+
+    const visible = context.welfareDependents ?? [];
+    const indices = parseSelection(value, visible.length);
+    if (!indices || indices.length === 0) {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    return confirm(indices.map((selection) => visible[selection - 1]!.memberNo));
+  }
+
+  if (state === 'welfare.confirm') {
+    if (value === '2') {
+      return {
+        state: 'welfare.product',
+        context: {
+          ...context,
+          welfareDependentsPhase: undefined,
+          welfareSelectedDependents: undefined,
+          notice: undefined,
+        },
+        done: false,
+      };
+    }
+    if (value !== '1') return invalid(state, context, 'error.invalid_choice');
+    const product = context.welfareProduct;
+    if (!product) return invalid(state, context, 'error.invalid_choice');
+    try {
+      const subscription = await services.subscribeWelfare({
+        memberNo: session.member!.memberNo,
+        productCode: product.code,
+        coveredMemberNos: context.welfareSelectedDependents,
+        phoneHash: session.phoneHash,
+      });
+      return {
+        state: 'welfare.done',
+        context: { ...context, welfareSubscription: subscription, notice: undefined },
+        done: true,
+      };
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'not_eligible') {
+        return {
+          state: 'error',
+          context: {
+            ...context,
+            returnState: 'welfare.list',
+            messageKey: 'error.not_eligible',
+            notice: undefined,
+          },
+          done: false,
+        };
+      }
+      return invalid(state, context, 'error.try_again');
+    }
+  }
+
+  if (state === 'welfare.services') {
+    if (value === '0') {
+      const all = context.welfareServices ?? [];
+      const size = welfareServicePageSize(all, session);
+      const page = context.welfareServicesPage ?? 0;
+      if (!(all.length > (page + 1) * size)) {
+        return invalid(state, context, 'error.invalid_choice');
+      }
+      return {
+        state,
+        context: { ...context, welfareServicesPage: page + 1, notice: undefined },
+        done: false,
+      };
+    }
+    return invalid(state, context, 'error.invalid_choice');
   }
 
   if (state === 'profile') {

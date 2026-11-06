@@ -835,4 +835,105 @@ create table event_session_expected (
 );
 `,
   },
+  {
+    version: '0015_welfare_products',
+    sql: `
+-- Welfare becomes configured reference data: eligibility, payer and cover are
+-- product rules evaluated server-side, never coded per subscription.
+create table subscription_products (
+  id uuid primary key default gen_random_uuid(),
+  code text not null,
+  name text not null,
+  description text,
+  premium_minor bigint not null check (premium_minor > 0),
+  currency text not null,
+  active boolean not null default true,
+  payment_mode text not null check (payment_mode in ('member', 'church', 'either')),
+  period_months integer not null check (period_months in (1, 2, 3, 6, 12)),
+  covers text not null check (covers in ('individual', 'household')),
+  max_dependents integer not null default 0 check (max_dependents >= 0),
+  allowed_relationships text[] not null default '{}',
+  min_membership_days integer not null default 0 check (min_membership_days >= 0),
+  requires_card boolean not null default false,
+  requires_verified boolean not null default false,
+  gender text,
+  min_age integer,
+  max_age integer,
+  created_by text not null,
+  updated_by text,
+  updated_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create unique index subscription_products_code_ci on subscription_products (lower(code));
+
+-- A product subscription leaves kind null; a legacy row keeps its kind and
+-- leaves the product fields null. Exactly one of the two is always set.
+alter table subscriptions drop constraint if exists subscriptions_kind_check;
+alter table subscriptions alter column kind drop not null;
+alter table subscriptions
+  add column product_id uuid references subscription_products(id),
+  add column paid_by text check (paid_by in ('member', 'church')),
+  add column premium_minor bigint,
+  add column period_start date,
+  add column period_end date,
+  add column updated_by text,
+  add column updated_at timestamptz;
+update subscriptions set updated_by = created_by, updated_at = created_at where updated_by is null;
+alter table subscriptions add constraint subscriptions_kind_or_product
+  check ((kind is null) <> (product_id is null));
+
+-- One row per paid cover period; the period itself is the natural key.
+create table subscription_payments (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid not null references subscriptions(id) on delete cascade,
+  period_start date not null,
+  period_end date not null,
+  amount_minor bigint not null check (amount_minor > 0),
+  currency text not null,
+  channel text not null check (channel in ('app', 'ussd', 'manual')),
+  reference text not null,
+  paid_at timestamptz not null default now(),
+  recorded_by text not null,
+  idempotency_key text not null,
+  created_at timestamptz not null default now()
+);
+create unique index subscription_payments_period
+  on subscription_payments (subscription_id, period_start);
+create unique index subscription_payments_reference
+  on subscription_payments (reference);
+create unique index subscription_payments_idempotency
+  on subscription_payments (idempotency_key);
+
+-- Claims are records, not payouts. A decision is append-only in practice (no
+-- route rewrites history) and the status machine is enforced by the repository.
+create table subscription_claims (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid not null references subscriptions(id) on delete cascade,
+  member_id uuid not null references members(id),
+  amount_minor bigint not null check (amount_minor > 0),
+  reason text not null,
+  status text not null check (status in ('pending', 'approved', 'rejected', 'paid')),
+  recorded_by text not null,
+  recorded_at timestamptz not null default now(),
+  decided_by text,
+  decided_at timestamptz,
+  decision_note text,
+  created_at timestamptz not null default now()
+);
+create index subscription_claims_subscription
+  on subscription_claims (subscription_id, recorded_at desc, id desc);
+
+-- The card is detail-only; a present value is trimmed, 1-32 characters and
+-- case-insensitively unique. Verification is an independent officer timestamp.
+alter table members add column membership_card_no text;
+alter table members add column verified_at timestamptz;
+create unique index members_membership_card_no_ci
+  on members (lower(membership_card_no)) where membership_card_no is not null;
+alter table members add constraint members_membership_card_no_trimmed
+  check (
+    membership_card_no is null
+    or (membership_card_no = btrim(membership_card_no) and char_length(membership_card_no) between 1 and 32)
+  );
+`,
+  },
 ];

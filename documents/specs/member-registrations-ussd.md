@@ -256,6 +256,7 @@ fits.
 | `welfare.paid_by_church`     | Paid by the church           | Church          |
 | `welfare.cover_dependents`   | Cover dependents? 1 Yes 2 No | Dependents?     |
 | `welfare.no_dependents`      | No dependents                | None            |
+| `welfare.no_services`        | No services                  | None            |
 | `action.yes`                 | Yes                          | Yes             |
 | `action.no`                  | No                           | No              |
 | `label.spouse_husband`       | Husband                      | Husband         |
@@ -455,10 +456,13 @@ USSD.
   channel, reference, paid on, recorded by); paying advances `periodEnd`. An unpaid period leaves the
   subscription expired at `periodEnd`, and the USSD "My services" shows it as expired.
 - **Coverage.** A household product covers the member plus up to `maxDependents` active members joined by
-  an allowed relationship (an existing explicit relationship edge, never derived). Adding a dependent
-  beyond the cap, with a disallowed relationship, or a non-active member is `422 validation_error`. An
-  individual product covers the member only. Coverage is explicit `subscription_coverage` rows — a
-  financial fact, never inferred from the household.
+  an allowed relationship (an existing explicit relationship edge, never derived). `allowedRelationships`
+  is read from the policyholder to the covered member, and the stored edge is normalised to that
+  direction (a covered-member-declared `child` edge normalises to `parent` from the policyholder;
+  spouse/guardian/other are neutral). Adding a dependent beyond the cap, with a disallowed relationship,
+  or a non-active member is `422 validation_error`. An individual product covers the member only.
+  Coverage is explicit `subscription_coverage` rows — a financial fact, never inferred from the
+  household.
 - USSD lists **only eligible products** for the caller and shows the premium, period, payer and cover in
   lay terms. A household product asks "Cover dependents? 1 Yes 2 No" and lists the eligible dependents
   up to the cap. The **Subscribe** list contains only products whose `paymentMode` is `member`; a
@@ -742,8 +746,9 @@ remains a review artifact.
 - 2026-11-05: 24c adds the Welfare & Services wire surface: products with server-side eligibility, a
   member-paid-only self-subscription list, renew/payments/claims routes, the owned+inherited subscription
   read, and the glossary keys `welfare.paid_by_church`, `welfare.cover_dependents`,
-  `welfare.no_dependents`, `action.yes`/`action.no` and the spouse labels. Premiums are recorded, not
-  transacted; legacy `life_insurance`/`credit_union` rows stay readable with a null `kind` product model.
+  `welfare.no_dependents`, `welfare.no_services`, `action.yes`/`action.no` and the spouse labels.
+  Premiums are recorded, not transacted; legacy `life_insurance`/`credit_union` rows stay readable with a
+  null `kind` product model.
 - 2026-11-05: headcount entry is refined. The current screen names **Adult service**, **Children
   service** or **Mixed service**; USSD offers `1 New count` and `2 Correct`; a correction keeps the
   corrected observation's `asOf` and supersedes exactly one row (`supersedes_id` unique when present);

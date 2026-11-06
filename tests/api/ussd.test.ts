@@ -279,8 +279,9 @@ describe('POST /ussd/session authentication and identity', () => {
     expect(member.body.text).toContain('1 Offerings');
     expect(member.body.text).toContain('2 Activities');
     expect(member.body.text).toContain('3 Attendance');
-    expect(member.body.text).toContain('4 Profile');
-    expect(member.body.text).toContain('5 Exit');
+    expect(member.body.text).toContain('4 Welfare');
+    expect(member.body.text).toContain('5 Profile');
+    expect(member.body.text).toContain('6 Exit');
     expect(member.body.sessionId).toBeTruthy();
     expect(JSON.stringify(member.body)).not.toContain('8012345678');
 

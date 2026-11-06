@@ -837,7 +837,12 @@ Member-paid writes one `subscription_payments` row for the first period and adva
 same transaction; church-paid writes no payment and leaves `premiumMinor` null. `household` validates
 each `coveredMemberNos` entry (active member, an existing allowed relationship edge to the policyholder,
 within `maxDependents`) and writes explicit `subscription_coverage` rows; `individual` requires the
-array empty/absent. `201` with `Location: /v1/members/{memberNo}/subscriptions/{id}`. Errors: `422
+array empty/absent. **Relationship direction:** `allowedRelationships` is read from the policyholder to
+the covered member — `child` means the covered member is the policyholder's child, `parent` means the
+covered member is the policyholder's parent. The stored edge is normalised to that direction before
+matching (a covered-member-declared `child` edge means the policyholder is that member's child and
+normalises to `parent` from the policyholder; `spouse`, `guardian` and `other` are direction-neutral).
+`201` with `Location: /v1/members/{memberNo}/subscriptions/{id}`. Errors: `422
 validation_error` (cap, relationship, inactive member, individual with dependents), `422 not_eligible`,
 `409 conflict` (already covered).
 

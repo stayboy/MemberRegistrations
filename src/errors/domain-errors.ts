@@ -17,8 +17,8 @@ export class ValidationError extends DomainError {
 }
 
 export class NotFoundError extends DomainError {
-  constructor(message: string) {
-    super(message, 'not_found');
+  constructor(message: string, code = 'not_found') {
+    super(message, code);
   }
 }
 
@@ -256,5 +256,55 @@ export class DelegateRequiredError extends ValidationError {
 export class DelegationExistsError extends ConflictError {
   constructor(message = 'A clocking delegation already exists for this event session') {
     super(message, 'delegation_exists');
+  }
+}
+
+/** A money amount is not a positive integer in minor units. */
+export class InvalidAmountError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'invalid_amount');
+  }
+}
+
+/** The member does not satisfy a welfare product's eligibility rules. */
+export class NotEligibleError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'not_eligible');
+  }
+}
+
+/** The subscription has ended and cannot take a renewal, payment or claim. */
+export class SubscriptionNotActiveError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'subscription_not_active');
+  }
+}
+
+/** The period is still covered, so there is no unpaid period to record. */
+export class PeriodAlreadyPaidError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'period_already_paid');
+  }
+}
+
+/** The member is not actively covered by the subscription. */
+export class NotCoveredError extends NotFoundError {
+  constructor(message: string) {
+    super(message, 'not_covered');
+    this.name = 'NotCoveredError';
+  }
+}
+
+/** A claim is decided once from pending, and paid once from approved. */
+export class ClaimNotPendingError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'claim_not_pending');
+  }
+}
+
+/** A membership card number already belongs to another member. */
+export class CardInUseError extends ConflictError {
+  constructor(message: string) {
+    super(message, 'card_in_use');
   }
 }

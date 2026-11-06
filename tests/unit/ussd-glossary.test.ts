@@ -160,6 +160,62 @@ function contextFor(state: (typeof STATES)[number]): UssdContext {
     doneLabel: 'Kofi Boateng',
     expected: { male: 20, female: 30, children: 40, total: 90 },
     requestReference: 'REG-ABCDEF',
+    welfareProducts: [1, 2, 3, 4].map((index) => ({
+      code: `W-${index}`,
+      name: `Welfare Product ${index}`,
+      premiumMinor: 3000,
+      currency: 'GHS',
+      periodMonths: 12,
+      covers: index === 2 ? 'household' : 'individual',
+      maxDependents: index === 2 ? 2 : 0,
+      allowedRelationships: index === 2 ? ['spouse', 'child'] : [],
+    })),
+    welfarePage: 0,
+    welfareProduct: {
+      code: 'W-1',
+      name: 'Welfare Product 1',
+      premiumMinor: 3000,
+      currency: 'GHS',
+      periodMonths: 12,
+      covers: 'individual',
+      maxDependents: 0,
+      allowedRelationships: [],
+    },
+    welfareDependents: [
+      { memberNo: 'M-3001', name: 'Grace Mensah', relationship: 'spouse' },
+      { memberNo: 'M-3002', name: 'Kofi Mensah', relationship: 'child' },
+      { memberNo: 'M-3003', name: 'Yaa Mensah', relationship: 'child' },
+    ],
+    welfareDependentsPhase: 'list',
+    welfareSelectedDependents: ['M-3001', 'M-3002'],
+    welfareServices: [
+      {
+        id: 's1',
+        name: 'Welfare Product 1',
+        status: 'active',
+        source: 'owned',
+        paidBy: 'member',
+        periodEnd: '2027-12-12',
+        claimedTotalMinor: 12000,
+        currency: 'GHS',
+        policyholder: null,
+        relationship: null,
+      },
+      {
+        id: 's2',
+        name: 'Welfare Product 2',
+        status: 'expired',
+        source: 'owned',
+        paidBy: 'church',
+        periodEnd: '2026-01-12',
+        claimedTotalMinor: 0,
+        currency: 'GHS',
+        policyholder: null,
+        relationship: null,
+      },
+    ],
+    welfareServicesPage: 0,
+    welfareSubscription: { id: 's-00000000-0000-0000-0000-000000000000', paidBy: 'member' },
   };
 
   if (state === 'offerings.pledge_date' || state === 'offerings.pledge_confirm') {
@@ -225,13 +281,96 @@ describe('USSD display glossary', () => {
     }
   });
 
+  it('renders welfare list, product, dependents, confirm and services inside the budget', () => {
+    for (const state of [
+      'welfare.list',
+      'welfare.product',
+      'welfare.dependents',
+      'welfare.confirm',
+      'welfare.done',
+      'welfare.services',
+    ] as const) {
+      const rendered = render(state, contextFor(state), memberSession, services);
+      expect(rendered.text.length, `${state}: ${rendered.text}`).toBeLessThanOrEqual(182);
+    }
+
+    const list = render('welfare.list', contextFor('welfare.list'), memberSession, services);
+    expect(list.text).toContain('1 Welfare Product 1');
+    expect(list.text).toContain('0 More');
+    expect(list.text).toContain('8 My plans');
+
+    const product = render(
+      'welfare.product',
+      contextFor('welfare.product'),
+      memberSession,
+      services,
+    );
+    expect(product.text).toContain('Premium GHS 30.00');
+    expect(product.text).toContain('1 Join');
+  });
+
+  it('uses the dedicated no_services key for an empty My services list', () => {
+    const context = contextFor('welfare.services');
+    context.welfareServices = [];
+    const rendered = render('welfare.services', context, memberSession, services);
+    expect(rendered.text).toContain(t('welfare.no_services'));
+    expect(GLOSSARY['welfare.no_services'].full).toBe('No services');
+  });
+
+  it('renders inherited services with the relationship and identity inside the budget', () => {
+    const context = contextFor('welfare.services');
+    context.welfareServices = [
+      {
+        id: 's3',
+        name: 'Church Family Cover',
+        status: 'active',
+        source: 'inherited',
+        paidBy: 'church',
+        periodEnd: '2027-01-12',
+        claimedTotalMinor: 250000,
+        currency: 'GHS',
+        policyholder: {
+          memberNo: 'M-2001',
+          name: 'Solomon Mensah',
+          gender: 'male',
+          age: 32,
+        },
+        relationship: 'spouse',
+      },
+      {
+        id: 's4',
+        name: 'Church Family Cover',
+        status: 'expired',
+        source: 'inherited',
+        paidBy: 'church',
+        periodEnd: '2026-01-12',
+        claimedTotalMinor: 0,
+        currency: 'GHS',
+        policyholder: {
+          memberNo: 'M-2001',
+          name: 'Solomon Mensah',
+          gender: 'male',
+          age: 32,
+        },
+        relationship: 'spouse',
+      },
+    ];
+    const rendered = render('welfare.services', context, memberSession, services);
+    expect(rendered.text.length, rendered.text).toBeLessThanOrEqual(182);
+    expect(rendered.text).toContain('Church Family Cover (Husband)');
+    expect(rendered.text).toContain('Solomon Mensah (Male, 32y)');
+    expect(rendered.text).toContain('Claimed GHS 2500.00');
+    expect(rendered.text).toContain('0 More');
+  });
+
   it('shows the fixed footer keys where a parent or a page exists', () => {
     const main = render('main', contextFor('main'), memberSession, services);
-    expect(main.options.map((option) => option.key)).toEqual(['1', '2', '3', '4', '5']);
+    expect(main.options.map((option) => option.key)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(main.text).toContain('2 Activities');
     expect(main.text).toContain('3 Attendance');
-    expect(main.text).toContain('4 Profile');
-    expect(main.text).toContain('5 Exit');
+    expect(main.text).toContain('4 Welfare');
+    expect(main.text).toContain('5 Profile');
+    expect(main.text).toContain('6 Exit');
     expect(main.text).not.toContain('00 Main');
 
     const anonymous = render('main', contextFor('main'), anonymousSession, services);

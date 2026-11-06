@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   date,
   index,
@@ -48,6 +49,8 @@ export const members = pgTable(
     joinedOn: date('joined_on'),
     isPresbyter: boolean('is_presbyter').notNull().default(false),
     presbyterRank: integer('presbyter_rank'),
+    membershipCardNo: text('membership_card_no'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     purgedAt: timestamp('purged_at', { withTimezone: true }),
     version: integer('version').notNull().default(1),
@@ -56,7 +59,12 @@ export const members = pgTable(
     createdBy: text('created_by').notNull(),
     updatedBy: text('updated_by').notNull(),
   },
-  (table) => [uniqueIndex('members_member_no_ci').on(sql`lower(${table.memberNo})`)],
+  (table) => [
+    uniqueIndex('members_member_no_ci').on(sql`lower(${table.memberNo})`),
+    uniqueIndex('members_membership_card_no_ci')
+      .on(sql`lower(${table.membershipCardNo})`)
+      .where(sql`${table.membershipCardNo} is not null`),
+  ],
 );
 
 export const eventSeries = pgTable(
@@ -154,23 +162,112 @@ export const memberContactLinks = pgTable(
   (table) => [uniqueIndex('member_contact_links_pair').on(table.memberId, table.contactId)],
 );
 
+export const subscriptionProducts = pgTable(
+  'subscription_products',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    premiumMinor: bigint('premium_minor', { mode: 'number' }).notNull(),
+    currency: text('currency').notNull(),
+    active: boolean('active').notNull().default(true),
+    paymentMode: text('payment_mode').notNull(),
+    periodMonths: integer('period_months').notNull(),
+    covers: text('covers').notNull(),
+    maxDependents: integer('max_dependents').notNull().default(0),
+    allowedRelationships: text('allowed_relationships')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    minMembershipDays: integer('min_membership_days').notNull().default(0),
+    requiresCard: boolean('requires_card').notNull().default(false),
+    requiresVerified: boolean('requires_verified').notNull().default(false),
+    gender: text('gender'),
+    minAge: integer('min_age'),
+    maxAge: integer('max_age'),
+    createdBy: text('created_by').notNull(),
+    updatedBy: text('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('subscription_products_code_ci').on(sql`lower(${table.code})`)],
+);
+
 export const subscriptions = pgTable(
   'subscriptions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    kind: text('kind').notNull(),
+    kind: text('kind'),
+    productId: uuid('product_id').references(() => subscriptionProducts.id),
     policyholderMemberId: uuid('policyholder_member_id')
       .notNull()
       .references(() => members.id),
     scope: text('scope').notNull(),
     status: text('status').notNull().default('active'),
+    paidBy: text('paid_by'),
+    premiumMinor: bigint('premium_minor', { mode: 'number' }),
     reference: text('reference'),
     startedOn: date('started_on').notNull(),
     endedOn: date('ended_on'),
+    periodStart: date('period_start'),
+    periodEnd: date('period_end'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     createdBy: text('created_by').notNull(),
+    updatedBy: text('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (table) => [index('subscriptions_policyholder').on(table.policyholderMemberId)],
+);
+
+export const subscriptionPayments = pgTable(
+  'subscription_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    periodStart: date('period_start').notNull(),
+    periodEnd: date('period_end').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    currency: text('currency').notNull(),
+    channel: text('channel').notNull(),
+    reference: text('reference').notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+    recordedBy: text('recorded_by').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('subscription_payments_period').on(table.subscriptionId, table.periodStart),
+    uniqueIndex('subscription_payments_reference').on(table.reference),
+    uniqueIndex('subscription_payments_idempotency').on(table.idempotencyKey),
+  ],
+);
+
+export const subscriptionClaims = pgTable(
+  'subscription_claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    reason: text('reason').notNull(),
+    status: text('status').notNull(),
+    recordedBy: text('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedBy: text('decided_by'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('subscription_claims_subscription').on(table.subscriptionId, table.recordedAt, table.id),
+  ],
 );
 
 export const subscriptionCoverage = pgTable(

@@ -9,6 +9,12 @@ import { eventOfferingsFor, type EventOfferingItem } from '../repos/offerings.js
 import type { OfferingRepository } from '../repos/offerings.js';
 import type { PaymentGroupRepository } from '../repos/payment-groups.js';
 import type { PledgeRepository } from '../repos/pledges.js';
+import {
+  isEligible,
+  type EligibilityMember,
+  type SubscriptionProductRepository,
+} from '../repos/subscription-products.js';
+import type { SubscriptionRepository } from '../repos/subscriptions.js';
 import type {
   CreateGroupInput,
   CreatePledgeInput,
@@ -23,6 +29,9 @@ import type {
   UssdPledge,
   UssdProfile,
   UssdServices,
+  UssdWelfareDependent,
+  UssdWelfareProduct,
+  UssdWelfareSubscription,
 } from './machine.js';
 
 export interface UssdServiceDeps {
@@ -34,6 +43,8 @@ export interface UssdServiceDeps {
   events: EventRepository;
   attendanceCodes: AttendanceCodeRepository;
   clocking: ClockingRepository;
+  subscriptionProducts: SubscriptionProductRepository;
+  subscriptions: SubscriptionRepository;
 }
 
 interface EventRow extends Row {
@@ -173,6 +184,72 @@ async function requireMemberId(db: Db, memberNo: string): Promise<string> {
   );
   if (!row) throw new ValidationError(`Member ${memberNo} was not found`);
   return row.id;
+}
+
+interface WelfareMemberRow extends Row {
+  id: string;
+  member_no: string;
+  joined_on: unknown;
+  membership_card_no: string | null;
+  verified_at: unknown;
+  gender: EligibilityMember['gender'];
+  dob: unknown;
+}
+
+function isoDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const text = String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : text;
+}
+
+function isoDateTime(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+async function requireWelfareMember(db: Db, memberNo: string): Promise<WelfareMemberRow> {
+  const [row] = await db.query<WelfareMemberRow>(
+    `select id, member_no, joined_on, membership_card_no, verified_at, gender, dob
+       from members
+      where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+    [memberNo],
+  );
+  if (!row) throw new ValidationError(`Member ${memberNo} was not found`);
+  return row;
+}
+
+function eligibilityOf(row: WelfareMemberRow): EligibilityMember {
+  return {
+    joinedOn: isoDate(row.joined_on),
+    membershipCardNo: row.membership_card_no,
+    verifiedAt: isoDateTime(row.verified_at),
+    gender: row.gender,
+    dob: isoDate(row.dob),
+  };
+}
+
+function legacyKindName(kind: string | null): string {
+  if (!kind) return 'Welfare';
+  const text = kind.replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The relationship from the covered member to the policyholder. */
+function coveredRelationship(storedType: string, declaredByHolder: boolean): string {
+  if (!declaredByHolder) return storedType;
+  if (storedType === 'parent') return 'child';
+  if (storedType === 'child') return 'parent';
+  return storedType;
+}
+
+/** The relationship from the policyholder to the covered member; the product rule. */
+function holderRelationship(storedType: string, declaredByHolder: boolean): string {
+  if (declaredByHolder) return storedType;
+  if (storedType === 'parent') return 'child';
+  if (storedType === 'child') return 'parent';
+  return storedType;
 }
 
 /**
@@ -451,6 +528,113 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
         [memberNo],
       );
       return (row?.presbyter_rank ?? null) !== null;
+    },
+
+    // -- welfare -----------------------------------------------------------
+
+    async welfareProducts(memberNo: string): Promise<UssdWelfareProduct[]> {
+      const member = await requireWelfareMember(deps.db, memberNo);
+      const eligibility = eligibilityOf(member);
+      const products = await deps.subscriptionProducts.list();
+      return products
+        .filter((product) => product.paymentMode === 'member' && isEligible(product, eligibility))
+        .map((product) => ({
+          code: product.code,
+          name: product.name,
+          premiumMinor: product.premiumMinor,
+          currency: product.currency,
+          periodMonths: product.periodMonths,
+          covers: product.covers,
+          maxDependents: product.maxDependents,
+          allowedRelationships: product.allowedRelationships,
+        }));
+    },
+
+    async welfareDependents(
+      memberNo: string,
+      productCode: string,
+    ): Promise<UssdWelfareDependent[]> {
+      const holder = await requireWelfareMember(deps.db, memberNo);
+      const product = await deps.subscriptionProducts.get(productCode);
+      if (!product || product.covers !== 'household') return [];
+
+      const rows = await deps.db.query<{
+        member_no: string;
+        first_name: string | null;
+        last_name: string | null;
+        other_names: string | null;
+        type: string;
+        declared_by_holder: boolean;
+      }>(
+        `select other.member_no, other.first_name, other.last_name, other.other_names,
+                r.type, (r.member_id = $1) as declared_by_holder
+           from member_relationships r
+           join members other
+             on other.id = case
+                when r.member_id = $1 then r.related_member_id
+                else r.member_id
+              end
+          where (r.member_id = $1 or r.related_member_id = $1)
+            and other.id <> $1
+            and other.archived_at is null
+            and other.purged_at is null
+          order by other.member_no`,
+        [holder.id],
+      );
+
+      const allowed = new Set<string>(product.allowedRelationships);
+      const seen = new Set<string>();
+      const dependents: UssdWelfareDependent[] = [];
+      for (const row of rows) {
+        const relationship = coveredRelationship(row.type, row.declared_by_holder);
+        if (!allowed.has(holderRelationship(row.type, row.declared_by_holder))) continue;
+        if (seen.has(row.member_no)) continue;
+        seen.add(row.member_no);
+        dependents.push({
+          memberNo: row.member_no,
+          name: displayName(row.first_name, row.last_name, row.other_names),
+          relationship,
+        });
+        if (dependents.length >= product.maxDependents) break;
+      }
+      return dependents;
+    },
+
+    async subscribeWelfare(input: {
+      memberNo: string;
+      productCode: string;
+      coveredMemberNos?: string[];
+      phoneHash: string;
+    }): Promise<UssdWelfareSubscription> {
+      const subscription = await deps.subscriptions.subscribe(
+        input.memberNo,
+        {
+          productCode: input.productCode,
+          coveredMemberNos: input.coveredMemberNos,
+        },
+        `ussd:${input.phoneHash}`,
+        'ussd',
+      );
+      return {
+        id: subscription.id,
+        paidBy: subscription.paidBy === 'church' ? 'church' : 'member',
+      };
+    },
+
+    async welfareServices(memberNo: string) {
+      const items = await deps.subscriptions.memberSubscriptions(memberNo);
+      return items.map((item) => ({
+        id: item.id,
+        name: item.productName ?? legacyKindName(item.kind),
+        status: item.status,
+        source: item.source,
+        paidBy: item.paidBy,
+        periodEnd: item.periodEnd,
+        claimedTotalMinor: item.claimedTotalMinor,
+        currency: item.currency,
+        policyholder: item.policyholder,
+        relationship: item.relationship,
+      }));
     },
   };
 }

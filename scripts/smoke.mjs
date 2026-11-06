@@ -659,12 +659,197 @@ async function runScenario() {
     JSON.stringify(requests.body),
   );
 
+  // Welfare: a product, a member subscription, a renewal, a claim, the card and
+  // verification, then the USSD Subscribe and My services flow.
+  const welfareProduct = await request('/v1/subscription-products', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      code: 'SMOKE-WELFARE',
+      name: 'Smoke Welfare',
+      premiumMinor: 3000,
+      currency: 'GHS',
+      paymentMode: 'member',
+      periodMonths: 1,
+      covers: 'individual',
+    }),
+  });
+  check(
+    'welfare product created',
+    welfareProduct.status === 201 && welfareProduct.body.code === 'SMOKE-WELFARE',
+    JSON.stringify(welfareProduct.body),
+  );
+
+  const welfareMember = await request('/v1/members', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      memberNo: 'M-9005',
+      firstName: 'Abena',
+      lastName: 'Owusu',
+      joinedOn: '2020-01-01',
+      contacts: [{ kind: 'phone', value: '0804 567 8901' }],
+    }),
+  });
+  check('welfare member created', welfareMember.status === 201);
+
+  const card = await request('/v1/members/M-9005', {
+    method: 'PUT',
+    headers: write,
+    body: JSON.stringify({ membershipCardNo: 'SMOKE-CARD-9005', verified: true }),
+  });
+  check(
+    'card and verification set',
+    card.status === 200 &&
+      card.body.membershipCardNo === 'SMOKE-CARD-9005' &&
+      Boolean(card.body.verifiedAt),
+    JSON.stringify(card.body),
+  );
+
+  const welfareSubscription = await request('/v1/members/M-9005/subscriptions', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ productCode: 'SMOKE-WELFARE' }),
+  });
+  check(
+    'welfare subscription created',
+    welfareSubscription.status === 201 &&
+      welfareSubscription.body.paidBy === 'member' &&
+      welfareSubscription.body.periodStart === TODAY,
+    JSON.stringify(welfareSubscription.body),
+  );
+
+  const renewal = await request(`/v1/subscriptions/${welfareSubscription.body.id}/renew`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({}),
+  });
+  check(
+    'welfare renewal extends the period',
+    renewal.status === 200 && renewal.body.periodStart === welfareSubscription.body.periodEnd,
+    JSON.stringify(renewal.body),
+  );
+
+  const welfareClaim = await request(`/v1/subscriptions/${welfareSubscription.body.id}/claims`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({ memberNo: 'M-9005', amountMinor: 1000, reason: 'Smoke claim' }),
+  });
+  check(
+    'welfare claim recorded',
+    welfareClaim.status === 201 && welfareClaim.body.status === 'pending',
+    JSON.stringify(welfareClaim.body),
+  );
+
+  const decidedClaim = await request(
+    `/v1/subscriptions/${welfareSubscription.body.id}/claims/${welfareClaim.body.id}/decide`,
+    {
+      method: 'POST',
+      headers: write,
+      body: JSON.stringify({ status: 'approved', note: 'Smoke approval' }),
+    },
+  );
+  check(
+    'welfare claim approved',
+    decidedClaim.status === 200 && decidedClaim.body.status === 'approved',
+    JSON.stringify(decidedClaim.body),
+  );
+
+  const welfareStart = await ussdFrame({ phone: '0804 567 8901', input: '', seq: 1 }, '10.9.0.1');
+  check(
+    'ussd member menu shows welfare',
+    welfareStart.body.text.includes('4 Welfare'),
+    JSON.stringify(welfareStart.body),
+  );
+  const welfareMenu = await ussdFrame(
+    { phone: '0804 567 8901', sessionId: welfareStart.body.sessionId, input: '4', seq: 2 },
+    '10.9.0.1',
+  );
+  check(
+    'ussd welfare list shows the product',
+    welfareMenu.body.state === 'welfare.list' &&
+      welfareMenu.body.text.includes('Smoke Welfare') &&
+      welfareMenu.body.text.includes('8 My plans'),
+    JSON.stringify(welfareMenu.body),
+  );
+  const welfareDetail = await ussdFrame(
+    { phone: '0804 567 8901', sessionId: welfareStart.body.sessionId, input: '1', seq: 3 },
+    '10.9.0.1',
+  );
+  check(
+    'ussd welfare product reads in lay terms',
+    welfareDetail.body.state === 'welfare.product' &&
+      welfareDetail.body.text.includes('Premium GHS 30.00') &&
+      welfareDetail.body.text.includes('1 Join'),
+    JSON.stringify(welfareDetail.body),
+  );
+  const welfareConfirm = await ussdFrame(
+    { phone: '0804 567 8901', sessionId: welfareStart.body.sessionId, input: '1', seq: 4 },
+    '10.9.0.1',
+  );
+  check(
+    'ussd welfare confirm',
+    welfareConfirm.body.state === 'welfare.confirm' &&
+      welfareConfirm.body.text.includes('1 Accept'),
+    JSON.stringify(welfareConfirm.body),
+  );
+  const welfareDone = await ussdFrame(
+    { phone: '0804 567 8901', sessionId: welfareStart.body.sessionId, input: '1', seq: 5 },
+    '10.9.0.1',
+  );
+  check(
+    'ussd welfare subscribed with a reference',
+    welfareDone.body.done === true &&
+      welfareDone.body.state === 'welfare.done' &&
+      welfareDone.body.text.includes('Ref ') &&
+      welfareDone.body.text.includes('You pay'),
+    JSON.stringify(welfareDone.body),
+  );
+
+  const servicesStart = await ussdFrame({ phone: '0804 567 8901', input: '', seq: 1 }, '10.9.0.2');
+  await ussdFrame(
+    { phone: '0804 567 8901', sessionId: servicesStart.body.sessionId, input: '4', seq: 2 },
+    '10.9.0.2',
+  );
+  const services = await ussdFrame(
+    { phone: '0804 567 8901', sessionId: servicesStart.body.sessionId, input: '8', seq: 3 },
+    '10.9.0.2',
+  );
+  let servicesText = services.body.text;
+  if (services.body.text.includes('0 More')) {
+    const moreServices = await ussdFrame(
+      { phone: '0804 567 8901', sessionId: servicesStart.body.sessionId, input: '0', seq: 4 },
+      '10.9.0.2',
+    );
+    servicesText += `\n${moreServices.body.text}`;
+  }
+  check(
+    'ussd welfare services shows rows and the claimed total',
+    services.body.state === 'welfare.services' &&
+      servicesText.includes('Smoke Welfare') &&
+      servicesText.includes('You pay') &&
+      servicesText.includes('Claimed GHS 10.00'),
+    JSON.stringify(services.body),
+  );
+
+  const subscriptions = await request('/v1/members/M-9005/subscriptions', { headers: read });
+  check(
+    'welfare read returns both subscriptions',
+    subscriptions.status === 200 &&
+      subscriptions.body.items?.length === 2 &&
+      subscriptions.body.items.some(
+        (item) => item.claimedTotalMinor === 1000 && item.status === 'active',
+      ),
+    JSON.stringify(subscriptions.body),
+  );
+
   const openapi = await request('/openapi.json');
   check(
     'openapi is served',
     openapi.status === 200 &&
       openapi.body.info?.version === '2.2.0' &&
-      Boolean(openapi.body.paths?.['/auth/magic-link']),
+      Boolean(openapi.body.paths?.['/auth/magic-link']) &&
+      Boolean(openapi.body.paths?.['/v1/subscription-products']),
   );
 }
 
@@ -678,7 +863,7 @@ function ddmmyyyy(iso) {
   return `${iso.slice(8, 10)}${iso.slice(5, 7)}${iso.slice(0, 4)}`;
 }
 
-function ussdFrame(body) {
+function ussdFrame(body, ip) {
   const raw = JSON.stringify(body);
   const timestamp = String(Math.floor(Date.now() / 1000));
   ussdNonce += 1;
@@ -693,6 +878,7 @@ function ussdFrame(body) {
       'X-USSD-Timestamp': timestamp,
       'X-USSD-Nonce': nonce,
       'X-USSD-Signature': signature,
+      ...(ip ? { 'X-Forwarded-For': ip } : {}),
     },
     body: raw,
   });

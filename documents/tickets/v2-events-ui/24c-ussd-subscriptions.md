@@ -26,8 +26,9 @@ authorised for this round by the owner (2026-11-05).
 - [ ] A member-paid period writes one `subscription_payments` row and advances `periodEnd`; an unpaid
       period leaves the subscription expired at `periodEnd` and USSD shows "Expired".
 - [ ] A household product asks "Cover dependents? 1 Yes 2 No", lists the eligible dependents up to the
-      cap, and writes explicit `subscription_coverage` rows; a disallowed relationship, a non-active
-      dependent or one beyond the cap is `422 validation_error`.
+      cap, and writes explicit `subscription_coverage` rows; the relationship is read from the policyholder
+      to the covered member (a covered-declared `child` normalises to `parent` from the policyholder), and
+      a disallowed relationship, a non-active dependent or one beyond the cap is `422 validation_error`.
 - [ ] Inherited cover appears read-only with `source: 'inherited'`, the policyholder's
       `{ memberNo, name, gender, age }` and the relationship label (spouse renders Husband/Wife by
       gender), e.g. `Life Cover (Husband · Solomon, Male, 32y)`.

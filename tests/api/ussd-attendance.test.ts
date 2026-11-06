@@ -376,7 +376,7 @@ describe('USSD attendance, codes and clocking', () => {
     const ip = '10.20.4.2';
     const started = await start(phone, ip);
     const sessionId = started.body.sessionId as string;
-    const profile = await frame(sessionId, phone, '4', 2, ip);
+    const profile = await frame(sessionId, phone, '5', 2, ip);
     expect(profile.body.state).toBe('profile');
     expect(profile.body.text).toContain('Ama Mensah (Female, 32y)');
     expect(profile.body.text).toContain('Member no. UA-PROFILE');

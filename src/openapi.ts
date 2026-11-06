@@ -126,6 +126,25 @@ import {
   rosterEntrySchema,
   rosterSchema,
 } from './schemas/shepherding.js';
+import {
+  createSubscriptionProductSchema,
+  subscriptionProductListSchema,
+  subscriptionProductSchema,
+  updateSubscriptionProductSchema,
+} from './schemas/subscription-products.js';
+import {
+  decideClaimSchema,
+  memberSubscriptionListSchema,
+  memberSubscriptionSchema,
+  recordClaimSchema,
+  recordPaymentSchema,
+  renewSubscriptionSchema,
+  subscribeProductSchema,
+  subscriptionClaimListSchema,
+  subscriptionClaimSchema,
+  subscriptionPaymentListSchema,
+  subscriptionPaymentSchema,
+} from './schemas/subscriptions.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -235,6 +254,21 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         ContactInput: toSchema(contactInputSchema, 'input'),
         Subscription: toSchema(subscriptionResponseSchema, 'output'),
         SubscriptionInput: toSchema(subscriptionInputSchema, 'input'),
+        SubscriptionProduct: toSchema(subscriptionProductSchema, 'output'),
+        SubscriptionProductList: toSchema(subscriptionProductListSchema, 'output'),
+        SubscriptionProductCreate: toSchema(createSubscriptionProductSchema, 'input'),
+        SubscriptionProductActive: toSchema(updateSubscriptionProductSchema, 'input'),
+        SubscribeProduct: toSchema(subscribeProductSchema, 'input'),
+        MemberSubscription: toSchema(memberSubscriptionSchema, 'output'),
+        MemberSubscriptionList: toSchema(memberSubscriptionListSchema, 'output'),
+        RenewSubscription: toSchema(renewSubscriptionSchema, 'input'),
+        SubscriptionPayment: toSchema(subscriptionPaymentSchema, 'output'),
+        SubscriptionPaymentList: toSchema(subscriptionPaymentListSchema, 'output'),
+        RecordSubscriptionPayment: toSchema(recordPaymentSchema, 'input'),
+        SubscriptionClaim: toSchema(subscriptionClaimSchema, 'output'),
+        SubscriptionClaimList: toSchema(subscriptionClaimListSchema, 'output'),
+        RecordSubscriptionClaim: toSchema(recordClaimSchema, 'input'),
+        DecideSubscriptionClaim: toSchema(decideClaimSchema, 'input'),
         Relationship: toSchema(relationshipResponseSchema, 'output'),
         RelationshipInput: toSchema(relationshipInputSchema, 'input'),
         AttendanceEntry: toSchema(attendanceEntryResponseSchema, 'output'),
@@ -748,15 +782,41 @@ export function buildOpenApiDocument(): Record<string, unknown> {
 
       '/v1/members/{memberNo}/subscriptions': {
         parameters: [memberNoParam],
+        get: {
+          summary: 'Owned and inherited welfare cover for a member',
+          description:
+            'Rows carry source owned|inherited, the policyholder identity and relationship for inherited cover, and the approved-plus-paid claimed total. A product row is expired when periodEnd is before today; a legacy row is active unless ended. Responses carry Cache-Control: no-store.',
+          responses: {
+            200: {
+              description: 'Owned and inherited rows with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('MemberSubscriptionList') } },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
         post: {
-          summary: 'Create a subscription; household scope takes explicit coverage',
+          summary: 'Subscribe to a welfare product, or create a legacy subscription',
+          description:
+            'A product subscription resolves paidBy server-side and evaluates eligibility first (422 not_eligible). The period starts today (UTC); a member-paid period writes one payment row, a church-paid period writes none and leaves premiumMinor null. Household coverage validates the cap, an allowed relationship and an active dependent. The legacy body still creates a life_insurance or credit_union row.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: ref('SubscriptionInput') } },
+            content: {
+              'application/json': {
+                schema: { oneOf: [ref('SubscribeProduct'), ref('SubscriptionInput')] },
+              },
+            },
           },
           responses: {
-            201: json('Subscription created.', 'Subscription'),
+            201: {
+              description: 'Subscription created.',
+              content: {
+                'application/json': {
+                  schema: { oneOf: [ref('MemberSubscription'), ref('Subscription')] },
+                },
+              },
+            },
             401: unauthorized,
             404: notFound,
             409: conflict,
@@ -813,7 +873,188 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             204: noContent('Coverage removed.'),
             401: unauthorized,
+            404: problem('The subscription or the active coverage was not found.'),
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/renew': {
+        parameters: [idParam('subscriptionId')],
+        post: {
+          summary: 'Renew a welfare subscription from max(periodEnd, today)',
+          description:
+            'paidBy defaults to the stored payer and is required for an either product. A member-paid renewal writes one payment row; a church-paid renewal writes none. A lapsed period restarts today (UTC). 409 subscription_not_active when the subscription has ended.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: false,
+            content: { 'application/json': { schema: ref('RenewSubscription') } },
+          },
+          responses: {
+            200: json('The renewed subscription.', 'MemberSubscription'),
+            401: unauthorized,
             404: notFound,
+            409: problem('The subscription has ended.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/payments': {
+        parameters: [idParam('subscriptionId')],
+        get: {
+          summary: 'List the recorded payments for a subscription',
+          responses: {
+            200: {
+              description: 'Payments in period order with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('SubscriptionPaymentList') } },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Record one member-paid premium for an unpaid period',
+          description:
+            'Idempotent by idempotencyKey: an identical repeat returns 200 with the stored row; a different payload is 409 idempotency_conflict. amountMinor > 0 and the currency must match the product. The period starts today (UTC); paidAt is informational and never anchors it. There is no unpaid period while periodEnd is on or after today (409 period_already_paid). Premiums are recorded, not transacted.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RecordSubscriptionPayment') } },
+          },
+          responses: {
+            201: {
+              description: 'Payment recorded; Location names the row.',
+              content: { 'application/json': { schema: ref('SubscriptionPayment') } },
+            },
+            200: {
+              description: 'Identical repeat of the idempotency key; the stored row.',
+              content: { 'application/json': { schema: ref('SubscriptionPayment') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The period is already paid, the key or reference was reused, or the subscription ended.',
+            ),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/claims': {
+        parameters: [idParam('subscriptionId')],
+        get: {
+          summary: 'List recorded claims, newest first',
+          responses: {
+            200: {
+              description: 'Claims with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('SubscriptionClaimList') } },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        post: {
+          summary: 'Record a back-office claim for the policyholder or a covered member',
+          description:
+            'The claimant must be the policyholder or actively covered (404 not_covered). amountMinor > 0 and a reason are required; the claim starts pending. There is no member self-service entry and no payout rail.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RecordSubscriptionClaim') } },
+          },
+          responses: {
+            201: {
+              description: 'Claim recorded; Location names the row.',
+              content: { 'application/json': { schema: ref('SubscriptionClaim') } },
+            },
+            401: unauthorized,
+            404: problem('The subscription or the covered claimant was not found.'),
+            409: problem('The subscription has ended.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscriptions/{subscriptionId}/claims/{claimId}/decide': {
+        parameters: [idParam('subscriptionId'), idParam('claimId')],
+        post: {
+          summary: 'Decide a claim: pending to approved or rejected, approved to paid',
+          description:
+            'Any other transition is 409 claim_not_pending. The decision records the actor, timestamp and optional note; "total claimed" is the approved-plus-paid sum.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('DecideSubscriptionClaim') } },
+          },
+          responses: {
+            200: {
+              description: 'The decided claim with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('SubscriptionClaim') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem('The claim is not pending, or the subscription has ended.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscription-products': {
+        get: {
+          summary: 'List welfare products, active only by default',
+          parameters: [
+            {
+              name: 'includeInactive',
+              in: 'query',
+              description: 'true also returns deactivated products.',
+              schema: { type: 'boolean' },
+            },
+          ],
+          responses: {
+            200: json('Welfare products in code order.', 'SubscriptionProductList'),
+            401: unauthorized,
+          },
+        },
+        post: {
+          summary: 'Create a welfare product',
+          description:
+            'code is trimmed, stored uppercase and matched case-insensitively (409 conflict on a repeat). premiumMinor > 0 is 422 invalid_amount. A household product requires maxDependents >= 1 and a non-empty allowedRelationships subset; an individual product forces 0 and an empty list. Pricing and eligibility are fixed after creation.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SubscriptionProductCreate') } },
+          },
+          responses: {
+            201: json('Product created; Location names it.', 'SubscriptionProduct'),
+            401: unauthorized,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/subscription-products/{code}': {
+        parameters: [idParam('code')],
+        get: {
+          summary: 'Read a welfare product by case-insensitive code',
+          responses: {
+            200: json('The product.', 'SubscriptionProduct'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Activate or deactivate a product; nothing else is mutable',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SubscriptionProductActive') } },
+          },
+          responses: {
+            200: json('The product with its new active flag.', 'SubscriptionProduct'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
           },
         },
       },

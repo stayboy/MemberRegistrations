@@ -1,5 +1,10 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import {
+  CardInUseError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '../errors/domain-errors.js';
 import { ageInYears } from '../domain/age.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
@@ -12,7 +17,7 @@ import {
   subscriptionCoverage,
   subscriptions as subscriptionsTable,
 } from '../db/schema.js';
-import { sqlState } from '../errors/sqlstate.js';
+import { sqlConstraint, sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
 import {
   loadCalendar,
@@ -20,27 +25,28 @@ import {
   resolveSeriesOccurrences,
 } from './occurrences.js';
 
-export const GENDERS = ['male', 'female', 'other', 'undisclosed'] as const;
-export type Gender = (typeof GENDERS)[number];
+import {
+  GENDERS,
+  RELATIONSHIP_TYPES,
+  type Gender,
+  type RelationshipType,
+} from '../domain/member-types.js';
+import {
+  SubscriptionRepository,
+  SUBSCRIPTION_KINDS,
+  type SubscriptionDto,
+  type SubscriptionKind,
+} from './subscriptions.js';
 
-export const RELATIONSHIP_TYPES = ['spouse', 'parent', 'child', 'guardian', 'other'] as const;
-export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
-
-export const SUBSCRIPTION_KINDS = ['life_insurance', 'credit_union'] as const;
-export type SubscriptionKind = (typeof SUBSCRIPTION_KINDS)[number];
-
-export interface SubscriptionDto {
-  id: string;
-  kind: SubscriptionKind;
-  scope: 'individual' | 'household';
-  status: 'active' | 'ended';
-  reference: string | null;
-  startedOn: string;
-  endedOn: string | null;
-  role: 'policyholder' | 'covered';
-  policyholderMemberNo: string;
-  coveredMemberNos: string[];
-}
+export {
+  GENDERS,
+  RELATIONSHIP_TYPES,
+  SUBSCRIPTION_KINDS,
+  type Gender,
+  type RelationshipType,
+  type SubscriptionDto,
+  type SubscriptionKind,
+};
 
 export interface MinistryDto {
   code: string;
@@ -80,7 +86,7 @@ export interface MemberAttendanceSummary extends AttendanceCounts {
 
 export interface MemberSubscriptionSummary {
   id: string;
-  kind: SubscriptionKind;
+  kind: SubscriptionKind | null;
   scope: 'individual' | 'household';
   status: 'active' | 'ended';
   role: 'policyholder' | 'covered';
@@ -164,6 +170,10 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   id: string;
   /** Senior presbyter rank; valid only while `isPresbyter` is true. */
   presbyterRank: number | null;
+  /** Detail-only back-office card number; null when not on file. */
+  membershipCardNo: string | null;
+  /** Detail-only officer-set verification timestamp; null means unverified. */
+  verifiedAt: string | null;
   maidenName: string | null;
   alias: string | null;
   dob: string | null;
@@ -198,6 +208,10 @@ export interface CreateMemberInput {
   joinedOn?: string | null;
   isPresbyter?: boolean;
   presbyterRank?: number | null;
+  /** Trimmed, 1-32 characters, case-insensitively unique when present. */
+  membershipCardNo?: string | null;
+  /** Sets (true) or clears (false) the officer verification timestamp. */
+  verified?: boolean;
   contacts?: ContactInput[];
   ministries?: string[];
 }
@@ -252,6 +266,8 @@ interface MemberRow extends Row {
   joined_on: string | null;
   is_presbyter: boolean;
   presbyter_rank: number | null;
+  membership_card_no: string | null;
+  verified_at: Date | string | null;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
   version: number;
@@ -277,6 +293,8 @@ const memberColumns = {
   joined_on: members.joinedOn,
   is_presbyter: members.isPresbyter,
   presbyter_rank: members.presbyterRank,
+  membership_card_no: members.membershipCardNo,
+  verified_at: members.verifiedAt,
   archived_at: members.archivedAt,
   purged_at: members.purgedAt,
   version: members.version,
@@ -349,6 +367,17 @@ function assertMemberNo(value: string): string {
     );
   }
   return value;
+}
+
+/** A present card is trimmed to 1-32 characters; blank input clears it. */
+function normalizeCardNo(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > 32) {
+    throw new ValidationError('membershipCardNo must be 1-32 characters');
+  }
+  return trimmed;
 }
 
 /** Bumps the optimistic-concurrency version after any change to the aggregate. */
@@ -779,6 +808,8 @@ export class MemberRepository {
     if (presbyterRank !== null && (!Number.isInteger(presbyterRank) || presbyterRank < 1)) {
       throw new ValidationError('presbyterRank must be a positive integer');
     }
+    const membershipCardNo = normalizeCardNo(input.membershipCardNo);
+    const verifiedAt = input.verified === true ? new Date() : null;
 
     try {
       const [row] = await db.orm
@@ -797,6 +828,8 @@ export class MemberRepository {
           joinedOn,
           isPresbyter,
           presbyterRank,
+          membershipCardNo,
+          verifiedAt,
           createdBy: actor,
           updatedBy: actor,
         })
@@ -811,6 +844,12 @@ export class MemberRepository {
       return row!.id;
     } catch (error) {
       if (sqlState(error) === '23505') {
+        const constraint = sqlConstraint(error);
+        if (constraint === 'members_membership_card_no_ci') {
+          throw new CardInUseError(
+            `Membership card ${membershipCardNo} already belongs to a member`,
+          );
+        }
         throw new ConflictError(`A member with number ${memberNo} already exists`);
       }
       throw error;
@@ -866,6 +905,12 @@ export class MemberRepository {
       fields.joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
     }
     if (input.isPresbyter !== undefined) fields.isPresbyter = input.isPresbyter;
+    if (input.membershipCardNo !== undefined) {
+      fields.membershipCardNo = normalizeCardNo(input.membershipCardNo);
+    }
+    if (input.verified !== undefined) {
+      fields.verifiedAt = input.verified ? new Date() : null;
+    }
 
     const nextIsPresbyter = input.isPresbyter ?? row.is_presbyter;
     if (input.isPresbyter === false) {
@@ -898,7 +943,18 @@ export class MemberRepository {
       .update(members)
       .set(set)
       .where(and(eq(members.id, row.id), eq(members.version, expectedVersion ?? row.version)))
-      .returning({ id: members.id });
+      .returning({ id: members.id })
+      .catch((error: unknown) => {
+        if (
+          sqlState(error) === '23505' &&
+          sqlConstraint(error) === 'members_membership_card_no_ci'
+        ) {
+          throw new CardInUseError(
+            `Membership card ${String(fields.membershipCardNo)} already belongs to a member`,
+          );
+        }
+        throw error;
+      });
 
     if (updated.length === 0) {
       throw new ConflictError('The member was modified since the supplied ETag');
@@ -978,6 +1034,7 @@ export class MemberRepository {
       await tx.query('delete from member_contact_links where member_id = $1', [row.id]);
       await tx.query('delete from member_contacts where member_id = $1', [row.id]);
       await tx.query('delete from subscription_coverage where member_id = $1', [row.id]);
+      await tx.query('delete from subscription_claims where member_id = $1', [row.id]);
       await tx.query('delete from subscriptions where policyholder_member_id = $1', [row.id]);
       await tx.query(
         'delete from member_relationships where member_id = $1 or related_member_id = $1',
@@ -1006,6 +1063,8 @@ export class MemberRepository {
           gender: 'undisclosed',
           isPresbyter: false,
           presbyterRank: null,
+          membershipCardNo: null,
+          verifiedAt: null,
           archivedAt: sql`now()`,
           purgedAt: sql`now()`,
           version: sql`${members.version} + 1`,
@@ -1187,6 +1246,8 @@ export class MemberRepository {
         .set({
           status: 'ended',
           endedOn: sql`coalesce(${subscriptionsTable.endedOn}, ${todayIn('UTC')}::date)`,
+          updatedBy: actor,
+          updatedAt: sql`now()`,
         })
         .where(
           and(
@@ -1198,48 +1259,6 @@ export class MemberRepository {
         .returning({ id: subscriptionsTable.id });
       if (updated.length === 0) throw new NotFoundError('Active subscription was not found');
       await touch(tx, row.id, actor);
-    });
-  }
-
-  async addCoverage(subscriptionId: string, memberNo: string, actor: string): Promise<void> {
-    const [subscription] = await this.db.query<{ policyholder_member_id: string; scope: string }>(
-      'select policyholder_member_id, scope from subscriptions where id = $1 and status = $2',
-      [subscriptionId, 'active'],
-    );
-    if (!subscription) throw new NotFoundError(`Subscription ${subscriptionId} was not found`);
-    if (subscription.scope !== 'household') {
-      throw new ValidationError('Coverage can only be added to a household subscription');
-    }
-
-    const covered = await this.requireRow(memberNo);
-    try {
-      await this.db.transaction(async (tx) => {
-        await this.insertCoverage(tx, subscriptionId, covered.id, todayIn('UTC'));
-        await touch(tx, subscription.policyholder_member_id, actor);
-        await touch(tx, covered.id, actor);
-      });
-    } catch (error) {
-      if (sqlState(error) === '23505') throw new ConflictError('Member is already covered');
-      throw error;
-    }
-  }
-
-  async removeCoverage(subscriptionId: string, memberNo: string, actor: string): Promise<void> {
-    const covered = await this.requireRow(memberNo);
-    await this.db.transaction(async (tx) => {
-      const updated = await tx.orm
-        .update(subscriptionCoverage)
-        .set({ removedOn: todayIn('UTC') })
-        .where(
-          and(
-            eq(subscriptionCoverage.subscriptionId, subscriptionId),
-            eq(subscriptionCoverage.memberId, covered.id),
-            isNull(subscriptionCoverage.removedOn),
-          ),
-        )
-        .returning({ id: subscriptionCoverage.id });
-      if (updated.length === 0) throw new NotFoundError('Coverage was not found');
-      await touch(tx, covered.id, actor);
     });
   }
 
@@ -1519,6 +1538,8 @@ export class MemberRepository {
       ...this.toSummary(row, contacts.length, ministries),
       id: row.id,
       presbyterRank: row.presbyter_rank,
+      membershipCardNo: row.membership_card_no,
+      verifiedAt: isoTimestamp(row.verified_at),
       maidenName: row.maiden_name,
       alias: row.alias,
       dob: isoDate(row.dob),
@@ -1621,7 +1642,7 @@ export class MemberRepository {
     const held = await this.db.query<{
       member_id: string;
       id: string;
-      kind: SubscriptionKind;
+      kind: SubscriptionKind | null;
       scope: 'individual' | 'household';
       status: 'active' | 'ended';
       policyholder_member_no: string;
@@ -1640,7 +1661,7 @@ export class MemberRepository {
     const covering = await this.db.query<{
       member_id: string;
       id: string;
-      kind: SubscriptionKind;
+      kind: SubscriptionKind | null;
       scope: 'individual' | 'household';
       status: 'active' | 'ended';
       policyholder_member_no: string;
@@ -1683,7 +1704,9 @@ export class MemberRepository {
         memberId,
         [...bySubscription.values()].sort((a, b) => {
           if (a.role !== b.role) return a.role === 'policyholder' ? -1 : 1;
-          if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+          const aKind = a.kind ?? '';
+          const bKind = b.kind ?? '';
+          if (aKind !== bKind) return aKind < bKind ? -1 : 1;
           return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
         }),
       );
@@ -1723,49 +1746,7 @@ export class MemberRepository {
   }
 
   private async subscriptionsFor(memberId: string): Promise<SubscriptionDto[]> {
-    const rows = await this.db.query<{
-      id: string;
-      kind: SubscriptionKind;
-      scope: 'individual' | 'household';
-      status: 'active' | 'ended';
-      reference: string | null;
-      started_on: string;
-      ended_on: string | null;
-      policyholder_member_id: string;
-      policyholder_member_no: string;
-      covered: string[];
-    }>(
-      `select s.id, s.kind, s.scope, s.status, s.reference, s.started_on, s.ended_on,
-              s.policyholder_member_id, holder.member_no as policyholder_member_no,
-              coalesce((
-                select array_agg(covered.member_no order by covered.member_no)
-                from subscription_coverage sc
-                join members covered on covered.id = sc.member_id
-                where sc.subscription_id = s.id and sc.removed_on is null
-              ), '{}') as covered
-       from subscriptions s
-       join members holder on holder.id = s.policyholder_member_id
-       where s.policyholder_member_id = $1
-          or exists (
-            select 1 from subscription_coverage sc
-            where sc.subscription_id = s.id and sc.member_id = $1 and sc.removed_on is null
-          )
-       order by s.kind, s.started_on`,
-      [memberId],
-    );
-
-    return rows.map((row) => ({
-      id: row.id,
-      kind: row.kind,
-      scope: row.scope,
-      status: row.status,
-      reference: row.reference,
-      startedOn: isoDate(row.started_on)!,
-      endedOn: isoDate(row.ended_on),
-      role: row.policyholder_member_id === memberId ? 'policyholder' : 'covered',
-      policyholderMemberNo: row.policyholder_member_no,
-      coveredMemberNos: row.covered,
-    }));
+    return new SubscriptionRepository(this.db).detailSubscriptions(memberId);
   }
 
   private async relationshipsFor(memberId: string): Promise<RelationshipDto[]> {

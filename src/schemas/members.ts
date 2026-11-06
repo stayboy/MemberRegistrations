@@ -30,6 +30,8 @@ export const createMemberSchema = z.object({
   joinedOn: dateStringSchema.nullable().optional(),
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
+  membershipCardNo: z.string().trim().max(32).nullable().optional(),
+  verified: z.boolean().optional(),
   contacts: z.array(contactInputSchema).max(20).optional(),
   ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
 });
@@ -47,6 +49,8 @@ export const updateMemberSchema = z.object({
   joinedOn: dateStringSchema.nullable().optional(),
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
+  membershipCardNo: z.string().trim().max(32).nullable().optional(),
+  verified: z.boolean().optional(),
 });
 
 export const relationshipInputSchema = z.object({
@@ -143,7 +147,7 @@ const ministrySchema = z.object({
 
 const subscriptionSchema = z.object({
   id: z.string(),
-  kind: z.enum(SUBSCRIPTION_KINDS),
+  kind: z.enum(SUBSCRIPTION_KINDS).nullable(),
   scope: z.enum(['individual', 'household']),
   status: z.enum(['active', 'ended']),
   reference: z.string().nullable(),
@@ -194,7 +198,7 @@ const memberAttendanceSummarySchema = z.object({
 
 const memberSubscriptionSummarySchema = z.object({
   id: z.string(),
-  kind: z.enum(SUBSCRIPTION_KINDS),
+  kind: z.enum(SUBSCRIPTION_KINDS).nullable(),
   scope: z.enum(['individual', 'household']),
   status: z.enum(['active', 'ended']),
   role: z.enum(['policyholder', 'covered']),
@@ -222,6 +226,8 @@ export const memberSummarySchema = z.object({
 export const memberDetailSchema = memberSummarySchema.extend({
   id: z.string(),
   presbyterRank: z.number().int().nullable(),
+  membershipCardNo: z.string().nullable(),
+  verifiedAt: z.string().nullable(),
   maidenName: z.string().nullable(),
   alias: z.string().nullable(),
   dob: z.string().nullable(),
