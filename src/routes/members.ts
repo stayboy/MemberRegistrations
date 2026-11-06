@@ -13,7 +13,9 @@ import {
   subscriptionInputSchema,
   updateMemberSchema,
 } from '../schemas/members.js';
+import { subscribeProductSchema } from '../schemas/subscriptions.js';
 import type { MemberDetail, MemberRepository } from '../repos/members.js';
+import type { SubscriptionRepository } from '../repos/subscriptions.js';
 
 function memberNo(req: Request): string {
   return memberNoParamSchema.parse(req.params.memberNo);
@@ -37,7 +39,10 @@ function sendMember(res: Response, member: MemberDetail, status = 200): void {
   res.status(status).json(member);
 }
 
-export function membersRouter(repo: MemberRepository): Router {
+export function membersRouter(
+  repo: MemberRepository,
+  subscriptions: SubscriptionRepository,
+): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
@@ -164,9 +169,27 @@ export function membersRouter(repo: MemberRepository): Router {
     res.status(204).end();
   });
 
+  router.get('/:memberNo/subscriptions', async (req, res) => {
+    const items = await subscriptions.memberSubscriptions(memberNo(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ items });
+  });
+
   router.post('/:memberNo/subscriptions', async (req, res) => {
+    if (req.body && typeof req.body.productCode === 'string') {
+      const input = subscribeProductSchema.parse(req.body);
+      const subscription = await subscriptions.subscribe(memberNo(req), input, actorOf(req));
+      res.setHeader(
+        'Location',
+        `/v1/members/${encodeURIComponent(req.params.memberNo)}/subscriptions/${subscription.id}`,
+      );
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(201).json(subscription);
+      return;
+    }
     const input = subscriptionInputSchema.parse(req.body);
     const subscription = await repo.addSubscription(memberNo(req), input, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
     res.status(201).json(subscription);
   });
 

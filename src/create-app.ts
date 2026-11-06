@@ -30,6 +30,8 @@ import { PaymentGroupRepository } from './repos/payment-groups.js';
 import { PledgeRepository } from './repos/pledges.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
+import { SubscriptionProductRepository } from './repos/subscription-products.js';
+import { SubscriptionRepository } from './repos/subscriptions.js';
 import { UssdRepository } from './repos/ussd.js';
 import { attendanceCodesRouter } from './routes/attendance-codes.js';
 import { contributionsRouter } from './routes/contributions.js';
@@ -44,6 +46,7 @@ import { pledgesRouter } from './routes/pledges.js';
 import { registrationRequestsRouter } from './routes/registration-requests.js';
 import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
+import { subscriptionProductsRouter } from './routes/subscription-products.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
 import { ussdRouter } from './routes/ussd.js';
 import { createUssdServices } from './ussd/services.js';
@@ -95,6 +98,8 @@ export function createApp(options: AppOptions): Express {
     visitorPhonePepper,
   );
   const ussdRepository = new UssdRepository(options.db);
+  const subscriptionProducts = new SubscriptionProductRepository(options.db);
+  const subscriptions = new SubscriptionRepository(options.db);
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -136,6 +141,8 @@ export function createApp(options: AppOptions): Express {
     events,
     attendanceCodes,
     clocking,
+    subscriptionProducts,
+    subscriptions,
   });
 
   app.disable('x-powered-by');
@@ -208,9 +215,10 @@ export function createApp(options: AppOptions): Express {
   v1.use(offeringsRouter(offerings));
   v1.use('/contributions', contributionsRoutes);
   v1.use('/pledges', pledgesRouter(pledges));
-  v1.use('/members', membersRouter(members));
+  v1.use('/members', membersRouter(members, subscriptions));
   v1.use('/members', memberShepherdingRouter(shepherding));
-  v1.use('/subscriptions', subscriptionsRouter(members));
+  v1.use('/subscriptions', subscriptionsRouter(subscriptions));
+  v1.use('/subscription-products', subscriptionProductsRouter(subscriptionProducts));
   v1.use('/ministries', ministriesRouter(ministries));
   v1.use('/series', seriesRouter(series));
   v1.use('/imports', importsRouter(imports));

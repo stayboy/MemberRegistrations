@@ -20,6 +20,8 @@ export interface UssdConfig {
   gatewaySecret: string;
   phonePepper: string;
   codePepper: string;
+  /** Declared paged-list sizes; 24d's Nalo adapter will declare 2 and 3. */
+  pageSize?: { events: number; offerings: number };
 }
 
 const NONCE_MIN = 8;
@@ -68,12 +70,14 @@ function sessionInfo(
   phone: string,
   phoneHash: string,
   member: Awaited<ReturnType<UssdRepository['findOwnedMember']>>,
+  pageSize: { events: number; offerings: number },
 ): UssdSessionInfo {
   return {
     phone,
     phoneHash,
     member,
     anonymous: member === null,
+    pageSize,
   };
 }
 
@@ -161,7 +165,12 @@ export function ussdRouter(
     }
 
     const member = await repo.findOwnedMember(phone);
-    const info = sessionInfo(phone, phoneHash, member);
+    const info = sessionInfo(
+      phone,
+      phoneHash,
+      member,
+      config.pageSize ?? { events: 3, offerings: 5 },
+    );
     const input = body.input.trim();
 
     let session: UssdSessionRow | null = null;

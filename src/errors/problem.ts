@@ -117,7 +117,7 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   }
 
   if (error instanceof NotFoundError) {
-    sendProblem(res, 404, 'Not Found', error.message, 'not_found');
+    sendProblem(res, 404, 'Not Found', error.message, error.code);
     return;
   }
 

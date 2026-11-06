@@ -281,6 +281,102 @@ describe('subscriptions', () => {
   });
 });
 
+describe('member card and verification', () => {
+  it('trims the card, keeps it detail-only and enforces case-insensitive uniqueness', async () => {
+    const created = await create('M-5001', { membershipCardNo: '  Card-ONE  ' });
+    expect(created.body.membershipCardNo).toBe('Card-ONE');
+    expect(created.body.verifiedAt).toBeNull();
+
+    const list = await request(app).get('/v1/members').query({ q: 'M-5001' }).set(readHeaders);
+    expect(list.body.items[0]).not.toHaveProperty('membershipCardNo');
+    expect(list.body.items[0]).not.toHaveProperty('verifiedAt');
+
+    const duplicate = await request(app).post('/v1/members').set(writeHeaders).send({
+      memberNo: 'M-5002',
+      firstName: 'Other',
+      lastName: 'Person',
+      membershipCardNo: 'card-one',
+    });
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.code).toBe('card_in_use');
+
+    const tooLong = await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({
+        memberNo: 'M-5003',
+        firstName: 'Long',
+        lastName: 'Card',
+        membershipCardNo: 'X'.repeat(33),
+      });
+    expect(tooLong.status).toBe(422);
+
+    const cleared = await request(app)
+      .put('/v1/members/M-5001')
+      .set(writeHeaders)
+      .send({ membershipCardNo: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.membershipCardNo).toBeNull();
+
+    const reissued = await request(app).post('/v1/members').set(writeHeaders).send({
+      memberNo: 'M-5004',
+      firstName: 'Card',
+      lastName: 'Reissue',
+      membershipCardNo: 'CARD-ONE',
+    });
+    expect(reissued.status).toBe(201);
+    expect(reissued.body.membershipCardNo).toBe('CARD-ONE');
+
+    const reassign = await request(app)
+      .put('/v1/members/M-5004')
+      .set(writeHeaders)
+      .send({ membershipCardNo: 'Card-Two' })
+      .expect(200);
+    expect(reassign.body.membershipCardNo).toBe('Card-Two');
+
+    const taken = await request(app)
+      .put('/v1/members/M-5001')
+      .set(writeHeaders)
+      .send({ membershipCardNo: 'card-two' });
+    expect(taken.status).toBe(409);
+    expect(taken.body.code).toBe('card_in_use');
+  });
+
+  it('sets and clears the officer verification timestamp independently of the card', async () => {
+    await create('M-5101');
+
+    const verified = await request(app)
+      .put('/v1/members/M-5101')
+      .set(writeHeaders)
+      .send({ verified: true });
+    expect(verified.status).toBe(200);
+    expect(verified.body.verifiedAt).toBeTruthy();
+    expect(verified.body.membershipCardNo).toBeNull();
+    const first = verified.body.verifiedAt as string;
+
+    const refreshed = await request(app)
+      .put('/v1/members/M-5101')
+      .set(writeHeaders)
+      .send({ verified: true });
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.verifiedAt).toBeTruthy();
+    expect(Date.parse(refreshed.body.verifiedAt)).toBeGreaterThanOrEqual(Date.parse(first));
+
+    const omitted = await request(app)
+      .put('/v1/members/M-5101')
+      .set(writeHeaders)
+      .send({ placeOfResidence: 'Accra' });
+    expect(omitted.body.verifiedAt).toBe(refreshed.body.verifiedAt);
+
+    const cleared = await request(app)
+      .put('/v1/members/M-5101')
+      .set(writeHeaders)
+      .send({ verified: false });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.verifiedAt).toBeNull();
+  });
+});
+
 describe('reference endpoints', () => {
   it('serves health and an OpenAPI document covering the new surface', async () => {
     const health = await request(app).get('/health');
