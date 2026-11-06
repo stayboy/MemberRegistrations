@@ -9,14 +9,16 @@ the durable record.
 ```md
 # Round — <slug>
 
-|         |                                                                  |
-| ------- | ---------------------------------------------------------------- |
-| Status  | OPEN / CLOSED / PARKED                                           |
-| Tier    | 0 / 1 / 2                                                        |
-| Mode    | `attended` / `unattended (auto-accept recommendations)`          |
-| Base    | `<short sha>`                                                    |
-| Spec    | `documents/specs/<file>.md` (or `AGENTS.md` for process work)    |
-| Workers | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)` |
+|                     |                                                                  |
+| ------------------- | ---------------------------------------------------------------- |
+| Status              | OPEN / CLOSED / PARKED                                           |
+| Tier                | 0 / 1 / 2                                                        |
+| Mode                | `attended` / `unattended (auto-accept recommendations)`          |
+| Base                | `<short sha>`                                                    |
+| Review rounds       | 0 / 1 / 2                                                        |
+| Gate runs in parent | 0                                                                |
+| Spec                | `documents/specs/<file>.md` (or `AGENTS.md` for process work)    |
+| Workers             | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)` |
 
 ## Plan
 
@@ -27,6 +29,10 @@ Goal, scope, expected files, acceptance criteria (numbered).
 | Gate | Command          | Result    |
 | ---- | ---------------- | --------- |
 | ...  | `npm run verify` | pass/fail |
+
+The section ends with the gate-run signature line, pasted verbatim:
+
+    gate-run <ISO-8601 UTC> profile=<name> steps=<passed>/<total> lines=<n> bytes=<n>
 
 ## Mock parity (when a mock exists)
 
@@ -42,6 +48,12 @@ One row per criterion: met/not met, evidence (`file:line` or test name), and the
 
 Scope changes, skipped gates, residuals.
 ```
+
+`Review rounds` and `Gate runs in parent` are counters, and they are self-reported. The `gate-run`
+signature is the exception: the gate runner prints it and the round doc must paste it verbatim.
+
+Every review is dispatched against `documents/rounds/review-brief.md`: one complete delta, findings
+batched into one fix pass, at most one confirmation round, `P1`/`P2`/`Nits` and an explicit verdict.
 
 Rules:
 

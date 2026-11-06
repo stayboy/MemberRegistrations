@@ -96,8 +96,10 @@ lives in `documents/lessons.md`.
   repo's pointer; in CI only the pointer is checked.
 - `npm run smoke` builds and exercises the compiled server against PGlite. Run it for migrations,
   auth, wire-contract or cross-cutting changes.
-- `.githooks/pre-commit` runs `verify:fast`; install it with `npm run hooks:install`. It can be
+- `.githooks/pre-commit` runs `verify:precommit`; install it with `npm run hooks:install`. It can be
   bypassed with `--no-verify`; this file remains the primary rule.
+
+Durable process rules live in `documents/lessons.md`; `npm run verify` and `verify:fast` print a bounded per-step summary and write full logs to `.gates/`.
 
 ## 8. Tests
 

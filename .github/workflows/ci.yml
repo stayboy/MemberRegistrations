@@ -34,6 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Round docs are part of the change. Fetch the base ref in full when the
+      # checkout did not bring it; the script itself reports any missing field.
+      - name: Check round docs
+        run: |
+          if ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+            git fetch --no-tags origin main:refs/remotes/origin/main
+          fi
+          node scripts/check-round.mjs
+
       - uses: actions/setup-node@v5
         with:
           node-version: 24

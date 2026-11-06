@@ -9,7 +9,88 @@ Owner acceptance is recorded with the entry. The 2026-11-02 entry was accepted w
 adoption on 2026-11-02 (grill Q16: "all as recommended"). The 2026-11-04 entries were accepted in the
 Q126 round (2026-11-04, "all as recommended"); the workspace-gate entry was accepted there on condition
 that it be written only once the UI CI job landed, which it did the same day. The 2026-11-05 capture
-and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as recommended").
+and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as recommended"). The
+2026-11-06 process entries were accepted in the `quiet-gates-and-lessons` round (2026-11-06, "all as
+recommended").
+
+---
+
+## 2026-11-06 — Output is re-read, so bound it at the source
+
+**Rule.** A tool's output is not paid for once: it re-enters the conversation on every later turn. A
+gate must print a bounded verdict and write the detail to a log, so a long round never re-sends the
+same transcript.
+
+**Evidence.** `npm run verify` printed the full Vitest transcript per run; across a long round the
+same lines were re-sent dozens of times, while the same gates run inside a worker cost the parent one
+line.
+
+**Trigger.** Any command whose output can exceed ~20 lines and whose result is a verdict.
+
+---
+
+## 2026-11-06 — A heavy gate belongs in the worker or CI, not in the orchestrator
+
+**Rule.** Run a full suite, build or smoke in a worker or CI and return the counts. The orchestrator
+keeps the verdict, never the transcript.
+
+**Evidence.** The 24c/24d builds, 500-test suites and smoke runs cost the parent nothing when
+executed by a subagent, which returns only counts.
+
+**Trigger.** Any full suite, build or smoke.
+
+---
+
+## 2026-11-06 — A reviewer gets one complete delta and at most one confirmation round
+
+**Rule.** Send one complete delta per review — the changed hunks plus the relevant spec sections,
+never the whole repository. Batch every finding into one fix pass, then run at most one confirmation
+round.
+
+**Evidence.** The headcount-entry spec review took three confirmation rounds that re-sent the same
+files and the same transcript.
+
+**Trigger.** A review that produces findings.
+
+---
+
+## 2026-11-06 — A hook that cannot pass is a hook people bypass
+
+**Rule.** A hook must be able to pass in the environment it runs in. An environmental failure is a
+hook defect, fixed by making the gate deterministic, not by bypassing it.
+
+**Evidence.** The pre-commit `verify:fast` crashed repeatedly in the Windows fork pool, so commits
+were made with the recorded `--no-verify` bypass; the hook now runs the serialized `verify:precommit`
+profile.
+
+**Trigger.** Any hook or gate that fails for environmental reasons.
+
+---
+
+## 2026-11-06 — Remove a Git worktree before the squash merge deletes its branch
+
+**Rule.** Before a squash merge deletes a branch, remove every worktree checked out on it. A deleted
+branch leaves the worktree directory behind with no `.git` and a stale dependency tree.
+
+**Evidence.** The docker-stack worktree was left checked out on its branch when the PR was
+squash-merged and the branch deleted, leaving an orphaned directory with no `.git` and a stale
+node_modules tree.
+
+**Trigger.** Merging a PR whose branch has a live worktree.
+
+---
+
+## 2026-11-06 — A local-only artefact must still fail closed
+
+**Rule.** An image, container or configuration built for local use still defaults to the safe
+production posture and opts into development explicitly. A bare run must refuse to start rather than
+silently run the wrong environment.
+
+**Evidence.** The local `api` image baked `NODE_ENV=development`, so a bare `docker run` would have
+started a console-mailer server; it now defaults to `production` and refuses to start without
+production configuration, while compose overrides to `development`.
+
+**Trigger.** Any image, container or config whose default could run the wrong environment silently.
 
 ---
 
