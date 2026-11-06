@@ -12,16 +12,24 @@ const SIGNATURE_PATTERN =
   /^gate-run \d{4}-\d{2}-\d{2}T[\d:.]+Z profile=\S+ steps=\d+\/\d+ lines=\d+ bytes=\d+$/m;
 
 function changedFiles() {
-  const args = ['diff', '--name-only', '--diff-filter=ACM', 'origin/main...HEAD'];
-  try {
-    return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
-      .split(/\r?\n/)
-      .filter(Boolean);
-  } catch (error) {
-    console.error(`check-round: could not compute the changed files (${args.join(' ')}):`);
-    console.error(String(error.stderr ?? error.message).trim());
-    process.exit(1);
+  const ranges = [
+    ['diff', '--name-only', '--diff-filter=ACM', 'origin/main...HEAD'],
+    // A shallow clone has no merge base, so fall back to the plain two-ref diff.
+    ['diff', '--name-only', '--diff-filter=ACM', 'origin/main', 'HEAD'],
+  ];
+  let lastError;
+  for (const args of ranges) {
+    try {
+      return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
+        .split(/\r?\n/)
+        .filter(Boolean);
+    } catch (error) {
+      lastError = error;
+    }
   }
+  console.error(`check-round: could not compute the changed files (${ranges[0].join(' ')}):`);
+  console.error(String(lastError?.stderr ?? lastError?.message).trim());
+  process.exit(1);
 }
 
 function filesFromArgs(argv) {

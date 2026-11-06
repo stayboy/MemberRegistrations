@@ -68,5 +68,9 @@ the protected-review flow. Final acceptance follows the merge.
 - **README and the brief are not round docs.** `scripts/check-round.mjs` skips
   `documents/rounds/README.md` and `documents/rounds/review-brief.md`, and checks the remaining
   `documents/rounds/*.md` files.
+- **CI needed full history.** The first CI run failed `Check round docs` with `origin/main...HEAD: no
+merge base`: the default shallow checkout has no common ancestor, so the three-dot diff cannot run.
+  The job's checkout now uses `fetch-depth: 0`, and `check-round.mjs` falls back to the two-ref diff,
+  so a shallow clone elsewhere degrades instead of failing.
 - **Hook line corrected.** `AGENTS.md` §7 now says the hook runs `verify:precommit`, matching the hook
   change, alongside the single requested pointer sentence.

@@ -33,6 +33,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # check-round diffs the branch against main, which needs a merge base.
+          fetch-depth: 0
 
       # Round docs are part of the change. Fetch the base ref in full when the
       # checkout did not bring it; the script itself reports any missing field.
