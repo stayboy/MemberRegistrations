@@ -52,15 +52,23 @@ export const listPledgesQuerySchema = z.object({
 export const pledgeSchema = z.object({
   id: z.string(),
   memberNo: z.string(),
+  /** Resolved current member display name (R5). */
+  memberName: z.string(),
   offeringId: z.string(),
+  /** Resolved current offering display name (R5); same rule as `EventOffering.name`. */
+  offeringName: z.string(),
   eventId: z.string(),
   sessionDate: z.string().nullable(),
   amountMinor: z.number().int(),
   currency: z.string(),
   expectedOn: z.string(),
   followUpOfficerMemberNo: z.string(),
+  /** Resolved current display name of the follow-up officer (R5). */
+  officerName: z.string(),
   status: pledgeStatusSchema,
   reason: z.string().nullable(),
+  /** This pledge's next pending reminder `scheduledFor`, or null (23-Q3). */
+  nextReminder: z.string().nullable(),
   /** Set once when a paid contribution settles the pledge. */
   settledContributionId: z.string().nullable(),
   termsVersion: z.number().int(),
