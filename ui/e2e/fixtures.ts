@@ -299,6 +299,8 @@ export const EVENTS: readonly EventItem[] = [
     description: 'Weekly worship service.',
     status: 'held',
     source: 'series',
+    tracksMembers: true,
+    presbyterOnly: false,
     sessions: [
       {
         date: '2026-01-04',
@@ -330,6 +332,8 @@ export const EVENTS: readonly EventItem[] = [
     description: null,
     status: 'scheduled',
     source: 'manual',
+    tracksMembers: true,
+    presbyterOnly: false,
     sessions: [
       {
         date: '2026-01-10',

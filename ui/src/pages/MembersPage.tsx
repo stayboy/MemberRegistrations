@@ -374,9 +374,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
   const [contactsFor, setContactsFor] = useState<MemberSummary | null>(null);
   const [findByContactOpen, setFindByContactOpen] = useState(false);
   // Read once: the report link seeds the filter; afterwards the chip owns it.
-  const [unassigned, setUnassigned] = useState(
-    () => searchParams.get('unassigned') === 'true',
-  );
+  const [unassigned, setUnassigned] = useState(() => searchParams.get('unassigned') === 'true');
 
   const setParam = useCallback(
     (key: string, value: string | null) => {

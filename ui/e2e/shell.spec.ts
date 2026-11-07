@@ -16,7 +16,7 @@ test.describe('shell', () => {
     await expect(page.getByText('Church Register', { exact: true })).toBeVisible();
 
     const topNav = page.getByRole('navigation', { name: 'Sections' });
-    await expect(topNav.getByRole('link')).toHaveCount(5);
+    await expect(topNav.getByRole('link')).toHaveCount(6);
     await expect(topNav.getByRole('link', { name: 'Members' })).toHaveAttribute(
       'aria-current',
       'page',
@@ -32,7 +32,7 @@ test.describe('shell', () => {
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Members');
   });
 
-  test('navigates Members → Events → Imports → Shepherding → Admin', async ({ page }) => {
+  test('navigates Members → Events → Imports → Shepherding → USSD → Admin', async ({ page }) => {
     await open(page, '/members');
     const topNav = page.getByRole('navigation', { name: 'Sections' });
 
@@ -54,6 +54,10 @@ test.describe('shell', () => {
       page.getByRole('heading', { level: 1, name: 'Shepherding officers' }),
     ).toBeVisible();
     await expect(page).toHaveURL(/#\/shepherding\/officers$/);
+
+    await topNav.getByRole('link', { name: 'USSD' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'USSD codes' })).toBeVisible();
+    await expect(page).toHaveURL(/#\/ussd\/codes$/);
 
     await topNav.getByRole('link', { name: 'Admin' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Ministries' })).toBeVisible();

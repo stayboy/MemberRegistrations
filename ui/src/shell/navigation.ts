@@ -4,20 +4,27 @@ import {
   BookContactsRegular,
   CalendarLtrRegular,
   CalendarMonthRegular,
+  ClockRegular,
   DocumentRegular,
   DocumentTableRegular,
+  DocumentTextRegular,
   GridRegular,
+  HeartRegular,
   HistoryRegular,
+  KeyRegular,
   PeopleAddRegular,
   PeopleRegular,
   PeopleTeamRegular,
+  PersonAddRegular,
   PersonCallRegular,
+  PhoneDesktopRegular,
+  PhoneRegular,
   PlugConnectedRegular,
   SettingsRegular,
   type FluentIcon,
 } from '@fluentui/react-icons';
 
-export type SectionId = 'members' | 'events' | 'imports' | 'shepherding' | 'admin';
+export type SectionId = 'members' | 'events' | 'imports' | 'shepherding' | 'ussd' | 'admin';
 
 export interface NavItem {
   readonly label: string;
@@ -125,6 +132,61 @@ export const SECTIONS: readonly NavSection[] = [
         path: '/shepherding/report',
         icon: DocumentRegular,
         description: 'Church totals and the still-in-church distribution.',
+      },
+    ],
+  },
+  {
+    id: 'ussd',
+    label: 'USSD',
+    icon: PhoneRegular,
+    items: [
+      {
+        label: 'Codes',
+        path: '/ussd/codes',
+        icon: KeyRegular,
+        description: 'Issue, review and void handset attendance and registration codes.',
+      },
+      {
+        label: 'Registrations',
+        path: '/ussd/registrations',
+        icon: PersonAddRegular,
+        description: 'Approve or reject pending USSD registration requests.',
+      },
+      {
+        label: 'Clocking',
+        path: '/ussd/clocking',
+        icon: ClockRegular,
+        description: 'Session attendance, clock-ins and presbyter delegations.',
+      },
+      {
+        label: 'Headcount',
+        path: '/ussd/headcount',
+        icon: PeopleRegular,
+        description: 'Record and correct the counted attendance for a session.',
+      },
+      {
+        label: 'Activities',
+        path: '/ussd/activities',
+        icon: CalendarLtrRegular,
+        description: 'The handset activity list with the same eligibility and ordering.',
+      },
+      {
+        label: 'Products',
+        path: '/ussd/products',
+        icon: HeartRegular,
+        description: 'Welfare products, eligibility, payer, period, cover and dependents.',
+      },
+      {
+        label: 'Claims',
+        path: '/ussd/claims',
+        icon: DocumentTextRegular,
+        description: 'Record welfare claims and move them through their statuses.',
+      },
+      {
+        label: 'Simulator',
+        path: '/ussd/simulator',
+        icon: PhoneDesktopRegular,
+        description: 'Development-only handset simulator over the real provider adapters.',
       },
     ],
   },

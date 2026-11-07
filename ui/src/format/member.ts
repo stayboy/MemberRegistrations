@@ -165,11 +165,7 @@ export function memberLabel(member: MemberLabelParts): string {
  * The label for DTOs that carry a composed `name` (relationships, officers,
  * roster rows, shepherding history) rather than the name parts.
  */
-export function memberLabelFromName(
-  name: string,
-  gender?: Gender,
-  age?: number | null,
-): string {
+export function memberLabelFromName(name: string, gender?: Gender, age?: number | null): string {
   return memberLabel({ firstName: name, lastName: '', gender, age });
 }
 
