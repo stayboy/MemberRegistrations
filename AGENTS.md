@@ -136,10 +136,10 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown
 file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
-lands only after `deepseek-v4-pro` build `0813` has reviewed the exact text. `glm-5.3` is admissible
-only when no provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as
-unavailable; a registry listing does not), and only with the unavailability stated in
-`fallbackReason`.
+lands only after `deepseek-v4-pro` build `0813` has reviewed the exact text.
+`cline-pass/cline-pass/mimo-v2.6-pro` is admissible only when no provider answers with that build
+(credit exhaustion, HTTP 429 and timeouts count as unavailable; a registry listing does not), and
+only with the unavailability stated in `fallbackReason`.
 
 The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
 (of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
@@ -235,6 +235,9 @@ reintroduce them silently.
 - **Standing instruction.** At the **end of a round**, run the go-forward `grill-me` round and **accept
   its recommendations automatically**, so the next round starts without a wait. The owner may still run a
   round attended by saying so. The consent is this rule, never the owner's silence.
+- **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session defaults to
+  `ollama-cloud/deepseek-v4.1-flash:1017` — the ollama provider first; if that provider fails, use
+  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
   recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
   recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report

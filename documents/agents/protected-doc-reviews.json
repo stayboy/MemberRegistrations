@@ -1,34 +1,34 @@
 {
-  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/agents/component-first.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (glm-5.3 only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
+  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/agents/component-first.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (cline-pass/cline-pass/mimo-v2.6-pro only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
   "firstChoice": {
     "model": "deepseek-v4-pro",
     "build": "0813"
   },
   "fallback": {
-    "model": "glm-5.3"
+    "model": "mimo-v2.6-pro"
   },
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "4e9552a34a562b684c155f3d46a5be99447aede38d95a9b5b0877881065ea21f",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: section 7's hook bullet now names the serialized `verify:precommit` profile that .githooks/pre-commit actually runs, and one pointer sentence records that durable process rules live in documents/lessons.md and that the gates print bounded per-step summaries with full logs under .gates/. why: the round replaced the unbounded chained gate with a bounded runner and fixed the pre-commit crash that forced recorded --no-verify bypasses, so the hook line would otherwise be false. rejected: restating the gate recipes or the review rules in AGENTS.md, which belong to the scripts and documents/rounds/review-brief.md.",
+      "sha256": "8ea7d78d71e4595faede8d75b9064f489130b92c21c6d3507fe00ffd117d7d0f",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the weekly usage limit (credit exhaustion) on every attempt this session; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro (probe SEAT-OK 2026-11-07) was used instead.",
+      "reason": "changes: section 10a's protected-document fallback sentence now names cline-pass/cline-pass/mimo-v2.6-pro instead of glm-5.3, and section 17 gains the grill-me seat bullet (ollama-cloud/deepseek-v4.1-flash:1017 first, cline-pass/cline-pass/deepseek-v4.1-flash-1017 when the ollama provider fails). why: the owner switched the reviewer fallback on 2026-11-07 after the seat probe answered SEAT-OK, and set the grill-me default the same day. rejected: keeping glm-5.3; naming either seat inside the canonical skill.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-read the final text of this file in the quiet-gates-and-lessons round and approved it for hashing: the reviewer read the exact on-disk content in full, made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-06"
+      "attestation": "Confirmation round read the exact on-disk text in full, found the fix pass clean (no P1/P2) and approved the text for hashing; it made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-07"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "0f256d45fa5e8200ab4e6afdae3c8d6ec771c365ad1fdcc06a3476d84aa5a7f9",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: the spec-review paragraph points at skill step 1b, names `ollama-cloud/deepseek-v4-pro:0813`, keeps the `glm-5.3` fallback and the Tier 0 commit-body record; the seats row adds spec review; Tier 1 restores 'parent implements'. why: the model is a repo choice outside the skill. rejected: a model id inside the skill.",
+      "sha256": "2e37380408f0cbde6de3fd0e230c19b557733ff65e74975d8c2d25965b0b1b52",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the weekly usage limit (credit exhaustion) on every attempt this session; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro (probe SEAT-OK 2026-11-07) was used instead.",
+      "reason": "changes: the two fallback-model mentions switch from glm-5.3 to cline-pass/cline-pass/mimo-v2.6-pro, and the Protected documents list adds documents/agents/component-first.md so it matches AGENTS.md section 10a, the record's policy string and the guard. why: the owner switched the reviewer fallback on 2026-11-07, and the review found the policy list was the only place missing component-first.md. rejected: leaving the policy list out of sync; a model id inside the canonical skill.",
       "verdict": "ACCEPTED",
-      "attestation": "The policy uses the `ollama-cloud/deepseek-v4-pro:0813` spelling in prose, restores 'parent implements' to Tier 1, and the spec-review paragraph names the same model and records, consistent with the skill and AGENTS.md.",
-      "at": "2026-11-05"
+      "attestation": "Confirmation round verified the one-line protected-list fix against AGENTS.md section 10a, the record and the guard, confirmed the earlier fallback rename still holds, and approved the text for hashing; it made no edits, ran no gates and committed nothing.",
+      "at": "2026-11-07"
     },
     {
       "path": "documents/agents/component-first.md",

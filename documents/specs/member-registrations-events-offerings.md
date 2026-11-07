@@ -249,16 +249,73 @@ invalid_reminder_date`. `GET /v1/pledges/{id}/reminders` lists them.
 - **Append-only.** Pledges are never deleted; every transition is a `pledge_events` row with actor,
   timestamp and reason.
 
+### V3 phase 4 — church offerings landing (ticket 23)
+
+Ticket 23 builds the landing at `#/events/offerings` behind the existing session connect gate (Q9).
+The mock at local `mockups/v2-events/05-offerings-landing.png` (git-ignored) is the layout reference;
+its divergences are recorded in the ticket 23 grill table below. The landing makes one new totals
+request — `GET /v1/offerings/summary?from&to`, whose endpoint row moves from `proposed` to ticket 23
+(23-Q1, the named §17 pre-authorisation for that wire addition) — and reuses the existing events list
+(FR-29 stats and the USSD preview) and the existing pledges list (the worklist below).
+
+- **Window.** The default window is the current UTC calendar year to date; the operator adjusts it
+  with the existing `DateWindowControl` (23-Q5).
+- **Headline cards.** Member-only money totals — paid, pledged and outstanding — plus the pledge
+  counts (pending, honored, dishonored, overdue) and the Visitors card. The mock's "All members +
+  visitors" footer row repeats the card numbers and is a drafting error; the by-member footer is
+  relabelled member-only (23-Q10). Visitor figures come from the summary's `visitors` block (R1):
+  `visitors.count` is the number of paid visitor contribution rows in the window and
+  `visitors.paidMinor` their sum in the reporting currency. `GET /v1/contributions/summary` remains
+  the ticket-21 member/visitor split by currency, not the landing's source.
+- **Currency.** The largest paid currency in the window is the reporting currency; money in other
+  currencies is excluded from the totals and recorded in this spec rather than converted (23-Q8;
+  precedent: the member summary in `src/repos/members.ts`). The same rule filters the visitor block.
+- **Measures.** `totalPaidMinor` is paid member contributions in the window. `totalPledgedMinor` is
+  every pledge meeting the relevance predicate below that is not dishonored, with its status as of
+  window end read from `pledge_events.at` rather than the current status. `totalOutstandingMinor` is
+  the pending subset, so pledged = outstanding + honored by construction. `offeredCount` is dropped.
+  A pledge settled by a contribution counts once in paid (through the contribution) and once in
+  pledged (as the promise) (R2).
+- **Pledge relevance.** A pledge counts in the window when `expectedOn` falls inside it, or when it is
+  still `pending` as of window end with `expectedOn` before `from`. The predicate feeds the headline
+  cards and the by-member table; the pledge worklist below is not windowed (23-Q9, R3). Pledged and
+  outstanding are as of window end, paid is window-only.
+- **By-member table.** The top 10 members by paid, tiebroken by member number. Columns are member
+  number and name only (no contact values), paid, pledged, outstanding and last given (the member's
+  latest paid contribution `session_date` up to the window end). There is no Follow-up column, and the
+  mock's "Top 6 shown" caption differs from the decided top 10; both divergences are recorded in the
+  grill table (23-Q4).
+- **Pledge worklist.** "Pledges and follow-up" reads `GET /v1/pledges` with no window filter, newest
+  first, the returned rows rendered as-is (pending, overdue, honored and dishonored alike) and bounded
+  by the route's limit; the caption states the worklist scope, not the window. Columns are member,
+  offering, amount, expected date, officer, status and next reminder. The member, officer and offering
+  names come from the new `memberName`/`officerName`/`offeringName` fields on the pledge list rows
+  (R5, whose acceptance is the named §17 pre-authorisation for that addition). The card counts are
+  window-scoped and are not the worklist's row count (R3).
+- **By-event totals** come from the summary's `events[]` (23-Q2); the per-event offering stats
+  (FR-29) ride the existing events list, so the landing makes no further request for them.
+- **Terms dialog.** Renders `GET /v1/offerings/{id}/terms` client-side, including the gateway account
+  and metadata the contract already returns; the browser holds no gateway secret.
+- **USSD preview.** Composed in the browser from the events list and the ticket 24d format helpers:
+  at most five offerings plus `0 More` (Q7b).
+- **Pledge follow-up.** Reassignment reuses `POST /v1/pledges/{id}/reassign` with the existing
+  `ReasonDialog`; no new endpoint.
+- **Deferred:** the mock's `+ Add offering` button (23-Q6) and the Reminders card — scheduled,
+  overdue, opted out (23-Q7) — are backlog entries, not this ticket. Materialising these totals in a
+  summary table or a NoSQL read model, and the pub/sub mechanics around it, is parked in the backlog
+  for a later round (owner, 2026-11-07); this round reads the source tables and adds no aggregate
+  store or migration.
+
 ### Navigation
 
-| Top-level | Submenu         | Route                    | API                                    | Slice |
-| --------- | --------------- | ------------------------ | -------------------------------------- | ----- |
-| Events    | Events          | `#/events`               | `GET /v1/events` (proposed)            | E1    |
-| Events    | Series          | `#/events/series`        | `GET /v1/series`                       | E2    |
-| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (proposed) | O4    |
-| Events    | Event detail    | `#/events/:eventId`      | `GET /v1/events/:eventId` (proposed)   | E1    |
-| Events    | Series detail   | `#/events/series/:id`    | `GET /v1/series/:id` + occurrences     | E2    |
-| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)     | O1    |
+| Top-level | Submenu         | Route                    | API                                     | Slice |
+| --------- | --------------- | ------------------------ | --------------------------------------- | ----- |
+| Events    | Events          | `#/events`               | `GET /v1/events` (proposed)             | E1    |
+| Events    | Series          | `#/events/series`        | `GET /v1/series`                        | E2    |
+| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (ticket 23) | O4    |
+| Events    | Event detail    | `#/events/:eventId`      | `GET /v1/events/:eventId` (proposed)    | E1    |
+| Events    | Series detail   | `#/events/series/:id`    | `GET /v1/series/:id` + occurrences      | E2    |
+| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)      | O1    |
 
 The current **Attendance** top-level is replaced by **Events**; attendance recording is an action on
 an event/series detail, and attendance imports stay under **Imports**. If the owner prefers to keep a
@@ -722,15 +779,22 @@ export interface ContributionSummary {
 export interface Pledge {
   id: string;
   memberNo: string;
+  /** Resolved current display name (R5); same rule as `EventOffering.name`. */
+  memberName: string;
   offeringId: string;
+  offeringName: string;
   eventId: string;
   sessionDate: string | null;
   amountMinor: number;
   currency: string;
   expectedOn: string;
   followUpOfficerMemberNo: string;
+  /** Resolved current display name of the follow-up officer (R5). */
+  officerName: string;
   status: PledgeStatus;
   reason: string | null;
+  /** This pledge's next pending reminder `scheduledFor`, or null (23-Q3, ticket 23). */
+  nextReminder: string | null;
   /** The terms version the pledge was recorded under (FR-33). */
   termsVersion: number;
   idempotencyKey: string;
@@ -765,7 +829,8 @@ export interface ChurchOfferingSummary {
   totalPaidMinor: number;
   totalPledgedMinor: number;
   totalOutstandingMinor: number;
-  offeredCount: number;
+  /** Visitor gifts in the window (R1): paid visitor contribution rows, summed in `currency`. */
+  visitors: { count: number; paidMinor: number };
   members: Array<{
     memberNo: string;
     name: string;
@@ -776,6 +841,14 @@ export interface ChurchOfferingSummary {
   }>;
   offerings: Array<{
     offeringId: string;
+    name: string;
+    paidMinor: number;
+    pledgedMinor: number;
+    outstandingMinor: number;
+  }>;
+  /** Totals by event in the window (23-Q2), serving FR-30's by-event totals. */
+  events: Array<{
+    eventId: string;
     name: string;
     paidMinor: number;
     pledgedMinor: number;
@@ -810,7 +883,7 @@ export interface ChurchOfferingSummary {
 | `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22  |
 | `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22  |
 | `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22  |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | proposed   |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | ticket 23  |
 | `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a |
 | `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d |
 | `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d |
@@ -900,6 +973,48 @@ All money is `bigint` minor units plus an ISO currency. All history tables are a
 The frontier is empty. Any new question must be added here and settled before implementation; do not
 decide it only in chat.
 
+### Ticket 23 grill — settled 2026-11-07
+
+The offerings-landing design tree was grilled in one round; the owner accepted every recommendation
+("all as recommended", 2026-11-07). IDs are `23-Qn` so they cannot be confused with the 2026-11-03
+grill above.
+
+| ID     | Decision            | Answer                                                                                                                                                                                                                                                                                          |
+| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 23-Q1  | Summary endpoint    | Build the spec-proposed `GET /v1/offerings/summary?from&to`; the endpoint row moves from `proposed` to ticket 23. This answer is the named §17 pre-authorisation for the wire addition; 23-Q3 rides the same pre-authorisation, though its field lands on `GET /v1/pledges`, not this endpoint. |
+| 23-Q2  | Summary shape       | Amend `ChurchOfferingSummary` with `visitors { count, paidMinor }` and `events[]`, so one request serves the landing.                                                                                                                                                                           |
+| 23-Q3  | Pledges list        | Add `nextReminder` (this pledge's next pending `scheduledFor`, or null) to the `GET /v1/pledges` list response.                                                                                                                                                                                 |
+| 23-Q4  | By-member table     | Top 10 members by paid, tiebroken by member number; no Follow-up column (mock divergence recorded).                                                                                                                                                                                             |
+| 23-Q5  | Window default      | Current UTC calendar year to date, adjustable with the existing `DateWindowControl`.                                                                                                                                                                                                            |
+| 23-Q6  | Add offering button | Omit the mock's `+ Add offering` button this round; deferred to the backlog.                                                                                                                                                                                                                    |
+| 23-Q7  | Reminders card      | Defer the Reminders card (scheduled, overdue, opted out); deferred to the backlog.                                                                                                                                                                                                              |
+| 23-Q8  | Currency            | The largest paid currency in the window is the reporting currency; other currencies are excluded from the totals (precedent: `src/repos/members.ts`).                                                                                                                                           |
+| 23-Q9  | Pledge relevance    | `expectedOn` in the window, or still `pending` with `expectedOn` before `from`; the same predicate for the cards and the table; pledged/outstanding as of window end, paid window-only.                                                                                                         |
+| 23-Q10 | Headline scope      | Headline cards are member-only and the by-member footer is relabelled member-only; the mock's "All members + visitors" footer row repeats the member numbers and is a drafting error.                                                                                                           |
+
+Settled without a question and recorded in the phase-4 section above: the officer gate is the
+existing session connect gate (Q9), the route is `#/events/offerings` under Events, the terms dialog
+renders the terms payload client-side, the USSD preview is client-composed from the events list
+(≤5 + `0 More`), pledge reassignment reuses the existing route and `ReasonDialog`, and by-event stats
+ride the events list.
+
+#### Follow-up decisions — settled 2026-11-07
+
+A second grill round answered the review's open forks; the owner accepted every recommendation
+("all as recommended"). These refine, and do not reopen, the 23-Qn answers.
+
+| ID  | Decision                | Answer                                                                                                                                                                                                                                                                                                                       |
+| --- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Visitor totals source   | The landing reads the summary's `visitors` block; `GET /v1/contributions/summary` remains the contributions surface's split. `visitors.count` counts paid visitor contribution rows in the window; `visitors.paidMinor` sums them in the reporting currency.                                                                 |
+| R2  | Summary total scope     | `totalPaidMinor`/`totalPledgedMinor`/`totalOutstandingMinor` are member-only and `offeredCount` is dropped. Pledged = relevance-predicate pledges, not dishonored, status as of window end from `pledge_events.at`; outstanding = the pending subset; a contribution-settled pledge counts once in paid and once in pledged. |
+| R3  | Pledge relevance scope  | The predicate covers the headline cards and the by-member table only; the pledge worklist is unwindowed (`GET /v1/pledges`, newest first, limit-bounded). `pending` (not yet due) and `overdue` are disjoint; the card caption reads pending + overdue.                                                                      |
+| R4  | Protected-document list | `documents/agents/component-first.md` joins the protected list in `orchestrator-policy.md`, matching `AGENTS.md` §10a, the record and the guard.                                                                                                                                                                             |
+| R5  | Pledge-row names        | `GET /v1/pledges` rows gain `memberName`, `officerName` and `offeringName`, resolved server-side with current names (same rule as `EventOffering.name`); this acceptance is the named §17 pre-authorisation for that wire addition.                                                                                          |
+
+A third exploration — materialising these totals in a summary table, a pub/sub projection and a NoSQL
+read model — was **parked for a later round** (owner, 2026-11-07) and is recorded in
+`documents/backlog.md`. This round reads the source tables and adds no aggregate store or migration.
+
 ## Definition of Done
 
 - Q1–Q12 answered and recorded, including rejected options.
@@ -915,6 +1030,23 @@ decide it only in chat.
 
 ## Change log
 
+- 2026-11-07: V3 phase 4 specified for ticket 23 from its grill round (23-Q1–23-Q10, all accepted
+  "as recommended"). `GET /v1/offerings/summary?from&to` moves from `proposed` to ticket 23 — the
+  named §17 pre-authorisation for the wire addition — `ChurchOfferingSummary` gains
+  `visitors { count, paidMinor }` and `events[]`, and the `GET /v1/pledges` rows gain `nextReminder`.
+  The landing window defaults to the current UTC calendar year to date; headline cards and the
+  by-member footer are member-only; the table is the top 10 by paid (tiebreak member number) with no
+  Follow-up column; the largest paid currency is the reporting currency and others are excluded; a
+  pledge is in-window when `expectedOn` falls inside it or it is still pending with `expectedOn`
+  before `from`, with pledged/outstanding as of window end and paid window-only. The mock's
+  `+ Add offering` button and the Reminders card are deferred to the backlog. A second round settled
+  the follow-ups (R1–R5): visitors come from the summary's `visitors` block (the
+  contributions-summary line is demoted), the `total*` measures are member-only with `offeredCount`
+  dropped and pledged/outstanding defined as of window end, the relevance predicate covers the cards
+  and the by-member table only (the pledge worklist is unwindowed), `component-first.md` joins the
+  protected list, and the pledge list rows gain `memberName`/`officerName`/`offeringName` under the
+  named §17 pre-authorisation. Materialising the totals in a summary table or a NoSQL read model was
+  parked for a later round; ticket 23 reads the source tables and adds no migration.
 - 2026-11-05: pledge follow-up is the member's active shepherd or an active presbyter the administrator
   supplies with a reason (`422 officer_required` otherwise); the offering-level default officer is
   removed because no such field exists. `pledge` leaves `OfferingKind` — a pledge is a payment mode on
