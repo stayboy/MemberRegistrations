@@ -109,7 +109,7 @@ describe('protected documents', () => {
 
   it('uses the first-choice reviewer, or the fallback with a stated reason', () => {
     for (const review of reviews()) {
-      if (review.model.toLowerCase() === 'glm-5.3') {
+      if (review.model.toLowerCase() === 'mimo-v2.6-pro') {
         expect(
           review.fallbackReason?.trim(),
           `${review.path} fell back without a reason`,

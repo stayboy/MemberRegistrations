@@ -20,8 +20,9 @@ The skill catalogues the Tier 3 seats for repos that enable them; this policy di
 **Spec review (all tiers).** Every behavioural spec, new or amended, is reviewed by a **separate**
 `ollama-cloud/deepseek-v4-pro:0813` session - never the author - **before the implementer builds
 against it** (the parent at Tier 0-1, the worker at Tier 2). The procedure is the canonical skill's
-Procedure step 1b; this paragraph records the repo's model choice and record. `glm-5.3` is admissible
-only when no provider answers 0813, with the reason recorded. The verdict and the reviewed revision go
+Procedure step 1b; this paragraph records the repo's model choice and record.
+`cline-pass/cline-pass/mimo-v2.6-pro` is admissible only when no provider answers 0813, with the
+reason recorded. The verdict and the reviewed revision go
 in the spec's status line plus the round doc, or the commit body at Tier 0. A typo, formatting or
 clarifying edit keeps only its changelog line. This is separate from the plan gate and the code review:
 the spec is the contract the implementer reads, so it is reviewed before the work starts, not after it
@@ -79,10 +80,11 @@ why (the catalog conflates the 1M context window with the output cap).
 
 ## Protected documents
 
-`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/lessons.md`,
-`documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical orchestrator skill's markdown
+`AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
+`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical
+orchestrator skill's markdown
 are review-gated: a change lands only after `deepseek-v4-pro:0813` reviews the exact text, with
-`glm-5.3` only as a recorded fallback. The record is `documents/agents/protected-doc-reviews.json`; the
+`cline-pass/cline-pass/mimo-v2.6-pro` only as a recorded fallback. The record is `documents/agents/protected-doc-reviews.json`; the
 guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
 while the repo checks always run.
