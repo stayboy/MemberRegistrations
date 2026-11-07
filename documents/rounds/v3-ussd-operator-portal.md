@@ -2,7 +2,7 @@
 
 |                     |                                                                                         |
 | ------------------- | --------------------------------------------------------------------------------------- |
-| Status              | OPEN                                                                                    |
+| Status              | CLOSED                                                                                  |
 | Tier                | 2 - Reviewed                                                                            |
 | Mode                | `unattended (auto-accept recommendations)`                                              |
 | Base                | `e532812`                                                                               |
@@ -133,7 +133,25 @@ change) so the UI gate is green. No migration.
 
 ## Acceptance
 
-TBD by the parent review.
+| #   | Criterion                                                                                                                       | Met | Evidence                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | --- | --------------------------------------------------------------------------------------------------------------------------- |
+| 1   | One top-level USSD section between Shepherding and Admin with the eight submenu items                                           | yes | `ui/src/shell/navigation.ts:139-191`; `navigation.render.test.tsx:17,31,64`                                                 |
+| 2   | Codes issue, show once with the 15-minute TTL, list by status and void with a reason                                            | yes | `ui/src/pages/ussd/UssdCodesPage.tsx`, `CODE_TTL_MINUTES`                                                                   |
+| 3   | Registrations list pending requests, approve with a member number, reject with a reason                                         | yes | `ui/src/pages/ussd/UssdRegistrationsPage.tsx:30-61`                                                                         |
+| 4   | Clocking shows attendance and delegations, records a clock-in and a senior→presbyter delegation                                 | yes | `ui/src/pages/ussd/UssdClockingPage.tsx`                                                                                    |
+| 5   | Headcount records Adult/Children/Mixed with an `asOf`, newest-first history, corrects without deleting, shows Roster separately | yes | `UssdHeadcountPage.tsx:66-67,82,128,288`                                                                                    |
+| 6   | Activities mirrors USSD eligibility, ordering, page sizes and zero/empty states                                                 | yes | `UssdActivitiesPage.tsx`; `ui/src/format/ussd.test.ts:65-191`                                                               |
+| 7   | Products list/create/toggle with eligibility, payer, period, cover and dependent rules                                          | yes | `ui/src/pages/ussd/UssdProductsPage.tsx`; `ui/src/format/welfare.ts`                                                        |
+| 8   | Claims record an amount and reason and move through the legal statuses with a note                                              | yes | `UssdClaimsPage.tsx:55-56` (pending → approved/rejected, approved → paid)                                                   |
+| 9   | Simulator drives the dev entry, shows real truncation, exposes the commit callback, unavailable in production                   | yes | `UssdSimulatorPage.tsx:35-40,70`; server refusal `src/routes/dev-ussd.ts` (B1)                                              |
+| 10  | No new API endpoint and no migration; existing routes and the officer gate reused                                               | yes | diff has no `src/routes/*` or `src/migrations/*`; only `src/create-app.ts` CORS mount; `RequireSession` at `router.tsx:130` |
+| 11  | A USSD section render test covers the top-level link, the eight submenu items and route resolution                              | yes | `ui/src/shell/navigation.render.test.tsx` (3 cases)                                                                         |
+| 12  | UI and repo gates pass; five pre-existing UI formatting offenders reformatted                                                   | yes | Verification table; gate signature below                                                                                    |
+
+Verdict: **ACCEPTED** by the parent on 2026-11-07 after the Tier 2 confirmation round. Acceptance uses
+the parent's own gate numbers (Verification above), not the reviewer's. The reviewer seat was
+`deepseek-v4-pro:0813` for the first pass and the sanctioned fallback `cline-pass/cline-pass/glm-5.3`
+for the confirmation, with the 0813 weekly-limit unavailability recorded under `## Review`.
 
 ## Interpretations
 
