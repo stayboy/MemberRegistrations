@@ -421,6 +421,24 @@ async function runScenario() {
     JSON.stringify(contributionSummary.body),
   );
 
+  // `/offerings/summary` must resolve before `/offerings/:id`; a swallowed
+  // request would fail the uuid parse with 422 instead of returning the window.
+  const offeringSummary = await request('/v1/offerings/summary?from=2999-01-01&to=2999-12-31', {
+    headers: read,
+  });
+  check(
+    'offering summary resolves before the offering id route',
+    offeringSummary.status === 200 &&
+      offeringSummary.body.from === '2999-01-01' &&
+      offeringSummary.body.to === '2999-12-31' &&
+      offeringSummary.body.currency === 'GHS' &&
+      offeringSummary.body.totalPaidMinor === 5000 &&
+      offeringSummary.body.members?.[0]?.memberNo === 'M-9002' &&
+      offeringSummary.body.members?.[0]?.lastGivenOn === '2999-01-01' &&
+      offeringSummary.body.visitors?.count === 0,
+    JSON.stringify(offeringSummary.body),
+  );
+
   const pledge = await request('/v1/pledges', {
     method: 'POST',
     headers: write,
@@ -948,6 +966,7 @@ async function runScenario() {
       openapi.body.info?.version === '2.2.0' &&
       Boolean(openapi.body.paths?.['/auth/magic-link']) &&
       Boolean(openapi.body.paths?.['/v1/subscription-products']) &&
+      Boolean(openapi.body.paths?.['/v1/offerings/summary']) &&
       Boolean(openapi.body.paths?.['/ussd/nalo']) &&
       !openapi.body.paths?.['/dev/ussd/session'],
   );

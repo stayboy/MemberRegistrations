@@ -135,6 +135,80 @@ export const exceptionListSchema = z.object({
   items: z.array(exceptionRowSchema),
 });
 
+/** The landing window: two inclusive UTC calendar dates. */
+export const offeringSummaryQuerySchema = z
+  .object({
+    from: dateStringSchema,
+    to: dateStringSchema,
+  })
+  .refine((value) => value.from <= value.to, {
+    message: 'from must be on or before to',
+    path: ['to'],
+  });
+
+export const offeringSummaryMemberSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  paidMinor: z.number().int(),
+  pledgedMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+  /** The member's latest paid `sessionDate` inside the window; null when unpaid. */
+  lastGivenOn: z.string().nullable(),
+});
+
+export const offeringSummaryGroupSchema = z.object({
+  offeringId: z.string(),
+  name: z.string(),
+  paidMinor: z.number().int(),
+  pledgedMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+});
+
+export const offeringSummaryEventSchema = z.object({
+  eventId: z.string(),
+  name: z.string(),
+  paidMinor: z.number().int(),
+  pledgedMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+});
+
+export const offeringSummaryPledgeCountsSchema = z.object({
+  /** Relevant pledges that are still pending and not yet overdue. */
+  pending: z
+    .number()
+    .int()
+    .describe('Relevant pledges still pending with expectedOn on or after the report date.'),
+  honored: z.number().int().describe('Relevant pledges honored as at the report date.'),
+  dishonored: z.number().int().describe('Relevant pledges dishonored as at the report date.'),
+  /** Relevant pledges still pending with `expectedOn` before the report date. */
+  overdue: z
+    .number()
+    .int()
+    .describe('Relevant pledges still pending with expectedOn before the report date.'),
+});
+
+/**
+ * `ChurchOfferingSummary`. Money is member-only in `total*` and excludes every
+ * currency but `currency` (the largest paid currency in the window). Visitor
+ * gifts are reported separately in `visitors`.
+ */
+export const churchOfferingSummarySchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  currency: z.string(),
+  totalPaidMinor: z.number().int(),
+  totalPledgedMinor: z.number().int(),
+  totalOutstandingMinor: z.number().int(),
+  visitors: z.object({
+    count: z.number().int(),
+    paidMinor: z.number().int(),
+  }),
+  members: z.array(offeringSummaryMemberSchema),
+  offerings: z.array(offeringSummaryGroupSchema),
+  events: z.array(offeringSummaryEventSchema),
+  pledges: offeringSummaryPledgeCountsSchema,
+});
+
 export type TermsInput = z.infer<typeof termsInputSchema>;
 export type TermsPublishInput = z.infer<typeof termsPublishSchema>;
 export type OfferingListItem = z.infer<typeof offeringSchema>;
@@ -143,3 +217,8 @@ export type AttachInput = z.infer<typeof attachSchema>;
 export type SeriesAttachInput = z.infer<typeof seriesAttachSchema>;
 export type ExceptionInput = z.infer<typeof exceptionInputSchema>;
 export type ExceptionRowItem = z.infer<typeof exceptionRowSchema>;
+export type OfferingSummaryQuery = z.infer<typeof offeringSummaryQuerySchema>;
+export type ChurchOfferingSummary = z.infer<typeof churchOfferingSummarySchema>;
+export type OfferingSummaryMember = z.infer<typeof offeringSummaryMemberSchema>;
+export type OfferingSummaryGroup = z.infer<typeof offeringSummaryGroupSchema>;
+export type OfferingSummaryEvent = z.infer<typeof offeringSummaryEventSchema>;

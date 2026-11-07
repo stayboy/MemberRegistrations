@@ -61,6 +61,7 @@ async function audit(page: Page, label: string): Promise<void> {
 const SCREENS = [
   { route: '/members', label: 'members', heading: 'Members' },
   { route: '/events', label: 'events', heading: 'Events' },
+  { route: '/events/offerings', label: 'offerings', heading: 'Offerings' },
   { route: '/events/event-1', label: 'event detail', heading: 'Sunday Service' },
 ] as const;
 

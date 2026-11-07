@@ -74,6 +74,7 @@ import {
 } from './schemas/registration-requests.js';
 import {
   attachSchema,
+  churchOfferingSummarySchema,
   exceptionInputSchema,
   exceptionListSchema,
   exceptionRowSchema,
@@ -321,6 +322,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OfferingException: toSchema(exceptionRowSchema, 'output'),
         OfferingExceptionList: toSchema(exceptionListSchema, 'output'),
         OfferingExceptionInput: toSchema(exceptionInputSchema, 'input'),
+        ChurchOfferingSummary: toSchema(churchOfferingSummarySchema, 'output'),
         Contribution: toSchema(contributionSchema, 'output'),
         ContributionList: toSchema(contributionListSchema, 'output'),
         ContributionSummary: toSchema(contributionSummarySchema, 'output'),
@@ -1601,6 +1603,31 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
+      '/v1/offerings/summary': {
+        get: {
+          summary: 'Church landing totals for a UTC date window',
+          description:
+            'One compute-on-read aggregate for the offerings landing. Money is integer minor units and member-only in `total*`; `currency` is the largest paid currency in the window and every other currency is excluded from the totals (no FX). `visitors` reports paid visitor contribution rows separately. Pledge measures use the relevance predicate (`expectedOn` in the window, or still pending as at the report date with `expectedOn` before `from`) and read status from `pledge_events.at` with the inclusive `at < report date + 1 day` boundary, where the report date is `min(to, today)`; `totalPledgedMinor = totalOutstandingMinor + honored`. Responses carry Cache-Control: no-store.',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: {
+              description: 'Landing totals with Cache-Control: no-store.',
+              content: { 'application/json': { schema: ref('ChurchOfferingSummary') } },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
       '/v1/offerings/{id}': {
         parameters: [idParam('id')],
         get: {
@@ -1917,7 +1944,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'List pledges, newest first',
           description:
-            '`overdue` is derived from expectedOn (pending and before today, UTC) and is never stored. from/to filter expectedOn inclusively. Responses carry Cache-Control: no-store.',
+            '`overdue` is derived from expectedOn (pending and before today, UTC) and is never stored. from/to filter expectedOn inclusively. Rows resolve the member, officer and offering display names server-side and carry `nextReminder` (the next pending reminder, or null). Responses carry Cache-Control: no-store.',
           parameters: [
             {
               name: 'status',

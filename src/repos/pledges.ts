@@ -32,18 +32,24 @@ export interface CreatedPledge {
 type PledgeRow = {
   id: string;
   member_no: string;
+  member_name: string;
   offering_id: string;
+  terms_name: string | null;
+  offering_kind: string;
   event_instance_id: string;
+  event_name: string;
   session_date: unknown;
   amount_minor: number | string;
   currency: string;
   expected_on: unknown;
   officer_member_no: string;
+  officer_name: string;
   status: string;
   reason: string | null;
   settled_contribution_id: string | null;
   terms_version: number | string;
   idempotency_key: string;
+  next_reminder: unknown;
   created_at: unknown;
 };
 
@@ -103,24 +109,60 @@ type CanonicalPayload = {
 const PLEDGE_COLUMNS = `
   p.id,
   m.member_no,
+  coalesce(
+    nullif(btrim(concat_ws(' ', m.first_name, m.last_name)), ''),
+    nullif(btrim(m.other_names), ''),
+    m.member_no
+  ) as member_name,
   p.offering_id,
+  t.name as terms_name,
+  t.kind as offering_kind,
   p.event_instance_id,
+  e.name as event_name,
   p.session_date,
   p.amount_minor,
   p.currency,
   p.expected_on,
   o.member_no as officer_member_no,
+  coalesce(
+    nullif(btrim(concat_ws(' ', o.first_name, o.last_name)), ''),
+    nullif(btrim(o.other_names), ''),
+    o.member_no
+  ) as officer_name,
   p.status,
   p.reason,
   p.settled_contribution_id,
   p.terms_version,
   p.idempotency_key,
+  r.next_reminder,
   p.created_at`;
 
 const PLEDGE_FROM = `
   from pledges p
   join members m on m.id = p.member_id
-  join members o on o.id = p.officer_member_id`;
+  join members o on o.id = p.officer_member_id
+  join event_instances e on e.id = p.event_instance_id
+  join lateral (
+    select name, kind
+      from offering_terms t
+     where t.offering_id = p.offering_id
+     order by t.version desc
+     limit 1
+  ) t on true
+  left join lateral (
+    select min(scheduled_for) as next_reminder
+      from reminders rm
+     where rm.pledge_id = p.id
+       and rm.status = 'pending'
+  ) r on true`;
+
+const KIND_LABELS: Record<string, string> = {
+  freewill: 'Freewill',
+  tithe: 'Tithe',
+  building: 'Building',
+  missions: 'Missions',
+  other: 'Other',
+};
 
 const REMINDER_COLUMNS = `
   id, pledge_id, scheduled_for, channel, status, sent_at`;
@@ -190,21 +232,29 @@ function reasonOrNull(value: string | undefined): string | null {
 
 function pledgeFromRow(row: PledgeRow, todayUtc: string): PledgeItem {
   const expectedOn = isoDate(row.expected_on)!;
+  const termsName = row.terms_name?.trim();
   return {
     id: row.id,
     memberNo: row.member_no,
+    memberName: row.member_name,
     offeringId: row.offering_id,
+    // Same display-name rule as `EventOffering.name` (R5).
+    offeringName: termsName
+      ? termsName
+      : `${row.event_name} · ${KIND_LABELS[row.offering_kind] ?? row.offering_kind}`,
     eventId: row.event_instance_id,
     sessionDate: isoDate(row.session_date),
     amountMinor: Number(row.amount_minor),
     currency: row.currency,
     expectedOn,
     followUpOfficerMemberNo: row.officer_member_no,
+    officerName: row.officer_name,
     status:
       row.status === 'pending' && expectedOn < todayUtc
         ? 'overdue'
         : (row.status as PledgeItem['status']),
     reason: row.reason,
+    nextReminder: isoDate(row.next_reminder),
     settledContributionId: row.settled_contribution_id,
     termsVersion: Number(row.terms_version),
     idempotencyKey: row.idempotency_key,

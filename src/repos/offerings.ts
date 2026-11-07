@@ -12,6 +12,7 @@ import { sqlState } from '../errors/sqlstate.js';
 import { isHeldOccurrence } from './occurrences.js';
 import type {
   AttachInput,
+  ChurchOfferingSummary,
   ExceptionInput,
   ExceptionRowItem,
   OfferingKind,
@@ -125,6 +126,218 @@ returning version, name, purpose, kind, currency,
           created_at as terms_created_at, created_by as terms_created_by
 `;
 
+/**
+ * The landing's contribution half: the reporting currency (largest paid
+ * currency in the window, tie broken by code), the member totals, the visitor
+ * block and the by-member/by-offering/by-event paid totals. One statement, so
+ * no per-row read (NFR-1, NFR-5).
+ */
+export const OFFERING_SUMMARY_CONTRIBUTIONS_SQL = `
+with bounds as (
+  select $1::date as from_date, $2::date as to_date
+),
+chosen as (
+  -- No FX: the largest paid currency in the window wins (23-Q8).
+  select coalesce((
+    select c2.currency
+      from contributions c2, bounds b
+     where c2.status = 'paid'
+       and c2.session_date between b.from_date and b.to_date
+     group by c2.currency
+     order by sum(c2.amount_minor) desc, c2.currency asc
+     limit 1
+  ), 'GHS') as currency
+),
+paid as (
+  select c.member_id, c.offering_id, c.event_instance_id, c.session_date, c.amount_minor
+    from contributions c, bounds b, chosen ch
+   where c.status = 'paid'
+     and c.session_date between b.from_date and b.to_date
+     and c.currency = ch.currency
+),
+member_totals as (
+  select m.member_no,
+         coalesce(
+           nullif(btrim(concat_ws(' ', m.first_name, m.last_name)), ''),
+           nullif(btrim(m.other_names), ''),
+           m.member_no
+         ) as name,
+         sum(p.amount_minor) as paid_minor,
+         max(p.session_date) as last_given_on
+    from paid p
+    join members m on m.id = p.member_id
+   group by m.id, m.member_no, m.first_name, m.last_name, m.other_names
+   order by sum(p.amount_minor) desc, lower(m.member_no) asc
+   limit 10
+),
+offering_totals as (
+  select p.offering_id,
+         coalesce(nullif(btrim(t.name), ''), t.purpose) as name,
+         sum(p.amount_minor) as paid_minor
+    from paid p
+    join lateral (
+      select name, purpose
+        from offering_terms t
+       where t.offering_id = p.offering_id
+       order by t.version desc
+       limit 1
+    ) t on true
+   where p.member_id is not null
+   group by p.offering_id, t.name, t.purpose
+),
+event_totals as (
+  select p.event_instance_id as event_id, e.name, sum(p.amount_minor) as paid_minor
+    from paid p
+    join event_instances e on e.id = p.event_instance_id
+   where p.member_id is not null
+   group by p.event_instance_id, e.name
+)
+select ch.currency,
+       coalesce((select sum(amount_minor) from paid where member_id is not null), 0)::bigint
+         as total_paid,
+       (select count(*) from paid where member_id is null)::int as visitor_count,
+       coalesce((select sum(amount_minor) from paid where member_id is null), 0)::bigint
+         as visitor_paid,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'memberNo', mt.member_no,
+                  'name', mt.name,
+                  'paidMinor', mt.paid_minor,
+                  'lastGivenOn', mt.last_given_on
+                ) order by mt.paid_minor desc, lower(mt.member_no) asc)
+           from member_totals mt
+       ), '[]'::jsonb) as members,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'offeringId', ot.offering_id,
+                  'name', ot.name,
+                  'paidMinor', ot.paid_minor
+                ) order by ot.paid_minor desc, lower(ot.name) asc, ot.offering_id asc)
+           from offering_totals ot
+       ), '[]'::jsonb) as offerings,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'eventId', et.event_id,
+                  'name', et.name,
+                  'paidMinor', et.paid_minor
+                ) order by et.paid_minor desc, lower(et.name) asc, et.event_id asc)
+           from event_totals et
+       ), '[]'::jsonb) as events
+  from chosen ch
+`;
+
+/**
+ * The landing's pledge half. A pledge is in scope when `expectedOn` is in the
+ * window, or it is still pending as at the report date (min(to, today)) with an
+ * `expectedOn` before `from` (23-Q9, R3). Its status is read from
+ * `pledge_events.at` with the inclusive boundary `at < report date + 1 day`
+ * (R2/R7), never from the mutable `pledges.status`. One statement.
+ */
+export const OFFERING_SUMMARY_PLEDGES_SQL = `
+with bounds as (
+  select $1::date as from_date,
+         $2::date as to_date,
+         least($2::date, $3::date) as report_date
+),
+bounded as (
+  select pe.pledge_id,
+         max(pe.at) filter (where pe.kind = 'honored') as honored_at,
+         max(pe.at) filter (where pe.kind = 'dishonored') as dishonored_at
+    from pledge_events pe, bounds b
+   where (pe.at at time zone 'UTC') < (b.report_date + 1)::timestamp
+   group by pe.pledge_id
+),
+staged as (
+  select p.member_id, m.member_no, p.offering_id, p.event_instance_id,
+         p.amount_minor, p.expected_on,
+         case
+           when b.dishonored_at is not null
+                and (b.honored_at is null or b.dishonored_at > b.honored_at) then 'dishonored'
+           when b.honored_at is not null then 'honored'
+           else 'pending'
+         end as as_of_status
+    from pledges p
+    join members m on m.id = p.member_id
+    left join bounded b on b.pledge_id = p.id
+   where p.currency = $4
+),
+in_scope as (
+  select s.*
+    from staged s, bounds b
+   where s.expected_on between b.from_date and b.to_date
+      or (s.expected_on < b.from_date and s.as_of_status = 'pending')
+),
+member_totals as (
+  select member_no,
+         coalesce(sum(amount_minor) filter (where as_of_status <> 'dishonored'), 0) as pledged,
+         coalesce(sum(amount_minor) filter (where as_of_status = 'pending'), 0) as outstanding
+    from in_scope
+   group by member_id, member_no
+),
+offering_totals as (
+  select i.offering_id,
+         coalesce(nullif(btrim(t.name), ''), t.purpose) as name,
+         coalesce(sum(i.amount_minor) filter (where i.as_of_status <> 'dishonored'), 0) as pledged,
+         coalesce(sum(i.amount_minor) filter (where i.as_of_status = 'pending'), 0) as outstanding
+    from in_scope i
+    join lateral (
+      select name, purpose
+        from offering_terms t
+       where t.offering_id = i.offering_id
+       order by t.version desc
+       limit 1
+    ) t on true
+   group by i.offering_id, t.name, t.purpose
+),
+event_totals as (
+  select i.event_instance_id,
+         e.name,
+         coalesce(sum(i.amount_minor) filter (where i.as_of_status <> 'dishonored'), 0) as pledged,
+         coalesce(sum(i.amount_minor) filter (where i.as_of_status = 'pending'), 0) as outstanding
+    from in_scope i
+    join event_instances e on e.id = i.event_instance_id
+   group by i.event_instance_id, e.name
+)
+select coalesce((
+         select sum(amount_minor) from in_scope where as_of_status <> 'dishonored'
+       ), 0)::bigint as total_pledged,
+       coalesce((
+         select sum(amount_minor) from in_scope where as_of_status = 'pending'
+       ), 0)::bigint as total_outstanding,
+       (select count(*) from in_scope s, bounds b
+         where s.as_of_status = 'pending' and s.expected_on >= b.report_date)::int as pending_count,
+       (select count(*) from in_scope s, bounds b
+         where s.as_of_status = 'pending' and s.expected_on < b.report_date)::int as overdue_count,
+       (select count(*) from in_scope where as_of_status = 'honored')::int as honored_count,
+       (select count(*) from in_scope where as_of_status = 'dishonored')::int as dishonored_count,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'memberNo', mt.member_no,
+                  'pledgedMinor', mt.pledged,
+                  'outstandingMinor', mt.outstanding
+                ) order by lower(mt.member_no))
+           from member_totals mt
+       ), '[]'::jsonb) as members,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'offeringId', ot.offering_id,
+                  'name', ot.name,
+                  'pledgedMinor', ot.pledged,
+                  'outstandingMinor', ot.outstanding
+                ) order by lower(ot.name), ot.offering_id)
+           from offering_totals ot
+       ), '[]'::jsonb) as offerings,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'eventId', et.event_instance_id,
+                  'name', et.name,
+                  'pledgedMinor', et.pledged,
+                  'outstandingMinor', et.outstanding
+                ) order by lower(et.name), et.event_instance_id)
+           from event_totals et
+       ), '[]'::jsonb) as events
+`;
+
 type TermsRow = {
   version: number | string;
   name: string | null;
@@ -172,6 +385,51 @@ type EventGuardRow = {
   status: string;
   end_date: unknown;
   sessions: unknown;
+};
+
+type SummaryContributionRow = {
+  currency: string;
+  total_paid: number | string;
+  visitor_count: number | string;
+  visitor_paid: number | string;
+  members: unknown;
+  offerings: unknown;
+  events: unknown;
+};
+
+type SummaryPledgeRow = {
+  total_pledged: number | string;
+  total_outstanding: number | string;
+  pending_count: number | string;
+  overdue_count: number | string;
+  honored_count: number | string;
+  dishonored_count: number | string;
+  members: unknown;
+  offerings: unknown;
+  events: unknown;
+};
+
+type SummaryMemberJson = {
+  memberNo: string;
+  name: string;
+  paidMinor: number | string;
+  lastGivenOn: string | null;
+};
+
+type SummaryPaidGroupJson = {
+  offeringId?: string;
+  eventId?: string;
+  name: string;
+  paidMinor: number | string;
+};
+
+type SummaryPledgedGroupJson = {
+  memberNo?: string;
+  offeringId?: string;
+  eventId?: string;
+  name?: string;
+  pledgedMinor: number | string;
+  outstandingMinor: number | string;
 };
 
 function isoDate(value: unknown): string | null {
@@ -483,6 +741,141 @@ export class OfferingRepository {
       [id],
     );
     return rows.map(termsFromRow);
+  }
+
+  /**
+   * Church landing totals (ticket 23). Two batched statements — contributions,
+   * then the as-at pledge measures — with no per-row read (NFR-1, NFR-5).
+   * `currency` is the largest paid currency in the window (tie broken by code)
+   * and every other currency is excluded from all totals (23-Q8, R2). The
+   * report date is `min(to, today)` (R2/R7).
+   */
+  async summary(
+    from: string,
+    to: string,
+    todayUtc = todayUtcDate(),
+  ): Promise<ChurchOfferingSummary> {
+    const [contributions] = await this.db.query<SummaryContributionRow>(
+      OFFERING_SUMMARY_CONTRIBUTIONS_SQL,
+      [from, to],
+    );
+    const currency = contributions?.currency ?? 'GHS';
+    const [pledges] = await this.db.query<SummaryPledgeRow>(OFFERING_SUMMARY_PLEDGES_SQL, [
+      from,
+      to,
+      todayUtc,
+      currency,
+    ]);
+
+    const pledgeByMember = new Map<string, { pledgedMinor: number; outstandingMinor: number }>();
+    for (const row of parseJsonArray(pledges?.members) as SummaryPledgedGroupJson[]) {
+      if (!row.memberNo) continue;
+      pledgeByMember.set(row.memberNo, {
+        pledgedMinor: Number(row.pledgedMinor),
+        outstandingMinor: Number(row.outstandingMinor),
+      });
+    }
+    const members = (parseJsonArray(contributions?.members) as SummaryMemberJson[]).map((row) => ({
+      memberNo: row.memberNo,
+      name: row.name,
+      paidMinor: Number(row.paidMinor),
+      pledgedMinor: pledgeByMember.get(row.memberNo)?.pledgedMinor ?? 0,
+      outstandingMinor: pledgeByMember.get(row.memberNo)?.outstandingMinor ?? 0,
+      lastGivenOn: row.lastGivenOn,
+    }));
+
+    const offerings = new Map<string, ChurchOfferingSummary['offerings'][number]>();
+    for (const row of parseJsonArray(contributions?.offerings) as SummaryPaidGroupJson[]) {
+      if (!row.offeringId) continue;
+      offerings.set(row.offeringId, {
+        offeringId: row.offeringId,
+        name: row.name,
+        paidMinor: Number(row.paidMinor),
+        pledgedMinor: 0,
+        outstandingMinor: 0,
+      });
+    }
+    for (const row of parseJsonArray(pledges?.offerings) as SummaryPledgedGroupJson[]) {
+      if (!row.offeringId) continue;
+      const existing = offerings.get(row.offeringId);
+      if (existing) {
+        existing.pledgedMinor = Number(row.pledgedMinor);
+        existing.outstandingMinor = Number(row.outstandingMinor);
+        continue;
+      }
+      offerings.set(row.offeringId, {
+        offeringId: row.offeringId,
+        name: row.name ?? 'Offering',
+        paidMinor: 0,
+        pledgedMinor: Number(row.pledgedMinor),
+        outstandingMinor: Number(row.outstandingMinor),
+      });
+    }
+
+    const events = new Map<string, ChurchOfferingSummary['events'][number]>();
+    for (const row of parseJsonArray(contributions?.events) as SummaryPaidGroupJson[]) {
+      if (!row.eventId) continue;
+      events.set(row.eventId, {
+        eventId: row.eventId,
+        name: row.name,
+        paidMinor: Number(row.paidMinor),
+        pledgedMinor: 0,
+        outstandingMinor: 0,
+      });
+    }
+    for (const row of parseJsonArray(pledges?.events) as SummaryPledgedGroupJson[]) {
+      if (!row.eventId) continue;
+      const existing = events.get(row.eventId);
+      if (existing) {
+        existing.pledgedMinor = Number(row.pledgedMinor);
+        existing.outstandingMinor = Number(row.outstandingMinor);
+        continue;
+      }
+      events.set(row.eventId, {
+        eventId: row.eventId,
+        name: row.name ?? 'Event',
+        paidMinor: 0,
+        pledgedMinor: Number(row.pledgedMinor),
+        outstandingMinor: Number(row.outstandingMinor),
+      });
+    }
+
+    const groupSort = (
+      left: { name: string; paidMinor: number; pledgedMinor: number },
+      right: { name: string; paidMinor: number; pledgedMinor: number },
+      leftId: string,
+      rightId: string,
+    ): number =>
+      right.paidMinor - left.paidMinor ||
+      right.pledgedMinor - left.pledgedMinor ||
+      left.name.localeCompare(right.name) ||
+      leftId.localeCompare(rightId);
+
+    return {
+      from,
+      to,
+      currency,
+      totalPaidMinor: Number(contributions?.total_paid ?? 0),
+      totalPledgedMinor: Number(pledges?.total_pledged ?? 0),
+      totalOutstandingMinor: Number(pledges?.total_outstanding ?? 0),
+      visitors: {
+        count: Number(contributions?.visitor_count ?? 0),
+        paidMinor: Number(contributions?.visitor_paid ?? 0),
+      },
+      members,
+      offerings: [...offerings.values()].sort((left, right) =>
+        groupSort(left, right, left.offeringId, right.offeringId),
+      ),
+      events: [...events.values()].sort((left, right) =>
+        groupSort(left, right, left.eventId, right.eventId),
+      ),
+      pledges: {
+        pending: Number(pledges?.pending_count ?? 0),
+        honored: Number(pledges?.honored_count ?? 0),
+        dishonored: Number(pledges?.dishonored_count ?? 0),
+        overdue: Number(pledges?.overdue_count ?? 0),
+      },
+    };
   }
 
   /** A stale `baseVersion` is a conflict; a published version is never edited. */

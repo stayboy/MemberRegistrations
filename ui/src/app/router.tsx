@@ -63,6 +63,11 @@ const SeriesDetailPage = lazy(() =>
 const SeriesFormPage = lazy(() =>
   import('../pages/SeriesFormPage').then(({ SeriesFormPage: page }) => ({ default: page })),
 );
+const OfferingsPage = lazy(() =>
+  import('../pages/offerings/OfferingsPage').then(({ OfferingsPage: page }) => ({
+    default: page,
+  })),
+);
 const UssdCodesPage = lazy(() =>
   import('../pages/ussd/UssdCodesPage').then(({ UssdCodesPage: page }) => ({ default: page })),
 );
@@ -139,6 +144,7 @@ export const router = createHashRouter([
           { path: 'events/series/new', element: <SeriesFormPage /> },
           { path: 'events/series/:id', element: <SeriesDetailPage /> },
           { path: 'events/series/:id/edit', element: <SeriesFormPage /> },
+          { path: 'events/offerings', element: <OfferingsPage /> },
           { path: 'events/:id', element: <EventDetailPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: <ImportsAttendancePage /> },

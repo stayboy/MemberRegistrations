@@ -1,5 +1,12 @@
 import { expect, test as base, type Page } from 'playwright/test';
-import type { EventAttendance, EventItem, EventOfferingStatsItem } from '../src/api/events';
+import type {
+  EventAttendance,
+  EventItem,
+  EventOfferingItem,
+  EventOfferingStatsItem,
+  OfferingTermsItem,
+} from '../src/api/events';
+import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
 import type {
   Gender,
   MemberAttendanceSeries,
@@ -282,6 +289,54 @@ const EMPTY_OFFERING_STATS: EventOfferingStatsItem = {
   contributionCount: 0,
 };
 
+function offeringTerms(
+  version: number,
+  name: string,
+  overrides: Partial<OfferingTermsItem> = {},
+): OfferingTermsItem {
+  return {
+    version,
+    name,
+    purpose: `${name} support`,
+    kind: 'freewill',
+    currency: 'GHS',
+    targetMinor: 500_000,
+    defaultAmountMinor: 5_000,
+    startsOn: '2026-01-01',
+    endsOn: null,
+    availableUntil: null,
+    scripture: 'Malachi 3:10',
+    gatewayAccount: 'MR-GATEWAY-001',
+    gatewayMetadata: { merchant: 'MR-001', channel: 'ussd' },
+    createdAt: '2026-01-01T09:00:00.000Z',
+    createdBy: 'officer-1',
+    reason: version > 1 ? 'Updated the appeal' : null,
+    ...overrides,
+  };
+}
+
+function eventOffering(offeringId: string, name: string): EventOfferingItem {
+  return {
+    offeringId,
+    name,
+    availableUntil: null,
+    expired: false,
+    terms: offeringTerms(1, name),
+    exceptions: [],
+    stats: EMPTY_OFFERING_STATS,
+  };
+}
+
+/** Six offerings so the USSD preview proves the five-row page plus `0 More`. */
+const PREVIEW_OFFERINGS: readonly EventOfferingItem[] = [
+  eventOffering('offering-1', 'Tithe'),
+  eventOffering('offering-2', 'Missions'),
+  eventOffering('offering-3', 'Building fund'),
+  eventOffering('offering-4', 'Freewill'),
+  eventOffering('offering-5', 'Youth appeal'),
+  eventOffering('offering-6', 'Welfare appeal'),
+];
+
 export const EVENTS: readonly EventItem[] = [
   {
     id: 'event-1',
@@ -358,6 +413,171 @@ export const EVENTS: readonly EventItem[] = [
     ],
     offerings: [],
     stats: EMPTY_OFFERING_STATS,
+  },
+  {
+    id: 'event-offerings',
+    eventNo: 'EVT-2999-777',
+    name: 'Foundation service',
+    seriesId: null,
+    ministry: null,
+    timezone: 'UTC',
+    startDate: '2999-01-10',
+    endDate: '2999-01-10',
+    startTime: '09:00',
+    endTime: '11:00',
+    venueType: 'auditorium',
+    venueName: 'Main auditorium',
+    description: null,
+    status: 'scheduled',
+    source: 'manual',
+    tracksMembers: true,
+    presbyterOnly: false,
+    sessions: [
+      {
+        date: '2999-01-10',
+        startTime: '09:00',
+        endTime: '11:00',
+        status: 'scheduled',
+        present: 0,
+        expected: 10,
+        importedRows: 0,
+        source: 'none',
+      },
+    ],
+    offerings: PREVIEW_OFFERINGS,
+    stats: EMPTY_OFFERING_STATS,
+  },
+];
+
+/**
+ * The landing aggregate. Amounts are integer minor units; the by-member rows are
+ * the top 10 by paid and visitor money is separate. Pledge counts come as at the
+ * report date.
+ */
+const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
+  from: '2026-01-01',
+  to: '2026-12-31',
+  currency: 'GHS',
+  totalPaidMinor: 1_245_000,
+  totalPledgedMinor: 480_000,
+  totalOutstandingMinor: 180_000,
+  visitors: { count: 3, paidMinor: 35_000 },
+  members: [
+    {
+      memberNo: 'M-1001',
+      name: 'Kwame Asante',
+      paidMinor: 720_000,
+      pledgedMinor: 300_000,
+      outstandingMinor: 100_000,
+      lastGivenOn: '2026-01-04',
+    },
+    {
+      memberNo: 'M-1002',
+      name: 'Ama Mensah',
+      paidMinor: 525_000,
+      pledgedMinor: 180_000,
+      outstandingMinor: 80_000,
+      lastGivenOn: '2026-01-03',
+    },
+  ],
+  offerings: [
+    {
+      offeringId: 'offering-1',
+      name: 'Tithe',
+      paidMinor: 900_000,
+      pledgedMinor: 300_000,
+      outstandingMinor: 100_000,
+    },
+    {
+      offeringId: 'offering-2',
+      name: 'Missions',
+      paidMinor: 345_000,
+      pledgedMinor: 180_000,
+      outstandingMinor: 80_000,
+    },
+  ],
+  events: [
+    {
+      eventId: 'event-1',
+      name: 'Sunday Service',
+      paidMinor: 1_045_000,
+      pledgedMinor: 300_000,
+      outstandingMinor: 100_000,
+    },
+    {
+      eventId: 'event-2',
+      name: 'Leaders retreat',
+      paidMinor: 200_000,
+      pledgedMinor: 180_000,
+      outstandingMinor: 80_000,
+    },
+  ],
+  pledges: { pending: 2, honored: 1, dishonored: 0, overdue: 1 },
+};
+
+const PLEDGES: readonly PledgeItem[] = [
+  {
+    id: 'pledge-1',
+    memberNo: 'M-1001',
+    memberName: 'Kwame Asante',
+    offeringId: 'offering-1',
+    offeringName: 'Tithe',
+    eventId: 'event-1',
+    sessionDate: '2026-01-04',
+    amountMinor: 100_000,
+    currency: 'GHS',
+    expectedOn: '2026-02-01',
+    followUpOfficerMemberNo: 'M-1002',
+    officerName: 'Ama Mensah',
+    status: 'pending',
+    reason: null,
+    nextReminder: '2026-01-25',
+    settledContributionId: null,
+    termsVersion: 1,
+    idempotencyKey: 'pledge-key-1',
+    createdAt: '2026-01-05T10:00:00.000Z',
+  },
+  {
+    id: 'pledge-2',
+    memberNo: 'M-1002',
+    memberName: 'Ama Mensah',
+    offeringId: 'offering-2',
+    offeringName: 'Missions',
+    eventId: 'event-2',
+    sessionDate: null,
+    amountMinor: 80_000,
+    currency: 'GHS',
+    expectedOn: '2026-01-01',
+    followUpOfficerMemberNo: 'M-1001',
+    officerName: 'Kwame Asante',
+    status: 'overdue',
+    reason: null,
+    nextReminder: null,
+    settledContributionId: null,
+    termsVersion: 1,
+    idempotencyKey: 'pledge-key-2',
+    createdAt: '2025-12-20T10:00:00.000Z',
+  },
+  {
+    id: 'pledge-3',
+    memberNo: 'M-1001',
+    memberName: 'Kwame Asante',
+    offeringId: 'offering-1',
+    offeringName: 'Tithe',
+    eventId: 'event-1',
+    sessionDate: '2026-01-04',
+    amountMinor: 60_000,
+    currency: 'GHS',
+    expectedOn: '2026-01-10',
+    followUpOfficerMemberNo: 'M-1002',
+    officerName: 'Ama Mensah',
+    status: 'honored',
+    reason: null,
+    nextReminder: null,
+    settledContributionId: 'contribution-1',
+    termsVersion: 1,
+    idempotencyKey: 'pledge-key-3',
+    createdAt: '2025-12-28T10:00:00.000Z',
   },
 ];
 
@@ -706,6 +926,8 @@ function createdDetail(input: unknown): MemberDetail {
  * window the pages ask for, so no assertion depends on today's date.
  */
 function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] {
+  const pledgeState = new Map<string, PledgeItem>(PLEDGES.map((pledge) => [pledge.id, pledge]));
+
   return [
     {
       method: 'GET',
@@ -747,6 +969,47 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
       method: 'GET',
       pattern: /^\/gateway\/v1\/ministries$/,
       handle: () => reply({ items: MINISTRIES }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/offerings\/summary$/,
+      handle: () => reply(OFFERINGS_SUMMARY),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/offerings\/([^/]+)\/terms$/,
+      handle: (_call, [offeringId]) => {
+        const name =
+          OFFERINGS_SUMMARY.offerings.find((offering) => offering.offeringId === offeringId)
+            ?.name ?? 'Offering';
+        return reply({ items: [offeringTerms(2, name)] });
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/pledges$/,
+      handle: () => reply({ items: [...pledgeState.values()] }),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/pledges\/([^/]+)\/reassign$/,
+      handle: (call, [pledgeId]) => {
+        const current = pledgeState.get(pledgeId!);
+        if (!current) return problem(404, `Pledge ${pledgeId} was not found`);
+        const body = asRecord(call.body);
+        const officerMemberNo = text(body.officerMemberNo).trim();
+        const reason = text(body.reason).trim();
+        if (!officerMemberNo || reason.length < 3) {
+          return problem(422, 'officerMemberNo and a reason are required');
+        }
+        const updated: PledgeItem = {
+          ...current,
+          followUpOfficerMemberNo: officerMemberNo,
+          officerName: officerMemberNo,
+        };
+        pledgeState.set(current.id, updated);
+        return reply(updated);
+      },
     },
     {
       method: 'GET',

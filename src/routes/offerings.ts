@@ -5,11 +5,13 @@ import {
   attachSchema,
   exceptionInputSchema,
   listQuerySchema,
+  offeringSummaryQuerySchema,
   seriesAttachSchema,
   setActiveSchema,
   termsInputSchema,
   termsPublishSchema,
 } from '../schemas/offerings.js';
+import { assertDate } from '../domain/contacts.js';
 import type { OfferingRepository } from '../repos/offerings.js';
 
 const idSchema = z.string().uuid();
@@ -49,6 +51,15 @@ export function offeringsRouter(repo: OfferingRepository): Router {
     res.setHeader('Location', offeringLocation(offering.id));
     noStore(res);
     res.status(201).json(offering);
+  });
+
+  // Registered before `/offerings/:id` so `summary` is never read as an id.
+  router.get('/offerings/summary', async (req, res) => {
+    const query = offeringSummaryQuerySchema.parse(req.query);
+    const from = assertDate(query.from, 'from');
+    const to = assertDate(query.to, 'to');
+    noStore(res);
+    res.json(await repo.summary(from, to));
   });
 
   router.get('/offerings/:id', async (req, res) => {
