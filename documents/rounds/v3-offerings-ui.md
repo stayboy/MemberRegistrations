@@ -110,7 +110,11 @@ migration.
 
 Local full-gate signature (verbatim, environmental failure):
 
-    gate-run 2026-11-07T19:11:21.188Z profile=full steps=4/6 lines=25 bytes=1984
+```
+gate-run 2026-11-07T19:11:21.188Z profile=full steps=4/6 lines=25 bytes=1984
+```
+
+The CI `verify` job re-runs the full gate; its signature is recorded when the round closes.
 
 ## Mock parity (when a mock exists)
 
