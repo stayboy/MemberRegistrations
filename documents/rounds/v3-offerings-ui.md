@@ -2,7 +2,7 @@
 
 |                     |                                                            |
 | ------------------- | ---------------------------------------------------------- |
-| Status              | OPEN                                                       |
+| Status              | CLOSED                                                     |
 | Tier                | 2                                                          |
 | Mode                | `unattended (auto-accept recommendations)`                 |
 | Base                | `6c5aad7`                                                  |
@@ -94,19 +94,19 @@ migration.
 
 ## Verification
 
-| Gate              | Command                                                                           | Result                                                                                                                                                           |
-| ----------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Format            | `npm run format:check`                                                            | pass (after a fix-pass prettier sweep)                                                                                                                           |
-| Lint              | `npm run lint`                                                                    | pass                                                                                                                                                             |
-| Typecheck         | `npm run typecheck`                                                               | pass                                                                                                                                                             |
-| Tests (targeted)  | `npx vitest run tests/api/offerings-summary*.test.ts tests/api/offerings.test.ts` | pass — 45 passed, 1 skipped (pg parity)                                                                                                                          |
-| Tests (full)      | `npm run verify`                                                                  | two local runs aborted on the known Windows fork-pool exit `3221226505` / PGlite-closed hook timeouts (different files each time); CI `verify` is the merge gate |
-| Build             | `npm run build` (inside `verify`)                                                 | pass                                                                                                                                                             |
-| Smoke             | `npm run smoke`                                                                   | pass (incl. the summary route-order case)                                                                                                                        |
-| UI lint/typecheck | `npm run ui:lint`, `npm run ui:typecheck`                                         | pass                                                                                                                                                             |
-| UI tests          | `npm run ui:test`                                                                 | pass — 30 files, 344 tests                                                                                                                                       |
-| UI build          | `npm run ui:build`                                                                | pass                                                                                                                                                             |
-| UI e2e            | `npm run ui:e2e`                                                                  | pass — 51 tests (landing, terms, reassignment, axe light/dark)                                                                                                   |
+| Gate              | Command                                                                           | Result                                                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Format            | `npm run format:check`                                                            | pass (after a fix-pass prettier sweep)                                                                                                                             |
+| Lint              | `npm run lint`                                                                    | pass                                                                                                                                                               |
+| Typecheck         | `npm run typecheck`                                                               | pass                                                                                                                                                               |
+| Tests (targeted)  | `npx vitest run tests/api/offerings-summary*.test.ts tests/api/offerings.test.ts` | pass — 45 passed, 1 skipped (pg parity)                                                                                                                            |
+| Tests (full)      | `npm run verify`                                                                  | pass in CI — the PR #83 `verify` job ran 5m15s (local runs aborted on the known Windows fork-pool exit `3221226505` / PGlite-closed hook timeouts; CI is the gate) |
+| Build             | `npm run build` (inside `verify`)                                                 | pass                                                                                                                                                               |
+| Smoke             | `npm run smoke`                                                                   | pass (incl. the summary route-order case)                                                                                                                          |
+| UI lint/typecheck | `npm run ui:lint`, `npm run ui:typecheck`                                         | pass                                                                                                                                                               |
+| UI tests          | `npm run ui:test`                                                                 | pass — 30 files, 344 tests                                                                                                                                         |
+| UI build          | `npm run ui:build`                                                                | pass                                                                                                                                                               |
+| UI e2e            | `npm run ui:e2e`                                                                  | pass — 51 tests (landing, terms, reassignment, axe light/dark)                                                                                                     |
 
 Local full-gate signature (verbatim, environmental failure):
 
@@ -114,7 +114,11 @@ Local full-gate signature (verbatim, environmental failure):
 gate-run 2026-11-07T19:11:21.188Z profile=full steps=4/6 lines=25 bytes=1984
 ```
 
-The CI `verify` job re-runs the full gate; its signature is recorded when the round closes.
+CI full-gate signature (verbatim, PR #83 `verify` job):
+
+```
+gate-run 2026-11-07T19:23:27.205Z profile=full steps=6/6 lines=6 bytes=6350
+```
 
 ## Mock parity (when a mock exists)
 
