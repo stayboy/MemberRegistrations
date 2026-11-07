@@ -2,7 +2,7 @@
 
 |                     |                                                                                               |
 | ------------------- | --------------------------------------------------------------------------------------------- |
-| Status              | OPEN                                                                                          |
+| Status              | CLOSED                                                                                        |
 | Tier                | 2 - Reviewed                                                                                  |
 | Mode                | `unattended` (subagent slice)                                                                 |
 | Base                | `b942d82`                                                                                     |
@@ -95,9 +95,33 @@ the bounded-gate rule each was retried at most once and recorded, not looped. Th
 42/42, and the recorded full gate passed every step (its test step: 42 files, 529 passed / 3 skipped).
 No test was skipped for this slice.
 
+## Review
+
+- **Tier 2 Standards + Spec review (`deepseek-v4-pro:0813`): ACCEPT, nits only.** No P1 or P2; the
+  findings were non-blocking nits, and the verdict is recorded verbatim in the squash-merge commit body
+  of PR `#78`. The review ran against the complete B1 delta (adapters, pipeline, routes, dev simulator,
+  env, OpenAPI, smoke, specs) per `documents/rounds/review-brief.md`: one delta, one fix pass (none
+  needed), one round — `Review rounds: 1`.
+
 ## Acceptance
 
-TBD by the parent review.
+| #   | Criterion                                                                                                                                                                      | Met | Evidence                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | Adapter contract `{ id, route, authenticator, toFrame, toWire, maxMsgChars, pageSize }` with a registry; adding provider C is one object                                       | yes | `src/ussd/adapters.ts`, `tests/unit/ussd-adapters.test.ts` ("registers exactly the two providers")                |
+| 2   | HMAC adapter keeps `/ussd/session` checks in the same order, `maxMsgChars` 182, `pageSize { events: 3, offerings: 5 }`                                                         | yes | `src/routes/ussd.ts`; page-size case in `tests/unit/ussd-adapters.test.ts`                                        |
+| 3   | Nalo adapter: `USERID` auth before session work (401, no write), `USERDATA` > 64 → 422, `SESSIONID` ↔ `external_id`, `MSGTYPE = !done`, `pageSize { events: 2, offerings: 3 }` | yes | `tests/api/ussd-nalo.test.ts` (auth, identity, re-delivery, page sizes)                                           |
+| 4   | Machine page sizes read the session's declared `pageSize`; no provider branching in the machine                                                                                | yes | `src/ussd/machine.ts` `offeringPageSize` / `activityPageSize`                                                     |
+| 5   | Re-delivery resolves by `(provider, external_id)`; a replayed money Accept reuses the confirmation idempotency key                                                             | yes | `tests/api/ussd-nalo.test.ts` "advances once and does not double-apply"                                           |
+| 6   | `POST /dev/ussd/session` dev-only: `404` in production, `503` when USSD disabled, no secret in any response                                                                    | yes | `src/routes/dev-ussd.ts`; `tests/api/ussd-nalo.test.ts` "refuses with 404 in production", "answers ussd_disabled" |
+| 7   | No migration (0016 from slice A already carries `provider`/`external_id`)                                                                                                      | yes | PR `#78` file list has no `src/migrations/*`                                                                      |
+| 8   | `USSD_NALO_USER_ID` 1-32 chars, dev default `NALOTest`, rejected at default in production; `USSD_NALO_MAX_MSG_CHARS` integer 1-182 default 120                                 | yes | `src/config/env.ts`; `tests/config/env.test.ts` bounds cases                                                      |
+| 9   | OpenAPI documents `/ussd/nalo`; `/dev/ussd/session` absent from the schema but in the route table                                                                              | yes | `src/openapi.ts`                                                                                                  |
+| 10  | Smoke covers Nalo auth, wrong-`USERID` 401, both simulator providers leaking no secret, and the `USSD_ENABLED`-off boot                                                        | yes | `scripts/smoke.mjs` — 72 checks                                                                                   |
+| 11  | UI and repo gates pass                                                                                                                                                         | yes | Verification table; gate signature below                                                                          |
+
+Verdict: **ACCEPTED** by the parent on 2026-11-07. Acceptance uses the parent's own gate numbers.
+Merged as PR `#78` (`e532812`) with all checks green; slice B2 (`#79`) is the surface these seams
+were built for.
 
 ## Interpretations
 
