@@ -4,8 +4,10 @@
 
 **Date:** 2026-11-03
 
-**Status:** **Approved 2026-11-03.** Events/series V2 and offerings V3; implementation is gated by
-tickets 07–11 and 20–24. The Strategic Conference is the reference event.
+**Status:** **Approved 2026-11-03; ticket-23 amendment (23-Q1–23-Q10, R1–R8) accepted 2026-11-07**
+by the fallback reviewer seat (first-choice `0813` unavailable: weekly usage limit). Events/series V2
+and offerings V3; implementation is gated by tickets 07–11 and 20–24. The Strategic Conference is the
+reference event.
 
 |         |                                                                                       |
 | ------- | ------------------------------------------------------------------------------------- |
@@ -256,7 +258,7 @@ The mock at local `mockups/v2-events/05-offerings-landing.png` (git-ignored) is 
 its divergences are recorded in the ticket 23 grill table below. The landing makes one new totals
 request — `GET /v1/offerings/summary?from&to`, whose endpoint row moves from `proposed` to ticket 23
 (23-Q1, the named §17 pre-authorisation for that wire addition) — and reuses the existing events list
-(FR-29 stats and the USSD preview) and the existing pledges list (the worklist below).
+(for the USSD preview) and the existing pledges list (the worklist below).
 
 - **Window.** The default window is the current UTC calendar year to date; the operator adjusts it
   with the existing `DateWindowControl` (23-Q5).
@@ -271,29 +273,38 @@ request — `GET /v1/offerings/summary?from&to`, whose endpoint row moves from `
   currencies is excluded from the totals and recorded in this spec rather than converted (23-Q8;
   precedent: the member summary in `src/repos/members.ts`). The same rule filters the visitor block.
 - **Measures.** `totalPaidMinor` is paid member contributions in the window. `totalPledgedMinor` is
-  every pledge meeting the relevance predicate below that is not dishonored, with its status as of
-  window end read from `pledge_events.at` rather than the current status. `totalOutstandingMinor` is
-  the pending subset, so pledged = outstanding + honored by construction. `offeredCount` is dropped.
-  A pledge settled by a contribution counts once in paid (through the contribution) and once in
-  pledged (as the promise) (R2).
+  every pledge meeting the relevance predicate below that is not dishonored, with its status as at
+  the report date — `min(to, today)` — read from `pledge_events.at` rather than the current status,
+  with the boundary inclusive (`at < report date + 1 day`). `totalOutstandingMinor` is the stored
+  `pending` set as at the report date (pending plus overdue-derived items), so
+  `pledged = outstanding + honored` holds by construction. `offeredCount` is dropped. For a relevant
+  pledge settled by a contribution, the money counts once in paid (through the contribution) and once
+  in pledged (as the promise); a pledge outside the relevance predicate counts in paid only (R2, R7).
 - **Pledge relevance.** A pledge counts in the window when `expectedOn` falls inside it, or when it is
-  still `pending` as of window end with `expectedOn` before `from`. The predicate feeds the headline
-  cards and the by-member table; the pledge worklist below is not windowed (23-Q9, R3). Pledged and
-  outstanding are as of window end, paid is window-only.
+  still `pending` as at the report date with `expectedOn` before `from`. The predicate feeds the
+  headline cards and the by-member table; the pledge worklist below is not windowed (23-Q9, R3).
+  Pledged and outstanding are as at the report date, paid is window-only.
 - **By-member table.** The top 10 members by paid, tiebroken by member number. Columns are member
   number and name only (no contact values), paid, pledged, outstanding and last given (the member's
-  latest paid contribution `session_date` up to the window end). There is no Follow-up column, and the
-  mock's "Top 6 shown" caption differs from the decided top 10; both divergences are recorded in the
-  grill table (23-Q4).
+  latest paid contribution `session_date` inside the window — never null when paid > 0, matching the
+  `lastAttendedOn` precedent). There is no Follow-up column, and the mock's "Top 6 shown" caption
+  differs from the decided top 10; both divergences are recorded in the grill table (23-Q4, R6).
 - **Pledge worklist.** "Pledges and follow-up" reads `GET /v1/pledges` with no window filter, newest
   first, the returned rows rendered as-is (pending, overdue, honored and dishonored alike) and bounded
   by the route's limit; the caption states the worklist scope, not the window. Columns are member,
   offering, amount, expected date, officer, status and next reminder. The member, officer and offering
   names come from the new `memberName`/`officerName`/`offeringName` fields on the pledge list rows
   (R5, whose acceptance is the named §17 pre-authorisation for that addition). The card counts are
-  window-scoped and are not the worklist's row count (R3).
-- **By-event totals** come from the summary's `events[]` (23-Q2); the per-event offering stats
-  (FR-29) ride the existing events list, so the landing makes no further request for them.
+  window-scoped and are not the worklist's row count (R3). The card counts are as at the report date,
+  while the worklist's derived `overdue` badge is as at today, so the two can differ when `to` is
+  earlier than today.
+- **By-event totals** come from the summary's `events[]` (23-Q2); the landing reads only
+  `summary.members[]`, `summary.offerings[]` and `summary.events[]`, and reuses the events list solely
+  for the USSD preview (event and offering names, the current/next event). The events list and event
+  detail return FR-29 `stats` zeroed (`src/repos/events.ts`), the event detail's attached-offering rows
+  zero their money fields (`src/repos/offerings.ts`), and the offering detail has no `stats` field; the
+  landing must not render them. Real FR-29 stats on those screens are a backlog row, not this ticket
+  (R8).
 - **Terms dialog.** Renders `GET /v1/offerings/{id}/terms` client-side, including the gateway account
   and metadata the contract already returns; the browser holds no gateway secret.
 - **USSD preview.** Composed in the browser from the events list and the ticket 24d format helpers:
@@ -995,21 +1006,24 @@ grill above.
 Settled without a question and recorded in the phase-4 section above: the officer gate is the
 existing session connect gate (Q9), the route is `#/events/offerings` under Events, the terms dialog
 renders the terms payload client-side, the USSD preview is client-composed from the events list
-(≤5 + `0 More`), pledge reassignment reuses the existing route and `ReasonDialog`, and by-event stats
-ride the events list.
+(≤5 + `0 More`), pledge reassignment reuses the existing route and `ReasonDialog`, and the by-event
+totals come from the summary's `events[]` (R8).
 
 #### Follow-up decisions — settled 2026-11-07
 
 A second grill round answered the review's open forks; the owner accepted every recommendation
 ("all as recommended"). These refine, and do not reopen, the 23-Qn answers.
 
-| ID  | Decision                | Answer                                                                                                                                                                                                                                                                                                                       |
-| --- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | Visitor totals source   | The landing reads the summary's `visitors` block; `GET /v1/contributions/summary` remains the contributions surface's split. `visitors.count` counts paid visitor contribution rows in the window; `visitors.paidMinor` sums them in the reporting currency.                                                                 |
-| R2  | Summary total scope     | `totalPaidMinor`/`totalPledgedMinor`/`totalOutstandingMinor` are member-only and `offeredCount` is dropped. Pledged = relevance-predicate pledges, not dishonored, status as of window end from `pledge_events.at`; outstanding = the pending subset; a contribution-settled pledge counts once in paid and once in pledged. |
-| R3  | Pledge relevance scope  | The predicate covers the headline cards and the by-member table only; the pledge worklist is unwindowed (`GET /v1/pledges`, newest first, limit-bounded). `pending` (not yet due) and `overdue` are disjoint; the card caption reads pending + overdue.                                                                      |
-| R4  | Protected-document list | `documents/agents/component-first.md` joins the protected list in `orchestrator-policy.md`, matching `AGENTS.md` §10a, the record and the guard.                                                                                                                                                                             |
-| R5  | Pledge-row names        | `GET /v1/pledges` rows gain `memberName`, `officerName` and `offeringName`, resolved server-side with current names (same rule as `EventOffering.name`); this acceptance is the named §17 pre-authorisation for that wire addition.                                                                                          |
+| ID  | Decision                | Answer                                                                                                                                                                                                                                                                                                                            |
+| --- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Visitor totals source   | The landing reads the summary's `visitors` block; `GET /v1/contributions/summary` remains the contributions surface's split. `visitors.count` counts paid visitor contribution rows in the window; `visitors.paidMinor` sums them in the reporting currency.                                                                      |
+| R2  | Summary total scope     | `totalPaidMinor`/`totalPledgedMinor`/`totalOutstandingMinor` are member-only and `offeredCount` is dropped. Pledged = relevance-predicate pledges, not dishonored, status as at the report date from `pledge_events.at`; outstanding = the pending subset; a contribution-settled pledge counts once in paid and once in pledged. |
+| R3  | Pledge relevance scope  | The predicate covers the headline cards and the by-member table only; the pledge worklist is unwindowed (`GET /v1/pledges`, newest first, limit-bounded). `pending` (not yet overdue) and `overdue` are disjoint; the card caption reads pending + overdue.                                                                       |
+| R4  | Protected-document list | `documents/agents/component-first.md` joins the protected list in `orchestrator-policy.md`, matching `AGENTS.md` §10a, the record and the guard.                                                                                                                                                                                  |
+| R5  | Pledge-row names        | `GET /v1/pledges` rows gain `memberName`, `officerName` and `offeringName`, resolved server-side with current names (same rule as `EventOffering.name`); this acceptance is the named §17 pre-authorisation for that wire addition.                                                                                               |
+| R6  | Last-given scope        | The by-member "last given" is the member's latest paid contribution `session_date` **inside the window** (never null when paid > 0), matching the `lastAttendedOn` precedent.                                                                                                                                                     |
+| R7  | Outstanding vs counts   | `totalOutstandingMinor` is the stored `pending` set as at the report date (`min(to, today)`, inclusive event boundary); the cards split it into `pending` (not yet overdue, `expectedOn >= as-of`) and `overdue` (`< as-of`), so `pledged = outstanding + honored` holds and outstanding rows = pending + overdue.                |
+| R8  | FR-29 stats scope       | The landing reads only `summary.members[]`/`offerings[]`/`events[]`; the events list is reused only for the USSD preview. Real FR-29 stats on the events list, event detail and attached-offering rows (currently zeroed) are a backlog row, and the landing must not render them.                                                |
 
 A third exploration — materialising these totals in a summary table, a pub/sub projection and a NoSQL
 read model — was **parked for a later round** (owner, 2026-11-07) and is recorded in
@@ -1038,15 +1052,18 @@ read model — was **parked for a later round** (owner, 2026-11-07) and is recor
   by-member footer are member-only; the table is the top 10 by paid (tiebreak member number) with no
   Follow-up column; the largest paid currency is the reporting currency and others are excluded; a
   pledge is in-window when `expectedOn` falls inside it or it is still pending with `expectedOn`
-  before `from`, with pledged/outstanding as of window end and paid window-only. The mock's
+  before `from`, with pledged/outstanding as at the report date and paid window-only. The mock's
   `+ Add offering` button and the Reminders card are deferred to the backlog. A second round settled
   the follow-ups (R1–R5): visitors come from the summary's `visitors` block (the
   contributions-summary line is demoted), the `total*` measures are member-only with `offeredCount`
-  dropped and pledged/outstanding defined as of window end, the relevance predicate covers the cards
+  dropped and pledged/outstanding defined as at the report date, the relevance predicate covers the cards
   and the by-member table only (the pledge worklist is unwindowed), `component-first.md` joins the
   protected list, and the pledge list rows gain `memberName`/`officerName`/`offeringName` under the
   named §17 pre-authorisation. Materialising the totals in a summary table or a NoSQL read model was
-  parked for a later round; ticket 23 reads the source tables and adds no migration.
+  parked for a later round; ticket 23 reads the source tables and adds no migration. A third round
+  settled R6–R8: last-given is window-scoped, outstanding is the stored pending set as at the report
+  date with the cards splitting pending/overdue, and the landing reads only the summary arrays (the
+  zeroed FR-29 event/offering stats are backlogged).
 - 2026-11-05: pledge follow-up is the member's active shepherd or an active presbyter the administrator
   supplies with a reason (`422 officer_required` otherwise); the offering-level default officer is
   removed because no such field exists. `pledge` leaves `OfferingKind` — a pledge is a payment mode on
