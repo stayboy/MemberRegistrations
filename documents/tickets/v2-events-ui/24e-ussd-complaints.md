@@ -2,11 +2,12 @@
 
 **Tier:** 2
 
-**Status:** deferred (last V3 round, after 22-24d and 23)
+**Status:** deferred — parked by the owner on 2026-11-07 for a later round; not scheduled
 
 **What to build:** A member-only USSD complaints flow with four types, plus the admin queue that views
-and resolves them. Deferred by the owner until the basic V3 features are delivered; the shape below is
-the settled grill record, not yet authorised for build.
+and resolves them. The basic V3 features (22–24d and 23) are delivered; the owner parked this ticket
+for a later round rather than opening the last V3 round. The shape below is the settled grill record,
+still not authorised for build.
 
 - **Menu.** A top-level `Complaints` entry opens `1 Change of Profile`, `2 General Report`,
   `3 Activities` (event / event day) and `4 Offerings`. `8 My complaints` shows the member's last three
@@ -38,4 +39,5 @@ the settled grill record, not yet authorised for build.
 - **Gates.** The migration (expected 0017) and the wire-contract additions need their own explicit owner
   authorisation when this round starts; this deferred ticket does not pre-authorise them.
 
-**Blocked by:** 22, 24a, 24b, 24c, 24d and 23 (the basic V3 features).
+**Blocked by:** nothing outstanding — 22, 24a, 24b, 24c, 24d and 23 are delivered. The ticket waits on
+the owner scheduling a later round (and, at that point, naming the migration and wire-route gates).

@@ -713,7 +713,7 @@ remains a review artifact.
 - The mobile app and the richer mobile views (V5).
 - Self-service profile editing, contact changes or member-number creation from USSD.
 - Complaints (Change of Profile, General Report, Event / Event Day, Offering) and the admin complaint
-  queue — deferred to the last round after the basic V3 features (ticket 24e).
+  queue — parked for a later round by the owner (2026-11-07; ticket 24e).
 - Per-officer web authorization; the web app keeps the shared bearer, USSD derives the actor from the
   phone-matched presbyter.
 - Claim approval policy, payout rails and provider integrations (claims are recorded, not paid out).
@@ -736,8 +736,9 @@ remains a review artifact.
   claims, USSD flows). 24d — the **real** USSD section of the operator app (Codes, Registrations,
   Clocking, Headcount, Products, Claims, and Complaints once 24e lands) plus the dev-only
   simulator page and `/dev/ussd/session`, never a mock for acceptance. 24e — complaints and the admin
-  complaint queue, deferred to the last round after 24d and 23. 24a is the only ticket that must land
-  before the simulator can be exercised against the real API. The menu arrives incrementally: 24a ships
+  complaint queue, parked for a later round by the owner (2026-11-07), after 24d and 23 landed. 24a
+  is the only ticket that must land before the simulator can be exercised against the real API. The
+  menu arrives incrementally: 24a ships
   Offerings and Exit, 24b adds Register (anonymous), Activities, Attendance and My Profile, and 24c adds
   Welfare & Services; the anonymous and member menus above are the completed 24c shape.
 - **V5 candidates** (identified, not in the USSD app): a mobile app with the full event calendar,
@@ -750,6 +751,11 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-07: the owner parked ticket 24e (USSD complaints and the admin queue) for a later round
+  instead of opening it after 24d and 23. Nothing behavioural changes: the out-of-scope list and the
+  ticket split now say "parked" rather than "deferred to the last round". The ticket keeps its settled
+  shape; its expected migration (0017) and the wire routes still need explicit authorisation when a
+  round is scheduled.
 - 2026-11-06: 24d slice B1 implements the adapter layer. `POST /ussd/nalo` and
   `POST /ussd/session` are thin declarations over one shared session pipeline; the Nalo adapter
   authenticates on `USERID` alone, stores `SESSIONID` as `external_id` under provider `nalo`, assigns

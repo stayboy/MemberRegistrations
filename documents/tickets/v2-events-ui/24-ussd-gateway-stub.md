@@ -10,9 +10,10 @@ authorised migration.
 | 24b  | attendance, one-time codes, registration requests, clocking/delegation, expected headcounts, profile        | 0014      |
 | 24c  | welfare products, eligibility, card/verified, subscriptions, inherited cover, claims                        | 0015      |
 | 24d  | the USSD admin portal section and the dev-only simulator                                                    | none      |
-| 24e  | member complaints and the admin complaint queue (deferred, last V3 round)                                   | next free |
+| 24e  | member complaints and the admin complaint queue (parked for a later round, owner 2026-11-07)                | next free |
 
-Order: 24a → 24b → 24c → 24d → 23 → 24e. 24a is the only part that must land before the simulator can
-be exercised against the real API.
+Order: 24a → 24b → 24c → 24d → 23 (all delivered). 24e is parked for a later round by the owner
+(2026-11-07), so it is no longer in the current sequence. 24a is the only part that must land before
+the simulator can be exercised against the real API.
 
-**Status:** 22 complete; 24a ready-for-agent.
+**Status:** 22–24d and 23 complete (2026-11-07); 24e deferred — parked for a later round.
