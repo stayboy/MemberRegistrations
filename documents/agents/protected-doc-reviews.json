@@ -21,14 +21,14 @@
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "2e37380408f0cbde6de3fd0e230c19b557733ff65e74975d8c2d25965b0b1b52",
+      "sha256": "4da7aefa08ba471631570eca9647e714bedbf227a72cae852a966a1c67fe7520",
       "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
       "model": "mimo-v2.6-pro",
-      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the weekly usage limit (credit exhaustion) on every attempt this session; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro (probe SEAT-OK 2026-11-07) was used instead.",
-      "reason": "changes: the two fallback-model mentions switch from glm-5.3 to cline-pass/cline-pass/mimo-v2.6-pro, and the Protected documents list adds documents/agents/component-first.md so it matches AGENTS.md section 10a, the record's policy string and the guard. why: the owner switched the reviewer fallback on 2026-11-07, and the review found the policy list was the only place missing component-first.md. rejected: leaving the policy list out of sync; a model id inside the canonical skill.",
+      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the ollama weekly usage limit (credit exhaustion) on this attempt, 2026-11-08; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro was used instead.",
+      "reason": "changes: the Seats section becomes a ranked model list per seat — worker and grill-me: ollama-cloud/deepseek-v4.1-flash:1017 then cline-pass/cline-pass/deepseek-v4.1-flash-1017; reviewer / plan gate / spec review / acceptance: ollama-cloud/deepseek-v4-pro:0813 then cline-pass/cline-pass/mimo-v2.6-pro — with the ranked fallback standing-approved (owner, 2026-11-08), the AGENTS.md §10a 'no provider answers that build' condition, the reason recorded in the round doc (commit body at Tier 0), and parking only when the whole ranking is unavailable; it also states the reviewer is the pro seat or its ranked fallback. why: the owner directed that the model ranking used on 2026-11-07/08 be kept as a repo instruction instead of a per-round substitution after the ollama weekly limit forced the cline-pass seats repeatedly. rejected: leaving the fallback round-scoped; a third model; a fallback self-reviewing; the earlier looser 'the provider refuses it' condition.",
       "verdict": "ACCEPTED",
-      "attestation": "Confirmation round verified the one-line protected-list fix against AGENTS.md section 10a, the record and the guard, confirmed the earlier fallback rename still holds, and approved the text for hashing; it made no edits, ran no gates and committed nothing.",
-      "at": "2026-11-07"
+      "attestation": "Review round found P1 (the unavailability clause was broader than AGENTS.md §10a) and P2 (the absolute 'reviewer is 0813' sentence), plus two nits; the fix pass applied the §10a condition, the pro-seat wording, the Tier 0 record path and an explicit supersession note. The confirmation round verified all four against the exact on-disk text and approved it for hashing; it made no edits, ran no gates and committed nothing. One cosmetic nit ('catalogue' vs 'registry') is recorded and deliberately left unapplied so the hashed text stays intact.",
+      "at": "2026-11-08"
     },
     {
       "path": "documents/agents/component-first.md",
