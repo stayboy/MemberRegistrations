@@ -30,14 +30,24 @@ lands.
 
 ## Seats
 
-| Seat                                                        | Model                                   |
-| ----------------------------------------------------------- | --------------------------------------- |
-| Worker (Tier 2+ implementer)                                | `ollama-cloud/deepseek-v4.1-flash:1017` |
-| Reviewer / plan gate / spec review / acceptance (all tiers) | `ollama-cloud/deepseek-v4-pro:0813`     |
+Model ranking is a repo instruction: use the first available model in each seat's list, and record the
+unavailable first choice and the chosen fallback in the round doc (the commit body at Tier 0) when the
+fallback is used. The fallback is standing-approved for these seats (owner, 2026-11-08); it is not a
+renegotiation of the gate. This supersedes the earlier "a fallback needs the owner's recorded approval":
+the approval is now the ranking itself, scoped as below.
 
-The reviewer is `deepseek-v4-pro:0813` in every tier. The gate must not be the author, so at Tier 2+
-the flash worker implements and the pro session reviews; a pro session does not both implement and
-review. An unavailable gate **parks** the round; a fallback needs the owner's recorded approval.
+| Seat                                                        | Ranked models (first available wins)                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Worker (Tier 2+ implementer)                                | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
+| Reviewer / plan gate / spec review / acceptance (all tiers) | 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `cline-pass/cline-pass/mimo-v2.6-pro`                |
+| Grill-me (go-forward round)                                 | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
+
+The reviewer is the pro seat — `deepseek-v4-pro:0813`, or its ranked fallback — in every tier. The gate
+must not be the author, so at Tier 2+ the flash worker implements and the pro session reviews; a pro
+session does not both implement and review. A seat is unavailable only when no provider answers its
+first model/build (credit exhaustion, HTTP 429 and timeouts count; a catalogue listing does not); the
+next model in the ranking is then admissible with the reason recorded. When the whole ranking is
+unavailable, the round **parks**; never self-review or invent a third model.
 
 `deepseek-v4-pro:0813` dispatches only with the output-limit override in
 `~/.config/opencode/opencode.json` (`limit.output = 65536`); the skill's `references/models.md` records
