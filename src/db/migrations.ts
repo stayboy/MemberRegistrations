@@ -997,4 +997,45 @@ create index event_session_headcounts_session
 drop table event_session_expected;
 `,
   },
+  {
+    version: '0017_offering_counts',
+    sql: `
+-- The operator's bulk cash count, per event + offering + session: an
+-- append-only observation whose lines are denomination x pieces. A correction
+-- is a new row whose supersedes_id names the current observation; the corrected
+-- row is never deleted or rewritten. A session date in the event's sessions, an
+-- attached offering and a positive total are validated in the repository
+-- because the database cannot join those rows in a check.
+create table event_session_offering_counts (
+  id uuid primary key default gen_random_uuid(),
+  event_instance_id uuid not null references event_instances(id),
+  offering_id uuid not null references offerings(id),
+  session_date date not null,
+  currency text not null,
+  terms_version integer not null,
+  as_of timestamptz not null,
+  recorded_by text not null,
+  recorded_at timestamptz not null default now(),
+  supersedes_id uuid references event_session_offering_counts(id)
+);
+create unique index event_session_offering_counts_supersedes
+  on event_session_offering_counts (supersedes_id)
+  where supersedes_id is not null;
+create index event_session_offering_counts_group
+  on event_session_offering_counts (event_instance_id, offering_id, session_date);
+
+-- One line per denomination within a count; denomination values are minor
+-- units and a piece count is a positive whole number.
+create table event_session_offering_count_lines (
+  count_id uuid not null references event_session_offering_counts(id) on delete cascade,
+  denomination_minor bigint not null
+    constraint event_session_offering_count_lines_denomination_positive
+    check (denomination_minor > 0),
+  pieces integer not null
+    constraint event_session_offering_count_lines_pieces_positive
+    check (pieces > 0),
+  primary key (count_id, denomination_minor)
+);
+`,
+  },
 ];

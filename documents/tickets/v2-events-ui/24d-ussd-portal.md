@@ -11,7 +11,7 @@ sequential slices: **A** migration 0016, headcount/activities/presbyter-only sem
 screens; **B** the operator pages and the simulator.
 
 **Blocked by:** 24a, 24b, 24c. Migration **0016** (`ussd_sessions.external_id`, text, partial unique
-when present) is authorised by name for this round (owner, 2026-11-05); 24e's expected migration is now 0017. Uses the existing shell, session and officer gate. The Nalo adapter follows the published provider
+when present) is authorised by name for this round (owner, 2026-11-05); 24e's expected migration is now 0018. Uses the existing shell, session and officer gate. The Nalo adapter follows the published provider
 protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
 
 **Status:** ready-for-agent
@@ -61,7 +61,7 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
       uuid, so the gateway id is the session identity. The same migration adds `event_session_headcounts`
       (append-only observations, mode/buckets/`asOf`/`supersedesId`), `presbyter_only` on
       `event_instances` and `event_series`, and drops `event_session_expected` from 0014. Authorised by
-      name for this round (owner, 2026-11-05); 24e's expected migration is 0017.
+      name for this round (owner, 2026-11-05); 24e's expected migration is 0018.
 - [ ] (addition) The headcount seam replaces the expected seam: the pair
       `GET`/`POST /v1/events/{eventId}/headcounts?sessionDate` (current + observations, `no-store`), mode/bucket
       validation, an `asOf` within the session day, and a `supersedesId` from the same session.
@@ -402,7 +402,7 @@ validation_error`; an unknown event or session is `404 not_found`.
 - **Independence and visibility.** Headcounts never derive from or feed per-member attendance or
   regularity, and they are operator-only — no member DTO, profile or summary returns them.
 - **Round placement.** All of this lands in 24d slice A (data/semantics/API/USSD) and slice B (operator
-  pages/simulator), extending migration 0016; 24c is unaffected and 24e stays at 0017.
+  pages/simulator), extending migration 0016; 24c is unaffected and 24e stays at 0018.
 
 ### Testing Decisions
 
@@ -429,7 +429,7 @@ validation_error`; an unknown event or session is `404 not_found`.
 
 ### Out of Scope
 
-- Welfare products and claims (24c), and complaints (24e, migration 0017) — unchanged.
+- Welfare products and claims (24c), and complaints (24e, migration 0018) — unchanged.
 - Deleting any headcount observation; correction is supersession, never a hard delete, by design.
 - Per-officer web authorization and a separate headcount permission — a presbyter or admin records, and
   no senior/delegate rule applies.

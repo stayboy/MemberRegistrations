@@ -172,6 +172,12 @@ export const SECTIONS: readonly NavSection[] = [
         description: 'Record and correct the counted attendance for a session.',
       },
       {
+        label: 'Offerings count',
+        path: '/ussd/offerings',
+        icon: MoneyRegular,
+        description: 'Record and correct the counted offering cash for a session.',
+      },
+      {
         label: 'Activities',
         path: '/ussd/activities',
         icon: CalendarLtrRegular,

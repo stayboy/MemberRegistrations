@@ -11,13 +11,60 @@ import {
   MessageBarTitle,
   Spinner,
   Text,
+  makeStyles,
+  shorthands,
+  tokens,
 } from '@fluentui/react-components';
-import { formatMoneyMinor } from '../../format/welfare';
+import { formatMoneyMinor } from '../format/welfare';
 import { useQuery } from '@tanstack/react-query';
-import { listOfferingTerms } from '../../api/offerings';
-import { useSession } from '../../auth/SessionProvider';
-import { useDateTimeFormat } from '../../shell/DateTimeProvider';
-import { useOfferingsStyles } from './offerings-styles';
+import { listOfferingTerms } from '../api/offerings';
+import { useSession } from '../auth/SessionProvider';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
+
+/**
+ * The dialog owns its presentation; it is shown by both the offerings landing
+ * and the USSD offerings count page, so it lives in the shared component set.
+ */
+const useStyles = makeStyles({
+  dialogSurface: {
+    maxWidth: '820px',
+  },
+  state: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: tokens.spacingVerticalXXL,
+    ...shorthands.border('1px', 'dashed', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  panelTitle: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  muted: {
+    color: tokens.colorNeutralForeground3,
+  },
+  termsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: tokens.spacingVerticalM,
+    margin: 0,
+  },
+  termsRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    minWidth: 0,
+  },
+  termsLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+});
 
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
@@ -40,7 +87,7 @@ export function TermsDialog({
   offering: { readonly offeringId: string; readonly name: string } | null;
   onClose: () => void;
 }) {
-  const styles = useOfferingsStyles();
+  const styles = useStyles();
   const { formatDate, formatInstant } = useDateTimeFormat();
   const { baseUrl, session } = useSession();
   const token = session?.token ?? '';

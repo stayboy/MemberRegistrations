@@ -227,6 +227,75 @@ select ch.currency,
 `;
 
 /**
+ * The landing's counted-cash half (phase 5). For each (event, offering, session)
+ * group it keeps only the current observation — the newest non-superseded row by
+ * `as_of`, `recorded_at` — so superseded history is never added. Counts in
+ * another currency are excluded, matching 23-Q8. One statement, windowed by
+ * `session_date`.
+ */
+export const OFFERING_SUMMARY_COUNTS_SQL = `
+with bounds as (
+  select $1::date as from_date, $2::date as to_date
+),
+current_counts as (
+  select distinct on (c.event_instance_id, c.offering_id, c.session_date)
+         c.id, c.event_instance_id, c.offering_id
+    from event_session_offering_counts c, bounds b
+   where c.currency = $3
+     and c.session_date between b.from_date and b.to_date
+     and not exists (
+       select 1 from event_session_offering_counts s where s.supersedes_id = c.id
+     )
+   order by c.event_instance_id, c.offering_id, c.session_date,
+            c.as_of desc, c.recorded_at desc, c.id desc
+),
+counted as (
+  select c.event_instance_id, c.offering_id,
+         sum(l.denomination_minor * l.pieces)::bigint as amount
+    from current_counts c
+    join event_session_offering_count_lines l on l.count_id = c.id
+   group by c.event_instance_id, c.offering_id
+),
+offering_totals as (
+  select d.offering_id,
+         coalesce(nullif(btrim(t.name), ''), t.purpose) as name,
+         sum(d.amount)::bigint as amount
+    from counted d
+    join lateral (
+      select name, purpose
+        from offering_terms t
+       where t.offering_id = d.offering_id
+       order by t.version desc
+       limit 1
+    ) t on true
+   group by d.offering_id, t.name, t.purpose
+),
+event_totals as (
+  select d.event_instance_id as event_id, e.name, sum(d.amount)::bigint as amount
+    from counted d
+    join event_instances e on e.id = d.event_instance_id
+   group by d.event_instance_id, e.name
+)
+select coalesce((select sum(amount) from counted), 0)::bigint as total_counted,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'offeringId', ot.offering_id,
+                  'name', ot.name,
+                  'countedMinor', ot.amount
+                ) order by ot.amount desc, lower(ot.name) asc, ot.offering_id asc)
+           from offering_totals ot
+       ), '[]'::jsonb) as offerings,
+       coalesce((
+         select jsonb_agg(jsonb_build_object(
+                  'eventId', et.event_id,
+                  'name', et.name,
+                  'countedMinor', et.amount
+                ) order by et.amount desc, lower(et.name) asc, et.event_id asc)
+           from event_totals et
+       ), '[]'::jsonb) as events
+`;
+
+/**
  * The landing's pledge half. A pledge is in scope when `expectedOn` is in the
  * window, or it is still pending as at the report date (min(to, today)) with an
  * `expectedOn` before `from` (23-Q9, R3). Its status is read from
@@ -409,6 +478,12 @@ type SummaryPledgeRow = {
   events: unknown;
 };
 
+type SummaryCountRow = {
+  total_counted: number | string;
+  offerings: unknown;
+  events: unknown;
+};
+
 type SummaryMemberJson = {
   memberNo: string;
   name: string;
@@ -430,6 +505,13 @@ type SummaryPledgedGroupJson = {
   name?: string;
   pledgedMinor: number | string;
   outstandingMinor: number | string;
+};
+
+type SummaryCountedGroupJson = {
+  offeringId?: string;
+  eventId?: string;
+  name: string;
+  countedMinor: number | string;
 };
 
 function isoDate(value: unknown): string | null {
@@ -744,11 +826,12 @@ export class OfferingRepository {
   }
 
   /**
-   * Church landing totals (ticket 23). Two batched statements — contributions,
-   * then the as-at pledge measures — with no per-row read (NFR-1, NFR-5).
-   * `currency` is the largest paid currency in the window (tie broken by code)
-   * and every other currency is excluded from all totals (23-Q8, R2). The
-   * report date is `min(to, today)` (R2/R7).
+   * Church landing totals (ticket 23, phase 5). Three batched statements —
+   * contributions, counted cash, then the as-at pledge measures — with no
+   * per-row read (NFR-1, NFR-5). `currency` is the largest paid currency in the
+   * window (tie broken by code) and every other currency is excluded from all
+   * totals (23-Q8, R2). The report date is `min(to, today)` (R2/R7). Counted
+   * cash is reported beside the gifts and never added to them.
    */
   async summary(
     from: string,
@@ -760,6 +843,11 @@ export class OfferingRepository {
       [from, to],
     );
     const currency = contributions?.currency ?? 'GHS';
+    const [counts] = await this.db.query<SummaryCountRow>(OFFERING_SUMMARY_COUNTS_SQL, [
+      from,
+      to,
+      currency,
+    ]);
     const [pledges] = await this.db.query<SummaryPledgeRow>(OFFERING_SUMMARY_PLEDGES_SQL, [
       from,
       to,
@@ -793,6 +881,7 @@ export class OfferingRepository {
         paidMinor: Number(row.paidMinor),
         pledgedMinor: 0,
         outstandingMinor: 0,
+        countedMinor: 0,
       });
     }
     for (const row of parseJsonArray(pledges?.offerings) as SummaryPledgedGroupJson[]) {
@@ -809,6 +898,23 @@ export class OfferingRepository {
         paidMinor: 0,
         pledgedMinor: Number(row.pledgedMinor),
         outstandingMinor: Number(row.outstandingMinor),
+        countedMinor: 0,
+      });
+    }
+    for (const row of parseJsonArray(counts?.offerings) as SummaryCountedGroupJson[]) {
+      if (!row.offeringId) continue;
+      const existing = offerings.get(row.offeringId);
+      if (existing) {
+        existing.countedMinor = Number(row.countedMinor);
+        continue;
+      }
+      offerings.set(row.offeringId, {
+        offeringId: row.offeringId,
+        name: row.name,
+        paidMinor: 0,
+        pledgedMinor: 0,
+        outstandingMinor: 0,
+        countedMinor: Number(row.countedMinor),
       });
     }
 
@@ -821,6 +927,7 @@ export class OfferingRepository {
         paidMinor: Number(row.paidMinor),
         pledgedMinor: 0,
         outstandingMinor: 0,
+        countedMinor: 0,
       });
     }
     for (const row of parseJsonArray(pledges?.events) as SummaryPledgedGroupJson[]) {
@@ -837,19 +944,40 @@ export class OfferingRepository {
         paidMinor: 0,
         pledgedMinor: Number(row.pledgedMinor),
         outstandingMinor: Number(row.outstandingMinor),
+        countedMinor: 0,
+      });
+    }
+    for (const row of parseJsonArray(counts?.events) as SummaryCountedGroupJson[]) {
+      if (!row.eventId) continue;
+      const existing = events.get(row.eventId);
+      if (existing) {
+        existing.countedMinor = Number(row.countedMinor);
+        continue;
+      }
+      events.set(row.eventId, {
+        eventId: row.eventId,
+        name: row.name,
+        paidMinor: 0,
+        pledgedMinor: 0,
+        outstandingMinor: 0,
+        countedMinor: Number(row.countedMinor),
       });
     }
 
     const groupSort = (
-      left: { name: string; paidMinor: number; pledgedMinor: number },
-      right: { name: string; paidMinor: number; pledgedMinor: number },
+      left: { name: string; paidMinor: number; pledgedMinor: number; countedMinor: number },
+      right: { name: string; paidMinor: number; pledgedMinor: number; countedMinor: number },
       leftId: string,
       rightId: string,
     ): number =>
       right.paidMinor - left.paidMinor ||
       right.pledgedMinor - left.pledgedMinor ||
+      right.countedMinor - left.countedMinor ||
       left.name.localeCompare(right.name) ||
       leftId.localeCompare(rightId);
+
+    const countedMinor = Number(counts?.total_counted ?? 0);
+    const visitorPaidMinor = Number(contributions?.visitor_paid ?? 0);
 
     return {
       from,
@@ -858,9 +986,11 @@ export class OfferingRepository {
       totalPaidMinor: Number(contributions?.total_paid ?? 0),
       totalPledgedMinor: Number(pledges?.total_pledged ?? 0),
       totalOutstandingMinor: Number(pledges?.total_outstanding ?? 0),
+      countedMinor,
+      varianceMinor: countedMinor - (Number(contributions?.total_paid ?? 0) + visitorPaidMinor),
       visitors: {
         count: Number(contributions?.visitor_count ?? 0),
-        paidMinor: Number(contributions?.visitor_paid ?? 0),
+        paidMinor: visitorPaidMinor,
       },
       members,
       offerings: [...offerings.values()].sort((left, right) =>

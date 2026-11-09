@@ -5,6 +5,8 @@ import { migrate } from '../../src/db/migrate.js';
 import {
   eventSeries,
   eventSessionHeadcounts,
+  eventSessionOfferingCountLines,
+  eventSessionOfferingCounts,
   members,
   ministries,
   seriesExceptions,
@@ -27,6 +29,12 @@ interface IndexShape {
   name: string;
   unique: boolean;
   columns: string[];
+}
+
+interface ForeignKeyShape {
+  column: string;
+  foreignTable: string;
+  foreignColumn: string;
 }
 
 function schemaColumns(table: PgTable): ColumnShape[] {
@@ -77,6 +85,64 @@ function sortByName<T extends { name: string }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function schemaForeignKeys(table: PgTable): ForeignKeyShape[] {
+  return getTableConfig(table)
+    .foreignKeys.flatMap((foreignKey) => {
+      const reference = foreignKey.reference();
+      const foreignTable = getTableConfig(reference.foreignTable).name;
+      return reference.columns.map((column, index) => ({
+        column: column.name,
+        foreignTable,
+        foreignColumn: reference.foreignColumns[index]!.name,
+      }));
+    })
+    .sort((left, right) => left.column.localeCompare(right.column));
+}
+
+async function dbForeignKeys(db: Db, tableName: string): Promise<ForeignKeyShape[]> {
+  const rows = await db.query<{
+    column_name: string;
+    foreign_table: string;
+    foreign_column: string;
+  }>(
+    `select kcu.column_name, ccu.table_name as foreign_table, ccu.column_name as foreign_column
+       from information_schema.table_constraints tc
+       join information_schema.key_column_usage kcu
+         on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
+       join information_schema.constraint_column_usage ccu
+         on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema
+      where tc.constraint_type = 'FOREIGN KEY'
+        and tc.table_schema = 'public'
+        and tc.table_name = $1
+      order by kcu.column_name`,
+    [tableName],
+  );
+  return rows.map((row) => ({
+    column: row.column_name,
+    foreignTable: row.foreign_table,
+    foreignColumn: row.foreign_column,
+  }));
+}
+
+function schemaCheckNames(table: PgTable): string[] {
+  return getTableConfig(table)
+    .checks.map((constraint) => constraint.name)
+    .sort();
+}
+
+async function dbCheckNames(db: Db, tableName: string): Promise<string[]> {
+  const rows = await db.query<{ conname: string }>(
+    `select c.conname
+       from pg_constraint c
+       join pg_class t on t.oid = c.conrelid
+       join pg_namespace n on n.oid = t.relnamespace
+      where c.contype = 'c' and n.nspname = 'public' and t.relname = $1
+      order by c.conname`,
+    [tableName],
+  );
+  return rows.map((row) => row.conname);
+}
+
 function assertMatches(actual: ColumnShape[], expected: ColumnShape[], tableName: string): void {
   if (JSON.stringify(sortByName(actual)) !== JSON.stringify(sortByName(expected))) {
     throw new Error(
@@ -110,6 +176,8 @@ describe('ORM schema drift', () => {
     ['subscription_coverage', subscriptionCoverage],
     ['ussd_sessions', ussdSessions],
     ['event_session_headcounts', eventSessionHeadcounts],
+    ['event_session_offering_counts', eventSessionOfferingCounts],
+    ['event_session_offering_count_lines', eventSessionOfferingCountLines],
   ];
 
   it('matches the committed SQL migrations', async () => {
@@ -131,6 +199,27 @@ describe('ORM schema drift', () => {
     expect(sortByName(await dbIndexes(db, 'ussd_sessions'))).toEqual(
       sortByName(schemaIndexes(ussdSessions)),
     );
+  });
+
+  it('matches the offering-count indexes', async () => {
+    expect(sortByName(await dbIndexes(db, 'event_session_offering_counts'))).toEqual(
+      sortByName(schemaIndexes(eventSessionOfferingCounts)),
+    );
+    // The line table's only index is its composite primary key; the drift
+    // helper excludes primary keys, so both sides are empty.
+    expect(sortByName(await dbIndexes(db, 'event_session_offering_count_lines'))).toEqual(
+      sortByName(schemaIndexes(eventSessionOfferingCountLines)),
+    );
+  });
+
+  it('matches the offering-count foreign keys and checks', async () => {
+    for (const [name, table] of [
+      ['event_session_offering_counts', eventSessionOfferingCounts],
+      ['event_session_offering_count_lines', eventSessionOfferingCountLines],
+    ] as Array<[string, PgTable]>) {
+      expect(await dbForeignKeys(db, name)).toEqual(schemaForeignKeys(table));
+      expect(await dbCheckNames(db, name)).toEqual(schemaCheckNames(table));
+    }
   });
 
   it('fails on a deliberate column mismatch', async () => {

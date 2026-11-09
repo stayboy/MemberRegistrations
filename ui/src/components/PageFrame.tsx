@@ -83,6 +83,7 @@ export function PageFrame({
   submenu,
   description,
   actions,
+  hideBadge = false,
   children,
 }: {
   sectionId: SectionId;
@@ -90,6 +91,8 @@ export function PageFrame({
   submenu?: string;
   description?: string;
   actions?: ReactNode;
+  /** The landing drops the API-connected pill; the operator pages keep it. */
+  hideBadge?: boolean;
   children?: ReactNode;
 }) {
   const styles = useStyles();
@@ -112,7 +115,7 @@ export function PageFrame({
           </nav>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{title}</h1>
-            <ConnectionBadge />
+            {hideBadge ? null : <ConnectionBadge />}
           </div>
           {description ? <p className={styles.description}>{description}</p> : null}
         </div>

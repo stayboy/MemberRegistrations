@@ -162,6 +162,8 @@ export const offeringSummaryGroupSchema = z.object({
   paidMinor: z.number().int(),
   pledgedMinor: z.number().int(),
   outstandingMinor: z.number().int(),
+  /** Counted cash from the current observation per group in the window (phase 5). */
+  countedMinor: z.number().int(),
 });
 
 export const offeringSummaryEventSchema = z.object({
@@ -170,6 +172,8 @@ export const offeringSummaryEventSchema = z.object({
   paidMinor: z.number().int(),
   pledgedMinor: z.number().int(),
   outstandingMinor: z.number().int(),
+  /** Counted cash from the current observation per group in the window (phase 5). */
+  countedMinor: z.number().int(),
 });
 
 export const offeringSummaryPledgeCountsSchema = z.object({
@@ -199,6 +203,16 @@ export const churchOfferingSummarySchema = z.object({
   totalPaidMinor: z.number().int(),
   totalPledgedMinor: z.number().int(),
   totalOutstandingMinor: z.number().int(),
+  /** Counted cash in the window (phase 5), reporting currency only. */
+  countedMinor: z
+    .number()
+    .int()
+    .describe('Current counted cash observations in the window, reporting currency only.'),
+  /** `countedMinor − (totalPaidMinor + visitors.paidMinor)`; never added to the gifts. */
+  varianceMinor: z
+    .number()
+    .int()
+    .describe('countedMinor minus all recorded gifts; a reconciliation indicator, never a total.'),
   visitors: z.object({
     count: z.number().int(),
     paidMinor: z.number().int(),

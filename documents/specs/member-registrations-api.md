@@ -14,6 +14,9 @@
 
 ## Change log
 
+- 2026-11-08: the MVP adds the offering-count route (`GET`/`POST /v1/events/{eventId}/offering-counts`)
+  and renumbers 24e's expected migration to `0018` after `0017_offering_counts`. The count tables are
+  specified in `member-registrations-events-offerings.md` (phase 5); this spec carries the route row.
 - 2026-11-06: 24d slice B1 implements both provider adapters over `POST /ussd/session`, with Nalo at
   `POST /ussd/nalo` (the route table already carried the row). `ussd_disabled` is recorded with its
   `503` status in the canonical error list. The dev-only `POST /dev/ussd/session` is not part of the
@@ -45,7 +48,7 @@
   register-derived `expected` keeps its wire name and is labelled **Roster**. `GET`/`POST
 /v1/events/{eventId}/headcounts` replace `GET`/`PUT …/expected` (the old route is removed in 24d).
   `presbyterOnly` is added to events and series, and a presbyter-only session's roster is the active
-  presbyters. Everything lands in 24d, extending migration 0016; 24c is unaffected and 24e stays 0017.
+  presbyters. Everything lands in 24d, extending migration 0016; 24c is unaffected and 24e stays at 0018.
 - 2026-11-05: 24b adds the attendance/code/registration/clocking/expected/profile seams listed in
   **USSD attendance, codes and clocking (24b)**, and `presbyterRank` on `MemberDetail` (positive
   integer, valid only with `isPresbyter`, cleared with the flag).
@@ -1049,6 +1052,7 @@ export interface Event {
 | `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                              | ticket 22  |
 | `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`                | ticket 24a |
 | `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                          |
+| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`, MVP)  |
 | `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec       | ticket 24a |
 | `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry (`USERID` auth, not bearer); see the USSD spec | ticket 24d |
 | `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway; refuses in production              | ticket 24d |
@@ -1248,7 +1252,8 @@ The 24b and 24c tables (`attendance_codes`, `registration_requests`, `clocking_d
 `members.presbyter_rank`, `membership_card_no` and `verified_at` columns are defined in the USSD spec
 and migrations 0014/0015. The 24d correction adds `event_session_headcounts`, `presbyter_only` on
 `event_instances` and `event_series`, and `ussd_sessions.external_id` in migration 0016, defined in the
-USSD spec.
+USSD spec. The MVP's `event_session_offering_counts` and `event_session_offering_count_lines` arrive in
+migration `0017` and are defined in `member-registrations-events-offerings.md` (phase 5).
 
 ## Acceptance Criteria
 

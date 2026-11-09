@@ -2,10 +2,13 @@ import { Text } from '@fluentui/react-components';
 import type { UssdPreview as UssdPreviewData } from '../../format/offerings';
 import { useOfferingsStyles } from './offerings-styles';
 
+const SHORTCODE = '*714*88#';
+
 /**
- * The USSD preview composed in the browser from the events list (R8): the
- * current or next session, at most five offering rows and `0 More`. It is a
- * preview only; no USSD session is opened.
+ * The one-line dashboard USSD preview composed from the events list (R8): the
+ * current or next session, at most five offering rows plus `0 More`, and a
+ * pinned preview-only caption. It opens no USSD session and carries no handset
+ * chrome.
  */
 export function UssdPreview({
   preview,
@@ -15,26 +18,28 @@ export function UssdPreview({
   formatDate: (value: string | null | undefined) => string;
 }) {
   const styles = useOfferingsStyles();
+  const menu = preview
+    ? preview.lines.filter((line) => !line.startsWith('Choose')).join(' · ')
+    : null;
 
   return (
     <section className={styles.panel} aria-label="USSD preview">
-      <div className={styles.panelHeader}>
-        <h2 className={styles.panelTitle}>USSD preview</h2>
-        <Text size={200} className={styles.muted}>
-          Reference menu · five offerings and 0 More
-        </Text>
-      </div>
-      <div className={styles.ussd}>
-        {preview ? (
-          <>
-            <Text size={200} className={styles.muted}>
-              {preview.eventName} · {formatDate(preview.sessionDate)}
-            </Text>
-            <pre className={styles.ussdScreen}>{preview.lines.join('\n')}</pre>
-          </>
-        ) : (
-          <Text className={styles.muted}>No upcoming event to preview.</Text>
-        )}
+      <div className={styles.ussdStripBody}>
+        <div className={styles.ussdScroll}>
+          <Text className={styles.ussdEyebrow}>USSD · upcoming</Text>
+          <Text className={styles.ussdCode}>{SHORTCODE}</Text>
+          {preview ? (
+            <>
+              <Text>
+                {preview.eventName} · {formatDate(preview.sessionDate)}
+              </Text>
+              <Text className={styles.ussdMenu}>{menu}</Text>
+            </>
+          ) : (
+            <Text className={styles.muted}>No upcoming event to preview.</Text>
+          )}
+        </div>
+        <Text className={styles.ussdCaption}>Preview only; no USSD session is opened.</Text>
       </div>
     </section>
   );

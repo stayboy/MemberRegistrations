@@ -1,11 +1,9 @@
 import {
   Button,
-  Field,
-  Input,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
-  Text,
+  Spinner,
 } from '@fluentui/react-components';
 import { ArrowClockwiseRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,17 +24,18 @@ import { ReasonDialog } from '../../components/ReasonDialog';
 import type { DateWindow } from '../../format/date-window';
 import { shiftUtcDate } from '../../format/date-window';
 import {
+  lastNDaysWindow,
+  monthToDateWindow,
   ussdPreviewFromEvents,
-  worklistScopeLabel,
   yearToDateWindow,
 } from '../../format/offerings';
 import { useDateTimeFormat } from '../../shell/DateTimeProvider';
-import { GroupTotalsTable } from './GroupTotalsTable';
-import { MemberTotalsTable } from './MemberTotalsTable';
-import { OfferingsError, OfferingsLoading } from './OfferingsState';
+import { BreakdownPanel } from './BreakdownPanel';
+import { OfferingsError } from './OfferingsState';
+import { OfferingsSkeleton } from './OfferingsSkeleton';
 import { PledgeWorklist } from './PledgeWorklist';
 import { SummaryCards } from './SummaryCards';
-import { TermsDialog } from './TermsDialog';
+import { TermsDialog } from '../../components/TermsDialog';
 import { UssdPreview } from './UssdPreview';
 import { useOfferingsStyles } from './offerings-styles';
 
@@ -44,17 +43,19 @@ const WORKLIST_LIMIT = 50;
 /** The USSD preview looks one month ahead from today (UTC), independently of the window. */
 const PREVIEW_DAYS = 30;
 
+type QuickRange = 'year' | '90' | 'month' | 'custom';
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return 'Check the API connection and try again.';
 }
 
 /**
- * Events → Offerings (ticket 23, FR-30/FR-40). The landing reads one summary
- * request for the member/offering/event totals, the existing pledge list for
- * the unwindowed worklist and the events list only for the USSD preview. It
- * never renders the zeroed FR-29 event/offering stats (R8) and never reads a
- * contact value.
+ * Events → Offerings (ticket 23, FR-30/FR-40). The dashboard landing reads one
+ * summary request for the four KPI tiles and the tabbed breakdown, the existing
+ * pledge list for the unwindowed worklist and the events list only for the
+ * one-line USSD preview. It never renders the zeroed FR-29 event/offering stats
+ * (R8) and never reads a contact value.
  */
 export function OfferingsPage() {
   const styles = useOfferingsStyles();
@@ -63,17 +64,18 @@ export function OfferingsPage() {
   const token = session?.token ?? '';
   const queryClient = useQueryClient();
 
-  // The default is 1 January of the current UTC year to today (23-Q5).
   const [window, setWindow] = useState<DateWindow>(() => yearToDateWindow());
+  const [quickRange, setQuickRange] = useState<QuickRange>('year');
   const previewWindow = useMemo(() => {
     const from = yearToDateWindow().to;
     return { from, to: shiftUtcDate(from, PREVIEW_DAYS) ?? from };
   }, []);
 
   const [termsTarget, setTermsTarget] = useState<OfferingSummaryGroup | null>(null);
-  const [reassignTarget, setReassignTarget] = useState<PledgeItem | null>(null);
-  const [officerMemberNo, setOfficerMemberNo] = useState('');
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<{
+    readonly pledge: PledgeItem;
+    readonly officerMemberNo: string;
+  } | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ['offerings', baseUrl, 'summary', window.from, window.to],
@@ -129,14 +131,9 @@ export function OfferingsPage() {
     [eventsQuery.data, previewWindow.from],
   );
 
-  function startReassign(pledge: PledgeItem): void {
-    setActionError(null);
-    reassignMutation.reset();
-    if (!officerMemberNo.trim()) {
-      setActionError('Enter the new follow-up officer member number before reassigning a pledge.');
-      return;
-    }
-    setReassignTarget(pledge);
+  function applyWindow(next: DateWindow, range: QuickRange): void {
+    setWindow(next);
+    setQuickRange(range);
   }
 
   return (
@@ -144,50 +141,60 @@ export function OfferingsPage() {
       sectionId="events"
       title="Offerings"
       submenu="Offerings"
-      description="Church giving totals by member, offering and event for the selected window, with the pledge follow-up worklist. Visitor gifts are shown separately and no contact values are shown."
+      hideBadge
       actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
-            void summaryQuery.refetch();
-            void pledgesQuery.refetch();
-            void eventsQuery.refetch();
-          }}
-          disabled={summaryQuery.isFetching || pledgesQuery.isFetching}
-        >
-          Refresh
-        </Button>
+        <div className={styles.headerActions}>
+          <div className={styles.quickRanges} role="group" aria-label="Quick ranges">
+            <Button
+              size="small"
+              appearance={quickRange === 'year' ? 'secondary' : 'transparent'}
+              onClick={() => applyWindow(yearToDateWindow(), 'year')}
+            >
+              This year
+            </Button>
+            <Button
+              size="small"
+              appearance={quickRange === '90' ? 'secondary' : 'transparent'}
+              onClick={() => applyWindow(lastNDaysWindow(90), '90')}
+            >
+              90 days
+            </Button>
+            <Button
+              size="small"
+              appearance={quickRange === 'month' ? 'secondary' : 'transparent'}
+              onClick={() => applyWindow(monthToDateWindow(), 'month')}
+            >
+              This month
+            </Button>
+            <Button
+              size="small"
+              appearance={quickRange === 'custom' ? 'secondary' : 'transparent'}
+              onClick={() => setQuickRange('custom')}
+            >
+              Custom
+            </Button>
+          </div>
+          <DateWindowControl
+            value={window}
+            onChange={(next) => applyWindow(next, 'custom')}
+            label="Offerings date window"
+            hint=""
+          />
+          <Button
+            icon={<ArrowClockwiseRegular />}
+            onClick={() => {
+              void summaryQuery.refetch();
+              void pledgesQuery.refetch();
+              void eventsQuery.refetch();
+            }}
+            disabled={summaryQuery.isFetching || pledgesQuery.isFetching}
+          >
+            Refresh
+          </Button>
+        </div>
       }
     >
       <div className={styles.page}>
-        <div className={styles.toolbar}>
-          <DateWindowControl
-            value={window}
-            onChange={setWindow}
-            label="Offerings date window"
-            hint="UTC dates · the member money cards and totals use this window."
-          />
-        </div>
-
-        {summaryQuery.isError ? (
-          <OfferingsError
-            title="The offerings totals could not be loaded"
-            error={summaryQuery.error}
-            onRetry={() => {
-              void summaryQuery.refetch();
-            }}
-          />
-        ) : null}
-
-        {actionError ? (
-          <MessageBar intent="warning">
-            <MessageBarBody>
-              <MessageBarTitle>Pledge follow-up needs attention</MessageBarTitle>
-              {actionError}
-            </MessageBarBody>
-          </MessageBar>
-        ) : null}
-
         {reassignMutation.isError ? (
           <MessageBar intent="error">
             <MessageBarBody>
@@ -197,120 +204,62 @@ export function OfferingsPage() {
           </MessageBar>
         ) : null}
 
-        {summaryQuery.isPending ? (
-          <OfferingsLoading label="Loading the offerings totals…" />
+        {summaryQuery.isError ? (
+          <OfferingsError
+            title="Offerings could not be loaded"
+            error={summaryQuery.error}
+            onRetry={() => {
+              void summaryQuery.refetch();
+            }}
+          />
+        ) : summaryQuery.isPending ? (
+          <OfferingsSkeleton />
         ) : summary ? (
           <>
             <SummaryCards summary={summary} />
 
-            <MemberTotalsTable
-              members={summary.members}
-              currency={summary.currency}
+            <BreakdownPanel
+              summary={summary}
               formatDate={formatDate}
+              onViewTerms={setTermsTarget}
             />
 
-            <div className={styles.panels}>
-              <GroupTotalsTable
-                title="Totals by offering"
-                ariaLabel="Totals by offering"
-                nameHeader="Offering"
-                currency={summary.currency}
-                rows={summary.offerings.map((offering) => ({
-                  id: offering.offeringId,
-                  name: offering.name,
-                  paidMinor: offering.paidMinor,
-                  pledgedMinor: offering.pledgedMinor,
-                  outstandingMinor: offering.outstandingMinor,
-                }))}
-                emptyTitle="No offerings in this window"
-                emptyHint="Paid gifts or relevant pledges will appear here."
-                renderAction={(row) => (
-                  <Button
-                    size="small"
-                    appearance="transparent"
-                    onClick={() => {
-                      setTermsTarget({
-                        offeringId: row.id,
-                        name: row.name,
-                        paidMinor: row.paidMinor,
-                        pledgedMinor: row.pledgedMinor,
-                        outstandingMinor: row.outstandingMinor,
-                      });
-                    }}
-                  >
-                    View terms
-                  </Button>
-                )}
+            {pledgesQuery.isError ? (
+              <OfferingsError
+                title="The pledge worklist could not be loaded"
+                error={pledgesQuery.error}
+                onRetry={() => {
+                  void pledgesQuery.refetch();
+                }}
               />
+            ) : pledgesQuery.isPending ? (
+              <div className={styles.state}>
+                <Spinner label="Loading the pledge worklist…" />
+              </div>
+            ) : (
+              <PledgeWorklist
+                pledges={pledges}
+                windowPledges={summary.pledges}
+                formatDate={formatDate}
+                onReassign={(pledge, officerMemberNo) =>
+                  setReassignTarget({ pledge, officerMemberNo })
+                }
+                limit={WORKLIST_LIMIT}
+              />
+            )}
 
-              <GroupTotalsTable
-                title="Totals by event"
-                ariaLabel="Totals by event"
-                nameHeader="Event"
-                currency={summary.currency}
-                rows={summary.events.map((event) => ({
-                  id: event.eventId,
-                  name: event.name,
-                  paidMinor: event.paidMinor,
-                  pledgedMinor: event.pledgedMinor,
-                  outstandingMinor: event.outstandingMinor,
-                }))}
-                emptyTitle="No events in this window"
-                emptyHint="Paid gifts or relevant pledges will appear here."
-              />
-            </div>
+            {eventsQuery.isError ? (
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  <MessageBarTitle>The USSD preview could not be composed</MessageBarTitle>
+                  The events list is unavailable; the rest of the landing still works.{' '}
+                  {errorMessage(eventsQuery.error)}
+                </MessageBarBody>
+              </MessageBar>
+            ) : null}
+
+            <UssdPreview preview={ussdPreview} formatDate={formatDate} />
           </>
-        ) : null}
-
-        <div className={styles.toolbar}>
-          <Field
-            label="Reassign to (officer member no)"
-            hint="Used by the Reassign action on any worklist row. The officer must be an active presbyter."
-          >
-            <Input
-              value={officerMemberNo}
-              onChange={(_, data) => setOfficerMemberNo(data.value)}
-              placeholder="e.g. M-1001"
-            />
-          </Field>
-        </div>
-
-        {pledgesQuery.isError ? (
-          <OfferingsError
-            title="The pledge worklist could not be loaded"
-            error={pledgesQuery.error}
-            onRetry={() => {
-              void pledgesQuery.refetch();
-            }}
-          />
-        ) : pledgesQuery.isPending ? (
-          <OfferingsLoading label="Loading the pledge worklist…" />
-        ) : (
-          <PledgeWorklist
-            pledges={pledges}
-            scopeLabel={worklistScopeLabel(pledges.length, WORKLIST_LIMIT)}
-            formatDate={formatDate}
-            onReassign={startReassign}
-          />
-        )}
-
-        {eventsQuery.isError ? (
-          <MessageBar intent="warning">
-            <MessageBarBody>
-              <MessageBarTitle>The USSD preview could not be composed</MessageBarTitle>
-              The events list is unavailable; the rest of the landing still works.{' '}
-              {errorMessage(eventsQuery.error)}
-            </MessageBarBody>
-          </MessageBar>
-        ) : null}
-
-        <UssdPreview preview={ussdPreview} formatDate={formatDate} />
-
-        {summaryQuery.isPending ? null : summary && summary.members.length === 0 ? (
-          <Text size={200} className={styles.muted}>
-            No member totals in this window yet. Widen the date window or record a paid contribution
-            to see the member breakdown.
-          </Text>
         ) : null}
       </div>
 
@@ -320,7 +269,7 @@ export function OfferingsPage() {
         open={reassignTarget !== null}
         title={
           reassignTarget
-            ? `Reassign ${reassignTarget.memberName}'s pledge to ${officerMemberNo}`
+            ? `Reassign ${reassignTarget.pledge.memberName}'s pledge to ${reassignTarget.officerMemberNo}`
             : 'Reassign the pledge'
         }
         label="Reason"
@@ -331,8 +280,8 @@ export function OfferingsPage() {
         onConfirm={(reason) => {
           if (!reassignTarget) return;
           reassignMutation.mutate({
-            pledge: reassignTarget,
-            officerMemberNo: officerMemberNo.trim(),
+            pledge: reassignTarget.pledge,
+            officerMemberNo: reassignTarget.officerMemberNo,
             reason,
           });
         }}

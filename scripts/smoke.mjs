@@ -342,6 +342,74 @@ async function runScenario() {
     JSON.stringify({ expected: presbyterReport.body?.expected }),
   );
 
+  // Offering cash count: append, read the group, then prove an invalid
+  // correction is refused. Counted cash stays separate from contributions.
+  const offeringCount = await request(`/v1/events/${todayEvent.body.id}/offering-counts`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      sessionDate: TODAY,
+      offeringId: offering.body.id,
+      lines: [
+        { denominationMinor: 2000, pieces: 3 },
+        { denominationMinor: 1000, pieces: 4 },
+      ],
+      asOf: `${TODAY}T09:00:00.000Z`,
+    }),
+  });
+  check(
+    'offering count appended',
+    offeringCount.status === 201 &&
+      offeringCount.body.totalMinor === 10_000 &&
+      offeringCount.body.supersedesId === null &&
+      offeringCount.body.supersededBy === null &&
+      offeringCount.body.currency === 'GHS' &&
+      offeringCount.body.lines?.length === 2,
+    JSON.stringify(offeringCount.body),
+  );
+
+  const offeringCountPage = await request(
+    `/v1/events/${todayEvent.body.id}/offering-counts?sessionDate=${TODAY}&offeringId=${offering.body.id}`,
+    { headers: read },
+  );
+  check(
+    'offering count list returns the current observation',
+    offeringCountPage.status === 200 &&
+      offeringCountPage.body.current?.id === offeringCount.body.id &&
+      offeringCountPage.body.observations?.length === 1,
+    JSON.stringify(offeringCountPage.body),
+  );
+
+  const badOfferingCorrection = await request(`/v1/events/${todayEvent.body.id}/offering-counts`, {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({
+      sessionDate: TODAY,
+      offeringId: offering.body.id,
+      lines: [{ denominationMinor: 2000, pieces: 4 }],
+      supersedesId: '00000000-0000-4000-8000-000000000000',
+    }),
+  });
+  check(
+    'unknown offering-count correction is 422',
+    badOfferingCorrection.status === 422 && badOfferingCorrection.body.code === 'validation_error',
+    JSON.stringify(badOfferingCorrection.body),
+  );
+
+  const todaySummary = await request(`/v1/offerings/summary?from=${TODAY}&to=${TODAY}`, {
+    headers: read,
+  });
+  check(
+    'summary reports counted cash and the variance identity',
+    todaySummary.status === 200 &&
+      todaySummary.body.countedMinor === 10_000 &&
+      todaySummary.body.varianceMinor ===
+        todaySummary.body.countedMinor -
+          todaySummary.body.totalPaidMinor -
+          todaySummary.body.visitors.paidMinor,
+    JSON.stringify(todaySummary.body),
+  );
+
   const exception = await request(
     `/v1/events/${smokeEvent.body.id}/offerings/${offering.body.id}/exceptions`,
     {
@@ -433,6 +501,8 @@ async function runScenario() {
       offeringSummary.body.to === '2999-12-31' &&
       offeringSummary.body.currency === 'GHS' &&
       offeringSummary.body.totalPaidMinor === 5000 &&
+      offeringSummary.body.countedMinor === 0 &&
+      offeringSummary.body.varianceMinor === -5000 &&
       offeringSummary.body.members?.[0]?.memberNo === 'M-9002' &&
       offeringSummary.body.members?.[0]?.lastGivenOn === '2999-01-01' &&
       offeringSummary.body.visitors?.count === 0,
@@ -967,6 +1037,7 @@ async function runScenario() {
       Boolean(openapi.body.paths?.['/auth/magic-link']) &&
       Boolean(openapi.body.paths?.['/v1/subscription-products']) &&
       Boolean(openapi.body.paths?.['/v1/offerings/summary']) &&
+      Boolean(openapi.body.paths?.['/v1/events/{eventId}/offering-counts']) &&
       Boolean(openapi.body.paths?.['/ussd/nalo']) &&
       !openapi.body.paths?.['/dev/ussd/session'],
   );

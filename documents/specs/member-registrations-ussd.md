@@ -751,10 +751,12 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-08: the MVP's offering-count migration takes `0017`, so 24e's expected migration moves to
+  `0018`; nothing behavioural changes in this spec.
 - 2026-11-07: the owner parked ticket 24e (USSD complaints and the admin queue) for a later round
   instead of opening it after 24d and 23. Nothing behavioural changes: the out-of-scope list and the
   ticket split now say "parked" rather than "deferred to the last round". The ticket keeps its settled
-  shape; its expected migration (0017) and the wire routes still need explicit authorisation when a
+  shape; its expected migration (0018) and the wire routes still need explicit authorisation when a
   round is scheduled.
 - 2026-11-06: 24d slice B1 implements the adapter layer. `POST /ussd/nalo` and
   `POST /ussd/session` are thin declarations over one shared session pipeline; the Nalo adapter
@@ -791,7 +793,7 @@ remains a review artifact.
   (general, active ministries, presbyter-only for presbyters), ordered date → priority tier → start
   time → event number, three plus `More`; with none today it shows `0 events today`, the next applicable
   day's count and `1 View` / `2 This week`. Events and series gain `presbyterOnly`. This lands in 24d,
-  extending migration 0016; 24c is unaffected and 24e stays at 0017.
+  extending migration 0016; 24c is unaffected and 24e stays at 0018.
 - 2026-11-05: the provider-adapter layer is settled. USSD is served through per-provider thin adapter
   routes behind a declaration contract (`{ id, route, authenticator, toFrame, toWire, maxMsgChars, pageSize }`);
   the Nalo adapter maps the Nalo Solutions wire (`USERID`-only auth against `USSD_NALO_USER_ID`,

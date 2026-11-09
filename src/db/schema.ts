@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import {
   bigint,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -381,5 +383,64 @@ export const eventSessionHeadcounts = pgTable(
       .on(table.supersedesId)
       .where(sql`${table.supersedesId} is not null`),
     index('event_session_headcounts_session').on(table.eventInstanceId, table.sessionDate),
+  ],
+);
+
+/**
+ * The offerings engine owns the full `offerings` row; this partial mirror only
+ * types the offering-count foreign key and is not in the drift test's list.
+ */
+export const offerings = pgTable('offerings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+});
+
+export const eventSessionOfferingCounts = pgTable(
+  'event_session_offering_counts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventInstanceId: uuid('event_instance_id')
+      .notNull()
+      .references(() => eventInstances.id),
+    offeringId: uuid('offering_id')
+      .notNull()
+      .references(() => offerings.id),
+    sessionDate: date('session_date').notNull(),
+    currency: text('currency').notNull(),
+    termsVersion: integer('terms_version').notNull(),
+    asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    recordedBy: text('recorded_by').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    supersedesId: uuid('supersedes_id').references(
+      (): AnyPgColumn => eventSessionOfferingCounts.id,
+    ),
+  },
+  (table) => [
+    uniqueIndex('event_session_offering_counts_supersedes')
+      .on(table.supersedesId)
+      .where(sql`${table.supersedesId} is not null`),
+    index('event_session_offering_counts_group').on(
+      table.eventInstanceId,
+      table.offeringId,
+      table.sessionDate,
+    ),
+  ],
+);
+
+export const eventSessionOfferingCountLines = pgTable(
+  'event_session_offering_count_lines',
+  {
+    countId: uuid('count_id')
+      .notNull()
+      .references(() => eventSessionOfferingCounts.id, { onDelete: 'cascade' }),
+    denominationMinor: bigint('denomination_minor', { mode: 'number' }).notNull(),
+    pieces: integer('pieces').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.countId, table.denominationMinor] }),
+    check(
+      'event_session_offering_count_lines_denomination_positive',
+      sql`${table.denominationMinor} > 0`,
+    ),
+    check('event_session_offering_count_lines_pieces_positive', sql`${table.pieces} > 0`),
   ],
 );

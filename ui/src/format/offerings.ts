@@ -1,5 +1,6 @@
 import type { EventItem } from '../api/events';
 import type { DateWindow } from './date-window';
+import { shiftUtcDate } from './date-window';
 import { utcToday } from './member-form';
 
 /**
@@ -15,6 +16,17 @@ export const DEFAULT_WORKLIST_LIMIT = 50;
 /** The default landing window: 1 January of the current UTC year to today. */
 export function yearToDateWindow(today: string = utcToday()): DateWindow {
   return { from: `${today.slice(0, 4)}-01-01`, to: today };
+}
+
+/** A quick range: the last `days` UTC calendar days, inclusive of today. */
+export function lastNDaysWindow(days: number, today: string = utcToday()): DateWindow {
+  const from = shiftUtcDate(today, -(days - 1));
+  return { from: from ?? today, to: today };
+}
+
+/** A quick range: the first of the current UTC month to today. */
+export function monthToDateWindow(today: string = utcToday()): DateWindow {
+  return { from: `${today.slice(0, 7)}-01`, to: today };
 }
 
 /** The reference USSD row truncation: a longer value ends with `…`. */

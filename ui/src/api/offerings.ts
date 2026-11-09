@@ -27,6 +27,7 @@ export interface OfferingSummaryGroup {
   readonly paidMinor: number;
   readonly pledgedMinor: number;
   readonly outstandingMinor: number;
+  readonly countedMinor: number;
 }
 
 export interface OfferingSummaryEvent {
@@ -35,6 +36,7 @@ export interface OfferingSummaryEvent {
   readonly paidMinor: number;
   readonly pledgedMinor: number;
   readonly outstandingMinor: number;
+  readonly countedMinor: number;
 }
 
 export interface OfferingSummaryPledgeCounts {
@@ -51,6 +53,10 @@ export interface ChurchOfferingSummary {
   readonly totalPaidMinor: number;
   readonly totalPledgedMinor: number;
   readonly totalOutstandingMinor: number;
+  /** Counted cash in the window (phase 5), reporting currency only. */
+  readonly countedMinor: number;
+  /** countedMinor − (totalPaidMinor + visitors.paidMinor); never added to the gifts. */
+  readonly varianceMinor: number;
   readonly visitors: {
     readonly count: number;
     readonly paidMinor: number;

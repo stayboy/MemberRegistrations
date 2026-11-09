@@ -13,9 +13,11 @@ import {
   sessionDateQuerySchema,
   updateEventSchema,
 } from '../schemas/events.js';
+import { offeringCountInputSchema, offeringCountQuerySchema } from '../schemas/offering-counts.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventDetail, EventRepository } from '../repos/events.js';
 import type { HeadcountRepository } from '../repos/headcounts.js';
+import type { OfferingCountRepository } from '../repos/offering-counts.js';
 
 const eventIdSchema = z.string().uuid();
 const attendanceIdSchema = z.string().uuid();
@@ -42,6 +44,7 @@ export function eventsRouter(
   repo: EventRepository,
   clocking: ClockingRepository,
   headcounts: HeadcountRepository,
+  offeringCounts: OfferingCountRepository,
 ): Router {
   const router = Router();
 
@@ -122,6 +125,31 @@ export function eventsRouter(
     );
     res.setHeader('Cache-Control', 'no-store');
     res.status(201).json(headcount);
+  });
+
+  // The sole read target for a count group; there is no item GET.
+  router.get('/:id/offering-counts', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const query = offeringCountQuerySchema.parse(req.query);
+    const page = await offeringCounts.get(id, query.sessionDate, query.offeringId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(page);
+  });
+
+  router.post('/:id/offering-counts', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = offeringCountInputSchema.parse(req.body);
+    const count = await offeringCounts.record(id, input, actorOf(req));
+    const params = new URLSearchParams({
+      sessionDate: count.sessionDate,
+      offeringId: count.offeringId,
+    });
+    res.setHeader(
+      'Location',
+      `/v1/events/${encodeURIComponent(id)}/offering-counts?${params.toString()}`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(count);
   });
 
   router.get('/:id/delegations', async (req, res) => {
