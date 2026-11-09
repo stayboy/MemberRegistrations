@@ -32,6 +32,8 @@ export interface NavItem {
   readonly path: string;
   readonly icon: FluentIcon;
   readonly description: string;
+  /** Development-only items are hidden from the production sidebar. */
+  readonly devOnly?: boolean;
 }
 
 export interface NavSection {
@@ -200,6 +202,7 @@ export const SECTIONS: readonly NavSection[] = [
         path: '/ussd/simulator',
         icon: PhoneDesktopRegular,
         description: 'Development-only handset simulator over the real provider adapters.',
+        devOnly: true,
       },
     ],
   },
@@ -231,6 +234,18 @@ export const SECTIONS: readonly NavSection[] = [
 ];
 
 export const BRAND_ICON = BookContactsRegular;
+
+/**
+ * The sidebar's item list. A production build drops development-only items,
+ * while `sectionForPath`/`navItemForPath` still resolve the full map so a deep
+ * link to a hidden page keeps its section and breadcrumb.
+ */
+export function visibleNavItems(
+  section: NavSection,
+  production = import.meta.env.PROD,
+): readonly NavItem[] {
+  return production ? section.items.filter((item) => !item.devOnly) : section.items;
+}
 
 function itemMatchesPath(item: NavItem, pathname: string): boolean {
   return pathname === item.path || pathname.startsWith(`${item.path}/`);

@@ -1,5 +1,12 @@
-import { Button, MessageBar, MessageBarBody, makeStyles, tokens } from '@fluentui/react-components';
-import { Link } from 'react-router-dom';
+import {
+  Button,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  makeStyles,
+  tokens,
+} from '@fluentui/react-components';
+import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useSession } from '../auth/SessionProvider';
 import { ConnectionBadge, connectionErrorDetail, useGatewayHealth } from '../shell/ConnectionBadge';
@@ -77,6 +84,18 @@ const useStyles = makeStyles({
   },
 });
 
+/**
+ * The production notice belongs to every USSD operator page. The Simulator is
+ * development-only and keeps its own MessageBar, so it is excluded here.
+ */
+export function showsUssdProductionNotice(
+  sectionId: SectionId,
+  pathname: string,
+  production = import.meta.env.PROD,
+): boolean {
+  return production && sectionId === 'ussd' && pathname !== '/ussd/simulator';
+}
+
 export function PageFrame({
   sectionId,
   title,
@@ -99,6 +118,8 @@ export function PageFrame({
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
   const health = useGatewayHealth();
   const { baseUrl } = useSession();
+  const { pathname } = useLocation();
+  const showUssdNotice = showsUssdProductionNotice(sectionId, pathname);
 
   return (
     <div className={styles.frame}>
@@ -137,6 +158,16 @@ export function PageFrame({
             >
               Retry
             </Button>
+          </MessageBarBody>
+        </MessageBar>
+      ) : null}
+
+      {showUssdNotice ? (
+        <MessageBar intent="info">
+          <MessageBarBody>
+            <MessageBarTitle>USSD is not live in this production build.</MessageBarTitle>
+            The member dial-in is disabled until an aggregator and payment provider are chosen; the
+            operator pages remain available.
           </MessageBarBody>
         </MessageBar>
       ) : null}

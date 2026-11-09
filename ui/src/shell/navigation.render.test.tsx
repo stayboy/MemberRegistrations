@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DateTimeProvider } from './DateTimeProvider';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
-import { SECTIONS, sectionForPath } from './navigation';
+import { SECTIONS, sectionForPath, visibleNavItems } from './navigation';
 import { ThemeProvider } from '../theme/ThemeProvider';
 
 function ussdSection() {
@@ -66,5 +66,24 @@ describe('USSD section render', () => {
       expect(sectionForPath(item.path).id).toBe('ussd');
       expect(sectionForPath(`${item.path}/detail`).id).toBe('ussd');
     }
+  });
+
+  it('drops the development-only Simulator in production but keeps every other item', () => {
+    const productionItems = visibleNavItems(ussdSection(), true).map((item) => item.label);
+
+    expect(productionItems).not.toContain('Simulator');
+    expect(productionItems).toEqual([
+      'Codes',
+      'Registrations',
+      'Clocking',
+      'Headcount',
+      'Offerings count',
+      'Activities',
+      'Products',
+      'Claims',
+    ]);
+
+    const developmentItems = visibleNavItems(ussdSection(), false).map((item) => item.label);
+    expect(developmentItems).toContain('Simulator');
   });
 });

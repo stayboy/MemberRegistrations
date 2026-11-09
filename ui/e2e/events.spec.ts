@@ -52,3 +52,24 @@ test('the event detail opens the session attendance dialog with the API rows', a
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
+  await open(page, '/events');
+  await page.getByRole('link', { name: 'Sunday Service' }).click();
+
+  const panel = page.getByRole('region', { name: 'Active offerings' });
+  await expect(panel).toBeVisible();
+  const table = panel.getByRole('table', { name: 'Active offerings' });
+  await expect(table.getByText('Tithe').first()).toBeVisible();
+  await expect(table.getByText('Missions').first()).toBeVisible();
+  await expect(table.getByText('Building fund')).toBeVisible();
+  await expect(table.getByText('Active', { exact: true })).toHaveCount(2);
+  await expect(table.getByText('Expired', { exact: true })).toHaveCount(1);
+  await expect(table.getByText('v1', { exact: true })).toHaveCount(3);
+
+  await panel.getByRole('button', { name: 'View terms for Tithe' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Terms of reference · Tithe' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

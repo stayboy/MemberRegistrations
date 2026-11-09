@@ -26,10 +26,11 @@
 
 ## Plan
 
-Goal: close the MVP hardening items from the capture round Q16/Q17 — roster-contact read narrowing,
-main-search narrowing, the read-only Active offerings panel, the production Simulator-hidden state,
-and the production config/backup/alerting/cutover checks — without reopening the offering-capture
-semantics.
+Goal: close the code/UI hardening items from the capture round Q16/Q17 — roster-contact read
+narrowing, main-search narrowing, the read-only Active offerings panel and the production
+Simulator-hidden state — without reopening the offering-capture semantics. The production
+config/backup/alerting/cutover checks are owner-gated and move to `mvp-release-cutover`; this round
+does not claim them.
 
 The two changed UI surfaces need a comparison mock and owner sign-off **before** code:
 
@@ -43,9 +44,11 @@ The two changed UI surfaces need a comparison mock and owner sign-off **before**
 Pre-authorisations carried from the capture grill (2026-11-08):
 
 - **Q5 roster contacts** — narrow the read so the roster DTO carries a contact count, never contact
-  values; the Contacts action continues to read the member contacts route.
-- **Q6 main search** — `GET /v1/members?q` matches name or member number only; drop the contact-value
-  `exists` branches.
+  values; the Contacts action continues to open by member number (the dialog fetches the member
+  detail).
+- **Q6 main search** — `GET /v1/members?q` matches member number and name parts (last, first, other
+  names, alias, maiden name) only; drop the contact-value `exists` branches. The separate `contact`
+  filter continues to match owned or linked contacts.
 
 Still owner-named when they open: production config/cutover values, backup/alerting setup, and 24e
 (`0018`). The protected-doc mock-policy amendment stays queued for `0813`.
@@ -146,23 +149,71 @@ The fallback also recommended: reword the round Goal to drop production config/b
 
 ## Mock parity
 
-Opens after sign-off. The parity pass compares the built event detail and the production USSD nav
-against these mocks; any spec-required miss is reworked before the hardening commit. The mock is
-advisory until this round is fully signed, per the policy.
+Opens after sign-off. The built event detail and the production USSD nav were compared against these
+mocks; the panel columns, expired row, empty state and footer match the signed mock. The production
+notice follows 0813's member-dial-in wording and omits the mock's "USSD not live" h1 badge; the signed
+mock's body carries the earlier Simulator-dev-only copy. Spec beats mock, so this deviation is
+recorded here rather than re-signed. The fixture now attaches three offerings (two active, one
+expired) to `event-1` so the e2e/axe covers the panel, and the `event-detail` live baseline is
+recaptured.
+
+## Review
+
+| Round | Seat                                               | Verdict | Notes                                                                                                                                                        |
+| ----- | -------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | `cline-pass/cline-pass/mimo-v2.6-pro` (12–18 seat) | REWORK  | P1: the negative `q` tests used digit-only values the old raw predicate did not match. P2: mock parity note, baseline, fixture kinds, dedupe, import, gates. |
+| 2     | `cline-pass/cline-pass/mimo-v2.6-pro` (12–18 seat) | ACCEPT  | All seven findings resolved; only a cosmetic SQL comment indent remains, no re-review.                                                                       |
 
 ## Verification
 
-| Gate        | Command                                  | Result                                                       |
-| ----------- | ---------------------------------------- | ------------------------------------------------------------ |
-| Mock render | `node mockups/mvp-hardening/capture.mjs` | 7 PNGs captured; no page or console errors                   |
-| Heights     | 1440 capture                             | active offerings 900 px; simulator hidden 900 px             |
-| Data check  | success panel                            | 3 attached offerings (2 active, 1 expired) on the event meta |
+| Gate             | Command                                                                  | Result                                                                                                                                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mock render      | `node mockups/mvp-hardening/capture.mjs`                                 | 7 PNGs captured; no page or console errors                                                                                                                                                                                                                 |
+| Heights          | 1440 capture                                                             | active offerings 900 px; simulator hidden 900 px                                                                                                                                                                                                           |
+| Data check       | success panel                                                            | 3 attached offerings (2 active, 1 expired) on the event meta                                                                                                                                                                                               |
+| Search red/green | `npx vitest run tests/api/members.test.ts -t "search narrowing"`         | HEAD `members.ts`: 1 failed (owned query returned M-6001); narrowed: 3 passed                                                                                                                                                                              |
+| Targeted API     | `npx vitest run tests/api/shepherding.test.ts tests/api/members.test.ts` | 39 passed (17 shepherding)                                                                                                                                                                                                                                 |
+| UI unit          | `npm test --workspace ui`                                                | 35 files / 379 passed                                                                                                                                                                                                                                      |
+| UI e2e           | `npm run ui:e2e`                                                         | 56 passed, including the light/dark axe checks                                                                                                                                                                                                             |
+| UI build         | `npm run build --workspace ui`                                           | pass                                                                                                                                                                                                                                                       |
+| Smoke            | `npm run smoke`                                                          | pass; roster contact count, search, offerings and USSD                                                                                                                                                                                                     |
+| Full verify      | `npm run verify`                                                         | skill/format/lint/typecheck pass; the test step hit the Windows `3221226505` flake twice (clocking; ussd-attendance+ussd); the serial run was 45/46 files, 553 passed/5 skipped, one worker exit (subscriptions). Linux CI `verify` is the required check. |
 
 gate-run 2026-11-09T11:20:54.269Z profile=fast steps=4/4 lines=4 bytes=514
+gate-run 2026-11-09T12:49:31.749Z profile=full steps=4/6 lines=24 bytes=2625
+
+## Acceptance
+
+| #   | Criterion                                                                                                  | Met | Evidence                                                                                      | Verdict |
+| --- | ---------------------------------------------------------------------------------------------------------- | --- | --------------------------------------------------------------------------------------------- | ------- |
+| 1   | Both mock sources render 7 PNGs at 1440 without errors                                                     | yes | `capture.mjs` clean; active 900 px, simulator 900 px                                          | pass    |
+| 2   | Active offerings panel lists every attached offering (expired marked), read-only, with empty/loading/error | yes | panel e2e + event-detail axe light/dark; no stats/totals; `View terms` reuses the terms route | pass    |
+| 3   | Production USSD nav hides the Simulator; other pages carry the notice; deep link keeps the dev-only guard  | yes | pure `visibleNavItems` test; count e2e notice/no Simulator; `PageFrame` condition test        | pass    |
+| 4   | Roster carries `contactCount` (owned + linked), no values; `q` no longer matches contacts                  | yes | API tests, smoke, red-before/green-after search run                                           | pass    |
+| 5   | No new read for the panel; terms version from the aggregate; `View terms` reuses the existing route        | yes | panel uses `event.offerings`; existing `GET /v1/offerings/{id}/terms`                         | pass    |
+| 6   | Full gates and parity; baselines recaptured                                                                | yes | UI e2e 56, smoke, UI unit 379, build; Linux CI `verify` is the required check; parity noted   | pass    |
+| 7   | Owner signs the mocks before code                                                                          | yes | seven rows signed 2026-11-09                                                                  | pass    |
+
+## Deviations
+
+- The production notice body follows 0813's member-dial-in wording and omits the signed mock's "USSD
+  not live" h1 badge; spec beats mock, so the deviation is recorded rather than re-signed.
+- The notice is one `PageFrame` message on every non-Simulator USSD page; the Simulator keeps its
+  development-only MessageBar.
+- The full baseline recapture changed all 21 images because of environment rendering; only the two
+  content-affected baselines (`event-detail`, `events-list`) are committed.
+- The roster count uses `count(distinct contact_id)` over owned and linked contacts; a contact cannot
+  be both, and the repository rejects that case (defence in depth).
+- The Windows vitest fork exit `3221226505` hit twice (`clocking`; `ussd-attendance`+`ussd`) and once
+  serially (`subscriptions`); the Linux CI `verify` check is the required gate.
+- The `events-list` baseline changed because the fixture now attaches three offerings to `event-1`.
 
 ## Deferred
 
-- 24e complaints (`0018`) after this round and Headcount's mock.
-- The protected-doc mock-policy amendment and the dashboard spec line (`0813` weekly limit).
-- The giving trend series, Redis/aggregate materialisation.
-- Release config/cutover actions until the owner names the production values and window.
+- `mvp-release-cutover` after this round and before the MVP release (owner values/window, backup/PITR
+  and alerting).
+- Headcount mock authored in parallel; its implementation follows the release. 24e (`0018`) follows
+  the release and Headcount's signed mock; its wire routes need a named pre-authorisation.
+- The protected-doc mock-policy amendment lands in its own docs PR with the now-available 0813; the
+  dashboard clarifying line is already in this round's spec commit.
+- The giving trend series and Redis/aggregate materialisation stay parked.
