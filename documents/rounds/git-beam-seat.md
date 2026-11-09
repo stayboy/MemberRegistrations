@@ -2,7 +2,7 @@
 
 |                     |                                                                                                                             |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Status              | OPEN — implementing (Tier 1, config + protected text)                                                                       |
+| Status              | CLOSED - merged in #94 (`b73b85c`)                                                                                          |
 | Tier                | 1                                                                                                                           |
 | Mode                | `attended`                                                                                                                  |
 | Base                | `20376ff`                                                                                                                   |
@@ -98,7 +98,8 @@ migration or wire change.
 | Skill hashes       | `npm run verify:skill`                                                                   | pass                                                   |
 | Format/lint/type   | `npm run verify:fast`                                                                    | pass — 4/4                                             |
 | Probe              | `opencode/beam-free` in a throwaway clone                                                | pass — SHA `8533815…`, 2,682-char body, trailer intact |
-| Delegated commit   | `git-executor` (`opencode/beam-free`), eight files, tree handshake                       | pass — `dc2e8c3`, trailer present, parent verified     |
+| Delegated commit   | `git-executor` (`opencode/beam-free`), eight files, tree handshake                       | pass - `dc2e8c3`, trailer present, parent verified     |
+| Delegated merge    | `git-executor` (`opencode/beam-free`), PR #94, checks green                              | pass - `b73b85c`, branch deleted                       |
 
 gate-run 2026-11-09T21:35:20.600Z profile=fast steps=4/4 lines=4 bytes=514
 
@@ -130,7 +131,11 @@ Tier 1 protected-doc review by `ollama-cloud/deepseek-v4-pro:0813`.
 
 | Action | Variant                               | Fallback reason | Result                                                    |
 | ------ | ------------------------------------- | --------------- | --------------------------------------------------------- |
-| commit | `git-executor` (`opencode/beam-free`) | —               | `dc2e8c3` — eight files, trailer present, parent verified |
+| commit | `git-executor` (`opencode/beam-free`) | -               | `dc2e8c3` - eight files, trailer present, parent verified |
+| commit | `git-executor` (`opencode/beam-free`) | -               | `b47da18` - round-doc correction, trailer present         |
+| push   | `git-executor` (`opencode/beam-free`) | -               | `origin/git-beam-seat` at `b47da18`                       |
+| pr     | `git-executor` (`opencode/beam-free`) | -               | #94, base `main`                                          |
+| merge  | `git-executor` (`opencode/beam-free`) | -               | #94 squash-merged as `b73b85c`; branch deleted            |
 
 ## Mock sign-off
 

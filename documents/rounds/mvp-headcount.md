@@ -2,7 +2,7 @@
 
 |                     |                                                                                                     |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
-| Status              | OPEN — implementing (dialog conversion)                                                             |
+| Status              | CLOSED - merged in #92 (`69666cc`)                                                                  |
 | Tier                | 2                                                                                                   |
 | Mode                | `unattended (auto-accept recommendations)` after the mock sign-off                                  |
 | Base                | `cacbee0`                                                                                           |
@@ -87,7 +87,7 @@ are **superseded** by this set.
 | UI unit     | `npm run test --workspace ui`        | pass — 36 files / 386 tests                                                                    |
 | UI e2e      | `npm run ui:e2e`                     | pass — 59/59, incl. headcount spec and axe light/dark                                          |
 | Full gate   | `npm run verify`                     | 45/46 files, 563 passed, 0 test failures; one Windows worker exit `3221226505` (environmental) |
-| Required    | CI `verify` (Linux)                  | pending — the required check on the PR                                                         |
+| Required    | CI `verify` (Linux)                  | pass - #92 merged (`69666cc`)                                                                  |
 
 gate-run 2026-11-09T13:31:17.400Z profile=fast steps=4/4 lines=4 bytes=514
 gate-run 2026-11-09T17:44:49.068Z profile=full steps=6/6 lines=6 bytes=680
