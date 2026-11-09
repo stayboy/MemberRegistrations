@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { OfferingCount } from '../api/offering-counts';
 import {
+  MAX_LINES,
   addDenomination,
   countPayload,
   countTotalMinor,
+  customRowCount,
   emptyCountRows,
+  gridDenominations,
+  hasDenominationCatalogue,
   idempotencyKey,
   lineSummary,
   parseMoneyMinor,
-  quickPickVisible,
+  positiveRowCount,
   removeDenomination,
   rowsFromObservation,
   setPieces,
@@ -23,8 +27,8 @@ const COUNT: OfferingCount = {
   currency: 'GHS',
   termsVersion: 1,
   lines: [
-    { denominationMinor: 1000, pieces: 40 },
     { denominationMinor: 2000, pieces: 39 },
+    { denominationMinor: 1000, pieces: 40 },
   ],
   totalMinor: 118_000,
   recordedAt: '2026-11-01T10:05:00.000Z',
@@ -33,42 +37,181 @@ const COUNT: OfferingCount = {
   supersededBy: null,
 };
 
-describe('quick-pick visibility', () => {
-  it('shows the GHS quick-pick only for GHS', () => {
-    expect(quickPickVisible('GHS')).toBe(true);
-    expect(quickPickVisible('USD')).toBe(false);
-    expect(quickPickVisible('')).toBe(false);
+describe('denomination catalogue', () => {
+  it('orders GHS notes before coins, descending within each group', () => {
+    const grid = gridDenominations('GHS');
+
+    expect(grid.map((entry) => entry.denominationMinor)).toEqual([
+      20_000, 10_000, 5_000, 2_000, 1_000, 500, 200, 100, 50, 20, 10, 5,
+    ]);
+    expect(grid.slice(0, 8).every((entry) => entry.kind === 'note')).toBe(true);
+    expect(grid.slice(8).every((entry) => entry.kind === 'coin')).toBe(true);
+    expect(grid.some((entry) => entry.denominationMinor === 1)).toBe(false);
+  });
+
+  it('returns no grid for a currency with no catalogue', () => {
+    expect(gridDenominations('USD')).toEqual([]);
+    expect(hasDenominationCatalogue('USD')).toBe(false);
+    expect(emptyCountRows('USD')).toEqual([]);
+  });
+
+  it('distinguishes an all-hidden catalogue from a missing one', () => {
+    const overrides = gridDenominations('GHS').map((entry) => ({
+      denominationMinor: entry.denominationMinor,
+      enabled: false,
+    }));
+
+    expect(gridDenominations('GHS', overrides)).toEqual([]);
+    expect(hasDenominationCatalogue('GHS')).toBe(true);
+    expect(emptyCountRows('GHS', overrides)).toEqual([]);
+  });
+
+  it('honours an override position without mutating the catalogue', () => {
+    const reordered = gridDenominations('GHS', [{ denominationMinor: 100, position: -1 }]);
+
+    expect(reordered[0]?.denominationMinor).toBe(100);
+    expect(gridDenominations('GHS')[0]?.denominationMinor).toBe(20_000);
+  });
+
+  it('creates one blank row per configured denomination', () => {
+    const rows = emptyCountRows('GHS');
+
+    expect(rows).toHaveLength(12);
+    expect(rows.every((row) => row.pieces === '')).toBe(true);
+    expect(rows.map((row) => row.denominationMinor)).toEqual(
+      gridDenominations('GHS').map((entry) => entry.denominationMinor),
+    );
   });
 });
 
 describe('count rows', () => {
-  it('creates a row on the first pick and increments it on the next', () => {
-    const once = addDenomination(emptyCountRows(), 2000);
-    expect(once).toEqual([{ denominationMinor: 2000, pieces: '1' }]);
+  it('sums a custom value into a configured row instead of adding a row', () => {
+    const blank = emptyCountRows('GHS');
+
+    const once = addDenomination(blank, 2000);
+    expect(once.find((row) => row.denominationMinor === 2000)?.pieces).toBe('1');
 
     const twice = addDenomination(once, 2000);
-    expect(twice).toEqual([{ denominationMinor: 2000, pieces: '2' }]);
+    expect(twice.find((row) => row.denominationMinor === 2000)?.pieces).toBe('2');
+    expect(twice).toHaveLength(blank.length);
   });
 
-  it('keeps rows ordered by denomination descending', () => {
-    const rows = addDenomination(addDenomination(emptyCountRows(), 1000), 2000);
-    expect(rows.map((row) => row.denominationMinor)).toEqual([2000, 1000]);
+  it('appends a one-off row for a value outside the catalogue without changing it', () => {
+    const rows = addDenomination(emptyCountRows('GHS'), 2550);
+    const oneOff = rows.find((row) => row.denominationMinor === 2550);
+
+    expect(oneOff?.pieces).toBe('1');
+    expect(rows).toHaveLength(13);
+    expect(customRowCount(rows, 'GHS')).toBe(1);
+    expect(gridDenominations('GHS').some((entry) => entry.denominationMinor === 2550)).toBe(
+      false,
+    );
+  });
+
+  it('sums a repeated one-off value into its existing row', () => {
+    const once = addDenomination(emptyCountRows('GHS'), 2550);
+    const twice = addDenomination(once, 2550);
+
+    expect(twice.filter((row) => row.denominationMinor === 2550)).toHaveLength(1);
+    expect(twice.find((row) => row.denominationMinor === 2550)?.pieces).toBe('2');
+  });
+
+  it('stops adding new one-off rows at the 50-line payload cap', () => {
+    let rows = emptyCountRows('GHS');
+    for (let index = 0; index < MAX_LINES; index += 1) {
+      rows = addDenomination(rows, 3000 + index);
+    }
+
+    expect(customRowCount(rows, 'GHS')).toBe(MAX_LINES);
+    expect(rows).toHaveLength(12 + MAX_LINES);
+    expect(positiveRowCount(rows)).toBe(MAX_LINES);
+
+    const capped = addDenomination(rows, 9000);
+    expect(capped).toHaveLength(rows.length);
+    expect(customRowCount(capped, 'GHS')).toBe(MAX_LINES);
+  });
+
+  it('allows a new one-off up to the 50th payload line and blocks the 51st', () => {
+    let rows = emptyCountRows('GHS').map((row) => ({ ...row, pieces: '1' }));
+    expect(positiveRowCount(rows)).toBe(12);
+
+    for (let index = 0; index < MAX_LINES - 12; index += 1) {
+      rows = addDenomination(rows, 3000 + index);
+    }
+
+    expect(positiveRowCount(rows)).toBe(MAX_LINES);
+    expect(rows).toHaveLength(MAX_LINES);
+
+    const capped = addDenomination(rows, 9000);
+    expect(positiveRowCount(capped)).toBe(MAX_LINES);
+    expect(capped).toHaveLength(MAX_LINES);
+  });
+
+  it('counts only rows that would contribute a payload line', () => {
+    expect(
+      positiveRowCount([
+        { denominationMinor: 2000, pieces: '1' },
+        { denominationMinor: 1000, pieces: '0' },
+        { denominationMinor: 500, pieces: '' },
+        { denominationMinor: 200, pieces: '2' },
+        { denominationMinor: 100, pieces: 'x' },
+      ]),
+    ).toBe(2);
   });
 
   it('sets and removes a row without mutating the input', () => {
-    const rows = addDenomination(emptyCountRows(), 2000);
-    const edited = setPieces(rows, 2000, '39');
-    expect(edited[0]?.pieces).toBe('39');
-    expect(rows[0]?.pieces).toBe('1');
+    const rows = addDenomination(emptyCountRows('GHS'), 2550);
+    const edited = setPieces(rows, 2550, '39');
+    expect(edited.find((row) => row.denominationMinor === 2550)?.pieces).toBe('39');
+    expect(rows.find((row) => row.denominationMinor === 2550)?.pieces).toBe('1');
 
-    expect(removeDenomination(edited, 2000)).toEqual([]);
+    expect(removeDenomination(edited, 2550)).toHaveLength(12);
+  });
+});
+
+describe('rowsFromObservation', () => {
+  it('rebuilds the grid and fills the configured rows', () => {
+    const rows = rowsFromObservation(COUNT, 'GHS');
+
+    expect(rows).toHaveLength(12);
+    expect(rows.find((row) => row.denominationMinor === 2000)?.pieces).toBe('39');
+    expect(rows.find((row) => row.denominationMinor === 1000)?.pieces).toBe('40');
+    expect(rows.find((row) => row.denominationMinor === 500)?.pieces).toBe('');
   });
 
-  it('rebuilds rows from an observation, newest denomination first', () => {
-    expect(rowsFromObservation(COUNT)).toEqual([
-      { denominationMinor: 2000, pieces: '39' },
-      { denominationMinor: 1000, pieces: '40' },
+  it('pins an observed line outside the catalogue as a pre-filled one-off', () => {
+    const rows = rowsFromObservation(
+      {
+        ...COUNT,
+        lines: [...COUNT.lines, { denominationMinor: 2550, pieces: 2 }],
+      },
+      'GHS',
+    );
+
+    expect(rows).toHaveLength(13);
+    expect(rows.at(-1)).toEqual({ denominationMinor: 2550, pieces: '2' });
+    expect(customRowCount(rows, 'GHS')).toBe(1);
+  });
+
+  it('re-renders a hidden observed line as a one-off', () => {
+    const rows = rowsFromObservation(COUNT, 'GHS', [
+      { denominationMinor: 2000, enabled: false },
     ]);
+
+    expect(rows.filter((row) => row.denominationMinor === 2000)).toHaveLength(1);
+    expect(rows.at(-1)).toEqual({ denominationMinor: 2000, pieces: '39' });
+  });
+
+  it('drops a blanked one-off from the payload', () => {
+    const rows = rowsFromObservation(
+      { ...COUNT, lines: [...COUNT.lines, { denominationMinor: 2550, pieces: 2 }] },
+      'GHS',
+    );
+    const parsed = countPayload(setPieces(rows, 2550, ''));
+
+    expect('error' in parsed).toBe(false);
+    if ('error' in parsed) return;
+    expect(parsed.lines.some((line) => line.denominationMinor === 2550)).toBe(false);
   });
 });
 

@@ -156,4 +156,71 @@ export const useUssdStyles = makeStyles({
     gap: tokens.spacingHorizontalS,
     flexWrap: 'wrap',
   },
+  denominationGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+  },
+  denominationGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(140px, 1fr))',
+    gap: tokens.spacingHorizontalS,
+    '@media (max-width: 720px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+    '@media (max-width: 480px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
+  },
+  denominationCell: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    minWidth: 0,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  denominationCellInvalid: {
+    ...shorthands.border('1px', 'solid', tokens.colorPaletteRedBorder2),
+    backgroundColor: tokens.colorPaletteRedBackground1,
+  },
+  denominationValue: {
+    color: tokens.colorNeutralForeground3,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  customAdd: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+  customField: {
+    width: '168px',
+    minWidth: 0,
+  },
+  customHint: {
+    flexBasis: '100%',
+  },
+  oneOffHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+  },
+  footerStatus: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+  },
+  errorText: {
+    color: tokens.colorPaletteRedForeground1,
+  },
+  dialogSurfaceWide: {
+    '&&': {
+      maxWidth: 'min(800px, calc(100vw - 32px))',
+    },
+  },
 });

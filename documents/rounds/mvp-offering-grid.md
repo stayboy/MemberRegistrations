@@ -90,15 +90,16 @@ foreign-currency counts, a Playwright visual baseline.
 
 ## Verification
 
-| Gate        | Command                                  | Result                                                                                        |
-| ----------- | ---------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Mock render | `node mockups/offering-grid/capture.mjs` | pass — 12 PNGs, no page or console errors                                                     |
-| Baseline    | `npm run verify:fast`                    | format/lint/typecheck pass; `test` stopped by the Windows PGlite fork crash (0 test failures) |
-| UI unit     | `npm run test --workspace ui`            | pending                                                                                       |
-| UI e2e      | `npm run ui:e2e`                         | pending                                                                                       |
-| Full gate   | `npm run verify`                         | pending                                                                                       |
+| Gate        | Command                                  | Result                                                                                         |
+| ----------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Mock render | `node mockups/offering-grid/capture.mjs` | pass — 12 PNGs, no page or console errors                                                      |
+| UI unit     | `npm run test --workspace ui`            | pass — 35 files / 394 tests                                                                    |
+| UI e2e      | `npm run ui:e2e`                         | pass — 56/56, incl. grid record/correct and axe light/dark                                     |
+| Full gate   | `npm run verify`                         | 45/46 files, 566 passed, 0 test failures; one Windows worker exit `3221226505` (environmental) |
+| Required    | CI `verify` (Linux)                      | pending — the required check on the PR                                                         |
 
 gate-run 2026-11-09T20:22:48.231Z profile=fast steps=3/4 lines=28 bytes=29323
+gate-run 2026-11-09T20:39:16.234Z profile=full steps=4/6 lines=23 bytes=1775
 
 ## Mock sign-off
 
@@ -119,21 +120,53 @@ gate-run 2026-11-09T20:22:48.231Z profile=fast steps=3/4 lines=28 bytes=29323
 
 ## Mock parity
 
-| Claim                                                                          | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
-| ------------------------------------------------------------------------------ | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
-| Filled at the parity pass; a confirmed miss on a spec-required atom is REWORK. |      |       |                   |           |              |             |
+| Claim                                                                                    | Type | State       | Answer (max prob) | Threshold | Confirmed by                                                      | Disposition |
+| ---------------------------------------------------------------------------------------- | ---- | ----------- | ----------------- | --------- | ----------------------------------------------------------------- | ----------- |
+| One input per configured denomination, notes then coins descending, blank = not counted  | atom | build + e2e | yes (0.99)        | ≥ 0.8     | parent — `offering-counts.ts:51-64`; render test counts 12 inputs | CONFIRMED   |
+| The caption reports `N of M` and the blank rows stay visible                             | atom | build + e2e | yes (0.99)        | ≥ 0.8     | parent — render/e2e assert the caption                            | CONFIRMED   |
+| A custom value matching a row sums; any other value is a one-off and never the catalogue | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `offering-counts.test.ts` sum-on-match and one-off cases | CONFIRMED   |
+| A correction re-renders a hidden/absent observed line as a pre-filled one-off            | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `rowsFromObservation`, unit test for absent/hidden lines | CONFIRMED   |
+| Blanking a one-off removes it from the payload                                           | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `countPayload` omits blanks; unit test                   | CONFIRMED   |
+| No-catalogue and all-hidden currencies show no grid and name the condition               | atom | build       | yes (0.99)        | ≥ 0.8     | parent — render tests for both messages                           | CONFIRMED   |
+| An over-cap piece row is marked and submit is disabled                                   | atom | build       | yes (0.99)        | ≥ 0.8     | parent — render test `aria-invalid` + message                     | CONFIRMED   |
+| A new one-off cannot push the payload past the 50-line server cap                        | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `positiveRowCount` guard, boundary unit test             | CONFIRMED   |
+| No API, migration or wire change                                                         | atom | diff        | yes (1.00)        | ≥ 0.8     | parent — `git diff` touches `ui/` and docs only                   | CONFIRMED   |
+
+## Review
+
+Tier 2, independent reviewer `ollama-cloud/deepseek-v4-pro:0813`, against `a6260c2`. Verdict
+**ACCEPT**, no P1.
+
+- **Standards — ACCEPT.** Fluent v9 only; the entry is presentational and the page owns the request;
+  React 19 rules; `makeStyles`/tokens.
+- **Spec — ACCEPT.** The grid, the custom merge, the correction one-off, the no-catalogue/all-hidden
+  states, the over-cap guard and the no-API boundary all match the amended sections.
+
+P2 fixed in this pass:
+
+1. `Configure denominations` linked to `#/settings`, contradicting the spec's named
+   `#/admin/offering-denominations`. The link is removed in slice A; the message stays, and slice B
+   adds the link when the screen exists.
+2. `Custom rows: n of 50` misstated the bound (the guard counts positive payload rows, not custom
+   rows). Relabelled `One-off rows: n`; the positive-row guard still stops the payload at 50.
+
+Nits fixed: the unused `addDenomination` parameters are gone; the wide-dialog inline style moved to
+`makeStyles`; the counted caption now uses positive pieces, matching the payload.
+
+Nits accepted: one-off rows keep entry order on record and sorted order on correction (the table is
+a scratch list); submit stays enabled for an empty count, matching the signed blank state.
 
 ## Acceptance
 
-| #   | Criterion                                             | Met     | Evidence                       | Verdict  |
-| --- | ----------------------------------------------------- | ------- | ------------------------------ | -------- |
-| 1   | Twelve states captured and signed                     | yes     | `## Mock sign-off`, 2026-11-09 | ACCEPTED |
-| 2   | Grid shows every configured denomination, blank=0     | pending |                                | PARKED   |
-| 3   | Correction re-renders hidden/absent lines as one-offs | pending |                                | PARKED   |
-| 4   | Custom add sums/merges and never joins the catalogue  | pending |                                | PARKED   |
-| 5   | No-catalogue and all-hidden states named              | pending |                                | PARKED   |
-| 6   | No API, migration or wire change                      | pending |                                | PARKED   |
-| 7   | Unit, render, e2e, axe and CI verify green            | pending |                                | PARKED   |
+| #   | Criterion                                             | Met     | Evidence                              | Verdict  |
+| --- | ----------------------------------------------------- | ------- | ------------------------------------- | -------- |
+| 1   | Twelve states captured and signed                     | yes     | `## Mock sign-off`, 2026-11-09        | ACCEPTED |
+| 2   | Grid shows every configured denomination, blank=0     | yes     | render test: 12 inputs, blank caption | ACCEPTED |
+| 3   | Correction re-renders hidden/absent lines as one-offs | yes     | `rowsFromObservation`; unit tests     | ACCEPTED |
+| 4   | Custom add sums/merges and never joins the catalogue  | yes     | `addDenomination`; unit tests         | ACCEPTED |
+| 5   | No-catalogue and all-hidden states named              | yes     | render tests for both messages        | ACCEPTED |
+| 6   | No API, migration or wire change                      | yes     | `git diff` is `ui/` + docs only       | ACCEPTED |
+| 7   | Unit, render, e2e, axe and CI verify green            | pending | CI `verify`                           | PARKED   |
 
 ## Deviations
 
@@ -141,7 +174,13 @@ gate-run 2026-11-09T20:22:48.231Z profile=fast steps=3/4 lines=28 bytes=29323
   and the submit is disabled. The owner signed it as shown.
 - State 06 footer copy is `The count could not be recorded.`; the built page titles the bar
   `The offering count could not be recorded`. The conversion aligns the copy.
-- `Configure denominations` is a link placeholder to the slice B admin screen, which is not built.
-- `Custom rows: 1 of 50` exposes the existing 50-line bound; the built entry does not show it.
-- `npm run verify:fast` cannot complete on this Windows host: the vitest fork exits before the
-  suites run. Retried once per §8 and stopped; Linux CI `verify` is the required check.
+- The signed mock shows a `Configure denominations` link and `Custom rows: n of 50`. Slice A omits the
+  link (the `#/admin/offering-denominations` route does not exist yet) and labels the list
+  `One-off rows: n`, following the reviewer's two P2 fixes; slice B restores the link at the
+  spec-named route. The add guard counts positive rows so a new one-off cannot push the payload
+  past 50 lines.
+- The all-hidden state is reachable through an optional `overrides` prop (default empty) and is
+  render-tested; the page passes nothing until slice B threads the setting.
+- `npm run verify` cannot complete on this Windows host: the vitest fork exits with `3221226505`
+  after every suite that ran passed. Retried once per §8 and stopped; Linux CI `verify` is the
+  required check.

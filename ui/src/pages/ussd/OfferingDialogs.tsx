@@ -16,12 +16,15 @@ function Shell({
   title,
   description,
   onClose,
+  wide,
   children,
 }: {
   open: boolean;
   title: string;
   description?: string;
   onClose: () => void;
+  /** Wider surface for a content grid; omitted keeps the Fluent dialog width. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const styles = useUssdStyles();
@@ -33,7 +36,7 @@ function Shell({
         if (!data.open) onClose();
       }}
     >
-      <DialogSurface>
+      <DialogSurface className={wide ? styles.dialogSurfaceWide : undefined}>
         <DialogBody>
           <DialogTitle>{title}</DialogTitle>
           {description ? (
@@ -62,7 +65,13 @@ export function RecordCountDialog({
   children: ReactNode;
 }) {
   return (
-    <Shell open={open} title={title} description={description} onClose={onClose}>
+    <Shell
+      open={open}
+      title={title}
+      description={description}
+      onClose={onClose}
+      wide
+    >
       {children}
     </Shell>
   );

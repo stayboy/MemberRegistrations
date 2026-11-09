@@ -65,10 +65,10 @@ function errorMessage(error: unknown): string {
 /**
  * USSD → Offerings count. The operator's bulk cash count for one event,
  * offering and session, following the headcount observation pattern: a
- * denomination entry with a GHS quick-pick, a live total, an append-only
- * history, and a Correct action that keeps the corrected `asOf`. The count
- * entry, announced offertory and pledge are dialogs from the page; the page
- * lists the session's offertories and links pledges to the landing worklist.
+ * denomination grid entry with a live total, an append-only history, and a
+ * Correct action that keeps the corrected `asOf`. The count entry, announced
+ * offertory and pledge are dialogs from the page; the page lists the session's
+ * offertories and links pledges to the landing worklist.
  */
 export function UssdOfferingsPage() {
   const styles = useUssdStyles();
@@ -79,7 +79,7 @@ export function UssdOfferingsPage() {
 
   const [selection, setSelection] = useState<EventSessionSelection | null>(null);
   const [offeringId, setOfferingId] = useState<string | null>(null);
-  const [rows, setRows] = useState<CountRowDraft[]>(emptyCountRows);
+  const [rows, setRows] = useState<CountRowDraft[]>(() => emptyCountRows('GHS'));
   const [asOf, setAsOf] = useState(() => toDateTimeLocal(new Date()));
   const [correction, setCorrection] = useState<OfferingCount | null>(null);
   const [countOpen, setCountOpen] = useState(false);
@@ -162,8 +162,15 @@ export function UssdOfferingsPage() {
     }
   }, [eventQuery.error, countsQuery.error, contributionsQuery.error, signOut]);
 
-  function resetEntry(): void {
-    setRows(emptyCountRows());
+  // Keep the blank grid in step with the chosen offering's currency while the
+  // entry is closed. Opening the dialog resets it through resetEntry.
+  useEffect(() => {
+    if (countOpen || correction !== null) return;
+    setRows(emptyCountRows(currency));
+  }, [currency, countOpen, correction]);
+
+  function resetEntry(forCurrency: string = currency): void {
+    setRows(emptyCountRows(forCurrency));
     setCorrection(null);
     setAsOf(toDateTimeLocal(new Date()));
     setActionError(null);
@@ -299,7 +306,7 @@ export function UssdOfferingsPage() {
 
   function beginCorrection(row: OfferingCount): void {
     setCorrection(row);
-    setRows(rowsFromObservation(row));
+    setRows(rowsFromObservation(row, row.currency));
     setActionError(null);
     setNotice(null);
     setCountOpen(true);
@@ -313,6 +320,8 @@ export function UssdOfferingsPage() {
     recordMutation.mutate(parsed.lines);
   }
 
+  const entryCurrency = correction?.currency ?? currency;
+
   const offeringPicker = (
     <div className={styles.fields}>
       <OfferingSelect
@@ -322,7 +331,9 @@ export function UssdOfferingsPage() {
         disabled={recordMutation.isPending}
         onChange={(next) => {
           setOfferingId(next);
-          resetEntry();
+          resetEntry(
+            offerings.find((offering) => offering.offeringId === next)?.terms.currency ?? currency,
+          );
           setNotice(null);
         }}
       />
@@ -543,13 +554,13 @@ export function UssdOfferingsPage() {
         onClose={closeCountDialog}
       >
         <OfferingCountEntry
-          currency={currency}
+          currency={entryCurrency}
           rows={rows}
           totalMinor={liveTotal}
           asOf={asOf}
           correction={correction}
           pending={recordMutation.isPending}
-          error={'error' in parsed ? parsed.error : null}
+          error={actionError}
           formatInstant={formatInstant}
           onAddDenomination={(denominationMinor) =>
             setRows((visible) => addDenomination(visible, denominationMinor))
