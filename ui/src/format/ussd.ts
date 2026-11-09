@@ -221,6 +221,18 @@ export function headcountFormFrom(row: Headcount): HeadcountFormValues {
   };
 }
 
+/** The bucket line for one observation, for example `AM 62 · AF 71 · C? 9`. */
+export function headcountBucketSummary(row: Headcount): string {
+  const parts: string[] = [];
+  if (row.adultMale) parts.push(`AM ${row.adultMale}`);
+  if (row.adultFemale) parts.push(`AF ${row.adultFemale}`);
+  if (row.adultUnspecified) parts.push(`A? ${row.adultUnspecified}`);
+  if (row.childMale) parts.push(`CM ${row.childMale}`);
+  if (row.childFemale) parts.push(`CF ${row.childFemale}`);
+  if (row.childUnspecified) parts.push(`C? ${row.childUnspecified}`);
+  return parts.length === 0 ? 'All zero' : parts.join(' · ');
+}
+
 export interface HeadcountPayload {
   readonly adultMale: number;
   readonly adultFemale: number;

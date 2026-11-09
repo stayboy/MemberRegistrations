@@ -9,6 +9,7 @@ import type {
 import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
 import type { OfferingCount } from '../src/api/offering-counts';
 import type { ContributionItem } from '../src/api/giving';
+import type { Headcount } from '../src/api/ussd';
 import type {
   Gender,
   MemberAttendanceSeries,
@@ -663,6 +664,55 @@ const OFFERING_COUNTS: readonly OfferingCount[] = [
   },
 ];
 
+const HEADCOUNTS: readonly Headcount[] = [
+  {
+    id: 'headcount-1',
+    eventId: 'event-offerings',
+    sessionDate: '2999-01-10',
+    asOf: '2999-01-10T09:02:00.000Z',
+    mode: 'adults',
+    adultMale: 58,
+    adultFemale: 71,
+    adultUnspecified: 0,
+    childMale: 0,
+    childFemale: 0,
+    childUnspecified: 9,
+    total: 138,
+    recordedBy: 'officer-1',
+    recordedAt: '2999-01-10T09:04:00.000Z',
+    supersedesId: null,
+    supersededBy: 'headcount-2',
+  },
+  {
+    id: 'headcount-2',
+    eventId: 'event-offerings',
+    sessionDate: '2999-01-10',
+    asOf: '2999-01-10T09:08:00.000Z',
+    mode: 'adults',
+    adultMale: 62,
+    adultFemale: 71,
+    adultUnspecified: 0,
+    childMale: 0,
+    childFemale: 0,
+    childUnspecified: 9,
+    total: 142,
+    recordedBy: 'officer-2',
+    recordedAt: '2999-01-10T09:10:00.000Z',
+    supersedesId: 'headcount-1',
+    supersededBy: null,
+  },
+];
+
+/** The register-derived roster shown beside the Foundation service headcount. */
+const HEADCOUNT_ATTENDANCE: EventAttendance = {
+  eventId: 'event-offerings',
+  sessionDate: '2999-01-10',
+  present: 0,
+  expected: 160,
+  importedRows: 0,
+  rows: [],
+};
+
 const SERIES: readonly SeriesDto[] = [
   {
     id: 'series-1',
@@ -998,6 +1048,10 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
     OFFERING_COUNTS.map((count) => [count.id, count]),
   );
   let offeringCountSeq = OFFERING_COUNTS.length;
+  const headcountState = new Map<string, Headcount>(
+    HEADCOUNTS.map((headcount) => [headcount.id, headcount]),
+  );
+  let headcountSeq = HEADCOUNTS.length;
 
   return [
     {
@@ -1091,10 +1145,17 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
       method: 'GET',
       pattern: /^\/gateway\/v1\/events\/([^/]+)\/attendance$/,
       handle: (call, [eventId]) => {
+        const date =
+          call.search.get('date') ??
+          (eventId === 'event-offerings'
+            ? HEADCOUNT_ATTENDANCE.sessionDate
+            : ATTENDANCE_EVENT_1.sessionDate);
+        if (eventId === 'event-offerings') {
+          return reply({ ...HEADCOUNT_ATTENDANCE, sessionDate: date });
+        }
         if (eventId !== ATTENDANCE_EVENT_1.eventId) {
           return problem(404, `Event ${eventId} was not found`);
         }
-        const date = call.search.get('date') ?? ATTENDANCE_EVENT_1.sessionDate;
         return reply({ ...ATTENDANCE_EVENT_1, sessionDate: date });
       },
     },
@@ -1105,6 +1166,75 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
         const event = EVENTS.find((candidate) => candidate.id === eventId);
         if (!event) return problem(404, `Event ${eventId} was not found`);
         return reply(event, 200, { ETag: '"e2e-event"' });
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/headcounts$/,
+      handle: (call) => {
+        const sessionDate = call.search.get('sessionDate') ?? '';
+        const observations = [...headcountState.values()]
+          .filter((headcount) => headcount.sessionDate === sessionDate)
+          .sort(
+            (left, right) =>
+              right.asOf.localeCompare(left.asOf) ||
+              right.recordedAt.localeCompare(left.recordedAt) ||
+              right.id.localeCompare(left.id),
+          );
+        const current = observations.find((headcount) => headcount.supersededBy === null) ?? null;
+        return reply({ sessionDate, current, observations });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/headcounts$/,
+      handle: (call, [eventId]) => {
+        const body = asRecord(call.body);
+        const sessionDate = text(body.sessionDate) || '2999-01-10';
+        const mode = text(body.mode);
+        if (mode !== 'adults' && mode !== 'children' && mode !== 'mixed') {
+          return problem(422, 'mode must be adults, children or mixed');
+        }
+        const buckets = {
+          adultMale: Number(body.adultMale ?? 0),
+          adultFemale: Number(body.adultFemale ?? 0),
+          adultUnspecified: Number(body.adultUnspecified ?? 0),
+          childMale: Number(body.childMale ?? 0),
+          childFemale: Number(body.childFemale ?? 0),
+          childUnspecified: Number(body.childUnspecified ?? 0),
+        };
+        const total = Object.values(buckets).reduce((sum, value) => sum + value, 0);
+        if (total > 30_000) return problem(422, 'The six buckets must not exceed 30,000.');
+
+        const supersedesId = optionalText(body.supersedesId);
+        const target = supersedesId ? headcountState.get(supersedesId) : undefined;
+        if (supersedesId && (!target || target.supersededBy !== null)) {
+          return problem(422, 'supersedesId must name the current observation');
+        }
+        const asOf = target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
+        if (!asOf.startsWith(sessionDate)) {
+          return problem(422, 'asOf must fall within the session day');
+        }
+
+        headcountSeq += 1;
+        const id = `headcount-${headcountSeq}`;
+        const headcount: Headcount = {
+          id,
+          eventId: eventId!,
+          sessionDate,
+          asOf,
+          mode,
+          ...buckets,
+          total,
+          recordedBy: 'officer-1',
+          recordedAt: `${sessionDate}T09:12:00.000Z`,
+          supersedesId: target?.id ?? null,
+          supersededBy: null,
+        };
+
+        if (target) headcountState.set(target.id, { ...target, supersededBy: id });
+        headcountState.set(id, headcount);
+        return reply(headcount, 201);
       },
     },
     {

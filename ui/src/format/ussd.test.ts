@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventItem, EventSessionItem } from '../api/events';
+import type { Headcount } from '../api/ussd';
 import {
   activitiesFromEvents,
   activitiesOn,
@@ -7,6 +8,7 @@ import {
   activityPageSize,
   codesRemainingLabel,
   emptyHeadcountForm,
+  headcountBucketSummary,
   headcountFields,
   headcountPayload,
   fromDateTimeLocal,
@@ -248,6 +250,32 @@ describe('headcount entry', () => {
         childUnspecified: 0,
       },
     });
+  });
+
+  it('summarises only the non-zero buckets in one line', () => {
+    const row: Headcount = {
+      id: 'headcount-1',
+      eventId: 'event-1',
+      sessionDate: '2026-11-08',
+      asOf: '2026-11-08T10:42:00.000Z',
+      mode: 'adults',
+      adultMale: 62,
+      adultFemale: 71,
+      adultUnspecified: 0,
+      childMale: 0,
+      childFemale: 0,
+      childUnspecified: 9,
+      total: 142,
+      recordedBy: 'demo.officer',
+      recordedAt: '2026-11-08T10:44:00.000Z',
+      supersedesId: null,
+      supersededBy: null,
+    };
+
+    expect(headcountBucketSummary(row)).toBe('AM 62 · AF 71 · C? 9');
+    expect(
+      headcountBucketSummary({ ...row, adultMale: 0, adultFemale: 0, childUnspecified: 0 }),
+    ).toBe('All zero');
   });
 });
 

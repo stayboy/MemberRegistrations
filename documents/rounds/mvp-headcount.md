@@ -6,7 +6,7 @@
 | Tier                | 2                                                                                                   |
 | Mode                | `unattended (auto-accept recommendations)` after the mock sign-off                                  |
 | Base                | `cacbee0`                                                                                           |
-| Review rounds       | 0                                                                                                   |
+| Review rounds       | 1                                                                                                   |
 | Gate runs in parent | 1 (`verify:fast`)                                                                                   |
 | Spec                | `documents/specs/member-registrations-ui.md` §2.5; `member-registrations-api.md` headcount sections |
 | Workers             | `single`                                                                                            |
@@ -81,13 +81,17 @@ are **superseded** by this set.
 
 ## Verification
 
-| Gate        | Command                              | Result                                   |
-| ----------- | ------------------------------------ | ---------------------------------------- |
-| Mock render | `node mockups/headcount/capture.mjs` | pass — 9 PNGs, no page or console errors |
-| UI unit     | `npm run test --workspace ui`        | pending                                  |
-| UI e2e      | `npm run ui:e2e`                     | pending                                  |
+| Gate        | Command                              | Result                                                                                         |
+| ----------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Mock render | `node mockups/headcount/capture.mjs` | pass — 9 PNGs, no page or console errors                                                       |
+| UI unit     | `npm run test --workspace ui`        | pass — 36 files / 386 tests                                                                    |
+| UI e2e      | `npm run ui:e2e`                     | pass — 59/59, incl. headcount spec and axe light/dark                                          |
+| Full gate   | `npm run verify`                     | 45/46 files, 563 passed, 0 test failures; one Windows worker exit `3221226505` (environmental) |
+| Required    | CI `verify` (Linux)                  | pending — the required check on the PR                                                         |
 
 gate-run 2026-11-09T13:31:17.400Z profile=fast steps=4/4 lines=4 bytes=514
+gate-run 2026-11-09T17:44:49.068Z profile=full steps=6/6 lines=6 bytes=680
+gate-run 2026-11-09T17:58:07.429Z profile=full steps=4/6 lines=23 bytes=1775
 
 ## Mock sign-off
 
@@ -105,21 +109,50 @@ gate-run 2026-11-09T13:31:17.400Z profile=fast steps=4/4 lines=4 bytes=514
 
 ## Mock parity
 
-| Claim                                                                          | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
-| ------------------------------------------------------------------------------ | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
-| Filled at the parity pass; a confirmed miss on a spec-required atom is REWORK. |      |       |                   |           |              |             |
+| Claim                                                                               | Type | State       | Answer (max prob) | Threshold | Confirmed by                                                        | Disposition |
+| ----------------------------------------------------------------------------------- | ---- | ----------- | ----------------- | --------- | ------------------------------------------------------------------- | ----------- |
+| Read-first: no always-visible write form; Record is a header action                 | atom | build + e2e | yes (0.99)        | ≥ 0.8     | parent — `headcount.spec.ts:23`, `UssdHeadcountPage.tsx:196-203`    | CONFIRMED   |
+| Record dialog: Adult/Children three fields, Mixed four, `As of`, live total         | atom | build + e2e | yes (0.99)        | ≥ 0.8     | parent — `HeadcountDialogs.tsx:74-130`, `headcount.spec.ts`         | CONFIRMED   |
+| Correct keeps the row's `asOf`, has no editable date, and sends `supersedesId` only | atom | build + e2e | yes (0.99)        | ≥ 0.8     | parent — `HeadcountDialogs.tsx:82-115`, `UssdHeadcountPage.tsx:142` | CONFIRMED   |
+| A superseded row reads `Valid for <its asOf>`, stays readable, is never deleted     | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `HeadcountReadFirst.tsx:148-173`                           | CONFIRMED   |
+| Roster is its own card labelled **Roster**, never merged with the headcount         | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `HeadcountReadFirst.tsx:85-105`                            | CONFIRMED   |
+| Error state retries from the header **Refresh**; no Retry inside the bar            | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `UssdHeadcountPage.tsx:204-214,250-256`                    | CONFIRMED   |
+| `asOf` defaults to now on Record and is absent on Correct                           | atom | build       | yes (0.99)        | ≥ 0.8     | parent — `UssdHeadcountPage.tsx:59,100`, `HeadcountDialogs.tsx:103` | CONFIRMED   |
+
+## Review
+
+Tier 2, independent reviewer `cline-pass/cline-pass/mimo-v2.6-pro` (12:00–18:00 window), against
+`a6260c2`. Verdict **ACCEPT**, no P1.
+
+- **Standards — ACCEPT.** Fluent v9 only; page/state in `UssdHeadcountPage`, presentational
+  `HeadcountReadFirst`/`HeadcountDialogFields`; React 19 rules; focused diff.
+- **Spec — ACCEPT.** All nine signed states matched. Adjudicated: on a correction the client sends
+  `supersedesId` and omits `asOf`; the server owns the value (`src/repos/headcounts.ts:222-255`),
+  which is the spec's `asOf?` contract. The e2e fixture mirrors it, so "keeps its asOf" is real.
+
+P2 findings, all fixed in this pass:
+
+1. Row state keyed off `supersededBy === null`, so a second uncorrected record would show two green
+   Current badges and a Correct that the API rejects (`422`). Now `id === current?.id` decides the
+   badge and the action; a stale non-superseded row reads **Earlier** and `Valid for <asOf>`.
+2. A rejected save rendered behind the modal. The dialog now shows `submitError` in its footer; only
+   a local validation error disables submit, so a server failure stays retryable.
+3. The row's Correct entry point was not exercised end-to-end. `headcount.spec.ts` now opens the dialog
+   from the history row and cancels.
+4. `axe.spec.ts` reformatted an unrelated offerings-count assertion. Reverted; the diff is
+   headcount-only (29 insertions, 0 deletions).
 
 ## Acceptance
 
-| #   | Criterion                                      | Met     | Evidence                       | Verdict  |
-| --- | ---------------------------------------------- | ------- | ------------------------------ | -------- |
-| 1   | Nine dialog-pattern states captured and signed | yes     | `## Mock sign-off`, 2026-11-09 | ACCEPTED |
-| 2   | Page converted to read-first + dialogs         | pending |                                | PARKED   |
-| 3   | Parity table complete                          | pending |                                | PARKED   |
-| 4   | e2e covers record/correct/history              | pending |                                | PARKED   |
-| 5   | axe light and dark, page and dialogs           | pending |                                | PARKED   |
-| 6   | Gates stay green                               | pending |                                | PARKED   |
-| 7   | Stale round closed                             | pending |                                | PARKED   |
+| #   | Criterion                                      | Met | Evidence                                                                                                                             | Verdict  |
+| --- | ---------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 1   | Nine dialog-pattern states captured and signed | yes | `## Mock sign-off`, 2026-11-09                                                                                                       | ACCEPTED |
+| 2   | Page converted to read-first + dialogs         | yes | `UssdHeadcountPage.tsx`, `HeadcountDialogs.tsx`, `HeadcountReadFirst.tsx`                                                            | ACCEPTED |
+| 3   | Parity table complete                          | yes | `## Mock parity` (seven atoms, all confirmed)                                                                                        | ACCEPTED |
+| 4   | e2e covers record/correct/history              | yes | `ui/e2e/headcount.spec.ts`; 59/59                                                                                                    | ACCEPTED |
+| 5   | axe light and dark, page and dialogs           | yes | `ui/e2e/axe.spec.ts` headcount entries; 21/21 targeted                                                                               | ACCEPTED |
+| 6   | Gates stay green                               | yes | UI unit 386; `ui:e2e` 59/59; `verify` 563 passed / 0 test failures, one environmental Windows worker exit (CI is the required check) | ACCEPTED |
+| 7   | Stale round closed                             | yes | `v3-ussd-headcount.md` CLOSED in #91                                                                                                 | ACCEPTED |
 
 ## Deviations
 
@@ -133,5 +166,10 @@ gate-run 2026-11-09T13:31:17.400Z profile=fast steps=4/4 lines=4 bytes=514
   conversion fixes it.
 - Mixed has four buckets (adult men/women, boys, girls), matching `headcountFields('mixed')`.
 - The Roster caption drops the build's word "expected"; "Roster" is the only label.
+- A stale non-superseded row (the second uncorrected record in a session) reads **Earlier**; the
+  signed mock only shows Current and Superseded, so this badge is new cover for the reviewer's P2 fix.
+- Local `npm run verify` cannot complete on this Windows host: one vitest fork exits `3221226505`
+  while every test that ran passed (563 passed, 0 failures). Retried once per §8 and stopped; Linux CI
+  `verify` is the required check.
 - The production USSD notice is omitted from this mock; `mockups/mvp-hardening/02-simulator-hidden.png`
   covers it.
