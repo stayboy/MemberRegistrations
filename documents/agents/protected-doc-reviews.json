@@ -10,25 +10,25 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "e4a33a52b5d5d18e7a8791cbd4b53cdad5e3b117896ca3c41528f72464b73616",
-      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
-      "model": "mimo-v2.6-pro",
-      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window.",
-      "reason": "changes: section 10a's fallback sentence now admits cline-pass/cline-pass/mimo-v2.6-pro in the 12:00–18:00 local window OR when no provider answers with 0813, with the basis stated in fallbackReason; the rest of 10a and section 17 are unchanged. why: the owner corrected the seat rule on 2026-11-09 (window OR weekly limit), and the protected text still said unavailability-only. rejected: keeping unavailability-only; a window-only rule that drops the fallback; a silent operational override without the governing text.",
+      "sha256": "41c75e7cf7afc21bcfb06362ec7ccea49248dc7f92aa6742f0a3ebcee197f8da",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "reason": "changes: section 9 gains a git-executor bullet: the parent owns the decision and verification, the seat executes one quoted verb per brief, never infers consent, and parks when unavailable, with the seat and budget rules deferred to the policy. why: the owner adopted Beam (rung 1 opencode/beam-free, rung 2 ollama-cloud/beam) as the git executor. rejected: a documented-only seat; letting the seat infer consent; a per-action model switch without a budget.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full after the fix pass. P1 (the second prong dropped the 0813 condition and was self-granting) and P2 (stale \"only 0813\" wording in the spec-review and Seats paragraphs) were fixed and confirmed; no P1/P2 remained. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09"
+      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09",
+      "build": "0813"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "09c0d25263a37d71a5a293cb49cd72106156b5d4d3977a19eb8e1e956708ed51",
-      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
-      "model": "mimo-v2.6-pro",
-      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window.",
-      "reason": "changes: the Protected-documents sentence, the spec-review paragraph, the Seats window assignment and the reviewer sentence now carry the owner's 12:00–18:00 window OR unavailability rule; the file also carries the signed-mock rule reviewed earlier this session. why: the seat rule is seat-wide and the old \"only 0813 / only as a recorded fallback\" wording contradicted it. rejected: scoping the window rule to protected docs only; leaving the seat table pointing at 0813 inside the window; a self-granting \"as a recorded fallback\" clause.",
+      "sha256": "d4df877d8e6da7ea1315e8995349c84523539375f72baa62628fa14d7e721d49",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "reason": "changes: the Seats table gains a Git executor row (opencode/beam-free then ollama-cloud/beam) and a paragraph fixing the scope, the owner-declared git-seat-budget, auto-accept never declaring it, the per-write variant table, the closed unavailability list and the kill-switch. why: the owner approved the git-executor seat so git and commit work runs on Beam while the parent keeps the decision and verification. rejected: automatic fallback to a possibly-paid rung; a budget the round can declare itself; a single agent file that cannot hold a ranked pair.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full after the fix pass. P1 (the second prong dropped the 0813 condition and was self-granting) and P2 (stale \"only 0813\" wording in the spec-review and Seats paragraphs) were fixed and confirmed; no P1/P2 remained. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09"
+      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09",
+      "build": "0813"
     },
     {
       "path": "documents/agents/component-first.md",
@@ -65,14 +65,14 @@
     },
     {
       "path": ".github/merge-policy.md",
-      "sha256": "9949321b6504d64ee2eb9f041f34740a148633692192362f96b37b8babe654d9",
+      "sha256": "a456bdd611a149f3f7f7014dc7e5828a5b4194047703b3305311989f3ebd66dc",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the merge policy is a governing instruction agents follow. rejected: protecting only AGENTS.md; leaving the merge policy out of the set.",
+      "reason": "changes: adds the delegation paragraph - an action may be executed by the git-executor on a brief quoting the owner verb, and the parent verifies the result; delegation changes who runs the command, never who authorises it. why: the owner adopted the seat. rejected: letting the seat authorise itself; moving the owner verbs into the brief.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
-      "at": "2026-11-04"
+      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09"
     },
     {
       "path": "canonical/SKILL.md",
@@ -98,14 +98,14 @@
     },
     {
       "path": "canonical/references/role-contracts.md",
-      "sha256": "8b30ee7f1303c310025816db9e04bc307a83aa5d6c473427662150f6b4a99c60",
+      "sha256": "0aa3627de9b01ba8a999bd86d6dbe90dde4701cf8b263ca18727aa550235e0f2",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: no text change this round; the file is protected and attested at its current text. why: the per-worktree writer contract already points at the parallel-workers reference. rejected: restating the pilot rules in the role contracts.",
+      "reason": "changes: the Parent section adds the git decision/verification delegation, and a new Git executor section fixes the one-verb brief, the tree-hash refusal, the forbidden commands, the ranked rungs, the per-write variant table, the Model-Seat trailer and the kill-switch. why: the canonical contract said the parent owns git, which the seat would otherwise contradict. rejected: letting workers commit; a seat with its own judgment; a silent fallback.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the protected-doc gate and the protected set: the set, reviewer order, record schema, hash normalization and canonical-absent CI path are coherent; no P1.",
-      "at": "2026-11-04"
+      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09"
     },
     {
       "path": "canonical/references/mock-parity.md",
@@ -131,14 +131,14 @@
     },
     {
       "path": "canonical/CHANGELOG.md",
-      "sha256": "2743dc6015f93ee4e3ac2c1e0ed89f13aa19c9685a63bcdc94e08bf73fd48f45",
-      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
-      "model": "mimo-v2.6-pro",
-      "reason": "changes: a 2026-11-09 entry records the step 4b signed-mock change and points at the repo policy. why: every skill change gets a changelog entry. rejected: shipping the change with no entry.",
+      "sha256": "eeee1a7b422feff40287acb3cc94991fb43fa27d90a586c785ef1c617537faa2",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "model": "deepseek-v4-pro",
+      "reason": "changes: a 2026-11-09 entry records the git-executor seat, its ranking, the owner-declared budget and the role-contract amendment. why: every canonical skill change gets a changelog entry. rejected: shipping the seat with no entry.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
       "at": "2026-11-09",
-      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window."
+      "build": "0813"
     }
   ]
 }
