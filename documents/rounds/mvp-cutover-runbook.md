@@ -2,7 +2,7 @@
 
 |                     |                                                                                                     |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
-| Status              | OPEN — implementing (Tier 1, runbook)                                                               |
+| Status              | CLOSED - merged in #96 (`ae570f6`)                                                                  |
 | Tier                | 1                                                                                                   |
 | Mode                | `unattended (auto-accept recommendations)`                                                          |
 | Base                | `3e51010`                                                                                           |
@@ -95,6 +95,7 @@ slice B.
 | Production probe | `GET /health`, `/openapi.json`, `/v1/members`                          | FAIL — 500 on all three; UI 404                                                                    |
 | Plan gate        | `0813` read of the runbook                                             | pass — REWORK → fixes → ACCEPT                                                                     |
 | Format/lint/type | `npm run verify:fast`                                                  | format/lint/typecheck pass; test stopped by the Windows PGlite fork crash (526 passed, 0 failures) |
+| CI               | `verify`, `ui`, `ui-e2e` on #96                                        | pass                                                                                               |
 
 gate-run 2026-11-09T22:53:31.259Z profile=fast steps=3/4 lines=26 bytes=4234
 
@@ -131,15 +132,15 @@ n/a — no mock.
 
 ## Acceptance
 
-| #   | Criterion                                      | Met | Evidence                                                                                   | Verdict  |
-| --- | ---------------------------------------------- | --- | ------------------------------------------------------------------------------------------ | -------- |
-| 1   | Runbook covers health, smoke, rollback, 15 min | yes | `documents/runbooks/release-cutover.md`                                                    | ACCEPTED |
-| 2   | Deploy config verified; P0/P1 recorded         | yes | `## Findings` P0/P1                                                                        | ACCEPTED |
-| 3   | Smoke set exercised and recorded               | yes | local 77 pass; production 500/404 recorded                                                 | ACCEPTED |
-| 4   | `0813` plan gate ACCEPT                        | yes | `## Review`                                                                                | ACCEPTED |
-| 5   | No mock and no behavioural spec change         | yes | `## Mock sign-off` / `## Mock parity`                                                      | ACCEPTED |
-| 6   | `verify:fast` green                            | yes | format/lint/type pass; 526 passed, one environmental worker exit; CI is the required check | ACCEPTED |
-| 7   | Owner asks listed                              | yes | `## Owner asks`                                                                            | ACCEPTED |
+| #   | Criterion                                      | Met | Evidence                                                                   | Verdict  |
+| --- | ---------------------------------------------- | --- | -------------------------------------------------------------------------- | -------- |
+| 1   | Runbook covers health, smoke, rollback, 15 min | yes | `documents/runbooks/release-cutover.md`                                    | ACCEPTED |
+| 2   | Deploy config verified; P0/P1 recorded         | yes | `## Findings` P0/P1                                                        | ACCEPTED |
+| 3   | Smoke set exercised and recorded               | yes | local 77 pass; production 500/404 recorded                                 | ACCEPTED |
+| 4   | `0813` plan gate ACCEPT                        | yes | `## Review`                                                                | ACCEPTED |
+| 5   | No mock and no behavioural spec change         | yes | `## Mock sign-off` / `## Mock parity`                                      | ACCEPTED |
+| 6   | `verify:fast` green                            | yes | CI `verify`, `ui`, `ui-e2e` pass on #96; local fork crash is environmental | ACCEPTED |
+| 7   | Owner asks listed                              | yes | `## Owner asks`                                                            | ACCEPTED |
 
 ## Deviations
 
