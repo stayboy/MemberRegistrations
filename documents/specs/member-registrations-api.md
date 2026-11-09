@@ -14,6 +14,10 @@
 
 ## Change log
 
+- 2026-11-09: `q` on `GET /v1/members` narrows to member number and name parts (first, last, other
+  names, alias, maiden name), never owned or linked contact values (FR-31a, Q6); the shepherding
+  roster DTO carries `contactCount` (owned and linked), not contact values (Q5). The separate
+  `contact` filter is unchanged.
 - 2026-11-08: the MVP adds the offering-count route (`GET`/`POST /v1/events/{eventId}/offering-counts`)
   and renumbers 24e's expected migration to `0018` after `0017_offering_counts`. The count tables are
   specified in `member-registrations-events-offerings.md` (phase 5); this spec carries the route row.
@@ -259,6 +263,9 @@ deployed to Vercel as a single function.
   column list inline.
 - FR-31: `GET /v1/members` MUST return `contactCount` instead of contact values; contact values are
   readable only through the member detail or the contacts endpoints.
+- FR-31a: The `q` parameter of `GET /v1/members` MUST match only member number and name parts (first,
+  last, other names, alias, maiden name), case-insensitively; it MUST NOT match owned or linked
+  contact values. Contact-value lookup is the separate `contact` filter.
 
 ## Non-Functional Requirements
 
@@ -324,7 +331,8 @@ preference.
 - `value` is **globally unique** after normalisation (digits only for phone/whatsapp, lower-cased for
   email), so one value belongs to exactly one member.
 - A dependent "having" the guardian's number is a **link** to that contact, not a duplicate row.
-- Filters match any owned or linked contact, so a shared household number returns the whole household.
+- The `contact` filter matches any owned or linked contact, so a shared household number returns the
+  whole household. The main `q` search does not match contact values (FR-31a).
 
 ### Subscription
 
@@ -424,11 +432,11 @@ conversations  = |calls with outcome = reached|
 lastCalledOn   = max(calledOn)
 ```
 
-The **roster** shows one row per active assignment: member identity, owned and linked contacts,
-residence, `attempts`, `conversations`, `lastCalledOn`, `lastOutcome`, current `stillInChurch`,
-`latestFeedback` and `latestIssue`. Counts cover the **current assignment only**; the member's own
-shepherding view exposes the full history across previous officers, including prior feedback and
-issues.
+The **roster** shows one row per active assignment: member identity, a contact count (owned and linked;
+never contact values), residence, `attempts`, `conversations`, `lastCalledOn`, `lastOutcome`, current
+`stillInChurch`, `latestFeedback` and `latestIssue`. Counts cover the **current assignment only**; the
+member's own shepherding view exposes the full history across previous officers, including prior
+feedback and issues.
 
 Roster rows, officer rows and the member's shepherding view carry `gender` and `age` alongside the
 composed `name`, so every shepherding surface renders the same identity label. Assignment history and
@@ -925,16 +933,16 @@ standalone `GET /v1/subscriptions/{id}`: the member aggregate and the renew resp
 
 ### Shepherding
 
-| Method   | Path                                               | Result                                                                      |
-| -------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
-| `POST`   | `/v1/shepherding/assignments`                      | Assign a member; reassignment needs `replaceAssignmentId` + `reason`        |
-| `DELETE` | `/v1/shepherding/assignments/{assignmentId}`       | End an assignment; `409` when already ended                                 |
-| `POST`   | `/v1/shepherding/assignments/{assignmentId}/calls` | Log one attempt; `409` when the assignment has ended                        |
-| `GET`    | `/v1/shepherding/assignments/{assignmentId}/calls` | Full call history for the assignment                                        |
-| `GET`    | `/v1/shepherding/officers`                         | Presbyters with list size and call totals (`from`, `to`)                    |
-| `GET`    | `/v1/shepherding/officers/{memberNo}/members`      | The officer's roster with contacts, counts and latest report (`from`, `to`) |
-| `GET`    | `/v1/shepherding/report`                           | Church-wide coverage and call totals (`from`, `to`)                         |
-| `GET`    | `/v1/members/{memberNo}/shepherding`               | Current shepherd, assignment history, calls and current status              |
+| Method   | Path                                               | Result                                                                                                                      |
+| -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/v1/shepherding/assignments`                      | Assign a member; reassignment needs `replaceAssignmentId` + `reason`                                                        |
+| `DELETE` | `/v1/shepherding/assignments/{assignmentId}`       | End an assignment; `409` when already ended                                                                                 |
+| `POST`   | `/v1/shepherding/assignments/{assignmentId}/calls` | Log one attempt; `409` when the assignment has ended                                                                        |
+| `GET`    | `/v1/shepherding/assignments/{assignmentId}/calls` | Full call history for the assignment                                                                                        |
+| `GET`    | `/v1/shepherding/officers`                         | Presbyters with list size and call totals (`from`, `to`)                                                                    |
+| `GET`    | `/v1/shepherding/officers/{memberNo}/members`      | The officer's roster with a contact count (owned and linked; never contact values), counts and latest report (`from`, `to`) |
+| `GET`    | `/v1/shepherding/report`                           | Church-wide coverage and call totals (`from`, `to`)                                                                         |
+| `GET`    | `/v1/members/{memberNo}/shepherding`               | Current shepherd, assignment history, calls and current status                                                              |
 
 Assignment body: `{ officerMemberNo, memberNo, assignedOn?, replaceAssignmentId?, reason? }`.
 
@@ -1409,10 +1417,10 @@ stays raw.
 - **In scope:** `create` (the member row insert), the reads (`findRow`/`findAnyRow`/`findById`),
   `update` (the version-gated update), `archive`/`restore` (the member row update), and `purge` (the
   PII nulling).
-- **Raw:** `list` (the cross-entity name/contact search), every related-table read and write (contacts,
-  subscriptions, coverage, ministries, relationships, attendance, shepherding), the contact/ministry
-  sub-inserts inside `create`, and the related-table deletes inside `purge`. Ticket 06 owns
-  contacts/subscriptions.
+- **Raw:** `list` (the cross-entity name search; contact matching is the `contact` filter), every
+  related-table read and write (contacts, subscriptions, coverage, ministries, relationships,
+  attendance, shepherding), the contact/ministry sub-inserts inside `create`, and the related-table
+  deletes inside `purge`. Ticket 06 owns contacts/subscriptions.
 - **Attendance and denominator:** the counts, `lastAttended` and the denominator queries stay raw and
   return the same numbers.
 - **Concurrency:** the `version = version + 1 where version = $x` gate is preserved; a stale ETag still
@@ -1429,9 +1437,9 @@ report and aggregate queries stay raw.
   `removeContact`, `linkContact`, `unlinkContact`, `insertContact`); `addCoverage`/`removeCoverage` and
   `insertCoverage`; `addSubscription`/`endSubscription` and `subscriptionsFor`; and the append-only
   shepherding calls (`logCall`, `listCalls`, `loadCallsForMember`).
-- **Raw:** the member `list` (the cross-entity contact search), the attendance/ministries/relationships
-  loaders, the shepherding assignment lifecycle (`assign`, `endAssignment`), and the roster/report/
-  officer aggregates.
+- **Raw:** the member `list` (the cross-entity name search; contact matching is the `contact` filter),
+  the attendance/ministries/relationships loaders, the shepherding assignment lifecycle (`assign`,
+  `endAssignment`), and the roster/report/officer aggregates.
 - **Contract:** unchanged. The summary contract keeps its contact list (Q65); contact values are not
   removed from list responses in this ticket.
 - **Append-only:** shepherding calls remain insert/read-only; no update or delete route appears.

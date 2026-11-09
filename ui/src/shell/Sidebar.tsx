@@ -2,7 +2,7 @@ import { Button, Tooltip, makeStyles, tokens } from '@fluentui/react-components'
 import { PanelLeftContractRegular, PanelLeftExpandRegular } from '@fluentui/react-icons';
 import { Link, useLocation } from 'react-router-dom';
 import { DateTimeMenu } from '../components/DateTimeMenu';
-import type { NavSection } from './navigation';
+import { visibleNavItems, type NavSection } from './navigation';
 import { ThemeControl } from './ThemeControl';
 
 const useStyles = makeStyles({
@@ -185,7 +185,7 @@ export function Sidebar({
 
       <nav className={styles.nav} aria-label={`${section.label} submenu`}>
         <ul className={styles.list}>
-          {section.items.map((item) => {
+          {visibleNavItems(section).map((item) => {
             const active = isItemActive(item.path, pathname);
             const Icon = item.icon;
             const link = (

@@ -17,7 +17,6 @@ import {
   ValidationError,
 } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
-import { loadContacts, type ContactDto } from './contacts.js';
 import type { Gender } from './members.js';
 
 const UTC = 'UTC';
@@ -79,7 +78,8 @@ export interface RosterEntryDto {
   gender: Gender;
   age: number | null;
   placeOfResidence: string | null;
-  contacts: ContactDto[];
+  /** Owned plus linked contacts, never the contact values (Q5). */
+  contactCount: number;
   attempts: number;
   conversations: number;
   lastCalledOn: string | null;
@@ -393,13 +393,13 @@ export class ShepherdingRepository {
     const rows = await this.db.query<{
       assignment_id: string;
       assigned_on: string;
-      member_id: string;
       member_no: string;
       first_name: string | null;
       last_name: string | null;
       gender: Gender;
       dob: string | Date | null;
       place_of_residence: string | null;
+      contact_count: number;
       attempts: number;
       conversations: number;
       last_called_on: string | null;
@@ -409,14 +409,28 @@ export class ShepherdingRepository {
       issue: string | null;
     }>(
       `select a.id as assignment_id, a.assigned_on,
-              m.id as member_id, m.member_no, m.first_name, m.last_name,
-              m.gender, m.dob, m.place_of_residence,
+              m.member_no, m.first_name, m.last_name,
+              m.gender, m.dob, m.place_of_residence, cc.contact_count,
               w.attempts, w.conversations, w.last_called_on,
               l.outcome as last_outcome,
               k.still_in_church,
               f.feedback, i.issue
        from shepherding_assignments a
        join members m on m.id = a.member_id
+       left join lateral (
+         -- count(distinct) covers owned plus linked contacts. A contact cannot be both owned and
+        -- linked (the repository rejects that case), so this is defence in depth, not a shortcut.
+        select count(distinct contact_id)::int as contact_count
+         from (
+           select c.id as contact_id
+           from member_contacts c
+           where c.member_id = m.id
+           union all
+           select link.contact_id
+           from member_contact_links link
+           where link.member_id = m.id
+         ) owned_or_linked
+       ) cc on true
        left join lateral (
          select count(*)::int as attempts,
                 count(*) filter (where c.outcome = 'reached')::int as conversations,
@@ -460,11 +474,6 @@ export class ShepherdingRepository {
       [officer.id, from, to],
     );
 
-    const contacts = await loadContacts(
-      this.db,
-      rows.map((row) => row.member_id),
-    );
-
     return rows.map((row) => ({
       assignmentId: row.assignment_id,
       assignedOn: iso(row.assigned_on)!,
@@ -473,7 +482,7 @@ export class ShepherdingRepository {
       gender: row.gender,
       age: ageInYears(iso(row.dob)),
       placeOfResidence: row.place_of_residence,
-      contacts: contacts.get(row.member_id) ?? [],
+      contactCount: row.contact_count,
       attempts: row.attempts,
       conversations: row.conversations,
       lastCalledOn: iso(row.last_called_on),

@@ -42,6 +42,12 @@ export const useEventStyles = makeStyles({
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
     ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke2),
   },
+  panelTitle: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase400,
+    lineHeight: tokens.lineHeightBase400,
+    fontWeight: tokens.fontWeightSemibold,
+  },
   sessionTable: {
     minWidth: '980px',
   },

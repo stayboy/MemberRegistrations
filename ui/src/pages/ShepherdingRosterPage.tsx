@@ -431,10 +431,10 @@ export function ShepherdingRosterPage() {
                                 <Button
                                   size="small"
                                   appearance="transparent"
-                                  aria-label={`${contactLabel(entry.contacts.length)} for ${label}`}
+                                  aria-label={`${contactLabel(entry.contactCount)} for ${label}`}
                                   onClick={() => setContactsFor(entry)}
                                 >
-                                  {contactLabel(entry.contacts.length)}
+                                  {contactLabel(entry.contactCount)}
                                 </Button>
                               </TableCell>
                               <TableCell>{entry.attempts}</TableCell>

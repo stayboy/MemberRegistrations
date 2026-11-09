@@ -15,6 +15,8 @@ test('the offerings count page reads the current observation and records a corre
 }) => {
   await open(page, '/ussd/offerings');
   await expect(page.getByRole('heading', { level: 1, name: 'Offerings count' })).toBeVisible();
+  await expect(page.getByText('USSD is not live in this production build.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Simulator' })).toHaveCount(0);
 
   await chooseFoundationService(page);
 

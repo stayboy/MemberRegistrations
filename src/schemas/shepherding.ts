@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { CALL_OUTCOMES, STILL_IN_CHURCH } from '../domain/shepherding.js';
 import { GENDERS } from '../repos/members.js';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
-import { contactResponseSchema } from './members.js';
 
 export const assignmentInputSchema = z.object({
   officerMemberNo: memberNoParamSchema,
@@ -71,7 +70,7 @@ export const rosterEntrySchema = z.object({
   gender: z.enum(GENDERS),
   age: z.number().int().nullable(),
   placeOfResidence: z.string().nullable(),
-  contacts: z.array(contactResponseSchema),
+  contactCount: z.number().int(),
   attempts: z.number().int(),
   conversations: z.number().int(),
   lastCalledOn: z.string().nullable(),

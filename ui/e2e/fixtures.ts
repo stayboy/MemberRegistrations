@@ -317,7 +317,11 @@ function offeringTerms(
   };
 }
 
-function eventOffering(offeringId: string, name: string): EventOfferingItem {
+function eventOffering(
+  offeringId: string,
+  name: string,
+  overrides: Partial<EventOfferingItem> = {},
+): EventOfferingItem {
   return {
     offeringId,
     name,
@@ -326,6 +330,7 @@ function eventOffering(offeringId: string, name: string): EventOfferingItem {
     terms: offeringTerms(1, name),
     exceptions: [],
     stats: EMPTY_OFFERING_STATS,
+    ...overrides,
   };
 }
 
@@ -370,7 +375,21 @@ export const EVENTS: readonly EventItem[] = [
         source: 'mixed',
       },
     ],
-    offerings: [],
+    offerings: [
+      eventOffering('offering-1', 'Tithe', {
+        availableUntil: '2026-12-31',
+        terms: offeringTerms(1, 'Tithe', { kind: 'tithe' }),
+      }),
+      eventOffering('offering-2', 'Missions', {
+        availableUntil: '2026-12-31',
+        terms: offeringTerms(1, 'Missions', { kind: 'missions' }),
+      }),
+      eventOffering('offering-3', 'Building fund', {
+        availableUntil: '2026-06-30',
+        expired: true,
+        terms: offeringTerms(1, 'Building fund', { kind: 'building' }),
+      }),
+    ],
     stats: EMPTY_OFFERING_STATS,
   },
   {
@@ -768,7 +787,7 @@ const ROSTER: Roster = {
       gender: 'female',
       age: null,
       placeOfResidence: 'Accra',
-      contacts: CONTACTS_1002,
+      contactCount: CONTACTS_1002.length,
       attempts: 2,
       conversations: 1,
       lastCalledOn: '2026-01-02',
@@ -785,16 +804,7 @@ const ROSTER: Roster = {
       gender: 'male',
       age: 35,
       placeOfResidence: 'Tema',
-      contacts: [
-        {
-          id: 'contact-1003-phone',
-          kind: 'phone',
-          value: '+233 20 000 0003',
-          displayOrder: 0,
-          ownerMemberNo: 'M-1003',
-          linked: false,
-        },
-      ],
+      contactCount: 1,
       attempts: 1,
       conversations: 1,
       lastCalledOn: '2025-12-20',
@@ -811,16 +821,7 @@ const ROSTER: Roster = {
       gender: 'female',
       age: 29,
       placeOfResidence: 'Takoradi',
-      contacts: [
-        {
-          id: 'contact-1005-email',
-          kind: 'email',
-          value: 'adjoa.boateng@example.test',
-          displayOrder: 0,
-          ownerMemberNo: 'M-1005',
-          linked: false,
-        },
-      ],
+      contactCount: 1,
       attempts: 1,
       conversations: 1,
       lastCalledOn: '2026-01-04',
@@ -837,7 +838,7 @@ const ROSTER: Roster = {
       gender: 'male',
       age: 52,
       placeOfResidence: 'Kumasi',
-      contacts: [],
+      contactCount: 0,
       attempts: 0,
       conversations: 0,
       lastCalledOn: null,

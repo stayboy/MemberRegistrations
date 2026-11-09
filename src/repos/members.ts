@@ -422,11 +422,6 @@ export class MemberRepository {
       where.push(`(
         m.member_no ilike ${p} or m.first_name ilike ${p} or m.last_name ilike ${p}
         or m.other_names ilike ${p} or m.alias ilike ${p} or m.maiden_name ilike ${p}
-        or exists (select 1 from member_contacts c where c.member_id = m.id and c.value ilike ${p})
-        or exists (
-          select 1 from member_contact_links l join member_contacts c on c.id = l.contact_id
-          where l.member_id = m.id and c.value ilike ${p}
-        )
       )`);
     }
 

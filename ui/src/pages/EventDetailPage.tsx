@@ -28,6 +28,7 @@ import {
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
+import { TermsDialog } from '../components/TermsDialog';
 import {
   eventStatusLabel,
   formatPresentExpected,
@@ -61,6 +62,10 @@ function statusColor(status: EventStatus): BadgeColor {
   return 'subtle';
 }
 
+function kindLabel(kind: string): string {
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
 /**
  * Events → event detail (events FR-4/FR-10/FR-15): the header, the metadata,
  * the attached-offering count and one row per dated session with its status,
@@ -76,6 +81,10 @@ export function EventDetailPage() {
   const { formatDate, formatTime, formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [selected, setSelected] = useState<EventSessionItem | null>(null);
+  const [termsTarget, setTermsTarget] = useState<{
+    readonly offeringId: string;
+    readonly name: string;
+  } | null>(null);
 
   const eventQuery = useQuery({
     queryKey: ['events', baseUrl, 'detail', id],
@@ -200,7 +209,92 @@ export function EventDetailPage() {
               ) : null}
             </Card>
 
+            <section className={styles.panel} aria-label="Active offerings">
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.panelTitle}>Active offerings</h2>
+                <Text size={200} className={styles.muted}>
+                  Every offering attached · current terms
+                </Text>
+              </div>
+              {event.offerings.length === 0 ? (
+                <div className={styles.empty}>
+                  <Text className={styles.emptyTitle}>No offerings attached</Text>
+                  <Text size={200} className={styles.muted}>
+                    Attach an offering to this event before recording giving.
+                  </Text>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.tableWrap}>
+                    <Table className={styles.table} size="small" aria-label="Active offerings">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHeaderCell>Offering</TableHeaderCell>
+                          <TableHeaderCell>Kind</TableHeaderCell>
+                          <TableHeaderCell>Currency</TableHeaderCell>
+                          <TableHeaderCell>Available until</TableHeaderCell>
+                          <TableHeaderCell>Status</TableHeaderCell>
+                          <TableHeaderCell>Terms</TableHeaderCell>
+                          <TableHeaderCell aria-label="Action" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {event.offerings.map((offering) => (
+                          <TableRow key={offering.offeringId}>
+                            <TableCell>
+                              <Text weight="semibold">{offering.name}</Text>
+                            </TableCell>
+                            <TableCell>{kindLabel(offering.terms.kind)}</TableCell>
+                            <TableCell>{offering.terms.currency}</TableCell>
+                            <TableCell>
+                              {offering.availableUntil ? formatDate(offering.availableUntil) : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                appearance="tint"
+                                color={offering.expired ? 'warning' : 'success'}
+                                size="small"
+                              >
+                                {offering.expired ? 'Expired' : 'Active'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{`v${offering.terms.version}`}</TableCell>
+                            <TableCell>
+                              <Button
+                                size="small"
+                                appearance="transparent"
+                                aria-label={`View terms for ${offering.name}`}
+                                onClick={() =>
+                                  setTermsTarget({
+                                    offeringId: offering.offeringId,
+                                    name: offering.name,
+                                  })
+                                }
+                              >
+                                View terms
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className={styles.listFooter}>
+                    <Text size={200} className={styles.muted}>
+                      Read-only summary · the full offering detail is post-MVP.
+                    </Text>
+                  </div>
+                </>
+              )}
+            </section>
+
             <section className={styles.panel} aria-label="Event sessions">
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.panelTitle}>Event sessions</h2>
+                <Text size={200} className={styles.muted}>
+                  {sessions.length} session dates
+                </Text>
+              </div>
               {sessions.length === 0 ? (
                 <div className={styles.empty}>
                   <Text className={styles.emptyTitle}>No sessions</Text>
@@ -262,6 +356,8 @@ export function EventDetailPage() {
         session={selected}
         onClose={() => setSelected(null)}
       />
+
+      <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />
     </PageFrame>
   );
 }

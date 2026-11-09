@@ -571,8 +571,19 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'List member registrations',
           parameters: [
-            { name: 'q', in: 'query', schema: { type: 'string' } },
-            { name: 'contact', in: 'query', schema: { type: 'string' } },
+            {
+              name: 'q',
+              in: 'query',
+              description:
+                'Matches member number and name parts (first, last, other names, alias, maiden name); never owned or linked contact values.',
+              schema: { type: 'string' },
+            },
+            {
+              name: 'contact',
+              in: 'query',
+              description: 'Matches an owned or linked contact value, normalised per channel.',
+              schema: { type: 'string' },
+            },
             {
               name: 'status',
               in: 'query',
@@ -2383,7 +2394,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
           ],
           responses: {
-            200: json('Roster with contacts, counts and latest reports.', 'Roster'),
+            200: json(
+              'Roster with a contact count (owned and linked, never values), counts and latest reports.',
+              'Roster',
+            ),
             401: unauthorized,
             404: notFound,
             422: validation,

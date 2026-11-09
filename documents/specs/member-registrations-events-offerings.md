@@ -63,7 +63,7 @@ contracts they will use.
 - **Events list**: event name, date range, series/standalone, venue, per-date attendance summary,
   offerings summary and status. Selecting a row opens the event detail.
 - **Event detail**: series/standalone, date range, 17:30 start, venue, per-date present/expected,
-  imported-row source, attached offerings (2+), offering totals and a link to the attendance import.
+  imported-row source, the read-only Active offerings panel and a link to the attendance import.
 - **Series**: list and detail with schedule versions, exceptions, generated events, attendance summary
   and attached offerings. Adding a schedule version and adding/removing an exception use the existing
   endpoints; archiving is a soft end.
@@ -409,8 +409,8 @@ separate Attendance section, that is Q1.
 - FR-3: Event status MUST be derived by the API; the UI MUST NOT classify an event by comparing dates
   locally.
 - FR-4: Selecting an event MUST open `#/events/:eventId` with the event detail: name, date range,
-  start time, venue, series/standalone, status, per-date attendance, imported-row source, offerings
-  attached and stats.
+  start time, venue, series/standalone, status, per-date attendance, imported-row source and the
+  read-only Active offerings panel (FR-39).
 - FR-5: The series list MUST use `GET /v1/series` and show name, ministry, a human-readable schedule,
   next occurrence and archived state.
 - FR-6: The series detail MUST show each schedule version (`effectiveFrom`, `rrule`, `endsOn`),
@@ -421,8 +421,9 @@ separate Attendance section, that is Q1.
   delete.
 - FR-8: “Import attendance” on an event/series MUST link to the existing import flow; after a
   successful batch the event/series queries MUST be invalidated.
-- FR-9: An event MUST show all offerings attached to it (two or more) and their totals. This data MUST
-  come from the offerings API; the UI MUST NOT aggregate contributions client-side from partial pages.
+- FR-9: An event MUST show all offerings attached to it (two or more) in the read-only Active
+  offerings panel. This data MUST come from the event aggregate or the offerings API; the UI MUST NOT
+  aggregate contributions client-side from partial pages.
 - FR-10: The event attendance report MUST show present/expected per event date and, when the API
   supports it, the member rows for that date with `import`/`manual` source. If the report endpoint is
   unavailable, the UI MUST show “attendance report not available” plus the imported-row count; it MUST
@@ -508,8 +509,12 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
   the date, not a manual edit.
 - FR-38: The USSD/payment flow MUST reject zero/negative amounts, unsupported currencies, expired
   sessions and offerings not attached to the selected active event.
-- FR-39: Selecting an active event MUST display every offering attached to it, including its terms,
-  default amount (if any), exceptions and stats.
+- FR-39: Selecting an active event MUST display every offering attached to it in a read-only **Active
+  offerings** panel — active meaning not detached; an expired attachment remains listed and marked —
+  with the resolved name, kind, currency, effective available-until, status, the current terms version
+  (from the event aggregate's `EventOffering.terms.version`) and a **View terms** action (reusing
+  `GET /v1/offerings/{id}/terms`). The terms view carries the default amount; the full offering detail,
+  including its per-date exceptions, is O1 post-MVP.
 - FR-40: The church landing MUST be usable without exposing individual contact data; member totals
   show member number/name only, not phone/email.
 
@@ -546,7 +551,7 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-2: **Given** a date window, **When** the events list loads, **Then** it shows held/upcoming/cancelled/extra occurrences with series, ministry, attendance and offering summaries from the API. (FR-2, FR-3)
 
-### AC-3: **Given** an event row, **When** it opens, **Then** the detail shows series, date, status, present/expected, imported-row source and all attached offerings with stats. (FR-4, FR-9, FR-39)
+### AC-3: **Given** an event row, **When** it opens, **Then** the detail shows series, date, status, present/expected, imported-row source and the read-only Active offerings panel (name, kind, currency, effective available-until, status, terms version from the aggregate, View terms reusing the terms route; expired marked). (FR-4, FR-9, FR-39)
 
 ### AC-4: **Given** the series list, **When** it loads, **Then** each series shows a human-readable schedule, next occurrence and archived state. (FR-5)
 
@@ -1138,6 +1143,9 @@ compute-on-read; this round reads the source tables and adds no aggregate store 
 
 ## Change log
 
+- 2026-11-09: FR-39/AC-3 narrowed (Option B, owner re-approved) to the read-only Active-offerings
+  panel; the default amount is carried by the terms view, and per-date exceptions/full detail are O1.
+  FR-4/FR-9/AC-3 "stats" wording aligned with R8 (zeroed on the event detail).
 - 2026-11-08: MVP phase 5 specified — **offering cash counts** per event + offering + session, entered
   as denomination lines, append-only with an `asOf` and corrected by a superseding row; the landing
   gains `countedMinor` and `varianceMinor`; the operator page `#/ussd/offerings` follows the headcount
