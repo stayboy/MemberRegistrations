@@ -162,12 +162,8 @@ export function UssdOfferingsPage() {
     }
   }, [eventQuery.error, countsQuery.error, contributionsQuery.error, signOut]);
 
-  // Keep the blank grid in step with the chosen offering's currency while the
-  // entry is closed. Opening the dialog resets it through resetEntry.
-  useEffect(() => {
-    if (countOpen || correction !== null) return;
-    setRows(emptyCountRows(currency));
-  }, [currency, countOpen, correction]);
+  // The grid is reset when the Record dialog opens (startRecordCount) and when
+  // it closes, so no effect is needed to track the offering's currency.
 
   function resetEntry(forCurrency: string = currency): void {
     setRows(emptyCountRows(forCurrency));
