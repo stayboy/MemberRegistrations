@@ -119,6 +119,14 @@ test.describe('accessibility', () => {
 
       await expectSeededTheme(page, 'fluent', scheme);
       await audit(page, `offerings count (${scheme})`);
+
+      // The record entry is a modal grid; audit it in the same seeded theme.
+      await page.getByRole('button', { name: 'Record count' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByLabel('Pieces of GHS 200.00')).toBeVisible();
+      await audit(page, `offerings count record dialog (${scheme})`);
+      await page.getByRole('button', { name: 'Cancel' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   }
 

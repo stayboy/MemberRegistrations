@@ -6,9 +6,11 @@
 
 **Status:** **Approved 2026-11-03; ticket-23 amendment (23-Q1–23-Q10, R1–R8) accepted 2026-11-07;
 MVP offering-count amendment (phase 5, Q18–Q24) accepted 2026-11-08**, both by the fallback reviewer
-seat (first-choice `0813` unavailable: weekly usage limit). Events/series V2 and offerings V3;
-implementation is gated by tickets 07–11, 20–24 and the MVP capture round. The Strategic Conference
-is the reference event.
+seat (first-choice `0813` unavailable: weekly usage limit). The **offering-denomination grid
+amendment (slice A, 2026-11-09)** was accepted by the owner from the grill round and reviewed by
+`ollama-cloud/deepseek-v4-pro:0813`: REWORK (2 P1, 4 P2) → fixes → **ACCEPT**. Events/series V2 and
+offerings V3; implementation is gated by tickets 07–11, 20–24 and the MVP capture round. The
+Strategic Conference is the reference event.
 
 |         |                                                                                       |
 | ------- | ------------------------------------------------------------------------------------- |
@@ -359,11 +361,51 @@ validation_error`. A correction keeps the corrected row's `asOf`, replaces its l
   positive value means counted cash exceeds recorded gifts; a negative one means the reverse. Counted
   cash is never added to recorded gifts (no double counting).
 - **UI.** `#/ussd/offerings` sits beside Headcount: the shared event/session picker, an offering
-  selector, the current observation, denomination rows with a GHS quick-pick (1, 2, 5, 10, 20, 50,
-  100, 200 notes; 0.50/0.20/0.10/0.05 coins) and free-form add, a live total, record/correct, the
-  observation history, plus the announced-gift and pledge forms and the offering's terms link. The GHS
-  quick-pick is hidden when the offering's currency is not GHS; free-form rows remain. The offerings
-  landing (`#/events/offerings`) stays read-only and gains the counted/variance figures.
+  selector, the current observation, a single-pass **denomination grid**, a live total,
+  record/correct, the observation history, plus the announced-gift and pledge forms and the
+  offering's terms link. The grid shows one number input per configured denomination, notes before
+  coins and descending within each group, so every value is on screen before any number is typed;
+  blank means not counted. GHS notes are 200, 100, 50, 20, 10, 5, 2 and 1 and coins are 0.50, 0.20,
+  0.10 and 0.05 (the 1 and 2 cedi coins collapse into the note group and are not listed separately). A
+  free-form add covers a one-off non-standard value (a withdrawn note or an odd lot; foreign cash is a
+  different currency and is out of scope for a single-currency count) and never joins the catalogue; a
+  value that matches a configured row merges into it (sums the piece counts), and one that matches a
+  hidden row is pinned as a one-off. A currency with no catalogue, or with every denomination hidden,
+  shows no grid but keeps free-form rows, and the message names which condition applies. On a
+  correction, an observed line whose denomination is hidden by the configuration or absent from the
+  catalogue re-renders as a pre-filled, editable free-form row (pinned as a one-off) and submits with
+  the correction unless the operator blanks it; blanking removes the line. The API keeps no
+  denomination whitelist, so the catalogue narrows the grid only in slice A (the slice B setting
+  narrows it the same way) and never rejects a value. The offerings landing (`#/events/offerings`)
+  stays read-only and gains the counted/variance figures.
+
+#### Denomination entry and ordering (2026-11-09)
+
+The owner accepted this amendment from the grill round. Decisions, with the rejected options:
+
+- Entry is one pass: an always-visible grid of number inputs, not click-to-add rows. Rejected: a
+  second "type the counts" mode; keeping add-a-row and reordering only the buttons.
+- The catalogue is per-currency data (`minor`, kind, default order, default enabled), seeded in code
+  for slice A and overlaid by the register setting in slice B. Rejected: one flat GHS constant; a
+  server-only catalogue before slice B.
+- The setting is one ordered list per currency, each entry `{denominationMinor, enabled, position}`;
+  hidden and ordered-last are distinct. It is register-wide and server-backed in slice B. Rejected:
+  browser-local settings (per-device); per-offering settings (drift); separate enable and order lists.
+- The setting is UI-only; `POST` keeps accepting any positive `denominationMinor`. Rejected: API
+  rejection, which would break corrections and the replay of existing observations.
+- Custom values stay one-off rows and never change the catalogue. Rejected: dropping free-form entry;
+  promoting a custom value into the order.
+- A currency with no catalogue shows free-form only and names the condition. Rejected: a generic
+  1-2-5 ladder.
+- The slice B admin screen is `#/admin/offering-denominations`, linked from Settings, not a panel on
+  the browser-local Settings page and not inline on the counting page.
+- Delivery is split: slice A is the grid (UI-only, no migration or wire change); slice B is the
+  server-backed setting, parked behind 24e and taking migration `0019`. Rejected: one round with the
+  migration; settings first.
+- Default order is notes before coins, descending within each group, for every currency from its
+  catalogue. A value that exists as both note and coin (1 and 2 GHS) appears once, in the note group.
+- `0.01` is not seeded until the live Bank of Ghana set is confirmed; if it is confirmed, it enters
+  catalogue-only and hidden by default.
 - **Migration.** `0017_offering_counts`; 24e's expected migration moves to `0018`.
 
 ### Navigation

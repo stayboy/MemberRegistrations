@@ -10,7 +10,7 @@ async function chooseFoundationService(page: Page): Promise<void> {
   await page.getByRole('option', { name: /Foundation service/ }).click();
 }
 
-test('the offerings count page reads the current observation and records a correction', async ({
+test('the offerings count page reads the current observation, records a grid count and corrects it', async ({
   page,
 }) => {
   await open(page, '/ussd/offerings');
@@ -32,32 +32,43 @@ test('the offerings count page reads the current observation and records a corre
   await expect(history.getByText('Superseded')).toBeVisible();
   await expect(history.getByText('GHS 780.00')).toBeVisible();
 
-  // The count entry is a dialog; the GHS quick-pick adds a row and the live total follows.
+  // The count entry is a single-pass grid: one input per configured denomination.
   await page.getByRole('button', { name: 'Record count' }).click();
   const recordDialog = page.getByRole('dialog');
   await expect(recordDialog.getByRole('heading', { name: 'Record offering count' })).toBeVisible();
-  await recordDialog.getByRole('button', { name: 'GHS 20.00' }).click();
-  const rows = recordDialog.getByRole('table', { name: 'Denomination rows' });
-  await expect(rows.getByLabel('Pieces of GHS 20.00')).toHaveValue('1');
-  await expect(recordDialog.getByText('Live total GHS 20.00')).toBeVisible();
-  await recordDialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(recordDialog.getByLabel('Pieces of GHS 200.00')).toHaveValue('');
+  await recordDialog.getByLabel('Pieces of GHS 200.00').fill('3');
+  await recordDialog.getByLabel('Pieces of GHS 50.00').fill('4');
+  await expect(
+    recordDialog.getByText('2 of 12 denominations counted; the blank rows stay visible.'),
+  ).toBeVisible();
+  await expect(recordDialog.getByText('Live total GHS 800.00')).toBeVisible();
 
-  // Correct the current observation: the lines prefill and asOf is kept.
+  // The fixture session is 2999-01-10; a new count keeps its asOf on that day.
+  await recordDialog.getByLabel('As of').fill('2999-01-10T09:30');
+  await recordDialog.getByRole('button', { name: 'Record count' }).click();
+
+  await expect(page.getByText('Offering count recorded.')).toBeVisible();
+  await expect(page.getByText('GHS 800.00').first()).toBeVisible();
+  const currentAsOf = (await page.getByText(/^as of /).first().innerText()).replace(/^as of /, '');
+
+  // Correct the newly recorded current observation: the grid prefills and asOf is kept.
   await page.getByRole('button', { name: 'Correct' }).first().click();
   const correctDialog = page.getByRole('dialog');
   await expect(correctDialog.getByRole('heading', { name: 'Correct offering count' })).toBeVisible();
-  await expect(correctDialog.getByText(/Keeping asOf/)).toBeVisible();
-  const correctionRows = correctDialog.getByRole('table', { name: 'Denomination rows' });
-  await expect(correctionRows.getByLabel('Pieces of GHS 20.00')).toHaveValue('40');
-  await correctionRows.getByLabel('Pieces of GHS 20.00').fill('41');
-  await expect(correctDialog.getByText('Live total GHS 1,220.00')).toBeVisible();
+  await expect(
+    correctDialog.getByText(`Keeping asOf ${currentAsOf}`, { exact: false }).first(),
+  ).toBeVisible();
+  await expect(correctDialog.getByLabel('Pieces of GHS 200.00')).toHaveValue('3');
+  await expect(correctDialog.getByLabel('Pieces of GHS 50.00')).toHaveValue('4');
+  await correctDialog.getByLabel('Pieces of GHS 200.00').fill('4');
+  await expect(correctDialog.getByText('Live total GHS 1,000.00')).toBeVisible();
   await correctDialog.getByRole('button', { name: 'Save correction' }).click();
 
   await expect(
     page.getByText('Correction saved. The earlier observation stays readable', { exact: false }),
   ).toBeVisible();
-  await expect(page.getByText('GHS 1,220.00').first()).toBeVisible();
+  await expect(page.getByText('GHS 1,000.00').first()).toBeVisible();
 });
 
 test('the page lists the session offertories and opens the record and pledge dialogs', async ({

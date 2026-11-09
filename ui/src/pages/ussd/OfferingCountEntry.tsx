@@ -3,6 +3,8 @@ import {
   Button,
   Field,
   Input,
+  MessageBar,
+  MessageBarBody,
   Table,
   TableBody,
   TableCell,
@@ -15,21 +17,33 @@ import { AddRegular, DeleteRegular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import type { OfferingCount } from '../../api/offering-counts';
 import {
-  GHS_COIN_MINORS,
-  GHS_NOTE_MINORS,
   MAX_LINES,
+  MAX_PIECES,
+  customRowCount,
   denominationLabel,
+  gridDenominations,
+  hasDenominationCatalogue,
   parseMoneyMinor,
-  quickPickVisible,
+  positivePieces,
+  positiveRowCount,
   type CountRowDraft,
+  type DenominationOverride,
 } from '../../format/offering-counts';
 import { formatMoneyMinor } from '../../format/welfare';
 import { useUssdStyles } from './ussd-styles';
 
+const OVER_CAP_MESSAGE = `A piece count must be ${MAX_PIECES.toLocaleString()} or fewer.`;
+
+function isOverCap(pieces: string): boolean {
+  const trimmed = pieces.trim();
+  return /^\d+$/.test(trimmed) && Number(trimmed) > MAX_PIECES;
+}
+
 /**
- * The denomination entry for one count: a GHS note/coin quick-pick hidden for
- * other currencies, a free-form custom denomination, editable rows, a live
- * total, and Record or Correct. Presentational only; the page owns the request.
+ * The single-pass denomination entry for one count: one number input per
+ * configured denomination (notes before coins, descending), a free-form one-off
+ * add, an editable one-off table, a live total and Record or Correct. The page
+ * owns the request and the rows; this component is presentational.
  */
 export function OfferingCountEntry({
   currency,
@@ -48,6 +62,7 @@ export function OfferingCountEntry({
   onCancelCorrection,
   showHeader = true,
   onCancel,
+  overrides = [],
 }: {
   currency: string;
   rows: readonly CountRowDraft[];
@@ -66,12 +81,58 @@ export function OfferingCountEntry({
   /** The dialog supplies its own title and close action. */
   showHeader?: boolean;
   onCancel?: () => void;
+  /** Slice B's enable/position setting; omitted keeps the catalogue defaults. */
+  overrides?: readonly DenominationOverride[];
 }) {
   const styles = useUssdStyles();
   const [customAmount, setCustomAmount] = useState('');
   const customMinor = parseMoneyMinor(customAmount);
-  const showQuickPick = quickPickVisible(currency);
-  const atLineCap = rows.length >= MAX_LINES;
+
+  const configured = gridDenominations(currency, overrides);
+  const configuredMinors = new Set(configured.map((entry) => entry.denominationMinor));
+  const hasGrid = configured.length > 0;
+  const catalogueExists = hasDenominationCatalogue(currency);
+  const oneOffRows = rows.filter((row) => !configuredMinors.has(row.denominationMinor));
+  const overCapMinors = new Set(
+    rows.filter((row) => isOverCap(row.pieces)).map((row) => row.denominationMinor),
+  );
+  const counted = configured.reduce((total, entry) => {
+    const row = rows.find((draft) => draft.denominationMinor === entry.denominationMinor);
+    return row && positivePieces(row.pieces) ? total + 1 : total;
+  }, 0);
+  const customRows = customRowCount(rows, currency, overrides);
+  const positiveRows = positiveRowCount(rows);
+  const atLineCap = positiveRows >= MAX_LINES;
+  const gridError = overCapMinors.size > 0 ? OVER_CAP_MESSAGE : null;
+
+  function renderCell(entry: (typeof configured)[number]) {
+    const row = rows.find((draft) => draft.denominationMinor === entry.denominationMinor);
+    const pieces = row?.pieces ?? '';
+    const overCap = overCapMinors.has(entry.denominationMinor);
+    return (
+      <div
+        key={entry.denominationMinor}
+        className={overCap ? `${styles.denominationCell} ${styles.denominationCellInvalid}` : styles.denominationCell}
+      >
+        <Field label={denominationLabel(entry.denominationMinor, currency)}>
+          <Input
+            type="number"
+            min={0}
+            max={MAX_PIECES}
+            inputMode="numeric"
+            value={pieces}
+            disabled={pending}
+            aria-label={`Pieces of ${denominationLabel(entry.denominationMinor, currency)}`}
+            aria-invalid={overCap || undefined}
+            onChange={(_, data) => onPiecesChange(entry.denominationMinor, data.value)}
+          />
+        </Field>
+        <Text size={200} className={styles.denominationValue}>
+          {formatMoneyMinor(entry.denominationMinor * (Number(pieces) || 0), currency)}
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <section className={showHeader ? styles.panel : undefined} aria-label="Record an offering count">
@@ -88,138 +149,144 @@ export function OfferingCountEntry({
         </div>
       ) : null}
       <div className={styles.panelBody}>
-        {showQuickPick ? (
-          <div className={styles.panelBody}>
+        {hasGrid ? (
+          <>
+            {(['note', 'coin'] as const).map((kind) => {
+              const entries = configured.filter((entry) => entry.kind === kind);
+              if (entries.length === 0) return null;
+              return (
+                <div key={kind} className={styles.denominationGroup}>
+                  <Text size={200} className={styles.muted}>
+                    {currency} {kind === 'note' ? 'notes' : 'coins'}
+                  </Text>
+                  <div className={styles.denominationGrid}>
+                    {entries.map((entry) => renderCell(entry))}
+                  </div>
+                </div>
+              );
+            })}
             <Text size={200} className={styles.muted}>
-              GHS notes
+              {counted} of {configured.length} denominations counted; the blank rows stay visible.
             </Text>
-            <div className={styles.badgeRow}>
-              {GHS_NOTE_MINORS.map((denominationMinor) => (
-                <Button
-                  key={denominationMinor}
-                  size="small"
-                  appearance="secondary"
-                  disabled={pending || atLineCap}
-                  onClick={() => onAddDenomination(denominationMinor)}
-                >
-                  {denominationLabel(denominationMinor, currency)}
-                </Button>
-              ))}
-            </div>
-            <Text size={200} className={styles.muted}>
-              GHS coins
-            </Text>
-            <div className={styles.badgeRow}>
-              {GHS_COIN_MINORS.map((denominationMinor) => (
-                <Button
-                  key={denominationMinor}
-                  size="small"
-                  appearance="secondary"
-                  disabled={pending || atLineCap}
-                  onClick={() => onAddDenomination(denominationMinor)}
-                >
-                  {denominationLabel(denominationMinor, currency)}
-                </Button>
-              ))}
-            </div>
-          </div>
+          </>
         ) : (
-          <Text size={200} className={styles.muted}>
-            The GHS quick-pick is hidden for {currency}; add free-form denomination rows below.
-          </Text>
+          <MessageBar intent="info">
+            <MessageBarBody>
+              {catalogueExists ? (
+                <strong>
+                  All denominations for {currency} are hidden; enter one-off rows.
+                </strong>
+              ) : (
+                <strong>No denominations are configured for {currency}.</strong>
+              )}
+            </MessageBarBody>
+          </MessageBar>
         )}
 
-        <div className={styles.fields}>
-          <Field
-            label="Custom denomination"
-            hint={`In ${currency}; two decimals at most. Adds one piece.`}
-          >
-            <Input
-              value={customAmount}
-              disabled={pending}
-              placeholder="e.g. 25.50"
-              inputMode="decimal"
-              onChange={(_, data) => setCustomAmount(data.value)}
-            />
-          </Field>
+        {gridError !== null ? (
+          <Text size={200} role="alert" className={styles.errorText}>
+            {gridError}
+          </Text>
+        ) : null}
+
+        <div className={styles.customAdd}>
+          <div className={styles.customField}>
+            <Field label="Custom denomination">
+              <Input
+                value={customAmount}
+                disabled={pending}
+                placeholder="e.g. 25.50"
+                inputMode="decimal"
+                onChange={(_, data) => setCustomAmount(data.value)}
+              />
+            </Field>
+          </div>
           <Button
             icon={<AddRegular />}
             appearance="secondary"
-            disabled={pending || atLineCap || customMinor === null}
+            disabled={pending || customMinor === null || atLineCap}
             onClick={() => {
-              if (customMinor === null) return;
+              if (customMinor === null || atLineCap) return;
               onAddDenomination(customMinor);
               setCustomAmount('');
             }}
           >
             Add row
           </Button>
+          <Text size={200} className={`${styles.muted} ${styles.customHint}`}>
+            In {currency}; two decimals at most. Adds one piece; a value that matches a configured
+            row sums into it; any other value becomes a one-off row.
+          </Text>
         </div>
 
-        {rows.length === 0 ? (
-          <div className={styles.empty}>
-            <Text size={200} className={styles.muted}>
-              No denomination row yet. Use the quick-pick or add a custom value.
-            </Text>
-          </div>
-        ) : (
-          <div className={styles.tableWrap}>
-            <Table className={styles.table} size="small" aria-label="Denomination rows">
-              <TableHeader>
-                <TableRow>
-                  <TableHeaderCell>Denomination</TableHeaderCell>
-                  <TableHeaderCell>Pieces</TableHeaderCell>
-                  <TableHeaderCell>Value</TableHeaderCell>
-                  <TableHeaderCell>Remove</TableHeaderCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.denominationMinor}>
-                    <TableCell>{denominationLabel(row.denominationMinor, currency)}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={1_000_000}
-                        value={row.pieces}
-                        disabled={pending}
-                        aria-label={`Pieces of ${denominationLabel(row.denominationMinor, currency)}`}
-                        onChange={(_, data) => onPiecesChange(row.denominationMinor, data.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {formatMoneyMinor(
-                        row.denominationMinor * (Number(row.pieces) || 0),
-                        currency,
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="small"
-                        appearance="transparent"
-                        icon={<DeleteRegular />}
-                        aria-label={`Remove ${denominationLabel(row.denominationMinor, currency)}`}
-                        disabled={pending}
-                        onClick={() => onRemove(row.denominationMinor)}
-                      >
-                        Remove
-                      </Button>
-                    </TableCell>
+        {oneOffRows.length > 0 ? (
+          <>
+            <div className={styles.oneOffHeader}>
+              <Text size={200} className={styles.muted}>
+                One-off rows
+              </Text>
+              <Text size={200} className={styles.muted}>
+                One-off rows: {customRows}
+              </Text>
+            </div>
+            <div className={styles.tableWrap}>
+              <Table size="small" aria-label="One-off rows">
+                <TableHeader>
+                  <TableRow>
+                    <TableHeaderCell>Denomination</TableHeaderCell>
+                    <TableHeaderCell>Pieces</TableHeaderCell>
+                    <TableHeaderCell>Value</TableHeaderCell>
+                    <TableHeaderCell>Remove</TableHeaderCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                </TableHeader>
+                <TableBody>
+                  {oneOffRows.map((row) => {
+                    const overCap = overCapMinors.has(row.denominationMinor);
+                    return (
+                      <TableRow key={row.denominationMinor}>
+                        <TableCell>{denominationLabel(row.denominationMinor, currency)}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={MAX_PIECES}
+                            value={row.pieces}
+                            disabled={pending}
+                            aria-label={`Pieces of ${denominationLabel(row.denominationMinor, currency)}`}
+                            aria-invalid={overCap || undefined}
+                            onChange={(_, data) =>
+                              onPiecesChange(row.denominationMinor, data.value)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {formatMoneyMinor(
+                            row.denominationMinor * (Number(row.pieces) || 0),
+                            currency,
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="small"
+                            appearance="transparent"
+                            icon={<DeleteRegular />}
+                            aria-label={`Remove ${denominationLabel(row.denominationMinor, currency)}`}
+                            disabled={pending}
+                            onClick={() => onRemove(row.denominationMinor)}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : null}
 
-        {correction ? (
-          <Text size={200} className={styles.muted}>
-            The correction keeps {formatInstant(correction.asOf)} — the moment counted — and
-            supersedes the current observation without deleting it. The earlier row stays readable
-            and valid for its asOf.
-          </Text>
-        ) : (
+        {correction ? null : (
           <Field
             label="As of"
             hint="Defaults to now and must fall within the session day in the event timezone."
@@ -232,29 +299,36 @@ export function OfferingCountEntry({
             />
           </Field>
         )}
+      </div>
 
+      <div className={styles.panelFoot}>
+        <div className={styles.footerStatus}>
+          <Text size={200} className={styles.muted}>
+            Live total {formatMoneyMinor(totalMinor, currency)}
+          </Text>
+          {error !== null ? (
+            <Text size={200} role="alert" className={styles.errorText}>
+              {error}
+            </Text>
+          ) : null}
+        </div>
         <div className={styles.badgeRow}>
-          <Button appearance="primary" disabled={pending || error !== null} onClick={onSubmit}>
-            {pending ? 'Saving…' : correction ? 'Save correction' : 'Record count'}
-          </Button>
           {correction ? (
             <Button appearance="secondary" disabled={pending} onClick={onCancelCorrection}>
-              Cancel correction
+              Cancel
             </Button>
           ) : onCancel ? (
             <Button appearance="secondary" disabled={pending} onClick={onCancel}>
               Cancel
             </Button>
           ) : null}
-          {error !== null ? (
-            <Text size={200} role="alert">
-              {error}
-            </Text>
-          ) : (
-            <Text size={200} className={styles.muted}>
-              Live total {formatMoneyMinor(totalMinor, currency)}
-            </Text>
-          )}
+          <Button
+            appearance="primary"
+            disabled={pending || overCapMinors.size > 0}
+            onClick={onSubmit}
+          >
+            {pending ? 'Saving…' : correction ? 'Save correction' : 'Record count'}
+          </Button>
         </div>
       </div>
     </section>

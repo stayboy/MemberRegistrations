@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { EventOfferingItem } from '../../api/events';
 import type { OfferingCount } from '../../api/offering-counts';
 import type { ContributionItem } from '../../api/giving';
+import { emptyCountRows, gridDenominations, type CountRowDraft } from '../../format/offering-counts';
 import { formatMoneyMinor } from '../../format/welfare';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { OfferingCountEntry } from './OfferingCountEntry';
@@ -97,14 +98,24 @@ function render(node: ReactElement): string {
   );
 }
 
+function gridRows(
+  pieces: Readonly<Record<number, string>> = {},
+  extras: readonly CountRowDraft[] = [],
+): CountRowDraft[] {
+  return [
+    ...emptyCountRows('GHS').map((row) => ({
+      ...row,
+      pieces: pieces[row.denominationMinor] ?? '',
+    })),
+    ...extras,
+  ];
+}
+
 function entry(overrides: Partial<Parameters<typeof OfferingCountEntry>[0]> = {}): string {
   return render(
     <OfferingCountEntry
       currency="GHS"
-      rows={[
-        { denominationMinor: 2000, pieces: '39' },
-        { denominationMinor: 1000, pieces: '40' },
-      ]}
+      rows={gridRows({ 2000: '39', 1000: '40' })}
       totalMinor={118_000}
       asOf="2026-11-01T10:00"
       correction={null}
@@ -123,43 +134,90 @@ function entry(overrides: Partial<Parameters<typeof OfferingCountEntry>[0]> = {}
 }
 
 describe('OfferingCountEntry', () => {
-  it('renders the GHS note and coin quick-pick, the rows and the live total', () => {
-    const markup = entry();
+  it('renders one grid input per configured denomination and no quick-pick buttons', () => {
+    const markup = entry({ rows: gridRows(), onCancel: () => {} });
 
-    expect(markup).toContain('Record a count');
     expect(markup).toContain('GHS notes');
     expect(markup).toContain('GHS coins');
-    expect(markup).toContain(money(20_000));
-    expect(markup).toContain(money(5));
+    expect(markup.match(/aria-label="Pieces of /g)).toHaveLength(12);
+    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup).toContain('0 of 12 denominations counted; the blank rows stay visible.');
+    expect(markup).toContain('Record count');
+  });
+
+  it('renders a filled grid, the live total and the counted caption', () => {
+    const markup = entry();
+
+    expect(markup).toContain('2 of 12 denominations counted; the blank rows stay visible.');
     expect(markup).toContain('Pieces of ' + money(2000));
+    expect(markup).toContain('value="39"');
     expect(markup).toContain('Live total ' + money(118_000));
     expect(markup).toContain('Record count');
   });
 
-  it('hides the quick-pick for a non-GHS offering and keeps free-form rows', () => {
-    const markup = entry({ currency: 'USD' });
+  it('renders a one-off row with the one-off count', () => {
+    const markup = entry({
+      rows: gridRows({}, [{ denominationMinor: 2550, pieces: '2' }]),
+      totalMinor: 5100,
+      onCancel: () => {},
+    });
 
+    expect(markup).toContain('One-off rows');
+    expect(markup).toContain('One-off rows: 1');
+    expect(markup).toContain('Pieces of ' + money(2550));
+    expect(markup).toContain(money(2550));
+  });
+
+  it('counts only positive integer pieces in the caption', () => {
+    const markup = entry({ rows: gridRows({ 2000: '39', 1000: '0', 500: 'x' }) });
+
+    expect(markup).toContain('1 of 12 denominations counted; the blank rows stay visible.');
+  });
+
+  it('names the missing catalogue and keeps the free-form add', () => {
+    const markup = entry({ currency: 'USD', rows: [] });
+
+    expect(markup).toContain('No denominations are configured for USD.');
     expect(markup).not.toContain('GHS notes');
-    expect(markup).not.toContain('GHS coins');
-    expect(markup).toContain('The GHS quick-pick is hidden for USD');
     expect(markup).toContain('Custom denomination');
-    expect(markup).toContain('Live total');
+  });
+
+  it('names an all-hidden catalogue and keeps the free-form add', () => {
+    const overrides = gridDenominations('GHS').map((denomination) => ({
+      denominationMinor: denomination.denominationMinor,
+      enabled: false,
+    }));
+    const markup = entry({ overrides, rows: [] });
+
+    expect(markup).toContain('All denominations for GHS are hidden; enter one-off rows.');
+    expect(markup).not.toContain('GHS notes');
+    expect(markup).not.toContain('aria-label="Pieces of ');
+    expect(markup).toContain('Custom denomination');
+    expect(markup).toContain('Add row');
+  });
+
+  it('marks an over-cap row and shows the local message', () => {
+    const markup = entry({ rows: gridRows({ 5: '1000001' }) });
+
+    expect(markup).toContain('A piece count must be 1,000,000 or fewer.');
+    expect(markup).toContain('aria-invalid="true"');
   });
 
   it('renders the correction state with the kept asOf and cancel action', () => {
-    const markup = entry({ correction: COUNT });
+    const markup = entry({ correction: COUNT, onCancel: () => {} });
 
     expect(markup).toContain('Correct the current observation');
     expect(markup).toContain('Keeping asOf 2026-11-01T10:00:00.000Z');
     expect(markup).toContain('Save correction');
-    expect(markup).toContain('Cancel correction');
+    expect(markup).toContain('Cancel');
     expect(markup).not.toContain('As of');
   });
 
-  it('shows the inline error and disables the submit action', () => {
-    const markup = entry({ error: 'Add at least one denomination.' });
-    expect(markup).toContain('Add at least one denomination.');
-    expect(markup).toContain('disabled');
+  it('shows a form or server error in the footer without hiding the retry', () => {
+    const markup = entry({ error: 'The count could not be recorded.' });
+
+    expect(markup).toContain('The count could not be recorded.');
+    expect(markup).toContain('Record count');
   });
 });
 
