@@ -7,6 +7,8 @@ import type {
   OfferingTermsItem,
 } from '../src/api/events';
 import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
+import type { OfferingCount } from '../src/api/offering-counts';
+import type { ContributionItem } from '../src/api/giving';
 import type {
   Gender,
   MemberAttendanceSeries,
@@ -461,6 +463,8 @@ const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
   totalPaidMinor: 1_245_000,
   totalPledgedMinor: 480_000,
   totalOutstandingMinor: 180_000,
+  countedMinor: 1_200_000,
+  varianceMinor: -80_000,
   visitors: { count: 3, paidMinor: 35_000 },
   members: [
     {
@@ -487,6 +491,7 @@ const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
       paidMinor: 900_000,
       pledgedMinor: 300_000,
       outstandingMinor: 100_000,
+      countedMinor: 900_000,
     },
     {
       offeringId: 'offering-2',
@@ -494,6 +499,7 @@ const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
       paidMinor: 345_000,
       pledgedMinor: 180_000,
       outstandingMinor: 80_000,
+      countedMinor: 300_000,
     },
   ],
   events: [
@@ -503,6 +509,7 @@ const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
       paidMinor: 1_045_000,
       pledgedMinor: 300_000,
       outstandingMinor: 100_000,
+      countedMinor: 1_045_000,
     },
     {
       eventId: 'event-2',
@@ -510,6 +517,7 @@ const OFFERINGS_SUMMARY: ChurchOfferingSummary = {
       paidMinor: 200_000,
       pledgedMinor: 180_000,
       outstandingMinor: 80_000,
+      countedMinor: 155_000,
     },
   ],
   pledges: { pending: 2, honored: 1, dishonored: 0, overdue: 1 },
@@ -578,6 +586,61 @@ const PLEDGES: readonly PledgeItem[] = [
     termsVersion: 1,
     idempotencyKey: 'pledge-key-3',
     createdAt: '2025-12-28T10:00:00.000Z',
+  },
+];
+
+const CONTRIBUTIONS: readonly ContributionItem[] = [
+  {
+    id: 'contribution-e2e-seed',
+    memberNo: 'M-1001',
+    visitorName: null,
+    offeringId: 'offering-1',
+    eventId: 'event-offerings',
+    sessionDate: '2999-01-10',
+    amountMinor: 50_000,
+    currency: 'GHS',
+    channel: 'manual',
+    status: 'paid',
+    reference: 'MR-E2E0000000',
+    idempotencyKey: 'manual-gift:seed',
+    termsVersion: 1,
+    createdAt: FIXED_INSTANT,
+  },
+];
+
+const OFFERING_COUNTS: readonly OfferingCount[] = [
+  {
+    id: 'offering-count-1',
+    eventId: 'event-offerings',
+    offeringId: 'offering-1',
+    sessionDate: '2999-01-10',
+    asOf: '2999-01-10T09:00:00.000Z',
+    currency: 'GHS',
+    termsVersion: 1,
+    lines: [{ denominationMinor: 2000, pieces: 39 }],
+    totalMinor: 78_000,
+    recordedAt: '2999-01-10T09:05:00.000Z',
+    recordedBy: 'officer-1',
+    supersedesId: null,
+    supersededBy: 'offering-count-2',
+  },
+  {
+    id: 'offering-count-2',
+    eventId: 'event-offerings',
+    offeringId: 'offering-1',
+    sessionDate: '2999-01-10',
+    asOf: '2999-01-10T09:00:00.000Z',
+    currency: 'GHS',
+    termsVersion: 1,
+    lines: [
+      { denominationMinor: 2000, pieces: 40 },
+      { denominationMinor: 1000, pieces: 40 },
+    ],
+    totalMinor: 120_000,
+    recordedAt: '2999-01-10T09:10:00.000Z',
+    recordedBy: 'officer-2',
+    supersedesId: 'offering-count-1',
+    supersededBy: null,
   },
 ];
 
@@ -927,6 +990,13 @@ function createdDetail(input: unknown): MemberDetail {
  */
 function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] {
   const pledgeState = new Map<string, PledgeItem>(PLEDGES.map((pledge) => [pledge.id, pledge]));
+  const contributionState = new Map<string, ContributionItem>(
+    CONTRIBUTIONS.map((contribution) => [contribution.id, contribution]),
+  );
+  const offeringCountState = new Map<string, OfferingCount>(
+    OFFERING_COUNTS.map((count) => [count.id, count]),
+  );
+  let offeringCountSeq = OFFERING_COUNTS.length;
 
   return [
     {
@@ -1034,6 +1104,158 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
         const event = EVENTS.find((candidate) => candidate.id === eventId);
         if (!event) return problem(404, `Event ${eventId} was not found`);
         return reply(event, 200, { ETag: '"e2e-event"' });
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/offering-counts$/,
+      handle: (call) => {
+        const sessionDate = call.search.get('sessionDate') ?? '';
+        const offeringId = call.search.get('offeringId') ?? '';
+        const observations = [...offeringCountState.values()]
+          .filter((count) => count.sessionDate === sessionDate && count.offeringId === offeringId)
+          .sort(
+            (left, right) =>
+              right.asOf.localeCompare(left.asOf) ||
+              right.recordedAt.localeCompare(left.recordedAt) ||
+              right.id.localeCompare(left.id),
+          );
+        const current = observations.find((count) => count.supersededBy === null) ?? null;
+        return reply({ current, observations });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/offering-counts$/,
+      handle: (call, [eventId]) => {
+        const body = asRecord(call.body);
+        const sessionDate = text(body.sessionDate) || '2999-01-10';
+        const rawLines = Array.isArray(body.lines) ? body.lines : [];
+        const lines = rawLines.map((line) => {
+          const record = asRecord(line);
+          return {
+            denominationMinor: Number(record.denominationMinor ?? 0),
+            pieces: Number(record.pieces ?? 0),
+          };
+        });
+        if (lines.length === 0 || lines.length > 50) {
+          return problem(422, 'A count needs 1 to 50 denomination lines');
+        }
+        if (lines.some((line) => line.denominationMinor <= 0 || line.pieces <= 0)) {
+          return problem(422, 'A count needs positive denomination lines');
+        }
+        if (new Set(lines.map((line) => line.denominationMinor)).size !== lines.length) {
+          return problem(422, 'Each denomination appears once per count');
+        }
+        const totalMinor = lines.reduce(
+          (sum, line) => sum + line.denominationMinor * line.pieces,
+          0,
+        );
+        if (!Number.isSafeInteger(totalMinor) || totalMinor <= 0) {
+          return problem(422, 'The counted total must be positive and safe');
+        }
+        const supersedesId = optionalText(body.supersedesId);
+        const target = supersedesId ? offeringCountState.get(supersedesId) : undefined;
+        if (supersedesId && (!target || target.supersededBy !== null)) {
+          return problem(422, 'supersedesId must name the current observation');
+        }
+        const asOf = target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
+        if (!asOf.startsWith(sessionDate)) {
+          return problem(422, 'asOf must fall within the session day');
+        }
+
+        offeringCountSeq += 1;
+        const id = `offering-count-${offeringCountSeq}`;
+        const count: OfferingCount = {
+          id,
+          eventId: eventId!,
+          offeringId: text(body.offeringId) || 'offering-1',
+          sessionDate,
+          asOf,
+          currency: text(body.currency) || 'GHS',
+          termsVersion: 1,
+          lines,
+          totalMinor,
+          recordedAt: FIXED_INSTANT,
+          recordedBy: 'officer-1',
+          supersedesId: target?.id ?? null,
+          supersededBy: null,
+        };
+
+        if (target) offeringCountState.set(target.id, { ...target, supersededBy: id });
+        offeringCountState.set(id, count);
+        return reply(count, 201);
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/contributions$/,
+      handle: (call) => {
+        const eventId = call.search.get('eventId');
+        const offeringId = call.search.get('offeringId');
+        const from = call.search.get('from');
+        const to = call.search.get('to');
+        const items = [...contributionState.values()].filter(
+          (contribution) =>
+            (!eventId || contribution.eventId === eventId) &&
+            (!offeringId || contribution.offeringId === offeringId) &&
+            (!from || contribution.sessionDate >= from) &&
+            (!to || contribution.sessionDate <= to),
+        );
+        return reply({ items });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/contributions$/,
+      handle: (call) => {
+        const body = asRecord(call.body);
+        const contribution: ContributionItem = {
+          id: 'contribution-e2e-1',
+          memberNo: text(body.memberNo) || null,
+          visitorName: null,
+          offeringId: text(body.offeringId),
+          eventId: text(body.eventId),
+          sessionDate: text(body.sessionDate),
+          amountMinor: Number(body.amountMinor ?? 0),
+          currency: 'GHS',
+          channel: 'manual',
+          status: 'paid',
+          reference: 'MR-E2E0000001',
+          idempotencyKey: text(body.idempotencyKey),
+          termsVersion: 1,
+          createdAt: FIXED_INSTANT,
+        };
+        contributionState.set(contribution.id, contribution);
+        return reply(contribution, 201);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/pledges$/,
+      handle: (call) => {
+        const body = asRecord(call.body);
+        const pledge: PledgeItem = {
+          ...PLEDGES[0]!,
+          id: 'pledge-e2e-new',
+          memberNo: text(body.memberNo),
+          memberName: text(body.memberNo),
+          offeringId: text(body.offeringId),
+          offeringName: 'Tithe',
+          eventId: text(body.eventId),
+          sessionDate: optionalText(body.sessionDate),
+          amountMinor: Number(body.amountMinor ?? 0),
+          currency: 'GHS',
+          expectedOn: text(body.expectedOn),
+          followUpOfficerMemberNo: text(body.followUpOfficerMemberNo) || 'M-1001',
+          officerName: text(body.followUpOfficerMemberNo) || 'Kwame Asante',
+          status: 'pending',
+          reason: null,
+          nextReminder: null,
+          settledContributionId: null,
+          idempotencyKey: text(body.idempotencyKey),
+        };
+        return reply(pledge, 201);
       },
     },
     {

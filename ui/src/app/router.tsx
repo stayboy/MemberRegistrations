@@ -86,6 +86,11 @@ const UssdHeadcountPage = lazy(() =>
     default: page,
   })),
 );
+const UssdOfferingsPage = lazy(() =>
+  import('../pages/ussd/UssdOfferingsPage').then(({ UssdOfferingsPage: page }) => ({
+    default: page,
+  })),
+);
 const UssdActivitiesPage = lazy(() =>
   import('../pages/ussd/UssdActivitiesPage').then(({ UssdActivitiesPage: page }) => ({
     default: page,
@@ -166,6 +171,7 @@ export const router = createHashRouter([
           { path: 'ussd/registrations', element: <UssdRegistrationsPage /> },
           { path: 'ussd/clocking', element: <UssdClockingPage /> },
           { path: 'ussd/headcount', element: <UssdHeadcountPage /> },
+          { path: 'ussd/offerings', element: <UssdOfferingsPage /> },
           { path: 'ussd/activities', element: <UssdActivitiesPage /> },
           { path: 'ussd/products', element: <UssdProductsPage /> },
           { path: 'ussd/claims', element: <UssdClaimsPage /> },

@@ -30,6 +30,10 @@ export const useUssdStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
     overflow: 'hidden',
   },
+  widePanel: {
+    flex: 1,
+    minWidth: '320px',
+  },
   panelHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -49,6 +53,26 @@ export const useUssdStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalM,
     padding: tokens.spacingVerticalL,
+  },
+  listPanels: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gap: tokens.spacingHorizontalL,
+    alignItems: 'start',
+  },
+  panelFoot: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  link: {
+    color: tokens.colorBrandForeground1,
+    textDecoration: 'underline',
+    ':hover': { color: tokens.colorBrandForeground2Hover },
   },
   tableWrap: {
     overflowX: 'auto',

@@ -103,4 +103,22 @@ test.describe('accessibility', () => {
       });
     }
   }
+
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`the Offerings count page passes WCAG 2.2 AA in ${scheme} mode`, async ({ page }) => {
+      await seedTheme(page, 'fluent', scheme);
+      await open(page, '/ussd/offerings');
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Offerings count' }),
+      ).toBeVisible();
+
+      await page.getByRole('combobox', { name: 'Event' }).click();
+      await page.getByRole('option', { name: /Foundation service/ }).click();
+      await expect(page.getByText('Current counted cash')).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Offering count observations' })).toBeVisible();
+
+      await expectSeededTheme(page, 'fluent', scheme);
+      await audit(page, `offerings count (${scheme})`);
+    });
+  }
 });
