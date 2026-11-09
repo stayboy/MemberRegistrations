@@ -19,6 +19,10 @@ force pushes, and deletion of `main` are not part of the workflow.
 Each action is separately authorised: "create a branch" or "fix X" does not authorise a commit, a
 push, a PR or a merge. Keep working-tree changes uncommitted by default.
 
+An action may be executed by the `git-executor` seat (`.opencode/agents/git-executor.md`) on a brief
+that quotes the owner's verb; the parent verifies the result. Delegation changes who runs the
+command, never who authorises it.
+
 ## Status checks
 
 `.github/workflows/ci.yml` runs the `verify` job on every PR and on `main`. It is the required check
