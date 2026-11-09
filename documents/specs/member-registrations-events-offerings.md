@@ -4,10 +4,11 @@
 
 **Date:** 2026-11-03
 
-**Status:** **Approved 2026-11-03; ticket-23 amendment (23-Q1–23-Q10, R1–R8) accepted 2026-11-07**
-by the fallback reviewer seat (first-choice `0813` unavailable: weekly usage limit). Events/series V2
-and offerings V3; implementation is gated by tickets 07–11 and 20–24. The Strategic Conference is the
-reference event.
+**Status:** **Approved 2026-11-03; ticket-23 amendment (23-Q1–23-Q10, R1–R8) accepted 2026-11-07;
+MVP offering-count amendment (phase 5, Q18–Q24) accepted 2026-11-08**, both by the fallback reviewer
+seat (first-choice `0813` unavailable: weekly usage limit). Events/series V2 and offerings V3;
+implementation is gated by tickets 07–11, 20–24 and the MVP capture round. The Strategic Conference
+is the reference event.
 
 |         |                                                                                       |
 | ------- | ------------------------------------------------------------------------------------- |
@@ -314,8 +315,56 @@ request — `GET /v1/offerings/summary?from&to`, whose endpoint row moves from `
 - **Deferred:** the mock's `+ Add offering` button (23-Q6) and the Reminders card — scheduled,
   overdue, opted out (23-Q7) — are backlog entries, not this ticket. Materialising these totals in a
   summary table or a NoSQL read model, and the pub/sub mechanics around it, is parked in the backlog
-  for a later round (owner, 2026-11-07); this round reads the source tables and adds no aggregate
+  for a later round (owner, 2026-11-07); Redis is parked for the MVP release (owner, 2026-11-08), so
+  MVP ships on compute-on-read. This round reads the source tables and adds no aggregate
   store or migration.
+
+### V3 phase 5 — offering cash counts and announced gifts (MVP, 2026-11-08)
+
+The MVP adds the operator's **bulk offering capture**: the physical cash counted after a service, per
+event, offering and session, entered by denomination. It follows the headcount pattern — an
+append-only observation with an `asOf`, corrected by a superseding row — and stays separate from
+member/visitor contributions and pledges.
+
+- **Scope.** A count belongs to one event instance + offering + session date; multiple observations may
+  exist for the group, and `current` is the newest non-superseded observation by `asOf`, then
+  `recordedAt`, matching headcounts. `lines` are denomination amounts in minor units with a positive
+  piece count; `totalMinor = Σ(denominationMinor × pieces)`, and the count snapshots the offering's
+  `termsVersion`. The offering's current terms currency is the count currency; a different currency is
+  rejected. A count for an offering not attached to the event is rejected (`offering_not_on_event`), a
+  session date outside the event's sessions is `session_not_in_event`, and a cancelled session date is
+  rejected (`event_not_active`), matching contributions.
+- **Capture.** `POST /v1/events/{eventId}/offering-counts` with `{ sessionDate, offeringId, currency?,
+lines, asOf?, supersedesId? }` (bearer, `no-store`) returns `201` with the created observation. A
+  plain POST appends a new observation and defaults `asOf` to now; it must fall within the session day
+  in the event timezone. A correction carries `supersedesId`, which must name the group's current
+  non-superseded row — unknown, already-superseded, other-group or second-supersede targets are `422
+validation_error`. A correction keeps the corrected row's `asOf`, replaces its lines, and leaves the
+  earlier row readable and valid for its `asOf`. An all-zero count (zero total) is rejected — unlike
+  headcounts, which allow all-zero. The list route is the sole read target; there is no item GET.
+- **Read.** `GET /v1/events/{eventId}/offering-counts?sessionDate=&offeringId=` (both required) returns
+  `{ current, observations }`; `observations` includes the current row and the superseded history,
+  newest first, with `supersededBy` derived from the unique superseding row.
+- **Member-announced gifts.** The operator records an announced member contribution through the
+  existing `POST /v1/contributions` (`channel: manual`) and a pledge through the existing
+  `POST /v1/pledges` (member, offering, amount, `expectedOn`, follow-up officer). Neither route changes,
+  and neither is tied to the cash count.
+- **Reconciliation.** The landing keeps the recorded member/visitor gifts and adds the counted cash and
+  the variance: `countedMinor` on the summary and on every `offerings[]`/`events[]` row, and
+  `varianceMinor = countedMinor − (totalPaidMinor + visitors.paidMinor)` on the summary. `countedMinor`
+  sums **only the current observation** of each group, windowed by `sessionDate`, so the superseded
+  history is never added; counts in another currency are excluded from the reporting-currency totals,
+  matching 23-Q8. The variance is captioned "cash counted − all recorded gifts" and includes every paid
+  channel (`app`/`ussd`/`manual`), so it is a reconciliation indicator, not a cash-only variance. A
+  positive value means counted cash exceeds recorded gifts; a negative one means the reverse. Counted
+  cash is never added to recorded gifts (no double counting).
+- **UI.** `#/ussd/offerings` sits beside Headcount: the shared event/session picker, an offering
+  selector, the current observation, denomination rows with a GHS quick-pick (1, 2, 5, 10, 20, 50,
+  100, 200 notes; 0.50/0.20/0.10/0.05 coins) and free-form add, a live total, record/correct, the
+  observation history, plus the announced-gift and pledge forms and the offering's terms link. The GHS
+  quick-pick is hidden when the offering's currency is not GHS; free-form rows remain. The offerings
+  landing (`#/events/offerings`) stays read-only and gains the counted/variance figures.
+- **Migration.** `0017_offering_counts`; 24e's expected migration moves to `0018`.
 
 ### Navigation
 
@@ -406,6 +455,10 @@ officer_required`. An administrator MAY assign at creation or reassign later wit
 headcount_only` (a closed event or session still answers its own `409`/`422` first), while expected
   headcounts remain allowed. An event's ministry is its series' ministry; a standalone event is
   general. The profile counts general events and events whose ministry the member belongs to.
+- FR-43: The system MUST record an offering cash count per event, offering and session as an
+  append-only observation of denomination lines (`denominationMinor × pieces`), corrected only by a
+  superseding row that names the current observation; the landing MUST report the current counted cash
+  and the variance against all recorded gifts without adding the two together.
 
 - FR-14: Every events/series surface MUST implement loading, empty, error and success states and map
   `401`/`404`/`409`/`422` as the shell spec does.
@@ -554,6 +607,8 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 ### AC-32: **Given** an offering with no custom name, **When** it is displayed, **Then** the label falls back to the event name + kind; `availableUntil` is event end or the explicit date; after expiry new gifts are rejected but a pending pledge can still be honored. (FR-19)
 
 ### AC-33: **Given** a headcount-only event, **When** per-member attendance, an attendance import, a USSD clock-in or an attendance code is attempted, **Then** it is rejected and no per-member row is created, while headcounts still record. (FR-42)
+
+### AC-34: **Given** a current count with lines `20 × 39` and `10 × 40`, **When** it is corrected to `20 × 40` and `10 × 40`, **Then** the current total is GHS 1,200, the earlier observation stays readable and valid for its `asOf`, the landing's `countedMinor` uses only the current observation, and the recorded-gifts total is unchanged. (FR-43)
 
 ## Edge Cases
 
@@ -833,6 +888,35 @@ export interface Reminder {
   sentAt: string | null;
 }
 
+export interface OfferingCountLine {
+  /** Denomination value in minor units, e.g. GHS 20 = 2000. */
+  denominationMinor: number;
+  pieces: number;
+}
+
+export interface OfferingCount {
+  id: string;
+  eventId: string;
+  offeringId: string;
+  sessionDate: string;
+  asOf: string;
+  currency: string;
+  termsVersion: number;
+  lines: OfferingCountLine[];
+  totalMinor: number;
+  recordedAt: string;
+  recordedBy: string;
+  supersedesId: string | null;
+  /** Derived from the unique row whose supersedesId points at this observation. */
+  supersededBy: string | null;
+}
+
+export interface OfferingCountList {
+  current: OfferingCount | null;
+  /** Newest first; includes the current row and the superseded history. */
+  observations: OfferingCount[];
+}
+
 export interface ChurchOfferingSummary {
   from: string;
   to: string;
@@ -840,6 +924,10 @@ export interface ChurchOfferingSummary {
   totalPaidMinor: number;
   totalPledgedMinor: number;
   totalOutstandingMinor: number;
+  /** Counted cash in the window (phase 5), reporting currency only. */
+  countedMinor: number;
+  /** countedMinor − (totalPaidMinor + visitors.paidMinor); never added to the gifts. */
+  varianceMinor: number;
   /** Visitor gifts in the window (R1): paid visitor contribution rows, summed in `currency`. */
   visitors: { count: number; paidMinor: number };
   members: Array<{
@@ -856,6 +944,7 @@ export interface ChurchOfferingSummary {
     paidMinor: number;
     pledgedMinor: number;
     outstandingMinor: number;
+    countedMinor: number;
   }>;
   /** Totals by event in the window (23-Q2), serving FR-30's by-event totals. */
   events: Array<{
@@ -864,6 +953,7 @@ export interface ChurchOfferingSummary {
     paidMinor: number;
     pledgedMinor: number;
     outstandingMinor: number;
+    countedMinor: number;
   }>;
   pledges: { pending: number; honored: number; dishonored: number; overdue: number };
 }
@@ -871,34 +961,35 @@ export interface ChurchOfferingSummary {
 
 ### Endpoints
 
-| Method       | Path                                                                 | Purpose                                                                   | Status     |
-| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
-| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed   |
-| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed   |
-| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed   |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20  |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20  |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20  |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20  |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20  |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20  |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20  |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20  |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20  |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21  |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21  |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21  |
-| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22  |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22  |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22  |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                     | ticket 23  |
-| `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a |
-| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d |
-| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a |
+| Method       | Path                                                                 | Purpose                                                                   | Status          |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------- |
+| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed        |
+| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed        |
+| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed        |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20       |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20       |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20       |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20       |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20       |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20       |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20       |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20       |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20       |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21       |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21       |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21       |
+| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22       |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22       |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22       |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22       |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22       |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22       |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals (gifts + counted/variance)                          | ticket 23 / MVP |
+| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`)                  | MVP             |
+| `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a      |
+| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d      |
+| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d      |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a      |
 
 The former `/v1/ussd/session/{id}/select` and `…/commit` routes are retired: the USSD flow is one
 server-owned route at `POST /ussd/session` with a `seq` frame number, specified in
@@ -928,20 +1019,22 @@ server-owned route at `POST /ussd/session` with a `seq` frame number, specified 
 
 All money is `bigint` minor units plus an ISO currency. All history tables are append-only.
 
-| Table                      | Key fields                                                                                                                                                                                                                                                                                                                                 | Constraints                                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `tracks_members` (boolean, default true), `sessions` (JSONB `{date,startTime,endTime,status,venueType?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` means headcount-only; ministry is the series' ministry (a standalone event is general) |
-| `event_attendance`         | `id`, `event_instance_id`, `session_date`, `member_id`, `source` (`import`/`manual`)                                                                                                                                                                                                                                                       | unique `(event_instance_id, session_date, member_id)`; session_date in sessions                                                                                                                 |
-| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                                                   | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                  |
-| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                                                    | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                     |
-| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                                                 | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null                                                         |
-| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                                                | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                              |
-| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                                                       | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                  |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                                                       | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                  |
-| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                                                       | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                         | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                              |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                                                     | short TTL; no raw phone in logs                                                                                                                                                                 |
-| `payment_intents`          | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                                             | unique gateway reference                                                                                                                                                                        |
+| Table                                | Key fields                                                                                                                                                                                                                                                                                                                                 | Constraints                                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `event_instances`                    | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `tracks_members` (boolean, default true), `sessions` (JSONB `{date,startTime,endTime,status,venueType?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` means headcount-only; ministry is the series' ministry (a standalone event is general)                                                                                                  |
+| `event_attendance`                   | `id`, `event_instance_id`, `session_date`, `member_id`, `source` (`import`/`manual`)                                                                                                                                                                                                                                                       | unique `(event_instance_id, session_date, member_id)`; session_date in sessions                                                                                                                                                                                                                  |
+| `offerings`                          | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                                                   | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                   |
+| `offering_terms`                     | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                                                    | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                      |
+| `event_instance_offerings`           | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                                                 | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null                                                                                                                                                          |
+| `offering_exceptions`                | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                                                | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                                                                               |
+| `contributions`                      | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                                                       | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                                                                                   |
+| `event_session_offering_counts`      | `id`, `event_instance_id`, `offering_id`, `session_date`, `currency`, `terms_version`, `as_of`, `recorded_by`, `recorded_at`, `supersedes_id`                                                                                                                                                                                              | multiple observations per `(event_instance_id, offering_id, session_date)` are allowed; `current` is the newest non-superseded by `as_of`, `recorded_at`; `session_date` in sessions; the offering must be attached; `supersedes_id` unique when present; at least one line and a positive total |
+| `event_session_offering_count_lines` | `count_id`, `denomination_minor`, `pieces`                                                                                                                                                                                                                                                                                                 | primary key `(count_id, denomination_minor)`; `denomination_minor > 0`; `pieces > 0`                                                                                                                                                                                                             |
+| `pledges`                            | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                                                       | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                                                                                   |
+| `pledge_events`                      | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                                                       | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                 |
+| `reminders`                          | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                         | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                               |
+| `ussd_sessions`                      | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                                                     | short TTL; no raw phone in logs                                                                                                                                                                                                                                                                  |
+| `payment_intents`                    | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                                             | unique gateway reference                                                                                                                                                                                                                                                                         |
 
 ## Out of Scope
 
@@ -1027,7 +1120,8 @@ A second grill round answered the review's open forks; the owner accepted every 
 
 A third exploration — materialising these totals in a summary table, a pub/sub projection and a NoSQL
 read model — was **parked for a later round** (owner, 2026-11-07) and is recorded in
-`documents/backlog.md`. This round reads the source tables and adds no aggregate store or migration.
+`documents/backlog.md`. The owner **parked Redis for the MVP release** on 2026-11-08, so MVP ships on
+compute-on-read; this round reads the source tables and adds no aggregate store or migration.
 
 ## Definition of Done
 
@@ -1044,6 +1138,14 @@ read model — was **parked for a later round** (owner, 2026-11-07) and is recor
 
 ## Change log
 
+- 2026-11-08: MVP phase 5 specified — **offering cash counts** per event + offering + session, entered
+  as denomination lines, append-only with an `asOf` and corrected by a superseding row; the landing
+  gains `countedMinor` and `varianceMinor`; the operator page `#/ussd/offerings` follows the headcount
+  pattern and also carries the member-announced gift and pledge forms. Migration
+  `0017_offering_counts`; 24e's expected migration moves to `0018`.
+- 2026-11-08: the owner parked **Redis** for the MVP release, so the MVP ships the offerings landing on
+  compute-on-read; the aggregate/NoSQL exploration stays a post-MVP backlog row. No behavioural change;
+  the phase-4 text and the backlog row now say so.
 - 2026-11-07: V3 phase 4 specified for ticket 23 from its grill round (23-Q1–23-Q10, all accepted
   "as recommended"). `GET /v1/offerings/summary?from&to` moves from `proposed` to ticket 23 — the
   named §17 pre-authorisation for the wire addition — `ChurchOfferingSummary` gains

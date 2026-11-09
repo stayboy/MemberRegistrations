@@ -95,6 +95,11 @@ import {
   createContributionSchema,
 } from './schemas/contributions.js';
 import {
+  offeringCountInputSchema,
+  offeringCountListSchema,
+  offeringCountSchema,
+} from './schemas/offering-counts.js';
+import {
   addReminderSchema,
   createPledgeSchema,
   dishonorSchema,
@@ -322,6 +327,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OfferingException: toSchema(exceptionRowSchema, 'output'),
         OfferingExceptionList: toSchema(exceptionListSchema, 'output'),
         OfferingExceptionInput: toSchema(exceptionInputSchema, 'input'),
+        OfferingCount: toSchema(offeringCountSchema, 'output'),
+        OfferingCountList: toSchema(offeringCountListSchema, 'output'),
+        OfferingCountInput: toSchema(offeringCountInputSchema, 'input'),
         ChurchOfferingSummary: toSchema(churchOfferingSummarySchema, 'output'),
         Contribution: toSchema(contributionSchema, 'output'),
         ContributionList: toSchema(contributionListSchema, 'output'),
@@ -1607,7 +1615,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'Church landing totals for a UTC date window',
           description:
-            'One compute-on-read aggregate for the offerings landing. Money is integer minor units and member-only in `total*`; `currency` is the largest paid currency in the window and every other currency is excluded from the totals (no FX). `visitors` reports paid visitor contribution rows separately. Pledge measures use the relevance predicate (`expectedOn` in the window, or still pending as at the report date with `expectedOn` before `from`) and read status from `pledge_events.at` with the inclusive `at < report date + 1 day` boundary, where the report date is `min(to, today)`; `totalPledgedMinor = totalOutstandingMinor + honored`. Responses carry Cache-Control: no-store.',
+            'One compute-on-read aggregate for the offerings landing. Money is integer minor units and member-only in `total*`; `currency` is the largest paid currency in the window and every other currency is excluded from the totals (no FX). `visitors` reports paid visitor contribution rows separately. `countedMinor` sums only the current counted-cash observation of each event + offering + session group whose `sessionDate` is in the window and whose currency is the reporting currency; superseded history is never added. `varianceMinor = countedMinor − (totalPaidMinor + visitors.paidMinor)` is a reconciliation indicator and is never added to the gifts. Pledge measures use the relevance predicate (`expectedOn` in the window, or still pending as at the report date with `expectedOn` before `from`) and read status from `pledge_events.at` with the inclusive `at < report date + 1 day` boundary, where the report date is `min(to, today)`; `totalPledgedMinor = totalOutstandingMinor + honored`. Responses carry Cache-Control: no-store.',
           parameters: [
             {
               name: 'from',
@@ -2596,6 +2604,58 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             200: json('The observation with its supersession links.', 'Headcount'),
             401: unauthorized,
             404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/offering-counts': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: "List one session's offering cash count observations",
+          description:
+            'Returns the current non-superseded observation and the full history of one event + offering + session group, newest first by asOf then recordedAt. Both query parameters are required. The list is the only read target; there is no item GET. Superseded rows stay readable and valid for their own asOf. Operator-only and no-store.',
+          parameters: [
+            {
+              name: 'sessionDate',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            {
+              name: 'offeringId',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'uuid' },
+            },
+          ],
+          responses: {
+            200: json(
+              'The current observation, or null, and the observations.',
+              'OfferingCountList',
+            ),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        post: {
+          summary: 'Record an offering cash count or correct the current one',
+          description:
+            "Without supersedesId this appends an observation with asOf defaulting to now, inside the session day in the event timezone. With supersedesId it corrects the group's current non-superseded observation, keeps that observation's asOf, and replaces its lines; the corrected row stays in history. Lines are denominationMinor x pieces, each denomination once, and a zero total is 422. The count snapshots the offering's current terms version and its currency; a different currency is 422. An offering not attached to the event is `offering_not_on_event`, a session the event does not hold is `session_not_in_event`, a cancelled event or session is `event_not_active`, and an unknown, already-superseded, other-group or non-current supersedesId is 422. The response is the created observation; Location names the list read target.",
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('OfferingCountInput') } },
+          },
+          responses: {
+            201: json(
+              'The recorded observation; Location names the list read target.',
+              'OfferingCount',
+            ),
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
             422: validation,
           },
         },

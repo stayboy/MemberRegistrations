@@ -4,6 +4,7 @@ import { migrate } from '../../src/db/migrate.js';
 import type { Db } from '../../src/db/sql.js';
 import {
   OFFERING_SUMMARY_CONTRIBUTIONS_SQL,
+  OFFERING_SUMMARY_COUNTS_SQL,
   OFFERING_SUMMARY_PLEDGES_SQL,
   OfferingRepository,
 } from '../../src/repos/offerings.js';
@@ -128,17 +129,18 @@ describe('offerings summary query shape', () => {
     expect(statements).toBeLessThanOrEqual(4);
 
     // Observation only: wall-clock is environment-dependent and never a gate.
-    // The shape guard covers contributions and pledges; the pledge_events
-    // aggregation is bounded to that small append-only history and is outside
-    // the guard's scope.
+    // The shape guard covers contributions, counted cash and pledges; the
+    // pledge_events aggregation is bounded to that small append-only history and
+    // is outside the guard's scope.
     console.info(`offerings summary: ${statements} statements in ${wallClockMs.toFixed(1)} ms`);
   });
 
-  it('never sequentially scans contributions or pledges', async () => {
+  it('never sequentially scans contributions, counted cash or pledges', async () => {
     await db.exec('set enable_seqscan = off');
     try {
       const plans: Array<readonly [string, readonly unknown[]]> = [
         [OFFERING_SUMMARY_CONTRIBUTIONS_SQL, [from, to]],
+        [OFFERING_SUMMARY_COUNTS_SQL, [from, to, 'GHS']],
         [OFFERING_SUMMARY_PLEDGES_SQL, [from, to, today, 'GHS']],
       ];
 
@@ -149,9 +151,16 @@ describe('offerings summary query shape', () => {
         );
         expect(rows).toHaveLength(1);
         const relations = findSeqScans(parsePlan(rows[0]!));
-        expect(relations.filter((name) => name === 'contributions' || name === 'pledges')).toEqual(
-          [],
-        );
+        expect(
+          relations.filter((name) =>
+            [
+              'contributions',
+              'pledges',
+              'event_session_offering_counts',
+              'event_session_offering_count_lines',
+            ].includes(name),
+          ),
+        ).toEqual([]);
       }
     } finally {
       await db.exec('set enable_seqscan = on');

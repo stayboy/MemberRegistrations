@@ -20,6 +20,8 @@ const SUMMARY: ChurchOfferingSummary = {
   totalPaidMinor: 120_000,
   totalPledgedMinor: 60_000,
   totalOutstandingMinor: 20_000,
+  countedMinor: 50_000,
+  varianceMinor: -73_000,
   visitors: { count: 2, paidMinor: 3_000 },
   members: [],
   offerings: [],
