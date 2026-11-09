@@ -10,24 +10,24 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "8ea7d78d71e4595faede8d75b9064f489130b92c21c6d3507fe00ffd117d7d0f",
-      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
-      "model": "mimo-v2.6-pro",
-      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the weekly usage limit (credit exhaustion) on every attempt this session; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro (probe SEAT-OK 2026-11-07) was used instead.",
-      "reason": "changes: section 10a's protected-document fallback sentence now names cline-pass/cline-pass/mimo-v2.6-pro instead of glm-5.3, and section 17 gains the grill-me seat bullet (ollama-cloud/deepseek-v4.1-flash:1017 first, cline-pass/cline-pass/deepseek-v4.1-flash-1017 when the ollama provider fails). why: the owner switched the reviewer fallback on 2026-11-07 after the seat probe answered SEAT-OK, and set the grill-me default the same day. rejected: keeping glm-5.3; naming either seat inside the canonical skill.",
-      "verdict": "ACCEPTED",
-      "attestation": "Confirmation round read the exact on-disk text in full, found the fix pass clean (no P1/P2) and approved the text for hashing; it made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-07"
-    },
-    {
-      "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "6b91bb9f18c78328efcf811b74081d4773826298250f77d8a1146abe0261db53",
+      "sha256": "e4a33a52b5d5d18e7a8791cbd4b53cdad5e3b117896ca3c41528f72464b73616",
       "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
       "model": "mimo-v2.6-pro",
       "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window.",
-      "reason": "changes: the `## Mock parity` section gains the six-bullet signed-mock rule — a comparison mock and owner sign-off before a UI/USSD round's first code commit, a mock as an HTML prototype plus a PNG per state (a PNG alone is not a mock), the compact-shell rule, the round-doc sign-off record, advisory parity until one fully-signed round is green, and no historical backfill. why: the owner's 2026-11-09 go-forward decision makes the capture round's signed-mock practice the standing rule after the hardening round closed green. rejected: keeping parity optional; a per-round exemption; backfilling old screens.",
+      "reason": "changes: section 10a's fallback sentence now admits cline-pass/cline-pass/mimo-v2.6-pro in the 12:00–18:00 local window OR when no provider answers with 0813, with the basis stated in fallbackReason; the rest of 10a and section 17 are unchanged. why: the owner corrected the seat rule on 2026-11-09 (window OR weekly limit), and the protected text still said unavailability-only. rejected: keeping unavailability-only; a window-only rule that drops the fallback; a silent operational override without the governing text.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "attestation": "Read the exact on-disk text in full after the fix pass. P1 (the second prong dropped the 0813 condition and was self-granting) and P2 (stale \"only 0813\" wording in the spec-review and Seats paragraphs) were fixed and confirmed; no P1/P2 remained. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09"
+    },
+    {
+      "path": "documents/agents/orchestrator-policy.md",
+      "sha256": "09c0d25263a37d71a5a293cb49cd72106156b5d4d3977a19eb8e1e956708ed51",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window.",
+      "reason": "changes: the Protected-documents sentence, the spec-review paragraph, the Seats window assignment and the reviewer sentence now carry the owner's 12:00–18:00 window OR unavailability rule; the file also carries the signed-mock rule reviewed earlier this session. why: the seat rule is seat-wide and the old \"only 0813 / only as a recorded fallback\" wording contradicted it. rejected: scoping the window rule to protected docs only; leaving the seat table pointing at 0813 inside the window; a self-granting \"as a recorded fallback\" clause.",
+      "verdict": "ACCEPTED",
+      "attestation": "Read the exact on-disk text in full after the fix pass. P1 (the second prong dropped the 0813 condition and was self-granting) and P2 (stale \"only 0813\" wording in the spec-review and Seats paragraphs) were fixed and confirmed; no P1/P2 remained. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
       "at": "2026-11-09"
     },
     {

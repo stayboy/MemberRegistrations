@@ -137,9 +137,9 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown
 file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
 lands only after `deepseek-v4-pro` build `0813` has reviewed the exact text.
-`cline-pass/cline-pass/mimo-v2.6-pro` is admissible only when no provider answers with that build
-(credit exhaustion, HTTP 429 and timeouts count as unavailable; a registry listing does not), and
-only with the unavailability stated in `fallbackReason`.
+`cline-pass/cline-pass/mimo-v2.6-pro` is admissible in the 12:00–18:00 local window **or** when no
+provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as unavailable; a
+registry listing does not); the basis is stated in `fallbackReason`.
 
 The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
 (of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
