@@ -1,13 +1,15 @@
 # Headcount, activities and presbyter-only (24d slice A)
 
-|        |                                                                                               |
-| ------ | --------------------------------------------------------------------------------------------- |
-| Status | OPEN                                                                                          |
-| Tier   | 2 - Reviewed                                                                                  |
-| Mode   | unattended (auto-accept recommendations)                                                      |
-| Base   | `f0eba0d`                                                                                     |
-| Ticket | 24d, slice A of two                                                                           |
-| Spec   | `documents/specs/member-registrations-api.md`; `documents/specs/member-registrations-ussd.md` |
+|                     |                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| Status              | CLOSED - slice A; slice B landed in #79                                                       |
+| Tier                | 2 - Reviewed                                                                                  |
+| Mode                | unattended (auto-accept recommendations)                                                      |
+| Base                | `f0eba0d`                                                                                     |
+| Review rounds       | 0                                                                                             |
+| Gate runs in parent | 1                                                                                             |
+| Ticket              | 24d, slice A of two                                                                           |
+| Spec                | `documents/specs/member-registrations-api.md`; `documents/specs/member-registrations-ussd.md` |
 
 ## Plan
 
@@ -62,6 +64,8 @@ Acceptance criteria:
 8. Every screen stays inside 16/60/182 and the glossary covers every static key.
 
 ## Verification
+
+gate-run 2026-11-09T13:31:17.400Z profile=fast steps=4/4 lines=4 bytes=514
 
 | Gate             | Command                                | Result                                                                                                          |
 | ---------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -233,6 +237,9 @@ TBD - parent acceptance after the review gate.
 
 ## Deviations
 
+- **Close-out (2026-11-09).** Slice B — the operator pages, the Nalo/HMAC adapters and the simulator —
+  landed in #79 (`v3-ussd-operator-portal`, CLOSED). The Headcount page's dialog-pattern conversion and
+  its mock are tracked in `documents/rounds/mvp-headcount.md`; nothing from slice A is unverified.
 - The parallel `npm run test` gate was not green on this Windows host; the serialized command was. The
   known PGlite worker exit is recorded above and was retried once.
 - No UI mock is involved in slice A; the USSD screens are asserted as exact frames and budgets.

@@ -2,7 +2,7 @@
 
 |                     |                                                                                               |
 | ------------------- | --------------------------------------------------------------------------------------------- |
-| Status              | OPEN — implementing (owner pre-authorised the round)                                          |
+| Status              | CLOSED - merged in #88 (`5170332`)                                                            |
 | Tier                | 2                                                                                             |
 | Mode                | `unattended (auto-accept recommendations; owner pre-authorised this round)`                   |
 | Base                | `33f891b`                                                                                     |
