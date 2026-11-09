@@ -121,4 +121,33 @@ test.describe('accessibility', () => {
       await audit(page, `offerings count (${scheme})`);
     });
   }
+
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`the Headcount page passes WCAG 2.2 AA in ${scheme} mode`, async ({ page }) => {
+      await seedTheme(page, 'fluent', scheme);
+      await open(page, '/ussd/headcount');
+      await expect(page.getByRole('heading', { level: 1, name: 'USSD headcount' })).toBeVisible();
+
+      await page.getByRole('combobox', { name: 'Event' }).click();
+      await page.getByRole('option', { name: /Foundation service/ }).click();
+      await expect(page.getByText('Current headcount')).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Headcount observations' })).toBeVisible();
+
+      await expectSeededTheme(page, 'fluent', scheme);
+      await audit(page, `headcount (${scheme})`);
+
+      await page.getByRole('button', { name: 'Record headcount' }).click();
+      await expect(
+        page.getByRole('dialog').getByRole('heading', { name: 'Record a headcount' }),
+      ).toBeVisible();
+      await audit(page, `headcount record dialog (${scheme})`);
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+      await page.getByRole('button', { name: 'Correct' }).first().click();
+      await expect(
+        page.getByRole('dialog').getByRole('heading', { name: 'Correct the current observation' }),
+      ).toBeVisible();
+      await audit(page, `headcount correct dialog (${scheme})`);
+    });
+  }
 });
