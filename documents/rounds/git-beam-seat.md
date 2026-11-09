@@ -98,6 +98,7 @@ migration or wire change.
 | Skill hashes       | `npm run verify:skill`                                                                   | pass                                                   |
 | Format/lint/type   | `npm run verify:fast`                                                                    | pass — 4/4                                             |
 | Probe              | `opencode/beam-free` in a throwaway clone                                                | pass — SHA `8533815…`, 2,682-char body, trailer intact |
+| Delegated commit   | `git-executor` (`opencode/beam-free`), eight files, tree handshake                       | pass — `dc2e8c3`, trailer present, parent verified     |
 
 gate-run 2026-11-09T21:35:20.600Z profile=fast steps=4/4 lines=4 bytes=514
 
@@ -127,9 +128,9 @@ Tier 1 protected-doc review by `ollama-cloud/deepseek-v4-pro:0813`.
 
 ## Per-write variant table
 
-| Action | Variant | Fallback reason | Result                                                                     |
-| ------ | ------- | --------------- | -------------------------------------------------------------------------- |
-| —      | —       | —               | No git write was delegated this round; the probe ran in a throwaway clone. |
+| Action | Variant                               | Fallback reason | Result                                                    |
+| ------ | ------------------------------------- | --------------- | --------------------------------------------------------- |
+| commit | `git-executor` (`opencode/beam-free`) | —               | `dc2e8c3` — eight files, trailer present, parent verified |
 
 ## Mock sign-off
 
@@ -149,12 +150,15 @@ n/a — no mock.
 | 4   | Meta guard and `verify:skill` pass                   | yes | 10/10; `verify:skill ok`                               | ACCEPTED |
 | 5   | Probe passes or parks                                | yes | `8533815…`, 2,682-char body, trailer intact            | ACCEPTED |
 | 6   | Kill-switch documented                               | yes | policy §Seats; role-contracts                          | ACCEPTED |
-| 7   | No delegated write before the probe                  | yes | no git write delegated                                 | ACCEPTED |
+| 7   | No delegated write before the probe                  | yes | the commit followed the probe                          | ACCEPTED |
 | 8   | Canary test passes                                   | yes | `tests/meta/git-executor.test.ts` 3/3                  | ACCEPTED |
 | 9   | Per-write variant table                              | yes | `## Per-write variant table`                           | ACCEPTED |
 
 ## Deviations
 
+- The harness does not register custom agent names for the `subagent` tool, so the seat is dispatched
+  as a general subagent on the seat model with the seat prompt and brief. The agent file remains the
+  documented seat and permission list, and the parent's post-action verification is the control.
 - The probe used a general subagent on `opencode/beam-free`, not the seat's permission file: the
   allow-list does not include `git -C`, and the probe must not touch this repository's history. The
   permission file is covered by inspection and the canary test.
