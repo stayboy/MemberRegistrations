@@ -148,7 +148,11 @@ async function runScenario() {
     roster.status === 200 && entry?.attempts === 1 && entry?.conversations === 1,
     JSON.stringify(roster.body),
   );
-  check('roster carries the contact', entry?.contacts?.length === 1);
+  check(
+    'roster carries the contact count',
+    entry?.contactCount === 1 && entry?.contacts === undefined,
+    JSON.stringify(roster.body),
+  );
 
   const report = await request('/v1/shepherding/report', { headers: read });
   check(

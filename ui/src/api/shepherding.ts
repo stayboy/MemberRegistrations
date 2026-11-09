@@ -1,6 +1,6 @@
 import { ApiError } from './errors';
 import { gatewayRequest } from './gateway';
-import type { CallOutcome, Gender, MemberContact, ShepherdingCall, StillInChurch } from './members';
+import type { CallOutcome, Gender, ShepherdingCall, StillInChurch } from './members';
 
 /**
  * Wire types mirror `src/schemas/shepherding.ts` and the shepherding DTOs in
@@ -33,8 +33,8 @@ export interface RosterEntry {
   readonly gender: Gender;
   readonly age: number | null;
   readonly placeOfResidence: string | null;
-  /** Values are present on the wire; the roster renders a count, never these values (Q157). */
-  readonly contacts: readonly MemberContact[];
+  /** Owned plus linked contacts; the roster renders the count, never their values (Q5). */
+  readonly contactCount: number;
   readonly attempts: number;
   readonly conversations: number;
   readonly lastCalledOn: string | null;

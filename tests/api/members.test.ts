@@ -207,6 +207,79 @@ describe('contacts', () => {
   });
 });
 
+describe('search narrowing', () => {
+  beforeAll(async () => {
+    await create('M-6001', {
+      firstName: 'Narrow',
+      lastName: 'Search',
+      otherNames: 'Adwoa',
+      alias: 'Quiet',
+      maidenName: 'Oldname',
+      contacts: [{ kind: 'phone', value: '0803 000 1111' }],
+    });
+    const owner = await create('M-6002', {
+      firstName: 'Contact',
+      lastName: 'Owner',
+      contacts: [{ kind: 'phone', value: '0803 000 3333' }],
+    });
+    await create('M-6003', { firstName: 'Linked', lastName: 'Member' });
+    await request(app)
+      .post('/v1/members/M-6003/contacts/link')
+      .set(writeHeaders)
+      .send({ contactId: owner.body.contacts[0].id })
+      .expect(201);
+  });
+
+  it('does not match owned or linked contact values through q', async () => {
+    const owned = await request(app)
+      .get('/v1/members')
+      .query({ q: '0803 000 1111' })
+      .set(readHeaders);
+
+    expect(owned.status).toBe(200);
+    expect(owned.body.items).toHaveLength(0);
+    expect(JSON.stringify(owned.body)).not.toContain('0803 000 1111');
+
+    const linked = await request(app)
+      .get('/v1/members')
+      .query({ q: '0803 000 3333' })
+      .set(readHeaders);
+
+    expect(linked.status).toBe(200);
+    expect(linked.body.items).toHaveLength(0);
+    expect(JSON.stringify(linked.body)).not.toContain('0803 000 3333');
+  });
+
+  it('still matches member number, name parts, alias and maiden name', async () => {
+    for (const q of ['M-6001', 'Narrow', 'Search', 'Adwoa', 'Quiet', 'Oldname']) {
+      const response = await request(app).get('/v1/members').query({ q }).set(readHeaders);
+      const memberNos = response.body.items.map((entry: { memberNo: string }) => entry.memberNo);
+
+      expect(response.status).toBe(200);
+      expect(memberNos).toContain('M-6001');
+      expect(JSON.stringify(response.body)).not.toContain('0803 000 1111');
+    }
+  });
+
+  it('keeps the contact filter for owned and linked values', async () => {
+    const owned = await request(app)
+      .get('/v1/members')
+      .query({ contact: '08030001111' })
+      .set(readHeaders);
+    expect(owned.body.items.map((entry: { memberNo: string }) => entry.memberNo)).toContain(
+      'M-6001',
+    );
+
+    const linked = await request(app)
+      .get('/v1/members')
+      .query({ contact: '08030003333' })
+      .set(readHeaders);
+    const memberNos = linked.body.items.map((entry: { memberNo: string }) => entry.memberNo);
+    expect(memberNos).toContain('M-6002');
+    expect(memberNos).toContain('M-6003');
+  });
+});
+
 describe('relationships', () => {
   it('creates one spouse edge and refuses a second', async () => {
     await create('M-3001');

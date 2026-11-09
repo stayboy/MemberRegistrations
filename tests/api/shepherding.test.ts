@@ -177,7 +177,47 @@ describe('assignments', () => {
       gender: 'female',
       age: 30,
     });
-    expect(newRoster.body.items[0].contacts[0].value).toBe('0801 234 5678');
+    expect(newRoster.body.items[0].contactCount).toBe(1);
+    expect(newRoster.body.items[0]).not.toHaveProperty('contacts');
+    expect(JSON.stringify(newRoster.body)).not.toContain('0801 234 5678');
+  });
+
+  it('counts owned and linked contacts without returning their values', async () => {
+    await create('M-2004', {
+      firstName: 'Linked',
+      lastName: 'Contact',
+      contacts: [{ kind: 'phone', value: '0804 000 0004' }],
+    });
+    const guardian = await create('M-2005', {
+      firstName: 'Guardian',
+      lastName: 'Contact',
+      contacts: [{ kind: 'phone', value: '0804 000 0005' }],
+    });
+    const guardianContact = (guardian.contacts as Array<{ id: string }>)[0]!;
+
+    await request(app)
+      .post('/v1/members/M-2004/contacts/link')
+      .set(writeHeaders)
+      .send({ contactId: guardianContact.id })
+      .expect(201);
+
+    const created = await assign({
+      officerMemberNo: 'P-1001',
+      memberNo: 'M-2004',
+      assignedOn: '2026-01-05',
+    });
+    expect(created.status).toBe(201);
+
+    const roster = await request(app)
+      .get('/v1/shepherding/officers/P-1001/members')
+      .set(readHeaders);
+    const entry = roster.body.items.find(
+      (item: { memberNo: string }) => item.memberNo === 'M-2004',
+    );
+
+    expect(entry.contactCount).toBe(2);
+    expect(entry).not.toHaveProperty('contacts');
+    expect(JSON.stringify(roster.body)).not.toContain('0804 000');
   });
 });
 
