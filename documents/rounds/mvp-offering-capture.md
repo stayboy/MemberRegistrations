@@ -2,7 +2,7 @@
 
 |                     |                                                                  |
 | ------------------- | ---------------------------------------------------------------- |
-| Status              | BLOCKED — no mock or sign-off for the two changed surfaces       |
+| Status              | IMPLEMENTED — mocks signed 2026-11-09; PR #87 (three commits)    |
 | Tier                | 2                                                                |
 | Mode                | `attended` (owner present; migration and wire gates named below) |
 | Base                | `268b8f8` + the phase-5 spec amendment                           |
@@ -127,15 +127,16 @@ The Windows fork-pool exit `3221226505` is environmental (recorded, retried once
 The first full root run also lost two unrelated files to beforeAll timeouts under memory pressure;
 the serial rerun above is the recorded result.
 
+gate-run 2026-11-09T09:50:57.414Z profile=fast steps=3/4 lines=27 bytes=24798
+
 ## Mock parity (when a mock exists)
 
-**Mocks now exist, sign-off pending.** The owner ruled on 2026-11-09 that every UI and USSD surface
-needs a comparison mock and a sign-off **before** implementation. This round started before that rule
-and recorded "no mock"; that was the gap. `documents/rounds/mvp-mocks.md` builds the two spec-derived
-mocks under `mockups/mvp-offerings/` (landing success/empty/loading/error; operator count
-success/none/correcting/loading/error). The round stays blocked until the owner signs both in that
-round doc; the parity pass then compares the built pages and any spec-required miss is reworked before
-the commit request.
+**Mocks signed 2026-11-09.** The owner ruled on 2026-11-09 that every UI and USSD surface needs a
+comparison mock and a sign-off **before** implementation. This round started before that rule and
+recorded "no mock"; that was the gap. `documents/rounds/mvp-mocks.md` built the two spec-derived mocks
+under `mockups/mvp-offerings/` and the owner signed all 22 states. The implementation is in PR #87;
+the parity notes (link underline, shared `PageFrame` title, expanded-worklist cap, no session-scoped
+pledge list) are recorded in that round doc.
 
 What existed before (all git-ignored):
 
@@ -161,8 +162,8 @@ does not satisfy this gate.
 | 3   | `asOf` kept, history readable, current derivation                          | yes | Chained-correction test: current = newest non-superseded by `asOf`, then `recordedAt`; write and read predicates agree                            | pass    |
 | 4   | Bearer, `no-store`, no contact values, OpenAPI                             | yes | Route headers; OpenAPI documents 201/401/404/409/422; smoke hits the path                                                                         | pass    |
 | 5   | Counted cash current-only, windowed, reporting currency; variance identity | yes | Summary SQL uses the same current predicate; API + smoke assert `countedMinor` and `varianceMinor = counted − (member paid + visitor paid)`       | pass    |
-| 6   | `#/ussd/offerings` follows the headcount pattern                           | yes | Page, entry, history, quick-pick hidden for non-GHS, live total, gift/pledge/terms actions; e2e + axe both schemes                                | pass    |
-| 7   | Landing counted/variance without changing gift/pledge semantics            | yes | Read-only cards and `Counted` columns; render and e2e tests                                                                                       | pass    |
+| 6   | `#/ussd/offerings` follows the headcount pattern                           | yes | Page with dialog entry/correction, offertories list, gift/pledge dialogs and terms; e2e + axe both schemes                                        | pass    |
+| 7   | Landing counted/variance without changing gift/pledge semantics            | yes | Dashboard tiles, tabbed breakdown and `Counted` columns; render and e2e tests                                                                     | pass    |
 | 8   | Tests fail before/pass after, both drivers, UI, e2e, smoke                 | yes | Above; pg parity through the existing app harness                                                                                                 | pass    |
 
 ## Deviations
@@ -174,6 +175,8 @@ does not satisfy this gate.
   (§15).
 - Offering selectors carry distinct accessible names (`Offering to count`, `Gift offering`,
   `Pledge offering`) after the e2e found three identically labelled comboboxes.
+- The count page's entry/correction and giving forms moved into dialogs and the session offertories
+  list was added in `mvp-mocks` (go-forward A5); the capture semantics are unchanged.
 
 ## Review
 

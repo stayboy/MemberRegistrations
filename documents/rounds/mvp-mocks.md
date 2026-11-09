@@ -286,6 +286,8 @@ Commit note: the three commits use `--no-verify` because the Windows pre-commit 
 flaky root test (`3221226505`, PGlite closed). The final tree passed format/lint/typecheck, the UI
 unit suite, the UI e2e suite, the UI build and smoke; the PR CI runs the full `verify` on Linux.
 
+gate-run 2026-11-09T09:52:14.759Z profile=fast steps=3/4 lines=31 bytes=16613
+
 ## Acceptance
 
 | #   | Criterion                                                                                  | Met | Evidence                                                                                      | Verdict         |
