@@ -1,15 +1,15 @@
 # Round — mvp-release-cutover
 
-|                     |                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| Status              | OPEN — owner values pending (window, PITR slot, alerting owner, env owners)        |
-| Tier                | 2                                                                                  |
-| Mode                | `attended` (owner supplies the values and the release go)                          |
-| Base                | `cacbee0`                                                                          |
-| Review rounds       | 0                                                                                  |
-| Gate runs in parent | 1 (`verify:fast`)                                                                  |
-| Spec                | `AGENTS.md` §7/§9; `documents/backlog.md` (MVP backup, alerting and rollback rows) |
-| Workers             | `single`                                                                           |
+|                     |                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| Status              | OPEN - P0: production API 500 (missing `RESEND_API_KEY`); P1: Pages 404; owner values pending |
+| Tier                | 2                                                                                             |
+| Mode                | `attended` (owner supplies the values and the release go)                                     |
+| Base                | `cacbee0`                                                                                     |
+| Review rounds       | 0                                                                                             |
+| Gate runs in parent | 1 (`verify:fast`)                                                                             |
+| Spec                | `AGENTS.md` §7/§9; `documents/backlog.md` (MVP backup, alerting and rollback rows)            |
+| Workers             | `single`                                                                                      |
 
 ### Seats (owner, 2026-11-09)
 
@@ -35,7 +35,7 @@
   2% for 10 minutes; fix forward for schema/data bugs (no down migrations); Neon restore only for
   data loss.
 - Release identity: annotated tag `v0.1.0-mvp` on the release commit plus the note in this doc.
-- Env set: the README's seven production names, not the `.env.example` subset.
+- Env set: `src/config/env.ts:63-93` (the loader), not the README's seven-name V2 table.
 
 ## Plan
 
@@ -45,10 +45,12 @@ behaviour; it has no user-visible surface, so no mock applies.
 
 In scope:
 
-1. **Production environment and secrets** — confirm every README production name is present in the
-   Vercel project: `NODE_ENV`, `API_BEARER_TOKEN`, `DATABASE_URL`, `VISITOR_PHONE_PEPPER`,
-   `RESEND_API_KEY`, `MAGIC_LINK_FROM`, `UI_BASE_URL`. Record the owner of each; no value enters the
-   repo, a log or this transcript.
+1. **Production environment and secrets** — confirm every production-required name is present in the
+   Vercel project. `src/config/env.ts:63-93` is authoritative: `API_BEARER_TOKEN`, `DATABASE_URL`,
+   `RESEND_API_KEY`, `MAGIC_LINK_FROM`, `VISITOR_PHONE_PEPPER`, `USSD_GATEWAY_SECRET`,
+   `USSD_PHONE_PEPPER`, `USSD_CODE_PEPPER`, `USSD_NALO_USER_ID`, `PAYMENT_GATEWAY_SECRET`, plus
+   `USSD_ENABLED=false` and the functional `UI_BASE_URL`. Record the owner of each; no value enters
+   the repo, a log or this transcript. The README's seven-name table is the V2 set.
 2. **Migrations** — apply the embedded migrations with the tracked runner (`npm run db:migrate`) and
    record the applied set on the production database.
 3. **Backup and restore drill** — confirm Neon's PITR window, restore one point into a scratch
@@ -66,17 +68,17 @@ Redis/aggregate materialisation and the giving trend.
 
 ### Owner inputs (gating)
 
-| Input                             | Why it gates                                                    | Value                                                                |
-| --------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Production env and secrets        | the function cannot start without the bearer, DB URL and pepper | seven names known; values set in Vercel; owners pending              |
-| Release window                    | migrations and merge need a low-traffic slot with the owner     | pending                                                              |
-| Neon PITR window + rehearsal slot | the restore drill needs the real window and a scratch target    | pending                                                              |
-| Alerting destination and owner    | nothing watches `/health` today                                 | pending                                                              |
-| Rollback thresholds               | decides rollback vs forward fix vs restore under pressure       | decided: `/health` fail or 5xx > 2% for 10 min; restore only on loss |
+| Input                             | Why it gates                                                         | Value                                                                                                            |
+| --------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Production env and secrets        | the function cannot start without the bearer, DB URL and the peppers | ten start-critical names (`env.ts`); production 500 `RESEND_API_KEY is required`; values NOT set; owners pending |
+| Release window                    | migrations and merge need a low-traffic slot with the owner          | pending                                                                                                          |
+| Neon PITR window + rehearsal slot | the restore drill needs the real window and a scratch target         | pending                                                                                                          |
+| Alerting destination and owner    | nothing watches `/health` today                                      | pending                                                                                                          |
+| Rollback thresholds               | decides rollback vs forward fix vs restore under pressure            | decided: `/health` fail or 5xx > 2% for 10 min; restore only on loss                                             |
 
 ### Acceptance criteria
 
-1. Every one of the seven README production names is present in Vercel with an owner, and no secret
+1. Every production-required name in `src/config/env.ts:63-93` is present in Vercel with an owner, and no secret
    is committed.
 2. The production migrations are applied by `npm run db:migrate` and the applied set is recorded.
 3. One PITR restore rehearsal completes on a Neon branch with restored row counts and recovery
@@ -107,18 +109,24 @@ n/a — no mock.
 
 ## Acceptance
 
-| #   | Criterion                                                         | Met     | Evidence | Verdict |
-| --- | ----------------------------------------------------------------- | ------- | -------- | ------- |
-| 1   | Seven env names present, owners recorded, no secret committed     | pending |          | PARKED  |
-| 2   | Production migrations applied by the tracked runner               | pending |          | PARKED  |
-| 3   | PITR restore drill on a Neon branch with counts and recovery time | pending |          | PARKED  |
-| 4   | `/health` watched; notifications reach the named owner            | pending |          | PARKED  |
-| 5   | Smoke/rollback runbook written and exercised once                 | pending |          | PARKED  |
-| 6   | Production smoke passes against both deployments                  | pending |          | PARKED  |
-| 7   | Release commit recorded, `v0.1.0-mvp` tagged, checks green        | pending |          | PARKED  |
+| #   | Criterion                                                          | Met     | Evidence | Verdict |
+| --- | ------------------------------------------------------------------ | ------- | -------- | ------- |
+| 1   | Production env names present, owners recorded, no secret committed | pending |          | PARKED  |
+| 2   | Production migrations applied by the tracked runner                | pending |          | PARKED  |
+| 3   | PITR restore drill on a Neon branch with counts and recovery time  | pending |          | PARKED  |
+| 4   | `/health` watched; notifications reach the named owner             | pending |          | PARKED  |
+| 5   | Smoke/rollback runbook written and exercised once                  | pending |          | PARKED  |
+| 6   | Production smoke passes against both deployments                   | pending |          | PARKED  |
+| 7   | Release commit recorded, `v0.1.0-mvp` tagged, checks green         | pending |          | PARKED  |
 
 ## Deviations
 
+- **2026-11-09 incident (P0/P1).** Production `/health`, `/openapi.json` and `/v1/members` return
+  `500 FUNCTION_INVOCATION_FAILED`; the Vercel runtime log is `RESEND_API_KEY is required when
+NODE_ENV=production` (`src/config/env.ts:67`), so the function exits before serving. The UI is 404
+  because GitHub Pages is not configured (`configure-pages` 404 on every run since 2026-11-08). Both
+  are owner-configuration fixes, not code. Recorded by `mvp-cutover-runbook`.
 - The values are not supplied yet; the round stays OPEN until the four pending inputs are recorded.
-- The env set was corrected from the `.env.example` subset to the README's seven production names
-  (`README.md:239-247`), which add `RESEND_API_KEY`, `MAGIC_LINK_FROM` and `UI_BASE_URL`.
+- The env set is the loader's, not the README's: `src/config/env.ts:63-93` requires the ten
+  start-critical names plus `USSD_ENABLED=false` and the functional `UI_BASE_URL`. The earlier
+  seven-name correction (README lines 239–247) was the V2 set and omitted the USSD/payment names.
