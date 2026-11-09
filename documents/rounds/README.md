@@ -34,7 +34,12 @@ The section ends with the gate-run signature line, pasted verbatim:
 
     gate-run <ISO-8601 UTC> profile=<name> steps=<passed>/<total> lines=<n> bytes=<n>
 
-## Mock parity (when a mock exists)
+## Mock sign-off
+
+| Surface | Mock | sha256 | Signer | Date | Verdict |
+| ------- | ---- | ------ | ------ | ---- | ------- |
+
+## Mock parity
 
 | Claim | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
 | ----- | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
@@ -64,4 +69,6 @@ Rules:
 - Tier 2 records the reviewer's Standards and Spec verdicts under `## Review`.
 - Tier 0 records only in the commit body.
 - Never put a round doc in `documents/specs/`.
+- Every round doc carries `## Mock sign-off` (or `n/a — no user-visible surface`) and `## Mock parity`
+  (or `n/a — no mock`).
 - A round with no mock records "no mock"; it never skips silently.

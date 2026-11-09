@@ -65,6 +65,22 @@ why (the catalog conflates the 1M context window with the output cap).
 
 ## Mock parity
 
+- A round that changes a user-visible UI or USSD surface must have a comparison mock and an owner
+  sign-off **before its first code commit**. The spec may land first. Tier 0 and Tier 1 bug/copy-only
+  rounds are exempt; API, migration and security-only rounds are exempt unless they alter the UI.
+- A mock is a static HTML prototype plus a PNG per state (empty, loading, error, success), captured
+  with the existing Playwright pattern. A PNG alone is not a mock. A clickable prototype is required
+  only for a multi-step USSD flow.
+- Mocks reuse one compact shell — the 56 px top bar, 260 px contextual sidebar with the Section header
+  and pinned date/time + appearance footer, and the dense content grid captured in
+  `mockups/v2-settings/02-date-time-sidebar.png`. Do not invent new chrome per surface and do not
+  stretch a page to fill height; the durable record is the spec and the round doc.
+- Sign-off is recorded in `documents/rounds/<slug>.md` under `## Mock sign-off` — surface, mock path,
+  sha256, signer, date and verdict — because `mockups/` is git-ignored. Only the owner signs a product
+  surface; the orchestrator records it.
+- Parity stays advisory until one fully-signed round is green; a blocking Acceptance check is then
+  proposed through a protected-doc round. A mock that contradicts the spec updates the spec first.
+- No historical backfill: a surface built before this rule gets a mock when it is next changed.
 - Applies at Tiers 1–3 when a round changes a surface with a mock under the local, git-ignored
   `mockups/**`; otherwise record "no mock".
 - The screen is advisory: it flags atoms, the reviewer confirms each with `path:line`, and only

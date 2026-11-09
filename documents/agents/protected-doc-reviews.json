@@ -1,5 +1,5 @@
 {
-  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/agents/component-first.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (cline-pass/cline-pass/mimo-v2.6-pro only when no provider answers with 0813, with the unavailability stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
+  "policy": "AGENTS.md, documents/agents/orchestrator-policy.md, documents/agents/component-first.md, documents/lessons.md, documents/rounds/README.md, .github/merge-policy.md, and every markdown file in the canonical orchestrator skill (~/.agents/skills/orchestrator/) are review-gated: a change is reviewed by deepseek-v4-pro build 0813 first (cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when no provider answers with 0813, with the basis stated in fallbackReason), judged against the reason recorded here, which names what changes, why now, and what was rejected. tests/meta/protected-doc-review.test.ts recomputes each sha256 (CRLF to LF, trailing whitespace trimmed, leading BOM dropped) and fails when the text moved after review, the reviewer is not the first choice, a fallback lacks a reason, an entry is orphaned, or a protected file is missing.",
   "firstChoice": {
     "model": "deepseek-v4-pro",
     "build": "0813"
@@ -21,14 +21,14 @@
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "4da7aefa08ba471631570eca9647e714bedbf227a72cae852a966a1c67fe7520",
+      "sha256": "6b91bb9f18c78328efcf811b74081d4773826298250f77d8a1146abe0261db53",
       "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
       "model": "mimo-v2.6-pro",
-      "fallbackReason": "First-choice seat ollama-cloud/deepseek-v4-pro:0813 returned the ollama weekly usage limit (credit exhaustion) on this attempt, 2026-11-08; the owner-directed fallback seat cline-pass/cline-pass/mimo-v2.6-pro was used instead.",
-      "reason": "changes: the Seats section becomes a ranked model list per seat — worker and grill-me: ollama-cloud/deepseek-v4.1-flash:1017 then cline-pass/cline-pass/deepseek-v4.1-flash-1017; reviewer / plan gate / spec review / acceptance: ollama-cloud/deepseek-v4-pro:0813 then cline-pass/cline-pass/mimo-v2.6-pro — with the ranked fallback standing-approved (owner, 2026-11-08), the AGENTS.md §10a 'no provider answers that build' condition, the reason recorded in the round doc (commit body at Tier 0), and parking only when the whole ranking is unavailable; it also states the reviewer is the pro seat or its ranked fallback. why: the owner directed that the model ranking used on 2026-11-07/08 be kept as a repo instruction instead of a per-round substitution after the ollama weekly limit forced the cline-pass seats repeatedly. rejected: leaving the fallback round-scoped; a third model; a fallback self-reviewing; the earlier looser 'the provider refuses it' condition.",
+      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window.",
+      "reason": "changes: the `## Mock parity` section gains the six-bullet signed-mock rule — a comparison mock and owner sign-off before a UI/USSD round's first code commit, a mock as an HTML prototype plus a PNG per state (a PNG alone is not a mock), the compact-shell rule, the round-doc sign-off record, advisory parity until one fully-signed round is green, and no historical backfill. why: the owner's 2026-11-09 go-forward decision makes the capture round's signed-mock practice the standing rule after the hardening round closed green. rejected: keeping parity optional; a per-round exemption; backfilling old screens.",
       "verdict": "ACCEPTED",
-      "attestation": "Review round found P1 (the unavailability clause was broader than AGENTS.md §10a) and P2 (the absolute 'reviewer is 0813' sentence), plus two nits; the fix pass applied the §10a condition, the pro-seat wording, the Tier 0 record path and an explicit supersession note. The confirmation round verified all four against the exact on-disk text and approved it for hashing; it made no edits, ran no gates and committed nothing. One cosmetic nit ('catalogue' vs 'registry') is recorded and deliberately left unapplied so the hashed text stays intact.",
-      "at": "2026-11-08"
+      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09"
     },
     {
       "path": "documents/agents/component-first.md",
@@ -54,14 +54,14 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "df492def5d9768ba8b6fa77f6715b82e070ae9c8b00d3e111bc1b5207962a993",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: the round-doc template gains the `Review rounds` and `Gate runs in parent` rows and a required verbatim `gate-run` signature line; the counters are documented as self-reported with the signature as the runner-printed exception; and review dispatch now points at documents/rounds/review-brief.md, making that brief discoverable from the round-doc home. why: the round record must carry the evidence that the gate ran and how many review rounds it took, and the brevity rules for reviews needed a durable, referenced home. rejected: verifying the signature's truth inside the checker, which stays structural by design.",
+      "sha256": "0112ecbcacdd1222103c5990b3ff56621d4afcdb337809b9ffee64860f20520d",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: the round-doc template gains the `## Mock sign-off` table (Surface | Mock | sha256 | Signer | Date | Verdict), `## Mock parity` loses its \"when a mock exists\" qualifier, and every round doc must carry both blocks or the `n/a` wording. why: the signed-mock rule needs a durable record because `mockups/` is git-ignored, and the checker only enforces the header rows. rejected: recording sign-off only in the commit body; a separate sign-off file.",
       "verdict": "ACCEPTED",
-      "attestation": "Re-read the final text of this file in the quiet-gates-and-lessons round and approved it for hashing: the reviewer read the exact on-disk content in full, made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-06"
+      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09",
+      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window."
     },
     {
       "path": ".github/merge-policy.md",
@@ -76,14 +76,14 @@
     },
     {
       "path": "canonical/SKILL.md",
-      "sha256": "2917877f3def0e132ac9e3a5152041674b50c794b9f33babb785f957e0459189",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: Procedure step 1b adds the every-tier spec-review gate — a separate reviewer-seat session, never the spec's author, before the implementer starts, with the verdict and reviewed revision in the spec status line plus the round doc (the commit body at Tier 0). The Reviewer role scopes its inline pass to the code-review gate and dispatches a second session when the author is on the reviewer model; the frontmatter version and the default seat row are updated. why: the owner moved the rule from AGENTS/policy into the shared procedure and kept the model outside the skill. rejected: keeping the whole rule in AGENTS; naming a model inside the skill.",
+      "sha256": "ab1157c40678528038df94aefbc53a0dc6824c0a8df1038b8f870dccbb7ef2a9",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: Procedure step 4b now requires a signed mock before implementation for any user-visible UI/USSD change and runs the parity screen at Acceptance, instead of only \"when a mock exists\". why: align the shared procedure with the repo's standing mock policy (owner, 2026-11-09) so a round cannot start UI code unmocked. rejected: duplicating the full policy in the skill; naming models in the skill.",
       "verdict": "ACCEPTED",
-      "attestation": "The Reviewer role now scopes 'never spawned a second time' to the code-review gate and routes the author-on-reviewer-model case to a second session for the spec gate, the frontmatter is version 2026-11-05, and the default seat row reads 'Reviewer, plan gate, spec review, acceptance'.",
-      "at": "2026-11-05"
+      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09",
+      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window."
     },
     {
       "path": "canonical/references/models.md",
@@ -131,14 +131,14 @@
     },
     {
       "path": "canonical/CHANGELOG.md",
-      "sha256": "5c3a30e1d20e073ba32788147572842e39541f28111d63c0212407f9c37b00c4",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: a 2026-11-05 entry records Procedure step 1b and the Reviewer-role note. why: a version-worthy procedural change. rejected: shipping the change with no changelog entry.",
+      "sha256": "2743dc6015f93ee4e3ac2c1e0ed89f13aa19c9685a63bcdc94e08bf73fd48f45",
+      "reviewedBy": "cline-pass/cline-pass/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: a 2026-11-09 entry records the step 4b signed-mock change and points at the repo policy. why: every skill change gets a changelog entry. rejected: shipping the change with no entry.",
       "verdict": "ACCEPTED",
-      "attestation": "The 2026-11-05 entry accurately records the added Procedure step 1b and the Reviewer-role note that the same seat reviews the spec but never its own text, consistent with the skill's current wording.",
-      "at": "2026-11-05"
+      "attestation": "Read the exact on-disk text in full and compared it with the parked amendment (documents/rounds/mvp-mocks.md:380-409) and the manifest hashes; no P1/P2, no edits, no gates, nothing committed. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-09",
+      "fallbackReason": "Owner seat rule (2026-11-09): cline-pass/cline-pass/mimo-v2.6-pro is admissible in the 12:00–18:00 local window OR when the ollama weekly limit makes 0813 unavailable. This review ran inside the window."
     }
   ]
 }
