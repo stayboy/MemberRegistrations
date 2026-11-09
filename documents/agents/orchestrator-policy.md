@@ -21,8 +21,8 @@ The skill catalogues the Tier 3 seats for repos that enable them; this policy di
 `ollama-cloud/deepseek-v4-pro:0813` session - never the author - **before the implementer builds
 against it** (the parent at Tier 0-1, the worker at Tier 2). The procedure is the canonical skill's
 Procedure step 1b; this paragraph records the repo's model choice and record.
-`cline-pass/cline-pass/mimo-v2.6-pro` is admissible only when no provider answers 0813, with the
-reason recorded. The verdict and the reviewed revision go
+`cline-pass/cline-pass/mimo-v2.6-pro` is admissible in the 12:00–18:00 local window or when no
+provider answers 0813, with the basis recorded. The verdict and the reviewed revision go
 in the spec's status line plus the round doc, or the commit body at Tier 0. A typo, formatting or
 clarifying edit keeps only its changelog line. This is separate from the plan gate and the code review:
 the spec is the contract the implementer reads, so it is reviewed before the work starts, not after it
@@ -34,7 +34,9 @@ Model ranking is a repo instruction: use the first available model in each seat'
 unavailable first choice and the chosen fallback in the round doc (the commit body at Tier 0) when the
 fallback is used. The fallback is standing-approved for these seats (owner, 2026-11-08); it is not a
 renegotiation of the gate. This supersedes the earlier "a fallback needs the owner's recorded approval":
-the approval is now the ranking itself, scoped as below.
+the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00 local the
+reviewer / plan-gate / spec-review / acceptance seat is `cline-pass/cline-pass/mimo-v2.6-pro` (owner,
+2026-11-09); outside that window the ranking applies.
 
 | Seat                                                        | Ranked models (first available wins)                                                            |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -42,7 +44,8 @@ the approval is now the ranking itself, scoped as below.
 | Reviewer / plan gate / spec review / acceptance (all tiers) | 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `cline-pass/cline-pass/mimo-v2.6-pro`                |
 | Grill-me (go-forward round)                                 | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
 
-The reviewer is the pro seat — `deepseek-v4-pro:0813`, or its ranked fallback — in every tier. The gate
+The reviewer is the pro seat — `deepseek-v4-pro:0813`, or its ranked fallback, which is the seat
+between 12:00 and 18:00 — in every tier. The gate
 must not be the author, so at Tier 2+ the flash worker implements and the pro session reviews; a pro
 session does not both implement and review. A seat is unavailable only when no provider answers its
 first model/build (credit exhaustion, HTTP 429 and timeouts count; a catalogue listing does not); the
@@ -110,7 +113,8 @@ why (the catalog conflates the 1M context window with the output cap).
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical
 orchestrator skill's markdown
 are review-gated: a change lands only after `deepseek-v4-pro:0813` reviews the exact text, with
-`cline-pass/cline-pass/mimo-v2.6-pro` only as a recorded fallback. The record is `documents/agents/protected-doc-reviews.json`; the
+`cline-pass/cline-pass/mimo-v2.6-pro` admissible in the 12:00–18:00 local window **or** when no provider
+answers with `0813`, the basis stated in `fallbackReason`. The record is `documents/agents/protected-doc-reviews.json`; the
 guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
 while the repo checks always run.
