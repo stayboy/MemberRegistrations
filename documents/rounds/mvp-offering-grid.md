@@ -2,11 +2,11 @@
 
 |                     |                                                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| Status              | OPEN — implementing (single-pass grid, slice A)                                                        |
+| Status              | CLOSED - merged in #93 (`20376ff`)                                                                     |
 | Tier                | 2                                                                                                      |
 | Mode                | `attended`                                                                                             |
 | Base                | `a6260c2`                                                                                              |
-| Review rounds       | 0                                                                                                      |
+| Review rounds       | 1                                                                                                      |
 | Gate runs in parent | 2 (`verify:fast`, both stopped by the Windows PGlite fork crash)                                       |
 | Spec                | `documents/specs/member-registrations-events-offerings.md` §phase 5; `member-registrations-ui.md` §2.5 |
 | Workers             | `single`                                                                                               |
@@ -158,15 +158,15 @@ a scratch list); submit stays enabled for an empty count, matching the signed bl
 
 ## Acceptance
 
-| #   | Criterion                                             | Met     | Evidence                              | Verdict  |
-| --- | ----------------------------------------------------- | ------- | ------------------------------------- | -------- |
-| 1   | Twelve states captured and signed                     | yes     | `## Mock sign-off`, 2026-11-09        | ACCEPTED |
-| 2   | Grid shows every configured denomination, blank=0     | yes     | render test: 12 inputs, blank caption | ACCEPTED |
-| 3   | Correction re-renders hidden/absent lines as one-offs | yes     | `rowsFromObservation`; unit tests     | ACCEPTED |
-| 4   | Custom add sums/merges and never joins the catalogue  | yes     | `addDenomination`; unit tests         | ACCEPTED |
-| 5   | No-catalogue and all-hidden states named              | yes     | render tests for both messages        | ACCEPTED |
-| 6   | No API, migration or wire change                      | yes     | `git diff` is `ui/` + docs only       | ACCEPTED |
-| 7   | Unit, render, e2e, axe and CI verify green            | pending | CI `verify`                           | PARKED   |
+| #   | Criterion                                             | Met | Evidence                                 | Verdict  |
+| --- | ----------------------------------------------------- | --- | ---------------------------------------- | -------- |
+| 1   | Twelve states captured and signed                     | yes | `## Mock sign-off`, 2026-11-09           | ACCEPTED |
+| 2   | Grid shows every configured denomination, blank=0     | yes | render test: 12 inputs, blank caption    | ACCEPTED |
+| 3   | Correction re-renders hidden/absent lines as one-offs | yes | `rowsFromObservation`; unit tests        | ACCEPTED |
+| 4   | Custom add sums/merges and never joins the catalogue  | yes | `addDenomination`; unit tests            | ACCEPTED |
+| 5   | No-catalogue and all-hidden states named              | yes | render tests for both messages           | ACCEPTED |
+| 6   | No API, migration or wire change                      | yes | `git diff` is `ui/` + docs only          | ACCEPTED |
+| 7   | Unit, render, e2e, axe and CI verify green            | yes | CI `verify`, `ui`, `ui-e2e` green on #93 | ACCEPTED |
 
 ## Deviations
 
