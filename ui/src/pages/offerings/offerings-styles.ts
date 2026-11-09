@@ -8,67 +8,113 @@ export const useOfferingsStyles = makeStyles({
     gap: tokens.spacingVerticalL,
     width: '100%',
   },
-  toolbar: {
+  headerActions: {
     display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalM,
+    alignItems: 'flex-end',
+    gap: tokens.spacingHorizontalS,
     flexWrap: 'wrap',
   },
-  cards: {
+  quickRanges: {
+    display: 'flex',
+    gap: tokens.spacingHorizontalXXS,
+    padding: '2px',
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
+  quickRange: {
+    minWidth: 'auto',
+  },
+  kpis: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: tokens.spacingHorizontalL,
-  },
-  card: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
-  },
-  cardHeader: {
-    display: 'flex',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: tokens.spacingHorizontalM,
-    flexWrap: 'wrap',
+    '@media (max-width: 1180px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
   },
-  cardTitle: {
-    margin: 0,
-    fontSize: tokens.fontSizeBase400,
-    lineHeight: tokens.lineHeightBase400,
-    fontWeight: tokens.fontWeightSemibold,
-  },
-  caption: {
-    margin: 0,
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200,
-  },
-  metrics: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-    gap: tokens.spacingHorizontalL,
-  },
-  metric: {
+  kpi: {
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXXS,
-    minWidth: 0,
+    minHeight: '100px',
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM}`,
   },
-  metricLabel: {
+  kpiLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase100,
+    fontWeight: tokens.fontWeightSemibold,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  kpiInline: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+  },
+  kpiValue: {
+    fontSize: tokens.fontSizeHero700,
+    lineHeight: tokens.lineHeightHero700,
+    fontWeight: tokens.fontWeightSemibold,
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+  },
+  kpiValueNegative: {
+    color: tokens.colorPaletteRedForeground1,
+  },
+  kpiCaption: {
+    marginTop: 'auto',
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase200,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    lineHeight: tokens.lineHeightBase200,
   },
-  metricValue: {
-    fontSize: tokens.fontSizeBase500,
-    fontWeight: tokens.fontWeightSemibold,
-    lineHeight: tokens.lineHeightBase500,
+  varianceBar: {
+    position: 'relative',
+    height: '10px',
+    marginTop: '2px',
+    marginBottom: '2px',
   },
-  panels: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-    gap: tokens.spacingHorizontalL,
-    alignItems: 'start',
+  varianceTrack: {
+    position: 'absolute',
+    top: '4px',
+    bottom: '4px',
+    left: 0,
+    right: 0,
+    borderRadius: '999px',
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
+  varianceZero: {
+    position: 'absolute',
+    top: '1px',
+    bottom: '1px',
+    left: '50%',
+    width: '1px',
+    backgroundColor: tokens.colorNeutralForeground3,
+  },
+  varianceUnder: {
+    position: 'absolute',
+    top: '4px',
+    bottom: '4px',
+    right: '50%',
+    borderRadius: '999px 0 0 999px',
+    backgroundColor: tokens.colorPaletteRedBackground3,
+  },
+  varianceOver: {
+    position: 'absolute',
+    top: '4px',
+    bottom: '4px',
+    left: '50%',
+    borderRadius: '0 999px 999px 0',
+    backgroundColor: tokens.colorPaletteGreenBackground3,
+  },
+  link: {
+    color: tokens.colorBrandForeground1,
+    textDecoration: 'underline',
+    whiteSpace: 'nowrap',
+    ':hover': { color: tokens.colorBrandForeground2Hover },
   },
   panel: {
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
@@ -91,14 +137,57 @@ export const useOfferingsStyles = makeStyles({
     lineHeight: tokens.lineHeightBase300,
     fontWeight: tokens.fontWeightSemibold,
   },
+  breakdownHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  tabList: {
+    overflowX: 'auto',
+  },
   tableWrap: {
     overflowX: 'auto',
   },
   table: {
-    minWidth: '560px',
+    minWidth: '640px',
   },
   worklistTable: {
-    minWidth: '980px',
+    minWidth: '720px',
+  },
+  worklistScroll: {
+    maxHeight: '320px',
+    overflowY: 'auto',
+  },
+  share: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    minWidth: '120px',
+  },
+  shareTrack: {
+    flex: 1,
+    height: '6px',
+    borderRadius: '999px',
+    backgroundColor: tokens.colorNeutralBackground3,
+    overflow: 'hidden',
+  },
+  shareFill: {
+    display: 'block',
+    height: '100%',
+    borderRadius: '999px',
+    backgroundColor: tokens.colorBrandBackground,
+  },
+  sharePct: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  countedDivider: {
+    borderLeft: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   state: {
     display: 'flex',
@@ -136,44 +225,78 @@ export const useOfferingsStyles = makeStyles({
     gap: tokens.spacingVerticalXXS,
     minWidth: '140px',
   },
-  ussd: {
+  expander: {
+    minWidth: 'auto',
+    marginRight: tokens.spacingHorizontalXS,
+  },
+  detailRow: {
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  detailGrid: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: tokens.spacingHorizontalL,
+    flexWrap: 'wrap',
+  },
+  detailField: {
+    minWidth: '200px',
+  },
+  ussdStripBody: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+  },
+  ussdScroll: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    flex: 1,
+    minWidth: 0,
+    overflowX: 'auto',
+  },
+  ussdEyebrow: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase100,
+    fontWeight: tokens.fontWeightSemibold,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    whiteSpace: 'nowrap',
+  },
+  ussdCode: {
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase400,
+    fontWeight: tokens.fontWeightSemibold,
+    whiteSpace: 'nowrap',
+  },
+  ussdMenu: {
+    whiteSpace: 'nowrap',
+  },
+  ussdCaption: {
+    flexShrink: 0,
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    whiteSpace: 'nowrap',
+  },
+  skeletonGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gap: tokens.spacingHorizontalM,
+    '@media (max-width: 1180px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+    '@media (max-width: 900px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
+  },
+  skeletonTile: {
+    minHeight: '100px',
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM}`,
+  },
+  skeletonStack: {
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
     padding: tokens.spacingVerticalL,
-    backgroundColor: tokens.colorNeutralBackground2,
-  },
-  ussdScreen: {
-    margin: 0,
-    padding: tokens.spacingVerticalM,
-    fontFamily: tokens.fontFamilyMonospace,
-    fontSize: tokens.fontSizeBase300,
-    lineHeight: tokens.lineHeightBase400,
-    color: tokens.colorNeutralForeground1,
-    backgroundColor: tokens.colorNeutralBackground1,
-    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
-    borderRadius: tokens.borderRadiusMedium,
-    whiteSpace: 'pre-wrap',
-  },
-  dialogSurface: {
-    maxWidth: '820px',
-  },
-  termsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: tokens.spacingVerticalM,
-    margin: 0,
-  },
-  termsRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXXS,
-    minWidth: 0,
-  },
-  termsLabel: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
   },
 });

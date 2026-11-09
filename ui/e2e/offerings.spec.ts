@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => {
   await seedSession(page);
 });
 
-test('the offerings landing shows member cards, totals, worklist and the USSD preview', async ({
+test('the offerings dashboard shows the four tiles, tabbed breakdown, worklist and USSD footer', async ({
   page,
 }) => {
   await open(page, '/events/offerings');
@@ -15,39 +15,55 @@ test('the offerings landing shows member cards, totals, worklist and the USSD pr
   const year = await page.evaluate(() => new Date().toISOString().slice(0, 4));
   await expect(page.getByLabel('From')).toHaveValue(`${year}-01-01`);
 
-  // Member-only money cards plus the separate Visitors card.
+  // Four tiles: member paid, counted cash, reconciliation and open pledges.
   const totals = page.getByRole('region', { name: 'Offerings totals' });
-  await expect(totals.getByText('Member giving')).toBeVisible();
+  await expect(totals.getByText('Member paid')).toBeVisible();
   await expect(totals.getByText('GHS 12,450.00')).toBeVisible();
-  await expect(totals.getByText('GHS 4,800.00')).toBeVisible();
+  await expect(totals.getByText('Visitors GHS 350.00 separate')).toBeVisible();
+  await expect(totals.getByText('Counted cash')).toBeVisible();
+  await expect(totals.getByText('GHS 12,000.00')).toBeVisible();
+  await expect(totals.getByText('Reconciliation')).toBeVisible();
+  await expect(totals.getByText(/-GHS\s*800\.00/)).toBeVisible();
+  await expect(totals.getByText('Open pledges')).toBeVisible();
   await expect(totals.getByText('GHS 1,800.00')).toBeVisible();
-  await expect(totals.getByText('Visitors')).toBeVisible();
-  await expect(totals.getByText('GHS 350.00')).toBeVisible();
 
-  // By-member is the top 10 by paid with no Follow-up column.
+  // The default breakdown tab is by offering; the event and member tabs stay reachable.
+  await expect(page.getByRole('table', { name: 'Totals by offering' })).toBeVisible();
+  await expect(page.getByText('Share of paid')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Totals by offering' }).getByText('Tithe')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'By event' }).click();
+  await expect(page.getByRole('table', { name: 'Totals by event' })).toBeVisible();
+  await expect(
+    page.getByRole('table', { name: 'Totals by event' }).getByText('Sunday Service'),
+  ).toBeVisible();
+
+  await page.getByRole('tab', { name: 'By member' }).click();
   const members = page.getByRole('table', { name: 'Member totals' });
   await expect(members.getByText('Kwame Asante')).toBeVisible();
   await expect(members.getByText('M-1001')).toBeVisible();
   await expect(members.getByRole('columnheader', { name: 'Follow-up' })).toHaveCount(0);
 
-  // By-offering and by-event totals come from summary.offerings/events.
-  await expect(page.getByRole('table', { name: 'Totals by offering' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Totals by event' })).toBeVisible();
-
-  // The worklist is unwindowed, newest first, with names and next reminder.
+  // The worklist is five columns with the officer/reminder/reassign in a detail row.
   const worklist = page.getByRole('table', { name: 'Pledge worklist' });
   await expect(worklist.getByText('Kwame Asante').first()).toBeVisible();
   await expect(worklist.getByText('Tithe').first()).toBeVisible();
   await expect(worklist.getByText('Ama Mensah').first()).toBeVisible();
-  await expect(worklist.getByRole('columnheader', { name: 'Next reminder' })).toBeVisible();
+  await expect(page.getByText('This window: 1 honored · 0 dishonored')).toBeVisible();
+  await page.getByRole('button', { name: 'Show details for Kwame Asante' }).first().click();
+  await expect(page.getByText('Next reminder')).toBeVisible();
+  await expect(page.getByLabel('New officer member no')).toBeVisible();
+  await expect(page.getByText('Ama Mensah').last()).toBeVisible();
 
-  // USSD preview: the current/next event, five offerings and 0 More.
+  // USSD footer: shortcode, session, five offerings and 0 More, preview only.
   const preview = page.getByRole('region', { name: 'USSD preview' });
-  await expect(preview.getByText('Foundation service')).toBeVisible();
-  await expect(preview.getByText('1 Tithe')).toBeVisible();
-  await expect(preview.getByText('5 Youth appeal')).toBeVisible();
-  await expect(preview.locator('pre')).toContainText('0 More');
+  await expect(preview.getByText('USSD · upcoming')).toBeVisible();
+  await expect(preview.getByText('*714*88#')).toBeVisible();
+  await expect(preview.getByText(/Foundation service/)).toBeVisible();
+  await expect(preview.getByText(/1 Tithe/)).toBeVisible();
+  await expect(preview.getByText(/0 More/)).toBeVisible();
   await expect(preview.getByText('Welfare appeal')).toHaveCount(0);
+  await expect(preview.getByText('Preview only; no USSD session is opened.')).toBeVisible();
 
   // FR-29 stats stay zeroed and are never rendered here (R8).
   await expect(page.getByText('Honor rate')).toHaveCount(0);
@@ -77,10 +93,13 @@ test('the terms dialog renders the newest version and the gateway payload', asyn
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('the worklist reassigns a pledge through the reason dialog', async ({ page }) => {
+test('the worklist reassigns a pledge through the detail row and the reason dialog', async ({
+  page,
+}) => {
   await open(page, '/events/offerings');
 
-  await page.getByLabel('Reassign to (officer member no)').fill('M-9002');
+  await page.getByRole('button', { name: 'Show details for Kwame Asante' }).first().click();
+  await page.getByLabel('New officer member no').fill('M-9002');
   await page.getByRole('button', { name: 'Reassign pledge for Kwame Asante' }).first().click();
 
   const dialog = page.getByRole('dialog');
@@ -89,7 +108,6 @@ test('the worklist reassigns a pledge through the reason dialog', async ({ page 
   await dialog.getByRole('button', { name: 'Reassign pledge' }).click();
 
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  // The list refetches and the row carries the new officer resolved name.
-  const worklist = page.getByRole('table', { name: 'Pledge worklist' });
-  await expect(worklist.getByText('M-9002').first()).toBeVisible();
+  // The list refetches and the expanded row carries the new officer.
+  await expect(page.getByText('M-9002').first()).toBeVisible();
 });

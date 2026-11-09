@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { ChurchOfferingSummary, PledgeItem } from '../../api/offerings';
 import { formatMoneyMinor } from '../../format/welfare';
 import { ThemeProvider } from '../../theme/ThemeProvider';
+import { BreakdownPanel } from './BreakdownPanel';
 import { GroupTotalsTable } from './GroupTotalsTable';
 import { MemberTotalsTable } from './MemberTotalsTable';
 import { OfferingsError, OfferingsLoading } from './OfferingsState';
@@ -21,6 +23,8 @@ const SUMMARY: ChurchOfferingSummary = {
   totalPaidMinor: 120_000,
   totalPledgedMinor: 60_000,
   totalOutstandingMinor: 20_000,
+  countedMinor: 150_000,
+  varianceMinor: 27_000,
   visitors: { count: 3, paidMinor: 3_000 },
   members: [
     {
@@ -47,6 +51,7 @@ const SUMMARY: ChurchOfferingSummary = {
       paidMinor: 120_000,
       pledgedMinor: 60_000,
       outstandingMinor: 20_000,
+      countedMinor: 150_000,
     },
   ],
   events: [
@@ -56,6 +61,7 @@ const SUMMARY: ChurchOfferingSummary = {
       paidMinor: 120_000,
       pledgedMinor: 60_000,
       outstandingMinor: 20_000,
+      countedMinor: 150_000,
     },
   ],
   pledges: { pending: 2, honored: 1, dishonored: 0, overdue: 1 },
@@ -84,23 +90,30 @@ const PLEDGE: PledgeItem = {
 };
 
 function render(node: ReactElement): string {
-  return renderToStaticMarkup(<ThemeProvider>{node}</ThemeProvider>);
+  return renderToStaticMarkup(
+    <MemoryRouter>
+      <ThemeProvider>{node}</ThemeProvider>
+    </MemoryRouter>,
+  );
 }
 
 describe('SummaryCards', () => {
-  it('renders member money, pledge counts and the separate Visitors card', () => {
+  it('renders the four dashboard tiles with visitors separate and counted never added', () => {
     const markup = render(<SummaryCards summary={SUMMARY} />);
 
-    expect(markup).toContain('Member giving');
-    expect(markup).toContain('Pledges');
-    expect(markup).toContain('Visitors');
+    expect(markup).toContain('Member paid');
+    expect(markup).toContain('Counted cash');
+    expect(markup).toContain('Reconciliation');
+    expect(markup).toContain('Open pledges');
     expect(markup).toContain(money(120_000));
-    expect(markup).toContain(money(60_000));
+    expect(markup).toContain(money(150_000));
+    expect(markup).toContain(money(27_000));
     expect(markup).toContain(money(20_000));
-    expect(markup).toContain(money(3_000));
-    expect(markup).toContain('>2<');
-    expect(markup).toContain('>1<');
-    expect(markup).toContain('Separate from member totals');
+    expect(markup).toContain('Visitors');
+    expect(markup).toContain('separate');
+    expect(markup).toContain('never added');
+    expect(markup).toContain('Record a count');
+    expect(markup).toContain('2 pending · 1 overdue');
     expect(markup).not.toContain('All members + visitors');
   });
 
@@ -121,7 +134,6 @@ describe('MemberTotalsTable', () => {
     expect(markup).toContain('M-1');
     expect(markup).toContain(money(90_000));
     expect(markup).toContain('2026-11-01');
-    expect(markup).toContain('Member totals only');
     expect(markup).not.toContain('Follow-up');
     expect(markup).not.toContain('@');
   });
@@ -133,10 +145,9 @@ describe('MemberTotalsTable', () => {
 });
 
 describe('GroupTotalsTable', () => {
-  it('renders the by-offering rows with an optional action', () => {
+  it('renders the by-offering rows with share, counted and an optional action', () => {
     const markup = render(
       <GroupTotalsTable
-        title="Totals by offering"
         ariaLabel="Totals by offering"
         nameHeader="Offering"
         currency="GHS"
@@ -147,24 +158,29 @@ describe('GroupTotalsTable', () => {
             paidMinor: 120_000,
             pledgedMinor: 60_000,
             outstandingMinor: 20_000,
+            countedMinor: 150_000,
           },
         ]}
         emptyTitle="No offerings in this window"
         emptyHint="Paid gifts or relevant pledges will appear here."
+        showShare
+        totalPaidMinor={120_000}
         renderAction={() => <button type="button">View terms</button>}
       />,
     );
 
-    expect(markup).toContain('Totals by offering');
     expect(markup).toContain('Tithe');
     expect(markup).toContain(money(120_000));
+    expect(markup).toContain(money(150_000));
+    expect(markup).toContain('Share of paid');
+    expect(markup).toContain('100%');
+    expect(markup).toContain('Counted');
     expect(markup).toContain('View terms');
   });
 
   it('renders the empty state', () => {
     const markup = render(
       <GroupTotalsTable
-        title="Totals by event"
         ariaLabel="Totals by event"
         nameHeader="Event"
         currency="GHS"
@@ -177,12 +193,37 @@ describe('GroupTotalsTable', () => {
   });
 });
 
+describe('BreakdownPanel', () => {
+  it('renders the tabs, the default offering rows and the reconcile footer', () => {
+    const markup = render(
+      <BreakdownPanel summary={SUMMARY} formatDate={date} onViewTerms={() => {}} />,
+    );
+
+    expect(markup).toContain('Breakdown');
+    expect(markup).toContain('By offering');
+    expect(markup).toContain('By event');
+    expect(markup).toContain('By member');
+    expect(markup).toContain('Tithe');
+    expect(markup).toContain('Reconciles to the tiles above.');
+  });
+});
+
 describe('PledgeWorklist', () => {
-  it('renders names, status, next reminder and the reassignment action', () => {
+  it('renders five-column rows, the window header and the all-time footer', () => {
     const markup = render(
       <PledgeWorklist
-        pledges={[PLEDGE, { ...PLEDGE, id: 'pledge-2', status: 'overdue', nextReminder: null }]}
-        scopeLabel="Newest first, unwindowed · first 2 of up to 50"
+        pledges={[
+          PLEDGE,
+          {
+            ...PLEDGE,
+            id: 'pledge-2',
+            memberNo: 'M-2',
+            memberName: 'Ama Mensah',
+            status: 'overdue',
+            nextReminder: null,
+          },
+        ]}
+        windowPledges={SUMMARY.pledges}
         formatDate={date}
         onReassign={() => {}}
       />,
@@ -193,9 +234,9 @@ describe('PledgeWorklist', () => {
     expect(markup).toContain('Ama Mensah');
     expect(markup).toContain('Pending');
     expect(markup).toContain('Overdue');
-    expect(markup).toContain('2026-11-13');
-    expect(markup).toContain('Reassign pledge for Kwame Asante');
-    expect(markup).toContain('Newest first, unwindowed');
+    expect(markup).toContain('This window: 1 honored · 0 dishonored');
+    expect(markup).toContain('All time · newest first · up to 50');
+    expect(markup).toContain('Show details for Kwame Asante');
     expect(markup).not.toContain('@');
   });
 
@@ -203,7 +244,7 @@ describe('PledgeWorklist', () => {
     const markup = render(
       <PledgeWorklist
         pledges={[]}
-        scopeLabel="Newest first, unwindowed · first 0 of up to 50"
+        windowPledges={SUMMARY.pledges}
         formatDate={date}
         onReassign={() => {}}
       />,
@@ -221,12 +262,12 @@ describe('OfferingsLoading and OfferingsError', () => {
   it('renders the error detail and a retry action', () => {
     const markup = render(
       <OfferingsError
-        title="The offerings totals could not be loaded"
+        title="Offerings could not be loaded"
         error={new Error('Gateway unavailable')}
         onRetry={() => {}}
       />,
     );
-    expect(markup).toContain('The offerings totals could not be loaded');
+    expect(markup).toContain('Offerings could not be loaded');
     expect(markup).toContain('Gateway unavailable');
     expect(markup).toContain('Retry');
   });
@@ -244,7 +285,7 @@ describe('OfferingsLoading and OfferingsError', () => {
 });
 
 describe('UssdPreview', () => {
-  it('renders the composed screen', () => {
+  it('renders the one-line footer with the shortcode, session, offerings and caption', () => {
     const markup = render(
       <UssdPreview
         preview={{
@@ -257,10 +298,11 @@ describe('UssdPreview', () => {
       />,
     );
 
-    expect(markup).toContain('USSD preview');
+    expect(markup).toContain('USSD · upcoming');
+    expect(markup).toContain('*714*88#');
     expect(markup).toContain('Foundation service');
-    expect(markup).toContain('Choose offering(s)');
-    expect(markup).toContain('0 More');
+    expect(markup).toContain('1 Tithe · 2 Missions · 0 More');
+    expect(markup).toContain('Preview only; no USSD session is opened.');
   });
 
   it('renders the no-upcoming-event state', () => {
