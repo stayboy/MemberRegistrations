@@ -66,6 +66,23 @@ export function corsMiddleware(origins: readonly string[]): RequestHandler {
   };
 }
 
+/**
+ * Sets the CORS header for an allowlisted origin and rejects nobody.
+ * `/health` is public and read-only, so an unknown origin still gets the normal
+ * result without the header; a monitor that happens to send an `Origin` must
+ * not be told the service is down.
+ */
+export function corsHeader(origins: readonly string[]): RequestHandler {
+  return (req, res, next) => {
+    res.setHeader('Vary', 'Origin');
+    const origin = req.header('origin');
+    if (origin && origins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    next();
+  };
+}
+
 export function authRouter(service: AuthService, mailer: Mailer, logger: Logger): Router {
   const router = Router();
 

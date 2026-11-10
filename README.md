@@ -83,6 +83,9 @@ another Postgres, override `DATABASE_URL` for `app` and `migrate` there. Docker 
 re-verify with `docker compose build && docker compose up -d`, then `curl -s
 http://localhost:3000/health`.
 
+The full walkthrough — seeding an officer, reading the magic link from the log, the CORS checks and
+troubleshooting — is [`documents/runbooks/local-docker.md`](documents/runbooks/local-docker.md).
+
 ## API
 
 Server-to-server callers use `/v1` with `Authorization: Bearer <API_BEARER_TOKEN>`; every write also

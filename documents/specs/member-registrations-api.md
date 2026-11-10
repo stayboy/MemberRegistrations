@@ -14,6 +14,12 @@
 
 ## Change log
 
+- 2026-11-10: `/health` joins the CORS allowlist. The operator UI probes it before requesting a magic
+  link, so without the header the browser refuses to let the probe read the `200` and the connection
+  badge reports the gateway down, local compose included. `/health` serves its normal result with the
+  header set for an allowed origin and without the header otherwise; `/openapi.json` stays non-CORS.
+  (AC-23)
+
 - 2026-11-10: the USSD and payment secrets stop being required when their subsystems are off.
   `USSD_ENABLED=false` (the default) no longer requires `USSD_GATEWAY_SECRET`, `USSD_PHONE_PEPPER`,
   `USSD_CODE_PEPPER` or the `USSD_NALO_USER_ID` client identifier, and the USSD entries
@@ -1210,7 +1216,13 @@ an HTTP hop.
 - The browser receives a session credential and sends it as a bearer header; the gateway sets no
   authentication cookie.
 - `X-Actor-Id` is derived from the authenticated officer; a client-supplied value is ignored.
-- CORS allows only the Pages origin (custom domain when configured) and local development origins.
+- CORS allows only the Pages origin (custom domain when configured) and local development origins, on
+  `/auth/*`, `/gateway/*`, `/health` and the development-only `/dev`. `/health` is the operator UI's
+  pre-flight probe: a request from an allowed origin MUST answer its normal health result (`200`, or
+  `503` when the database is unreachable) with `Access-Control-Allow-Origin` set to the caller; a
+  request with no `Origin`, or from an unlisted origin, MUST answer the same result **without** the
+  header — `/health` is not sensitive and must not be rejected. `/openapi.json` is not a browser
+  surface and stays non-CORS.
 - Only `/v1/*` is reachable through the gateway; no arbitrary URL is forwarded.
 - Officers are seeded and deactivated by CLI; only active officers receive a link.
 - Magic links go through a `Mailer` port: Resend in production, console/no-op in development and tests.
@@ -1318,7 +1330,7 @@ migration `0017` and are defined in `member-registrations-events-offerings.md` (
 
 ### AC-22: **Given** an officer, **When** they sign in, **Then** the magic link is single-use, the session expires and is revocable, and a write carries the derived `X-Actor-Id`. (FR-22)
 
-### AC-23: **Given** an unlisted origin, **When** it calls the gateway, **Then** CORS rejects it; **Given** a path outside `/v1`, **When** it is requested, **Then** the gateway does not proxy it. (FR-23)
+### AC-23: **Given** an unlisted origin, **When** it calls the gateway, **Then** CORS rejects it; **Given** a path outside `/v1`, **When** it is requested, **Then** the gateway does not proxy it; **Given** the operator UI's health probe, **When** it runs from an allowed origin, **Then** `/health` answers `200` (or `503`) with `Access-Control-Allow-Origin` set to that origin; **Given** a request with no `Origin` or an unlisted origin, **When** it probes `/health`, **Then** the same result is returned without the header. (FR-23)
 
 ### AC-24: **Given** a gateway request, **When** it is served, **Then** it is rewritten to the existing `/v1` router in the same process, with no HTTP call to a second deployment. (FR-24)
 
