@@ -1,15 +1,15 @@
 # Round — mvp-release-cutover
 
-|                     |                                                                                               |
-| ------------------- | --------------------------------------------------------------------------------------------- |
-| Status              | OPEN - P0: production API 500 (missing `RESEND_API_KEY`); P1: Pages 404; owner values pending |
-| Tier                | 2                                                                                             |
-| Mode                | `attended` (owner supplies the values and the release go)                                     |
-| Base                | `cacbee0`                                                                                     |
-| Review rounds       | 0                                                                                             |
-| Gate runs in parent | 1 (`verify:fast`)                                                                             |
-| Spec                | `AGENTS.md` §7/§9; `documents/backlog.md` (MVP backup, alerting and rollback rows)            |
-| Workers             | `single`                                                                                      |
+|                     |                                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| Status              | PARKED - production postponed (owner, 2026-11-10); the target is the local dev MVP in `mvp-local.md` |
+| Tier                | 2                                                                                                    |
+| Mode                | `attended` (owner supplies the values and the release go)                                            |
+| Base                | `cacbee0`                                                                                            |
+| Review rounds       | 0                                                                                                    |
+| Gate runs in parent | 1 (`verify:fast`)                                                                                    |
+| Spec                | `AGENTS.md` §7/§9; `documents/backlog.md` (MVP backup, alerting and rollback rows)                   |
+| Workers             | `single`                                                                                             |
 
 ### Seats (owner, 2026-11-09)
 

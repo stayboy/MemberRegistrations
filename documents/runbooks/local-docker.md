@@ -77,17 +77,19 @@ badge reports the gateway down even though `app` is healthy.
 
 Compose sets everything the API needs for development; nothing has to be exported by hand:
 
-| Name                   | Value in compose                        | Why                                      |
-| ---------------------- | --------------------------------------- | ---------------------------------------- |
-| `DATABASE_URL`         | `postgresql://postgres:postgres@db:...` | The `db` service                         |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:8080`                 | The nginx UI origin                      |
-| `UI_BASE_URL`          | `http://localhost:8080/#/connect`       | Magic-link target                        |
-| `NODE_ENV`             | `development`                           | Console mailer, dev defaults, no secrets |
-| `VITE_GATEWAY_URL`     | `http://localhost:3000` (build arg)     | The UI's default gateway                 |
+| Name                   | Value in compose                        | Why                                                         |
+| ---------------------- | --------------------------------------- | ----------------------------------------------------------- |
+| `DATABASE_URL`         | `postgresql://postgres:postgres@db:...` | The `db` service                                            |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:8080`                 | The nginx UI origin                                         |
+| `UI_BASE_URL`          | `http://localhost:8080/#/connect`       | Magic-link target                                           |
+| `NODE_ENV`             | `development`                           | Console mailer, dev defaults, no secrets                    |
+| `USSD_ENABLED`         | `true`                                  | Every USSD screen and the simulator are exercisable locally |
+| `PAYMENTS_ENABLED`     | `true`                                  | The HMAC callback is mounted for local testing              |
+| `VITE_GATEWAY_URL`     | `http://localhost:3000` (build arg)     | The UI's default gateway                                    |
 
-The USSD and payment subsystems are off by default, so their secrets are not required. Personal tweaks
-(another Postgres, extra ports) go in a git-ignored `docker-compose.override.yml`; override
-`DATABASE_URL` for **both** `app` and `migrate`.
+Both subsystems are on **for the local MVP only**; production keeps them off, so their secrets are not
+required there. Personal tweaks (another Postgres, extra ports) go in a git-ignored
+`docker-compose.override.yml`; override `DATABASE_URL` for **both** `app` and `migrate`.
 
 ## Teardown and reset
 
