@@ -2,7 +2,7 @@
 
 |                     |                                                            |
 | ------------------- | ---------------------------------------------------------- |
-| Status              | OPEN — implementing (Tier 1)                               |
+| Status              | CLOSED — merged in #100                                    |
 | Tier                | 1                                                          |
 | Mode                | attended (owner accepted the grill round)                  |
 | Base                | `92bc553`                                                  |
