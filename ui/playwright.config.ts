@@ -41,6 +41,9 @@ export default defineConfig({
   webServer: {
     command: 'npm --prefix ui run build && npm --prefix ui run preview -- --port 4173 --strictPort',
     cwd: repoRoot,
+    // The origin is baked into the production build (FR-13), so the harness must
+    // supply the same value the Pages deploy uses; the stubs intercept it.
+    env: { VITE_GATEWAY_URL: 'https://member-registrations-mind-logs.vercel.app' },
     url: 'http://localhost:4173/MemberRegistrations/',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

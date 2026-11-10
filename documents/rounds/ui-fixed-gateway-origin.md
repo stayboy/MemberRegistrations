@@ -1,22 +1,23 @@
 # Round — ui-fixed-gateway-origin
 
-|                     |                                                                          |
-| ------------------- | ------------------------------------------------------------------------ |
-| Status              | OPEN - spec merged in #98; mock signed; code parked on the P0 restore    |
-| Tier                | 2 (sign-in path, CSP, storage)                                           |
-| Mode                | attended (owner answered two grill rounds)                               |
-| Base                | `a162faf`                                                                |
-| Review rounds       | 0                                                                        |
-| Gate runs in parent | 0                                                                        |
-| Spec                | `documents/specs/member-registrations-ui.md` FR-12, FR-13, AC-10a, §11.2 |
-| Workers             | `worker` implements (Tier 2); separate `code-review` pass                |
+|                     |                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| Status              | OPEN - spec merged in #98; mock signed; implementing on `feat/fixed-gateway-origin`             |
+| Tier                | 2 (sign-in path, CSP, storage)                                                                  |
+| Mode                | attended (owner answered two grill rounds)                                                      |
+| Base                | `bd3ed08`                                                                                       |
+| Review rounds       | 0 (code review not run yet; the spec gate took three rounds)                                    |
+| Gate runs in parent | 0                                                                                               |
+| Spec                | `documents/specs/member-registrations-ui.md` FR-12, FR-13, AC-10a, §11.2                        |
+| Workers             | the implementing session on `feat/fixed-gateway-origin`; independent `code-review` still to run |
 
 ### Seats (owner, 2026-11-10)
 
 - **Spec gate:** `ollama-cloud/deepseek-v4-pro:0813` reviews the exact amended text; the 12:00–18:00
   window does not apply.
 - **Worker:** `ollama-cloud/deepseek-v4.1-flash:1017`.
-- **Git executor:** rung 1 `opencode/beam-free`.
+- **Git executor:** unavailable — `opencode/beam-free` is over its free usage limit and
+  `git-seat-budget: 0` parks rung 2, so the owner authorised the executing session (2026-11-10).
 
 `git-seat-budget: 0 (rung 1 only; rung 2 parked)`
 
@@ -55,17 +56,22 @@ build-time value that no user, storage entry or runtime file can change.
 
 In scope:
 
-1. One module owns the origin (currently duplicated in `ui/vite.config.ts:4` and
-   `ui/src/auth/session.ts:3-4`); `vite.config.ts` generates `connect-src 'self' <origin>` from it.
+1. One module owns the origin — `ui/src/auth/gatewayOrigin.ts` — replacing the duplicate defaults in
+   `ui/vite.config.ts` and `ui/src/auth/session.ts`; `vite.config.ts` generates
+   `connect-src 'self' <origin>` from it.
 2. `ConnectPage.tsx`: remove the Gateway URL field, its validation state and its error path; keep the
-   email field, the `/health` probe, the sending and sent states, and the expired-session bar.
-3. `session.ts`: drop `GATEWAY_STORAGE_KEY`, `readStoredGatewayUrl`, `writeStoredGatewayUrl` and the
-   `localStorage` round-trip; keep `normalizeGatewayUrl` as the configured-origin validator.
+   email field, the `/health` probe, the sending and sent states, and the expired-session bar. The
+   unreachable copy becomes "The service is unreachable. Try again in a moment; if it persists,
+   contact the administrator."
+3. `session.ts`: drop `GATEWAY_STORAGE_KEY`, `readStoredGatewayUrl`, `writeStoredGatewayUrl`,
+   `normalizeGatewayUrl` and the `localStorage` round-trip. The configured origin is validated once,
+   at build time, in `vite.config.ts` (FR-13); a stale `mr.gateway.v1` is cleared and never read.
 4. A production build fails when the origin is missing, invalid or not `https://`; `deploy-pages.yml`
    sets `VITE_GATEWAY_URL` explicitly and `vite.config.ts` validates it before building (AC-10b).
 5. Tests: unit (origin resolution, dev default, production rejection), render (no URL input, error and
-   sent states), e2e (`ui/e2e/*` fixtures stop setting `mr.gateway.v1`), axe light and dark.
-6. Spec: FR-12, FR-13, AC-10a and §11.2 (done — awaiting review).
+   sent states), e2e (`ui/e2e/fixtures.ts` stops setting `mr.gateway.v1`; `ui/e2e/connect.spec.ts`),
+   axe light and dark.
+6. Spec: FR-12, FR-13, AC-10a, AC-10b and §11.2 — **merged** in #98 (`335ae67`), reviewed ACCEPT.
 
 Out of scope: a custom domain, the proxy and single-origin architectures, any change to the gateway,
 the magic-link flow, the session credential or CORS.
@@ -73,7 +79,8 @@ the magic-link flow, the session credential or CORS.
 ### Acceptance criteria
 
 1. The connect page has no gateway-origin input, caption or control, and no `localStorage` write.
-2. The origin resolves from one module; `connect-src` equals it in the built `index.html`.
+2. The origin resolves from one module; the built `index.html` lists `'self'` and that origin in
+   `connect-src`.
 3. A production build with a missing, invalid or `http://` origin fails.
 4. The `/health` probe still gates the magic-link request, and its failure shows the new copy.
 5. A stale `mr.gateway.v1` cannot change the origin (test).
@@ -83,19 +90,19 @@ the magic-link flow, the session credential or CORS.
 
 ## Verification
 
-| Gate             | Command                           | Result             |
-| ---------------- | --------------------------------- | ------------------ |
-| Spec review      | `0813` exact text                 | ACCEPT (REWORK ×2) |
-| Mock sign-off    | `mockups/ui-fixed-gateway-origin` | pending            |
-| Format/lint/type | `npm run verify:fast`             | pass (4/4)         |
-| UI tests         | `npm run ui:test`                 | pending            |
-| Browser gate     | `npm run ui-e2e`                  | pending            |
+| Gate             | Command                           | Result                  |
+| ---------------- | --------------------------------- | ----------------------- |
+| Spec review      | `0813` exact text                 | ACCEPT (REWORK ×2)      |
+| Mock sign-off    | `mockups/ui-fixed-gateway-origin` | signed 2026-11-10       |
+| Format/lint/type | `npm run verify:fast`             | pass (4/4, spec commit) |
+| UI tests         | `npm run ui:test`                 | pending                 |
+| Browser gate     | `npm run ui-e2e`                  | pending                 |
 
 gate-run 2026-11-10T08:54:19.579Z profile=fast steps=4/4 lines=4 bytes=514
 
 ## Review
 
-Spec gate: `ollama-cloud/deepseek-v4-pro:0813` reviewed the exact amended text.
+### Spec gate `0813`
 
 - Round 1: **REWORK** — P1s: FR-19 still allowed persisting the base URL; the 7.1 traceability block
   was stale and omitted AC-10a; FR-13's build-time failure had no AC. P2s: §9.1 and §11.4 still said
@@ -105,6 +112,24 @@ Spec gate: `ollama-cloud/deepseek-v4-pro:0813` reviewed the exact amended text.
   EC-14; the error copy was not in the spec.
 - Round 2: all fixed; one new P2 — EC-1 still displayed the base URL.
 - Round 3 (EC-1 fixed): **ACCEPT**.
+
+### Code review (Tier 2, independent)
+
+- Round 1: **REWORK** on both axes, from one P1 claim — that `loadEnv` and `import.meta.env` ignore
+  `process.env`, so the CI/Playwright value would never reach the resolver. **Refuted with evidence:**
+  with no `.env` file present, a build whose only source was the process environment
+  (`VITE_GATEWAY_URL=https://review-proof.example.net npx vite build`) emitted
+  `connect-src 'self' https://review-proof.example.net` and the same string in the bundle; Vite's
+  `loadEnv` merges prefix-matching `process.env` entries (the prefix here is `''`) and
+  `import.meta.env` carries `VITE_*` from the process. The same path is exercised by `ui:e2e` (62
+  tests) and by the three AC-10b build probes.
+- Accepted from round 1: **P2** `ui/README.md` still claimed the production default — corrected to the
+  build-time rule and the `http://localhost:3000` dev default; `ui/.env.example` annotated so it is
+  not copied into a local `.env`.
+- Recorded, not changed: **nit** keying the gate on `mode` rather than `command` is deliberate — the
+  Docker image builds `vite build --mode development` and must be allowed a loopback origin, which is
+  exactly the spec's "development build" wording (FR-13). **Nit** `DEV_GATEWAY_URL` ships in the
+  production bundle; it is a public default, not a secret.
 
 ## Mock sign-off
 
@@ -143,5 +168,10 @@ Pending.
 
 ## Deviations
 
-- Implementation parks until the production env names are in (owner, `mvp-release-cutover` P0), so the
-  first working sign-in is the simplified page.
+- **Implementation runs in a shared working tree.** A second session is on `feat/fixed-gateway-origin`
+  while the production P0 is still open; the branch is based on `bd3ed08`, not the spec commit
+  `335ae67`. The round closes only after that session's changes are committed, reviewed and merged.
+- The production P0 (three env names) no longer blocks the code, but it still blocks the first real
+  sign-in from Pages.
+- The origin is deliberately shown nowhere, including the error state (owner, round 2): a failed
+  sign-in is diagnosable only from the network tab.

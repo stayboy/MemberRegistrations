@@ -12,11 +12,10 @@ import { exchangeMagicToken, fetchMe, logoutSession } from '../api/gateway';
 import { isUnauthorized } from '../api/errors';
 import {
   clearSession,
+  GATEWAY_URL,
   isSessionUsable,
   readSession,
-  readStoredGatewayUrl,
   writeSession,
-  writeStoredGatewayUrl,
   type Officer,
   type SessionCredential,
 } from './session';
@@ -27,10 +26,10 @@ interface SessionContextValue {
   readonly status: SessionStatus;
   readonly officer: Officer | null;
   readonly session: SessionCredential | null;
+  /** The build-time gateway origin; the connect form cannot change it. */
   readonly baseUrl: string;
   /** True when a saved session was rejected, so the gate can explain why. */
   readonly expired: boolean;
-  setBaseUrl(url: string): void;
   signIn(token: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -48,8 +47,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>(initialSession ? 'checking' : 'signed-out');
   const [officer, setOfficer] = useState<Officer | null>(null);
   const [session, setSession] = useState<SessionCredential | null>(initialSession);
-  const [baseUrl, setBaseUrlState] = useState<string>(() => readStoredGatewayUrl());
   const [expired, setExpired] = useState(initial.expired);
+  const baseUrl = GATEWAY_URL;
 
   // Restore the tab credential and verify it with the gateway before rendering
   // protected content. A network failure keeps the shell usable (FR-10); only a
@@ -62,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const controller = new AbortController();
 
-    fetchMe(readStoredGatewayUrl(), initialSession.token, controller.signal)
+    fetchMe(GATEWAY_URL, initialSession.token, controller.signal)
       .then((verified) => {
         if (controller.signal.aborted) return;
         setOfficer(verified);
@@ -83,28 +82,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [initialSession]);
 
-  const setBaseUrl = useCallback((url: string) => {
-    writeStoredGatewayUrl(url);
-    setBaseUrlState(url);
+  const signIn = useCallback(async (token: string) => {
+    const result = await exchangeMagicToken(GATEWAY_URL, token);
+    writeSession(result.session);
+    setSession(result.session);
+    setOfficer(result.officer);
+    setExpired(false);
+    setStatus('signed-in');
   }, []);
-
-  const signIn = useCallback(
-    async (token: string) => {
-      const result = await exchangeMagicToken(baseUrl, token);
-      writeSession(result.session);
-      setSession(result.session);
-      setOfficer(result.officer);
-      setExpired(false);
-      setStatus('signed-in');
-    },
-    [baseUrl],
-  );
 
   const signOut = useCallback(async () => {
     const token = session?.token;
     if (token) {
       try {
-        await logoutSession(baseUrl, token, AbortSignal.timeout(5000));
+        await logoutSession(GATEWAY_URL, token, AbortSignal.timeout(5000));
       } catch {
         // A failed revoke must not trap the operator in a signed-in shell; the
         // credential is short-lived and is removed locally below.
@@ -117,7 +108,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setOfficer(null);
     setExpired(false);
     setStatus('signed-out');
-  }, [baseUrl, queryClient, session?.token]);
+  }, [queryClient, session?.token]);
 
   const value = useMemo<SessionContextValue>(
     () => ({
@@ -126,11 +117,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session,
       baseUrl,
       expired,
-      setBaseUrl,
       signIn,
       signOut,
     }),
-    [status, officer, session, baseUrl, expired, setBaseUrl, signIn, signOut],
+    [status, officer, session, baseUrl, expired, signIn, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -62,6 +62,10 @@ jobs:
   ui:
     name: ui
     runs-on: ubuntu-latest
+    # A production build fails without the baked origin (AC-10b), and CI builds
+    # the same artefact the Pages workflow deploys.
+    env:
+      VITE_GATEWAY_URL: https://member-registrations-mind-logs.vercel.app
 
     steps:
       - uses: actions/checkout@v5
@@ -82,6 +86,10 @@ jobs:
   ui-e2e:
     name: ui-e2e
     runs-on: ubuntu-latest
+    # The harness builds the production bundle; its Playwright config also sets
+    # this, and the job-level value keeps both paths identical.
+    env:
+      VITE_GATEWAY_URL: https://member-registrations-mind-logs.vercel.app
 
     steps:
       - uses: actions/checkout@v5

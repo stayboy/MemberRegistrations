@@ -13,10 +13,14 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { probeGateway, requestMagicLink } from '../api/gateway';
 import { useSession } from '../auth/SessionProvider';
-import { normalizeGatewayUrl } from '../auth/session';
+import { GATEWAY_URL } from '../auth/session';
 import { connectionErrorDetail } from '../shell/ConnectionBadge';
 
 type Phase = 'idle' | 'checking' | 'sending' | 'sent' | 'exchanging' | 'error';
+
+/** Shown when the pre-flight probe cannot reach the gateway (FR-12). */
+const UNREACHABLE =
+  'The service is unreachable. Try again in a moment; if it persists, contact the administrator.';
 
 const useStyles = makeStyles({
   wrap: {
@@ -105,12 +109,10 @@ export function ConnectPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { status, officer, baseUrl, setBaseUrl, signIn, signOut } = useSession();
+  const { status, officer, signIn, signOut } = useSession();
 
   const [incomingToken] = useState<string | null>(() => readTokenFromHash());
-  const [gatewayInput, setGatewayInput] = useState(baseUrl);
   const [email, setEmail] = useState('');
-  const [gatewayError, setGatewayError] = useState<string | undefined>();
   const [emailError, setEmailError] = useState<string | undefined>();
   const [phase, setPhase] = useState<Phase>(incomingToken ? 'exchanging' : 'idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -151,31 +153,31 @@ export function ConnectPage() {
     event.preventDefault();
     setMessage(null);
 
-    const normalized = normalizeGatewayUrl(gatewayInput);
-    const nextGatewayError = normalized
-      ? undefined
-      : 'Use an https:// URL (http:// is allowed only for localhost).';
     const trimmedEmail = email.trim();
     const nextEmailError =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) === true
         ? undefined
         : 'Enter the email address of an active officer.';
 
-    setGatewayError(nextGatewayError);
     setEmailError(nextEmailError);
-    if (nextGatewayError || nextEmailError || !normalized) return;
+    if (nextEmailError) return;
 
     setPhase('checking');
     try {
-      await probeGateway(normalized, AbortSignal.timeout(6000));
-      setPhase('sending');
-      await requestMagicLink(normalized, trimmedEmail, AbortSignal.timeout(10000));
-      setBaseUrl(normalized);
-      setGatewayInput(normalized);
+      await probeGateway(GATEWAY_URL, AbortSignal.timeout(6000));
+    } catch {
+      setPhase('error');
+      setMessage(UNREACHABLE);
+      return;
+    }
+
+    setPhase('sending');
+    try {
+      await requestMagicLink(GATEWAY_URL, trimmedEmail, AbortSignal.timeout(10000));
       setPhase('sent');
     } catch (error: unknown) {
       setPhase('error');
-      setMessage(`${connectionErrorDetail(error)} Check the gateway URL and try again.`);
+      setMessage(connectionErrorDetail(error));
     }
   };
 
@@ -257,22 +259,6 @@ export function ConnectPage() {
         ) : null}
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
-          <Field
-            label="Gateway URL"
-            required
-            validationMessage={gatewayError}
-            validationState={gatewayError ? 'error' : 'none'}
-            hint="The Vercel deployment that holds the API credential."
-          >
-            <Input
-              type="url"
-              value={gatewayInput}
-              autoComplete="url"
-              spellCheck={false}
-              onChange={(_, data) => setGatewayInput(data.value)}
-            />
-          </Field>
-
           <Field
             label="Officer email"
             required

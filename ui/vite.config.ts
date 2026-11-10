@@ -1,7 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
-
-const DEFAULT_GATEWAY_URL = 'https://member-registrations-mind-logs.vercel.app';
+import { resolveGatewayOrigin } from './src/auth/gatewayOrigin.ts';
 
 /**
  * A Content-Security-Policy is only injected into the production build: the dev
@@ -36,7 +35,10 @@ function contentSecurityPolicy(gatewayUrl: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const gatewayUrl = env.VITE_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+  // Throws on a missing, invalid or non-https value in a production build, so
+  // the build stops before an artefact exists (AC-10b). The CSP below is
+  // generated from this same result.
+  const gatewayUrl = resolveGatewayOrigin(env.VITE_GATEWAY_URL, mode);
 
   return {
     // GitHub Pages serves the project under /MemberRegistrations/. Dev keeps the

@@ -16,8 +16,10 @@ npm run ui:typecheck
 npm run ui:test
 ```
 
-`VITE_GATEWAY_URL` defaults to `https://member-registrations-mind-logs.vercel.app`; see
-`.env.example`. The build has no secret: the gateway holds the API bearer.
+`VITE_GATEWAY_URL` is the one gateway origin, baked at build time. A production build requires it
+(`https://`, no path, query, fragment or credentials) and fails without it; a development build
+defaults to `http://localhost:3000`. See `.env.example`. The build has no secret: the gateway holds
+the API bearer.
 
 ## Shell
 

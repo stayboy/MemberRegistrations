@@ -1,7 +1,16 @@
+import { resolveGatewayOrigin } from './gatewayOrigin';
+
 export const SESSION_STORAGE_KEY = 'mr.session.v1';
-export const GATEWAY_STORAGE_KEY = 'mr.gateway.v1';
-export const DEFAULT_GATEWAY_URL =
-  import.meta.env.VITE_GATEWAY_URL?.trim() || 'https://member-registrations-mind-logs.vercel.app';
+
+/** The storage key an earlier build used to remember a gateway origin. */
+const LEGACY_GATEWAY_STORAGE_KEY = 'mr.gateway.v1';
+
+/**
+ * The gateway origin, resolved once at build time from `VITE_GATEWAY_URL` and
+ * inlined into the bundle (FR-13). Nothing at runtime can change it; the CSP in
+ * `index.html` is generated from the same value.
+ */
+export const GATEWAY_URL = resolveGatewayOrigin(import.meta.env.VITE_GATEWAY_URL, import.meta.env.MODE);
 
 export interface SessionCredential {
   readonly token: string;
@@ -86,45 +95,14 @@ export function clearSession(): void {
 }
 
 /**
- * Normalises a gateway base URL: trims, strips trailing slashes, and requires
- * https (http is allowed only for a loopback host). Returns null when invalid so
- * the form can show an inline error without saving it (FR-13).
+ * Removes the `mr.gateway.v1` entry an earlier build wrote. It is never read, so
+ * it cannot change the origin; deleting it keeps a stale value out of the
+ * browser's storage (FR-13, AC-10a).
  */
-export function normalizeGatewayUrl(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  let url: URL;
+export function clearLegacyGatewayUrl(): void {
   try {
-    url = new URL(trimmed);
+    localStorageOrNull()?.removeItem(LEGACY_GATEWAY_STORAGE_KEY);
   } catch {
-    return null;
-  }
-
-  if (url.username || url.password || url.search || url.hash) return null;
-
-  const loopback =
-    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) return null;
-
-  const path = url.pathname.replace(/\/+$/, '');
-  return `${url.origin}${path}`;
-}
-
-export function readStoredGatewayUrl(): string {
-  const storage = localStorageOrNull();
-  if (!storage) return DEFAULT_GATEWAY_URL;
-  try {
-    return normalizeGatewayUrl(storage.getItem(GATEWAY_STORAGE_KEY) ?? '') ?? DEFAULT_GATEWAY_URL;
-  } catch {
-    return DEFAULT_GATEWAY_URL;
-  }
-}
-
-export function writeStoredGatewayUrl(url: string): void {
-  try {
-    localStorageOrNull()?.setItem(GATEWAY_STORAGE_KEY, url);
-  } catch {
-    // Prefilling the next visit is a convenience, not a requirement.
+    // A browser that blocks localStorage has nothing to clear.
   }
 }
