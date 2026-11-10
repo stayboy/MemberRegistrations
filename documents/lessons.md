@@ -11,7 +11,61 @@ Q126 round (2026-11-04, "all as recommended"); the workspace-gate entry was acce
 that it be written only once the UI CI job landed, which it did the same day. The 2026-11-05 capture
 and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as recommended"). The
 2026-11-06 process entries were accepted in the `quiet-gates-and-lessons` round (2026-11-06, "all as
-recommended").
+recommended"). The 2026-11-10 entries were accepted in reply to the session that proposed them
+(2026-11-10, "accept lessons").
+
+---
+
+## 2026-11-10 — The reviewer seat is chosen by the clock, not by the model you prefer
+
+**Rule.** `documents/agents/orchestrator-policy.md` (Seats) makes the reviewer, plan-gate, spec-review
+and acceptance seat `cline-pass/cline-pass/mimo-v2.6-pro` between 12:00 and 18:00 local; outside that
+window the ranked pro seat applies. Read the clock and the table before dispatching, and name the seat
+in the round doc. A review dispatched on the wrong seat is no verdict until it is re-run on the right
+one — or on the ranked fallback, with the reason recorded, because a provider that refuses a model is a
+fallback, not a second seat. `AGENTS.md` §10a still words the protected-document gate as a review by
+`0813`; the Seats ruling (owner, 2026-11-09) applies inside the window, and harmonising that sentence is
+queued in `documents/backlog.md`.
+
+**Evidence.** The #101 code review (13:24) sat on `deepseek-v4-pro` `0813` inside the window, and so did
+the ruleset round's merge-policy review (14:41); the owner caught both. The code review was re-run as
+round 3 on the window model, and the merge-policy text was re-reviewed on it later that day when the
+verb glossary changed it.
+
+**Trigger.** Dispatching any review: spec, code, plan gate or protected document.
+
+---
+
+## 2026-11-10 — `gh pr merge --auto` is not a gate on this repository
+
+**Rule.** Check `enablePullRequestAutoMerge` before reading `--auto` as "merge when green". It is
+disabled here, so the flag never arms a gate: it errors, and a plain `gh pr merge` is gated by nothing
+except the ruleset. The wait is explicit — `gh pr checks <n> --watch`, then merge on green.
+
+**Evidence.** PR #101 merged at 13:38:37 with `verify` still running; no ruleset existed and nothing
+refused the merge. After the ruleset was created on 2026-11-10 at 14:41, a merge attempt on #102 was
+refused with "the base branch policy prohibits the merge" while its checks ran, and `gh pr merge --auto`
+on that pull request returned "Auto merge is not allowed for this repository".
+
+**Trigger.** Any merge command, and any policy text that treats `--auto` as a gate.
+
+---
+
+## 2026-11-10 — A Windows Vitest worker crash is an environment failure, not a test failure
+
+**Rule.** Exit `3221226505` from a Vitest worker is a Node fail-fast on Windows, not an assertion. Read
+the total, isolate the file that crashed, run it alone, and re-run the gate once. Bypassing the hook
+does not fix it — "A hook that cannot pass is a hook people bypass" (2026-11-06) still stands, and the
+deterministic fix is queued in `documents/backlog.md`. A bypass is a recorded exception for a docs-only
+change, never a habit, and the required CI check stays the authority.
+
+**Evidence.** Two consecutive pre-commit runs crashed with `3221226505` on different files
+(`tests/api/ussd.test.ts`, then `tests/api/events-presbytery.test.ts`); the second passed 10/10 alone
+and the full suite passed 48/48 in the same session. CI `verify` on Ubuntu then passed in 3m38s. The
+docs-only commit that used `--no-verify` records the bypass in its body, and
+`documents/rounds/ui-fixed-gateway-origin.md` carries both runs and both files under Deviations.
+
+**Trigger.** A gate exits non-zero with a worker exit code and no failing assertion.
 
 ---
 
