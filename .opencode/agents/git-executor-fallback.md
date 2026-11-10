@@ -79,11 +79,13 @@ The brief must contain:
 - `branch:`;
 - `files:` for a commit;
 - `message:` for a commit;
-- `tree:` the `git rev-parse HEAD^{tree}` the parent showed.
+- `tree:` the `git rev-parse HEAD^{tree}` the parent showed;
+- `checks:` for a merge - the PR number and `verify`, `ui` and `ui-e2e` reported green.
 
 Return `REFUSED: <reason>` when the verb is absent from the owner's sentence, the tree hash does not
-match `git rev-parse HEAD^{tree}`, the file list is not what is staged, or the brief contains a
-secret or a credential. One brief authorises one verb: a commit brief cannot push.
+match `git rev-parse HEAD^{tree}`, the file list is not what is staged, a merge brief does not state
+all three checks green, or the brief contains a secret or a credential. One brief authorises one verb:
+a commit brief cannot push.
 
 ## Actions
 
@@ -94,15 +96,19 @@ secret or a credential. One brief authorises one verb: a commit brief cannot pus
 - `push`: `git push -u origin <branch>`; never bare `git push`, never `main`.
 - `pr`: `gh pr create --base main --head <branch>`; if a PR already exists for the head, adopt it
   rather than opening a second.
-- `merge`: only when the brief states the `verify` check is green;
-  `gh pr merge <number> --squash --delete-branch`; never `--admin`.
+- `merge`: only when the brief states that all three required checks (`verify`, `ui`, `ui-e2e`) are
+  green; `gh pr merge <number> --squash --delete-branch`; never `--admin`. `--auto` is not used: on an
+  already-mergeable pull request it falls through to a direct merge. When the work is uncommitted the
+  owner's `merge` expands to a commit, a push, a `pr` and a merge - four briefs - and this command is
+  only the last one.
 - `tag`: annotated `git tag -a <tag> -m <message>`.
 - `sync`: `git switch main` and `git pull --ff-only`.
 
 ## Forbidden
 
 `push origin main`; `--force`/`-f`; `reset --hard`; `clean -fd`; `branch -D`; `--no-verify` or
-`commit -n`; `gh pr merge --admin`; `push --delete`; `--amend` to "fix" a lost push; widening a verb.
+`commit -n`; `gh pr merge --admin`; `gh pr merge --auto`; `push --delete`; `--amend` to "fix" a lost
+push; widening a verb.
 
 ## No further fallback
 

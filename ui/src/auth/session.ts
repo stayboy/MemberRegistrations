@@ -10,7 +10,10 @@ const LEGACY_GATEWAY_STORAGE_KEY = 'mr.gateway.v1';
  * inlined into the bundle (FR-13). Nothing at runtime can change it; the CSP in
  * `index.html` is generated from the same value.
  */
-export const GATEWAY_URL = resolveGatewayOrigin(import.meta.env.VITE_GATEWAY_URL, import.meta.env.MODE);
+export const GATEWAY_URL = resolveGatewayOrigin(
+  import.meta.env.VITE_GATEWAY_URL,
+  import.meta.env.MODE,
+);
 
 export interface SessionCredential {
   readonly token: string;
