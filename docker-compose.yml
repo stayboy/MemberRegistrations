@@ -45,6 +45,10 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
       CORS_ALLOWED_ORIGINS: http://localhost:8080
       UI_BASE_URL: 'http://localhost:8080/#/connect'
+      # Local MVP: every screen must be exercisable, so the switched-off
+      # subsystems are on here. Development only — production keeps both off.
+      USSD_ENABLED: 'true'
+      PAYMENTS_ENABLED: 'true'
       LOG_LEVEL: info
     depends_on:
       migrate:
