@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_USSD_GATEWAY_SECRET, DEFAULT_USSD_NALO_USER_ID } from '../../src/config/env.js';
 import { hashVisitorPhone } from '../../src/domain/contributions.js';
 import {
   createDisabledUssdTestApp,
@@ -849,5 +850,82 @@ describe('USSD my payments', () => {
     expect(summary.body.text).toContain('Quarter');
     expect(summary.body.text).toContain('Year');
     expect(summary.body.text).toContain('Sunday Celebration');
+  });
+});
+
+describe('USSD disabled gate', () => {
+  it('answers ussd_disabled before any HMAC or USERID check and writes nothing', async () => {
+    const disabled = await createDisabledUssdTestApp(harness.db);
+    const [before] = await disabled.db.query<{ count: number | string }>(
+      'select count(*) as count from ussd_sessions',
+    );
+
+    const body = { phone: '0899 000 0901', input: '', seq: 1 };
+    const raw = JSON.stringify(body);
+
+    const unsigned = await request(disabled.app)
+      .post('/ussd/session')
+      .set('Content-Type', 'application/json')
+      .send(raw);
+    expect(unsigned.status).toBe(503);
+    expect(unsigned.body.code).toBe('ussd_disabled');
+
+    // A frame signed with the disabled instance's own secret (the public
+    // development default) would verify if the gate were removed; it must not
+    // authenticate a subsystem that is switched off.
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const nonce = 'dev-default-nonce-0001';
+    const wouldVerify = createHmac('sha256', DEFAULT_USSD_GATEWAY_SECRET)
+      .update(`${timestamp}${nonce}${raw}`)
+      .digest('hex');
+    const signedFrame = await request(disabled.app)
+      .post('/ussd/session')
+      .set({
+        'Content-Type': 'application/json',
+        'X-USSD-Timestamp': timestamp,
+        'X-USSD-Nonce': nonce,
+        'X-USSD-Signature': wouldVerify,
+      })
+      .send(raw);
+    expect(signedFrame.status).toBe(503);
+    expect(signedFrame.body.code).toBe('ussd_disabled');
+
+    // Nalo authenticates with USERID instead of an HMAC; the disabled gate
+    // must precede that check too.
+    const noUser = await request(disabled.app)
+      .post('/ussd/nalo')
+      .set('Content-Type', 'application/json')
+      .send(
+        JSON.stringify({ MSISDN: '08990000902', USERDATA: '', MSGTYPE: true, NETWORK: 'test' }),
+      );
+    expect(noUser.status).toBe(503);
+    expect(noUser.body.code).toBe('ussd_disabled');
+
+    const validUser = await request(disabled.app).post('/ussd/nalo').send({
+      USERID: DEFAULT_USSD_NALO_USER_ID,
+      MSISDN: '08990000903',
+      USERDATA: '',
+      MSGTYPE: true,
+      NETWORK: 'test',
+      SESSIONID: 'disabled-nalo-valid',
+    });
+    expect(validUser.status).toBe(503);
+    expect(validUser.body.code).toBe('ussd_disabled');
+
+    const unknownUser = await request(disabled.app).post('/ussd/nalo').send({
+      USERID: 'some-other-client',
+      MSISDN: '08990000904',
+      USERDATA: '',
+      MSGTYPE: true,
+      NETWORK: 'test',
+      SESSIONID: 'disabled-nalo-unknown',
+    });
+    expect(unknownUser.status).toBe(503);
+    expect(unknownUser.body.code).toBe('ussd_disabled');
+
+    const [after] = await disabled.db.query<{ count: number | string }>(
+      'select count(*) as count from ussd_sessions',
+    );
+    expect(Number(after!.count)).toBe(Number(before!.count));
   });
 });

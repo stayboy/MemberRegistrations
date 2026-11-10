@@ -23,6 +23,7 @@ export interface TestAppOptions {
   corsOrigins?: string[];
   paymentGateway?: PaymentGateway;
   paymentGatewaySecret?: string;
+  paymentsEnabled?: boolean;
   visitorPhonePepper?: string;
   ussd?: {
     enabled?: boolean;
@@ -38,15 +39,17 @@ export interface TestAppOptions {
 export async function createTestApp(options: TestAppOptions = {}): Promise<TestApp> {
   const db = await createPgliteDb();
   await migrate(db);
-  const { ussd, ...rest } = options;
+  const { ussd, paymentsEnabled, ...rest } = options;
   const app = createApp({
     db,
     bearerToken: TOKEN,
     logger: pino({ level: 'silent' }),
     mailer: options.mailer ?? new NullMailer(),
     ...rest,
-    // USSD is on for tests unless a test asks for the disabled wiring.
+    // USSD and the payment callback are on for tests unless a test asks for
+    // the disabled wiring.
     ussd: { enabled: true, ...ussd },
+    paymentsEnabled: paymentsEnabled ?? true,
   });
   return { app, db, close: () => db.close() };
 }
@@ -65,6 +68,22 @@ export async function createDisabledUssdTestApp(db?: Db): Promise<TestApp> {
     return { app, db, close: async () => {} };
   }
   return createTestApp({ ussd: { enabled: false } });
+}
+
+/** The same real app with the payment callback unmounted, for the 404 gate. */
+export async function createDisabledPaymentsTestApp(db?: Db): Promise<TestApp> {
+  if (db) {
+    // Reuse an existing PGlite instance; the caller owns its lifetime.
+    const app = createApp({
+      db,
+      bearerToken: TOKEN,
+      logger: pino({ level: 'silent' }),
+      mailer: new NullMailer(),
+      paymentsEnabled: false,
+    });
+    return { app, db, close: async () => {} };
+  }
+  return createTestApp({ paymentsEnabled: false });
 }
 
 export const writeHeaders = {
