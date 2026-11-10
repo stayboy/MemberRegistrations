@@ -24,6 +24,9 @@ const child = spawn(process.execPath, ['dist/index.js'], {
     API_BEARER_TOKEN: TOKEN,
     LOG_LEVEL: 'silent',
     USSD_ENABLED: 'true',
+    // The scenario drives the HMAC-only payment callback, which is unmounted
+    // unless payments are explicitly enabled (production defaults it to false).
+    PAYMENTS_ENABLED: 'true',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });

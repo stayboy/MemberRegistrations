@@ -34,6 +34,7 @@ const app = createApp({
     .filter(Boolean),
   visitorPhonePepper: env.VISITOR_PHONE_PEPPER,
   paymentGatewaySecret: env.PAYMENT_GATEWAY_SECRET,
+  paymentsEnabled: env.PAYMENTS_ENABLED,
   ussd: {
     enabled: env.USSD_ENABLED,
     gatewaySecret: env.USSD_GATEWAY_SECRET,

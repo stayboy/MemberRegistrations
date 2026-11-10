@@ -45,6 +45,12 @@ const envSchema = z.object({
     .min(1)
     .max(182)
     .default(DEFAULT_USSD_NALO_MAX_MSG_CHARS),
+  // The callback is authenticated by HMAC only, so a public development secret
+  // would let anyone forge it; the route stays unmounted until a real gateway.
+  PAYMENTS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   PAYMENT_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_PAYMENT_GATEWAY_SECRET),
 });
 
@@ -70,25 +76,25 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.VISITOR_PHONE_PEPPER === DEFAULT_VISITOR_PHONE_PEPPER) {
       throw new Error('VISITOR_PHONE_PEPPER is required when NODE_ENV=production');
     }
-    if (env.USSD_GATEWAY_SECRET === DEFAULT_USSD_GATEWAY_SECRET) {
-      throw new Error('USSD_GATEWAY_SECRET is required when NODE_ENV=production');
-    }
-    if (env.USSD_PHONE_PEPPER === DEFAULT_USSD_PHONE_PEPPER) {
-      throw new Error('USSD_PHONE_PEPPER is required when NODE_ENV=production');
-    }
-    if (env.USSD_CODE_PEPPER === DEFAULT_USSD_CODE_PEPPER) {
-      throw new Error('USSD_CODE_PEPPER is required when NODE_ENV=production');
-    }
-    if (env.USSD_NALO_USER_ID === DEFAULT_USSD_NALO_USER_ID) {
-      throw new Error('USSD_NALO_USER_ID is required when NODE_ENV=production');
-    }
-    if (env.PAYMENT_GATEWAY_SECRET === DEFAULT_PAYMENT_GATEWAY_SECRET) {
-      throw new Error('PAYMENT_GATEWAY_SECRET is required when NODE_ENV=production');
-    }
     if (env.USSD_ENABLED) {
+      if (env.USSD_GATEWAY_SECRET === DEFAULT_USSD_GATEWAY_SECRET) {
+        throw new Error('USSD_GATEWAY_SECRET is required when NODE_ENV=production');
+      }
+      if (env.USSD_PHONE_PEPPER === DEFAULT_USSD_PHONE_PEPPER) {
+        throw new Error('USSD_PHONE_PEPPER is required when NODE_ENV=production');
+      }
+      if (env.USSD_CODE_PEPPER === DEFAULT_USSD_CODE_PEPPER) {
+        throw new Error('USSD_CODE_PEPPER is required when NODE_ENV=production');
+      }
+      if (env.USSD_NALO_USER_ID === DEFAULT_USSD_NALO_USER_ID) {
+        throw new Error('USSD_NALO_USER_ID is required when NODE_ENV=production');
+      }
       throw new Error(
         'USSD_ENABLED must be false when NODE_ENV=production until a real aggregator exists',
       );
+    }
+    if (env.PAYMENTS_ENABLED && env.PAYMENT_GATEWAY_SECRET === DEFAULT_PAYMENT_GATEWAY_SECRET) {
+      throw new Error('PAYMENT_GATEWAY_SECRET is required when NODE_ENV=production');
     }
   }
 

@@ -14,6 +14,14 @@
 
 ## Change log
 
+- 2026-11-10: the USSD and payment secrets stop being required when their subsystems are off.
+  `USSD_ENABLED=false` (the default) no longer requires `USSD_GATEWAY_SECRET`, `USSD_PHONE_PEPPER`,
+  `USSD_CODE_PEPPER` or the `USSD_NALO_USER_ID` client identifier, and the USSD entries
+  answer `503 ussd_disabled` before any HMAC check. A new `PAYMENTS_ENABLED` (default `false`) keeps
+  `POST /v1/payments/callback` unmounted, answering `404`, and drops `PAYMENT_GATEWAY_SECRET` from
+  the required set. `VISITOR_PHONE_PEPPER` stays required: contributions and pledges hash visitor
+  phones. (Deployment; AC-29, AC-30)
+
 - 2026-11-09: `q` on `GET /v1/members` narrows to member number and name parts (first, last, other
   names, alias, maiden name), never owned or linked contact values (FR-31a, Q6); the shepherding
   roster DTO carries `contactCount` (owned and linked), not contact values (Q5). The separate
@@ -786,8 +794,9 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 Business routes are under `/v1`, with the public `/auth/*` sign-in routes and the USSD entries
 (`/ussd/session`, `/ussd/nalo`) outside it; `/health`, `/openapi.json` and the development-only
 `/dev/ussd/session` are unversioned too. Bearer auth guards `/v1` except the signature-verified
-`/v1/payments/callback`; `/gateway/v1` uses the gateway token; the USSD entries authenticate with the
-HMAC signature or the Nalo `USERID`. Every bearer write requires `X-Actor-Id`.
+`/v1/payments/callback`, which exists only when `PAYMENTS_ENABLED=true`; `/gateway/v1` uses the
+gateway token; the USSD entries authenticate with the HMAC signature or the Nalo `USERID`. Every
+bearer write requires `X-Actor-Id`.
 
 The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 `GET /v1/events/{eventId}/attendance?date=`; the V3 additions include `POST /v1/contributions` and
@@ -1037,34 +1046,34 @@ export interface Event {
 
 ### Offerings and giving
 
-| Method       | Path                                                                 | Result                                                         |
-| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1                  |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                 |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)                   |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                              |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                       |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences          |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                         |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                              |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                              |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                    | ticket 21  |
-| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)                | ticket 24a |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                              | ticket 21  |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                          | ticket 21  |
-| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                       | ticket 22  |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                       | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                          | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                          | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason                   | ticket 22  |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                              | ticket 22  |
-| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`                | ticket 24a |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                          |
-| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`, MVP)  |
-| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec       | ticket 24a |
-| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry (`USERID` auth, not bearer); see the USSD spec | ticket 24d |
-| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway; refuses in production              | ticket 24d |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified)                          | ticket 24a |
+| Method       | Path                                                                 | Result                                                                      |
+| ------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active) or create with terms v1                               |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                              |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)                                |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                                           |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                                    |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences                       |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                      |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                                           |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                                           |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                                 | ticket 21  |
+| `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)                             | ticket 24a |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                           | ticket 21  |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                       | ticket 21  |
+| `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                                    | ticket 22  |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                    | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                                       | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append a dishonor event with a reason                                       | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Assign or reassign the officer with a reason                                | ticket 22  |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                           | ticket 22  |
+| `POST`       | `/v1/pledges/{id}/settle`                                            | Settle with a contribution and append `honored`                             | ticket 24a |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals                                                       |
+| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`, MVP)               |
+| `POST`       | `/ussd/session`                                                      | USSD gateway entry (HMAC, not bearer); see the USSD spec                    | ticket 24a |
+| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry (`USERID` auth, not bearer); see the USSD spec              | ticket 24d |
+| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway; refuses in production                           | ticket 24d |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified; `404` unless `PAYMENTS_ENABLED=true`) | ticket 24a |
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
@@ -1321,6 +1330,10 @@ migration `0017` and are defined in `member-registrations-events-offerings.md` (
 
 ### AC-28: **Given** two serverless instances, **When** a session or rate-limit decision is made, **Then** both read the same Postgres state; no in-memory store is authoritative. (FR-28)
 
+### AC-29: **Given** `PAYMENTS_ENABLED` unset or `false`, **When** `POST /v1/payments/callback` is called even with a signature made with the development secret, **Then** the response is `404` and no contribution or pledge is written. (§ Subscriptions, payments and claims (24c))
+
+### AC-30: **Given** `USSD_ENABLED=false`, **When** `/ussd/session` or `/ussd/nalo` is called with no signature, with a valid signature, and with a signature made with the development default secret, **Then** every response is `503 ussd_disabled` and no HMAC or `USERID` verification or write occurs. (§ USSD attendance, codes and clocking (24b))
+
 ## Edge Cases
 
 - EC-1: A multi-day event where one session is cancelled: attendance is allowed for the remaining sessions only, and the cancelled date is visible but read-only.
@@ -1506,6 +1519,27 @@ sequences.
 - `API_BEARER_TOKEN` is required in production.
 - `VISITOR_PHONE_PEPPER` (at least 16 characters) is required in production for the visitor-phone
   HMAC; development and tests may use a local default, and rotating it changes every stored hash.
+- `USSD_ENABLED` defaults to `false`. When it is `false`, `USSD_GATEWAY_SECRET`, `USSD_PHONE_PEPPER`,
+  `USSD_CODE_PEPPER` and `USSD_NALO_USER_ID` are **not** required, and every USSD entry answers
+  `503 ussd_disabled` **before** any HMAC or `USERID` verification; the development simulator answers
+  the same `503` when disabled outside production, where its refusal remains the `404` already
+  documented in the route table. `USSD_NALO_MAX_MSG_CHARS` is never required. When it is `true`, all
+  four are required in production and must differ from their development defaults; a local developer
+  must set `USSD_ENABLED=true` to drive the simulator. **The production guard that rejects
+  `USSD_ENABLED=true` (`USSD_ENABLED must be false when NODE_ENV=production until a real aggregator
+exists`) is retained**, so the `true` requirements apply only once a future aggregator integration
+  (OS-3) removes it.
+- `PAYMENTS_ENABLED` defaults to `false`. When it is `false`, `POST /v1/payments/callback` is not
+  mounted and answers `404` (its raw-body parser is skipped too), and `PAYMENT_GATEWAY_SECRET` is
+  **not** required. `createApp` gains `paymentsEnabled?: boolean`, defaulting from the variable, and
+  the test helper defaults it **enabled**, as it does for USSD. When it is `true`, a secret of at
+  least 16 characters that differs from the development default is required in production, and the
+  callback is mounted before the bearer gate with HMAC verification of the raw body. AC-29's `404`
+  case is exercised by an app constructed with `paymentsEnabled: false`.
+- **Disabled subsystems must not verify.** The `503 ussd_disabled` / `404` gate is the only guard for
+  a switched-off subsystem and MUST precede any HMAC or `USERID` verification; a frame or callback
+  signed with a public `dev-only-*` default MUST never authenticate. The generated OpenAPI document
+  lists the payment callback unconditionally; the runtime answers `404` when it is disabled.
 - Migrations run as an explicit step (`npm run db:migrate`), never automatically on request.
 - Vercel's 4.5 MB body limit still applies; the app caps JSON at 1 MB, so imports are chunked.
 

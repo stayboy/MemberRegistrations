@@ -70,6 +70,8 @@ export interface AppOptions {
   /** Tests inject a fake; the default is the in-process stub. */
   paymentGateway?: PaymentGateway;
   paymentGatewaySecret?: string;
+  /** Mounts the HMAC-only callback; off by default so the path answers 404. */
+  paymentsEnabled?: boolean;
   ussd?: {
     enabled?: boolean;
     gatewaySecret?: string;
@@ -130,6 +132,7 @@ export function createApp(options: AppOptions): Express {
     options.paymentGatewaySecret ??
     process.env.PAYMENT_GATEWAY_SECRET ??
     DEFAULT_PAYMENT_GATEWAY_SECRET;
+  const paymentsEnabled = options.paymentsEnabled ?? process.env.PAYMENTS_ENABLED === 'true';
   const ussd = {
     enabled: options.ussd?.enabled ?? process.env.USSD_ENABLED === 'true',
     gatewaySecret:
@@ -217,9 +220,16 @@ export function createApp(options: AppOptions): Express {
   );
 
   // The callback HMAC covers the exact raw body, so this route is mounted
-  // before the global JSON parser and before the bearer gate.
-  app.use('/v1/payments/callback', express.raw({ type: 'application/json', limit: '256kb' }));
-  app.use('/v1/payments', paymentsRouter(paymentGroups, paymentGatewaySecret));
+  // before the global JSON parser and before the bearer gate. When payments are
+  // disabled the whole surface is skipped: an explicit 404 handler answers the
+  // path before the gate, because a provider callback never carries the bearer
+  // and a switched-off subsystem must not authenticate anything.
+  if (paymentsEnabled) {
+    app.use('/v1/payments/callback', express.raw({ type: 'application/json', limit: '256kb' }));
+    app.use('/v1/payments', paymentsRouter(paymentGroups, paymentGatewaySecret));
+  } else {
+    app.all('/v1/payments/callback', notFoundHandler);
+  }
 
   app.use(express.json({ limit: '1mb' }));
 

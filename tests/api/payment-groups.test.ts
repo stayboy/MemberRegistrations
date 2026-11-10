@@ -1,12 +1,19 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_PAYMENT_GATEWAY_SECRET } from '../../src/config/env.js';
 import type {
   InitiatePaymentInput,
   InitiatedPayment,
   PaymentGateway,
 } from '../../src/payments/gateway.js';
-import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import {
+  createDisabledPaymentsTestApp,
+  createTestApp,
+  readHeaders,
+  writeHeaders,
+  type TestApp,
+} from '../helpers/app.js';
 
 const TEST_PAYMENT_SECRET = 'test-payment-gateway-secret-16';
 
@@ -757,6 +764,51 @@ describe('POST /v1/payments/callback', () => {
       .send(raw);
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('validation_error');
+  });
+});
+
+describe('POST /v1/payments/callback with payments disabled', () => {
+  it('answers 404 with no signature and with a development-default signature', async () => {
+    const disabled = await createDisabledPaymentsTestApp(harness.db);
+    const body = {
+      reference: 'PG-DISABLED-CALLBACK',
+      status: 'paid',
+      amountMinor: 100,
+      currency: 'GHS',
+      occurredAt: new Date().toISOString(),
+    };
+    const raw = JSON.stringify(body);
+
+    const [contributionsBefore] = await harness.db.query<{ count: number | string }>(
+      'select count(*) as count from contributions',
+    );
+    const [pledgesBefore] = await harness.db.query<{ count: number | string }>(
+      'select count(*) as count from pledges',
+    );
+
+    const unsigned = await request(disabled.app)
+      .post('/v1/payments/callback')
+      .set('Content-Type', 'application/json')
+      .send(raw);
+    expect(unsigned.status).toBe(404);
+
+    // A signature made with the public development default must not
+    // authenticate a callback for a subsystem that is switched off.
+    const forged = createHmac('sha256', DEFAULT_PAYMENT_GATEWAY_SECRET).update(raw).digest('hex');
+    const signed = await request(disabled.app)
+      .post('/v1/payments/callback')
+      .set({ 'Content-Type': 'application/json', 'X-Payment-Signature': forged })
+      .send(raw);
+    expect(signed.status).toBe(404);
+
+    const [contributionsAfter] = await harness.db.query<{ count: number | string }>(
+      'select count(*) as count from contributions',
+    );
+    const [pledgesAfter] = await harness.db.query<{ count: number | string }>(
+      'select count(*) as count from pledges',
+    );
+    expect(Number(contributionsAfter!.count)).toBe(Number(contributionsBefore!.count));
+    expect(Number(pledgesAfter!.count)).toBe(Number(pledgesBefore!.count));
   });
 });
 
