@@ -8,21 +8,43 @@ force pushes, and deletion of `main` are not part of the workflow.
 1. Create a branch from `main`: `feat/<slug>`, `fix/<slug>` or `chore/<slug>`.
 2. Add or update tests for behavioural changes. Tier 2 runs the `code-review` skill against the base
    and resolves every P1 before the PR.
-3. Commit **only after the owner explicitly says "commit"**. Show the change set first unless the
-   owner named it.
-4. Push only after the owner explicitly says "push".
-5. Open a PR targeting `main` only after the owner asks for a PR.
-6. Wait for the `verify`, `ui` and `ui-e2e` GitHub Actions checks to pass — the ruleset refuses the
+3. Commit **only after the owner explicitly says "commit"** — or as part of an authorised `merge`
+   chain (see Verb glossary). Show the change set first unless the owner named it.
+4. Push only after the owner explicitly says "push", or as part of an authorised `merge` chain.
+5. Open a PR targeting `main` only after the owner asks for a PR, or as part of an authorised `merge`
+   chain.
+6. Wait for the `verify`, `ui` and `ui-e2e` GitHub Actions checks to pass - the ruleset refuses the
    merge until all three are green.
 7. Merge only after the owner says "merge": **squash merge, delete the source branch**.
 8. Switch to `main` and pull the merged result.
 
 Each action is separately authorised: "create a branch" or "fix X" does not authorise a commit, a
-push, a PR or a merge. Keep working-tree changes uncommitted by default.
+push, a PR or a merge. Keep working-tree changes uncommitted by default. `merge` is the one exception,
+defined in the Verb glossary below.
+
+## Verb glossary
+
+What each owner verb authorises, and nothing more. An action outside this list needs its own
+instruction.
+
+| Verb                  | What it authorises                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `branch`              | Create `feat/`, `fix/` or `chore/` from `main`.                                                                                                                                                                                                                                                                                                                                                     |
+| `commit`              | Stage and commit the named change set. Never pushes.                                                                                                                                                                                                                                                                                                                                                |
+| `push`                | Push the current branch. Never opens a PR.                                                                                                                                                                                                                                                                                                                                                          |
+| `pr` / `pull request` | Open the pull request to `main`. Never merges.                                                                                                                                                                                                                                                                                                                                                      |
+| `merge`               | Merge **only when green**. If the work is uncommitted, this one verb covers the whole chain: commit the change set, push the branch, open the PR, wait for `verify`, `ui` and `ui-e2e`, squash merge, delete the branch, pull `main`. If the PR for the current branch already exists, it covers waiting and merging. It never authorises merging a blocked PR, a `--admin` merge, or a force push. |
+| `go unattended`       | Pre-authorises commit, push, PR and merge for that round only (`AGENTS.md` §17).                                                                                                                                                                                                                                                                                                                    |
+
+"Merge" implies its prerequisites because the merged result cannot exist otherwise; the reverse never
+holds — "commit", "push" or "pr" never implies a merge. A blocked or failing check is a stop: fix on
+the branch and wait again.
 
 An action may be executed by the `git-executor` seat (`.opencode/agents/git-executor.md`) on a brief
 that quotes the owner's verb; the parent verifies the result. Delegation changes who runs the
-command, never who authorises it.
+command, never who authorises it. What the seat may not do — infer consent, or carry more than one verb
+per brief — is `AGENTS.md` §9 and `.opencode/agents/git-executor.md`; a `merge` brief still carries
+one verb even though that verb expands to several commands.
 
 ## Status checks
 
