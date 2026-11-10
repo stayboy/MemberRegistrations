@@ -65,14 +65,14 @@
     },
     {
       "path": ".github/merge-policy.md",
-      "sha256": "a456bdd611a149f3f7f7014dc7e5828a5b4194047703b3305311989f3ebd66dc",
+      "sha256": "3ecbdfd053523d0498d6c72e96e0a06baecc99b62ba6098a0033ee786761007e",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: adds the delegation paragraph - an action may be executed by the git-executor on a brief quoting the owner verb, and the parent verifies the result; delegation changes who runs the command, never who authorises it. why: the owner adopted the seat. rejected: letting the seat authorise itself; moving the owner verbs into the brief.",
+      "reason": "changes: the Status checks section records the active repository ruleset `main - require verify` (id 26950867) - a pull request plus `verify`, `ui` and `ui-e2e`, squash merge, force-push and deletion blocked, no bypass actors (administrators included) - created 2026-11-10 after PR #101 merged before its checks finished, corrects the obsolete private-Free-repo HTTP 403 finding (the repository is public), states that CI has no path filters, and explains that `gh pr merge --auto` is only safe because the ruleset refuses a merge until the checks are green; step 6 of the required path names all three checks. The Local guard section corrects `verify:fast` to `verify:precommit` and adds that hooks are per clone, `core.hooksPath` was found empty on 2026-11-10, and no git hook can see a merge (git has no merge hook; `gh pr merge` never touches the local repository), so the ruleset is the only control on merging. why: #101 merged before its checks finished; investigation found no ruleset, no branch protection and no installed hooks, and the only recorded reason for their absence was a 403 that no longer applies. rejected: leaving the conditional 'when configured' wording; a local `npm run pr:merge` wrapper; an admin bypass list; recording only `verify` as required.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09"
+      "attestation": "Read the exact on-disk text in full (70 lines). Round 1 ACCEPTED with one P2 (step 6 still named only `verify`) and one nit (PRs targeting `main`); both were applied and a final exact-text confirmation returned ACCEPTED with no P1/P2/nit, confirming nothing else moved. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-10"
     },
     {
       "path": "canonical/SKILL.md",

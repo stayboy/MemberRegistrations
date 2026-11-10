@@ -12,7 +12,8 @@ force pushes, and deletion of `main` are not part of the workflow.
    owner named it.
 4. Push only after the owner explicitly says "push".
 5. Open a PR targeting `main` only after the owner asks for a PR.
-6. Wait for the `verify` GitHub Actions check to pass.
+6. Wait for the `verify`, `ui` and `ui-e2e` GitHub Actions checks to pass — the ruleset refuses the
+   merge until all three are green.
 7. Merge only after the owner says "merge": **squash merge, delete the source branch**.
 8. Switch to `main` and pull the merged result.
 
@@ -25,10 +26,18 @@ command, never who authorises it.
 
 ## Status checks
 
-`.github/workflows/ci.yml` runs the `verify` job on every PR and on `main`. It is the required check
-for merging, enforced by the repository ruleset `main - require verify` when configured; treat it as
-required either way. Do not merge while it is running or failing. A failing branch is fixed on the
-branch and re-run.
+`.github/workflows/ci.yml` runs on every pull request that targets `main`, and on `main` itself, with
+no path filters, so the `verify`, `ui` and `ui-e2e` jobs always report. All three are **required** to merge: the repository
+ruleset `main - require verify` (id `26950867`) requires a pull request, those three checks and a
+squash merge, and blocks force pushes and deletion, with **no bypass actors** — administrators
+included (`current_user_can_bypass: never`). It was created on 2026-11-10 after PR #101 merged
+before its checks finished. The earlier finding that rulesets return HTTP 403 belonged to a private
+Free repository; this one is public, so the gate is available and is now on.
+
+Do not merge while a check is running or red. `gh pr merge --auto` is safe precisely because the
+ruleset refuses the merge until every required check reports green; without it, `--auto` merges a
+mergeable pull request immediately and the checks run afterwards on `main`. A failing branch is
+fixed on the branch and re-run.
 
 A red `main` is an incident:
 
@@ -50,7 +59,12 @@ hand if the branch survived.
 
 ## Local guard
 
-`.githooks/pre-commit` runs `npm run verify:fast` and blocks the commit on failure.
+`.githooks/pre-commit` runs `npm run verify:precommit` and blocks the commit on failure.
 `.githooks/pre-push` blocks direct pushes to `main`; feature-branch pushes are allowed. Install both
 with `npm run hooks:install`. They are tripwires, not a security boundary: `--no-verify` bypasses
 them, and this policy remains the primary control.
+
+Hooks are per clone and `core.hooksPath` can be cleared without leaving a record — it was found empty
+on 2026-11-10 — and they cannot see a merge at all: git has no merge hook, and `gh pr merge` is an API
+call that never touches the local repository. The ruleset above is the control on merging; the hooks
+protect only commits and pushes.
