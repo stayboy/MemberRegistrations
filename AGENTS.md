@@ -112,8 +112,10 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 ## 9. Commit, push, PR merge
 
 - Spec approval does **not** authorise a commit. Each of commit, push, PR and merge needs its own
-  explicit owner instruction — except that "go unattended" pre-authorises those four for that round
-  (§17). Every action outside the round still needs its own instruction.
+  explicit owner instruction — except that "merge" invoked while the work is uncommitted authorises
+  the whole chain (commit → push → PR → wait for the checks → squash merge → pull), and "go
+  unattended" pre-authorises those four for that round (§17). Every action outside the round still
+  needs its own instruction. Verb definitions: `.github/merge-policy.md` (Verb glossary).
 - The **git-executor** seat (`.opencode/agents/git-executor.md`, ranked `opencode/beam-free` then
   `ollama-cloud/beam`) may execute the command on a brief that quotes the owner's verb; the parent
   keeps the decision and verifies every result. The seat never infers consent, runs one verb per
@@ -121,10 +123,11 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for
-  the `verify` check, then squash merge and delete the branch. `.githooks/pre-push` blocks direct
-  pushes to `main` locally; `--no-verify` is a deliberate bypass, not a workflow.
-- Never push directly to `main`, force-push, or merge with a red/required check. Fix forward through
-  a PR.
+  the `verify`, `ui` and `ui-e2e` checks, then squash merge and delete the branch.
+  `.githooks/pre-push` blocks direct pushes to `main` locally; `--no-verify` is a deliberate bypass,
+  not a workflow.
+- Never push directly to `main`, force-push, merge with a red/required check, merge a blocked PR, or
+  use `--admin` to bypass the ruleset. Fix forward through a PR.
 - Full policy: `.github/merge-policy.md`.
 
 ## 10. Round docs, lessons and backlog

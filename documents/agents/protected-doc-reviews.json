@@ -10,14 +10,14 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "41c75e7cf7afc21bcfb06362ec7ccea49248dc7f92aa6742f0a3ebcee197f8da",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "reason": "changes: section 9 gains a git-executor bullet: the parent owns the decision and verification, the seat executes one quoted verb per brief, never infers consent, and parks when unavailable, with the seat and budget rules deferred to the policy. why: the owner adopted Beam (rung 1 opencode/beam-free, rung 2 ollama-cloud/beam) as the git executor. rejected: a documented-only seat; letting the seat infer consent; a per-action model switch without a budget.",
+      "sha256": "c25873615f0e29af4d1b0008bb74b7f14ed6702d6a35bf5a08015733746076f4",
+      "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: section 9 defines the merge verb's chain - 'merge' invoked on uncommitted work authorises commit, push, PR, waiting for the checks, squash merge and pull - and names all three required checks instead of `verify` alone; its stop bullet now also forbids merging a blocked PR and using `--admin` to bypass the ruleset, and it points at merge-policy's Verb glossary. why: the owner instructed that invoking merge on uncommitted changes must mean commit, push, PR and merge, with the PR green, after PR #101 merged before its checks finished. rejected: leaving `verify` as the only named check; leaving the `--admin` and blocked-PR stops only in the secondary document; a separate glossary document (drift risk).",
+      "fallbackReason": "12:00-18:00 local window: the seat is cline-pass/cline-pass/mimo-v2.6-pro, and deepseek-v4-pro 0813 does not sit the reviewer seat in this window. cline-pass lists mimo-v2.6-pro in the registry but the harness rejects it as unavailable (model not found), and a registry listing does not count as available; the same window model, mimo-v2.6-pro, was served by ollama-cloud.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09",
-      "build": "0813"
+      "attestation": "Read the exact on-disk text of section 9 (lines 112-131). Round 1 ACCEPTED with three P2s: the check list named only `verify`; the git-executor paragraph paraphrased the seat contract; the `--admin`/blocked-PR stops lived only in merge-policy. All three were applied and a final exact-text confirmation returned ACCEPTED with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-10"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
@@ -65,13 +65,13 @@
     },
     {
       "path": ".github/merge-policy.md",
-      "sha256": "3ecbdfd053523d0498d6c72e96e0a06baecc99b62ba6098a0033ee786761007e",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "build": "0813",
-      "reason": "changes: the Status checks section records the active repository ruleset `main - require verify` (id 26950867) - a pull request plus `verify`, `ui` and `ui-e2e`, squash merge, force-push and deletion blocked, no bypass actors (administrators included) - created 2026-11-10 after PR #101 merged before its checks finished, corrects the obsolete private-Free-repo HTTP 403 finding (the repository is public), states that CI has no path filters, and explains that `gh pr merge --auto` is only safe because the ruleset refuses a merge until the checks are green; step 6 of the required path names all three checks. The Local guard section corrects `verify:fast` to `verify:precommit` and adds that hooks are per clone, `core.hooksPath` was found empty on 2026-11-10, and no git hook can see a merge (git has no merge hook; `gh pr merge` never touches the local repository), so the ruleset is the only control on merging. why: #101 merged before its checks finished; investigation found no ruleset, no branch protection and no installed hooks, and the only recorded reason for their absence was a 403 that no longer applies. rejected: leaving the conditional 'when configured' wording; a local `npm run pr:merge` wrapper; an admin bypass list; recording only `verify` as required.",
+      "sha256": "8df9c9af5439fba1b26465e8794ea1b60e24eb791596b40cd9408541f9850633",
+      "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: gains a Verb glossary defining branch, commit, push, pr, merge and go-unattended; the merge row means 'merge only when green' and, on uncommitted work, authorises the whole chain (commit, push, PR, wait for verify/ui/ui-e2e, squash merge, delete branch, pull), never a blocked PR, `--admin` or a force push; steps 3-5 gain the same merge-chain exception; the single rationale sentence follows the table. why: the owner instructed that merge on uncommitted changes must mean commit, push, PR and merge with the PR green, after #101 merged ahead of its checks. rejected: merge as merge-only; the reverse implication (commit/push/pr authorising a merge); `--admin`; a separate glossary document.",
+      "fallbackReason": "12:00-18:00 local window: the seat is cline-pass/cline-pass/mimo-v2.6-pro, and deepseek-v4-pro 0813 does not sit the reviewer seat in this window. cline-pass lists mimo-v2.6-pro in the registry but the harness rejects it as unavailable (model not found), and a registry listing does not count as available; the same window model, mimo-v2.6-pro, was served by ollama-cloud.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full (70 lines). Round 1 ACCEPTED with one P2 (step 6 still named only `verify`) and one nit (PRs targeting `main`); both were applied and a final exact-text confirmation returned ACCEPTED with no P1/P2/nit, confirming nothing else moved. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "attestation": "Read the full on-disk file (92 lines). Round 1 ACCEPTED with three P2s: a duplicated rationale sentence; 'the seat's full contract is AGENTS.md 9' overstating; the merge row's unqualified 'the PR'. All three were applied and a final exact-text confirmation returned ACCEPTED with no P1/P2. A final formatting-only pass (Prettier table padding) was confirmed as the reviewed text after it ran. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
       "at": "2026-11-10"
     },
     {
