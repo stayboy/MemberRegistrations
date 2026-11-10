@@ -3,10 +3,11 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { resolveGatewayOrigin } from './src/auth/gatewayOrigin.ts';
 
 /**
- * A Content-Security-Policy is only injected into the production build: the dev
- * server needs inline styles and a websocket for HMR. Griffel (Fluent UI) injects
- * its stylesheet at runtime, which is the documented `style-src 'unsafe-inline'`
- * exception in the UI spec (NFR-3).
+ * A Content-Security-Policy is injected into every `vite build` (production and
+ * `--mode development`, which the Docker image uses); the dev server needs
+ * inline styles and a websocket for HMR and gets none. Griffel (Fluent UI)
+ * injects its stylesheet at runtime, which is the documented
+ * `style-src 'unsafe-inline'` exception in the UI spec (NFR-3).
  */
 function contentSecurityPolicy(gatewayUrl: string): Plugin {
   return {

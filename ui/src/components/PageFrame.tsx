@@ -144,7 +144,7 @@ export function PageFrame({
       {health.isError ? (
         <MessageBar intent="warning">
           <MessageBarBody>
-            Can&apos;t reach the API. {connectionErrorDetail(health.error)} The shell still works -{' '}
+            Can&apos;t reach the API. {connectionErrorDetail(health.error)} The shell still works —{' '}
             <Link to="/connect">check the API connection</Link>.{' '}
             <Button
               size="small"
