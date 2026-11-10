@@ -8,7 +8,6 @@ import {
 } from '@fluentui/react-components';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useSession } from '../auth/SessionProvider';
 import { ConnectionBadge, connectionErrorDetail, useGatewayHealth } from '../shell/ConnectionBadge';
 import { SECTIONS, firstItemOf, type SectionId } from '../shell/navigation';
 
@@ -117,7 +116,6 @@ export function PageFrame({
   const styles = useStyles();
   const section = SECTIONS.find((candidate) => candidate.id === sectionId) ?? SECTIONS[0];
   const health = useGatewayHealth();
-  const { baseUrl } = useSession();
   const { pathname } = useLocation();
   const showUssdNotice = showsUssdProductionNotice(sectionId, pathname);
 
@@ -146,8 +144,7 @@ export function PageFrame({
       {health.isError ? (
         <MessageBar intent="warning">
           <MessageBarBody>
-            Can&apos;t reach the API at <code>{baseUrl}</code>.{' '}
-            {connectionErrorDetail(health.error)} The shell still works —{' '}
+            Can&apos;t reach the API. {connectionErrorDetail(health.error)} The shell still works —{' '}
             <Link to="/connect">check the API connection</Link>.{' '}
             <Button
               size="small"

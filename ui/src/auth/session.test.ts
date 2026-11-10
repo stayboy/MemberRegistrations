@@ -1,34 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import { isSessionUsable, normalizeGatewayUrl, parseSession } from './session';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { clearLegacyGatewayUrl, isSessionUsable, parseSession } from './session';
 
-describe('normalizeGatewayUrl', () => {
-  it('trims and removes trailing slashes', () => {
-    expect(normalizeGatewayUrl('  https://example.vercel.app/  ')).toBe(
-      'https://example.vercel.app',
-    );
-    expect(normalizeGatewayUrl('https://example.vercel.app/base//')).toBe(
-      'https://example.vercel.app/base',
-    );
+describe('legacy gateway storage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('keeps the path but drops nothing else', () => {
-    expect(normalizeGatewayUrl('https://example.vercel.app/api')).toBe(
-      'https://example.vercel.app/api',
-    );
-  });
+  it('removes the entry an earlier build stored and tolerates a blocked store', () => {
+    const removeItem = vi.fn();
+    vi.stubGlobal('window', { localStorage: { removeItem } });
+    clearLegacyGatewayUrl();
+    expect(removeItem).toHaveBeenCalledWith('mr.gateway.v1');
 
-  it('allows http only for loopback', () => {
-    expect(normalizeGatewayUrl('http://localhost:3000')).toBe('http://localhost:3000');
-    expect(normalizeGatewayUrl('http://127.0.0.1:3000/')).toBe('http://127.0.0.1:3000');
-    expect(normalizeGatewayUrl('http://example.com')).toBeNull();
-  });
-
-  it('rejects empty, relative, credentialed and query-bearing input', () => {
-    expect(normalizeGatewayUrl('')).toBeNull();
-    expect(normalizeGatewayUrl('example.com')).toBeNull();
-    expect(normalizeGatewayUrl('https://user:pass@example.com')).toBeNull();
-    expect(normalizeGatewayUrl('https://example.com?token=1')).toBeNull();
-    expect(normalizeGatewayUrl('https://example.com#x')).toBeNull();
+    vi.stubGlobal('window', {
+      localStorage: {
+        removeItem: () => {
+          throw new Error('blocked');
+        },
+      },
+    });
+    expect(() => clearLegacyGatewayUrl()).not.toThrow();
   });
 });
 

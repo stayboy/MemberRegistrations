@@ -1,13 +1,13 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
-
-const DEFAULT_GATEWAY_URL = 'https://member-registrations-mind-logs.vercel.app';
+import { resolveGatewayOrigin } from './src/auth/gatewayOrigin.ts';
 
 /**
- * A Content-Security-Policy is only injected into the production build: the dev
- * server needs inline styles and a websocket for HMR. Griffel (Fluent UI) injects
- * its stylesheet at runtime, which is the documented `style-src 'unsafe-inline'`
- * exception in the UI spec (NFR-3).
+ * A Content-Security-Policy is injected into every `vite build` (production and
+ * `--mode development`, which the Docker image uses); the dev server needs
+ * inline styles and a websocket for HMR and gets none. Griffel (Fluent UI)
+ * injects its stylesheet at runtime, which is the documented
+ * `style-src 'unsafe-inline'` exception in the UI spec (NFR-3).
  */
 function contentSecurityPolicy(gatewayUrl: string): Plugin {
   return {
@@ -36,7 +36,10 @@ function contentSecurityPolicy(gatewayUrl: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const gatewayUrl = env.VITE_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+  // Throws on a missing, invalid or non-https value in a production build, so
+  // the build stops before an artefact exists (AC-10b). The CSP below is
+  // generated from this same result.
+  const gatewayUrl = resolveGatewayOrigin(env.VITE_GATEWAY_URL, mode);
 
   return {
     // GitHub Pages serves the project under /MemberRegistrations/. Dev keeps the

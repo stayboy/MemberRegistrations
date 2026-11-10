@@ -1,4 +1,4 @@
-import { expect, test as base, type Page } from 'playwright/test';
+import { expect, test as base, type Page, type Request } from 'playwright/test';
 import type {
   EventAttendance,
   EventItem,
@@ -27,8 +27,10 @@ import type { OccurrenceListDto, SeriesDto } from '../src/api/series';
 import type { AccentId, Scheme } from '../src/theme/brand';
 
 export const SESSION_STORAGE_KEY = 'mr.session.v1';
-export const GATEWAY_STORAGE_KEY = 'mr.gateway.v1';
 export const THEME_STORAGE_KEY = 'mr.theme.v1';
+
+/** The `vite preview` origin the harness serves the production build from. */
+const PREVIEW_ORIGIN = 'http://localhost:4173';
 
 /** 48 characters, well past the 10-character floor `parseSession` enforces. */
 export const SESSION_TOKEN = 'e2e-session-credential-0123456789abcdef012345';
@@ -42,17 +44,16 @@ const FIXED_INSTANT = '2026-01-05T10:00:00.000Z';
 // ---------------------------------------------------------------------------
 
 /**
- * `RequireSession` needs a stored credential, and the gateway base must point at
- * this preview origin so every `fetch` lands on the stubbed route. Both land
- * before the first script runs, so the first render is already signed in.
+ * `RequireSession` needs a stored credential. The gateway origin is baked into
+ * the build, so the stubs intercept that origin directly (see `GatewayStub`);
+ * nothing seeds a gateway URL any more.
  */
 export async function seedSession(page: Page): Promise<void> {
   await page.addInitScript(
-    ([sessionKey, gatewayKey, token, expiresAt]) => {
+    ([sessionKey, token, expiresAt]) => {
       sessionStorage.setItem(sessionKey, JSON.stringify({ token, expiresAt }));
-      localStorage.setItem(gatewayKey, window.location.origin);
     },
-    [SESSION_STORAGE_KEY, GATEWAY_STORAGE_KEY, SESSION_TOKEN, SESSION_EXPIRES_AT] as const,
+    [SESSION_STORAGE_KEY, SESSION_TOKEN, SESSION_EXPIRES_AT] as const,
   );
 }
 
@@ -1446,34 +1447,61 @@ class GatewayStub {
   private readonly routes: readonly RouteEntry[] = buildRoutes(this.created);
   private readonly unmatched: string[] = [];
 
+  /**
+   * The origin is baked into the build, so every gateway call from the preview
+   * server is cross-origin, and the `Authorization` header makes it non-simple:
+   * Chromium sends a preflight and discards a response without a matching
+   * `Access-Control-Allow-Origin`. Answer both before the app sees anything.
+   */
+  private static cors(request: Request): Record<string, string> {
+    return {
+      'access-control-allow-origin': request.headers()['origin'] ?? PREVIEW_ORIGIN,
+      'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      'access-control-allow-headers': 'authorization, content-type, if-match',
+      'access-control-max-age': '600',
+      vary: 'origin',
+    };
+  }
+
   async install(page: Page): Promise<void> {
     // The connection badge probes the base URL directly, outside the gateway
     // prefix; answer it so every screen is in its connected state.
-    await page.route('**/health', (route) =>
-      route.fulfill({
+    await page.route('**/health', async (route) => {
+      const request = route.request();
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: GatewayStub.cors(request) });
+        return;
+      }
+      await route.fulfill({
         status: 200,
-        headers: { 'content-type': 'application/json' },
+        headers: { ...GatewayStub.cors(request), 'content-type': 'application/json' },
         body: JSON.stringify({ status: 'ok' }),
-      }),
-    );
+      });
+    });
 
     // The session gateway's auth routes live at `/auth/*`, not under
     // `/gateway/v1/*`: `fetchMe` calls `${baseUrl}/auth/me`.
     await page.route('**/auth/**', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
+      const cors = GatewayStub.cors(request);
+
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
 
       if (request.method() === 'GET' && url.pathname === '/auth/me') {
         await route.fulfill({
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { ...cors, 'content-type': 'application/json' },
           body: JSON.stringify(OFFICER),
         });
         return;
       }
 
       if (request.method() === 'POST' && url.pathname === '/auth/logout') {
-        await route.fulfill({ status: 204 });
+        await route.fulfill({ status: 204, headers: cors });
         return;
       }
 
@@ -1481,7 +1509,7 @@ class GatewayStub {
       this.unmatched.push(unmatched);
       await route.fulfill({
         status: 500,
-        headers: { 'content-type': 'application/json' },
+        headers: { ...cors, 'content-type': 'application/json' },
         body: JSON.stringify({
           type: 'about:blank',
           title: 'Unstubbed gateway route',
@@ -1494,6 +1522,13 @@ class GatewayStub {
     await page.route('**/gateway/v1/**', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
+      const cors = GatewayStub.cors(request);
+
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+
       const call: GatewayCall = {
         method: request.method(),
         path: url.pathname,
@@ -1510,7 +1545,7 @@ class GatewayStub {
         this.unmatched.push(unmatched);
         await route.fulfill({
           status: 500,
-          headers: { 'content-type': 'application/json' },
+          headers: { ...cors, 'content-type': 'application/json' },
           body: JSON.stringify({
             type: 'about:blank',
             title: 'Unstubbed gateway route',
@@ -1526,6 +1561,7 @@ class GatewayStub {
       await route.fulfill({
         status: result.status ?? 200,
         headers: {
+          ...cors,
           'content-type': 'application/json',
           ...result.headers,
         },

@@ -32,6 +32,9 @@ jobs:
 
       - run: npm ci
       - run: npm run ui:build
+        env:
+          # Baked into the bundle and the CSP; the build fails without it (FR-13).
+          VITE_GATEWAY_URL: https://member-registrations-mind-logs.vercel.app
 
       - uses: actions/configure-pages@v5
 

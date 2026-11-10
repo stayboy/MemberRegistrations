@@ -39,6 +39,9 @@ export default defineConfig({
   webServer: {
     command: 'npm --prefix ui run build && npm --prefix ui run preview -- --port 4173 --strictPort',
     cwd: repoRoot,
+    // Same baked origin as the assertion suite, so a capture and an assertion
+    // see identical bundles.
+    env: { VITE_GATEWAY_URL: 'https://member-registrations-mind-logs.vercel.app' },
     url: 'http://localhost:4173/MemberRegistrations/',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
