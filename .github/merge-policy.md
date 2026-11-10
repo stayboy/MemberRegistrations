@@ -56,10 +56,13 @@ included (`current_user_can_bypass: never`). It was created on 2026-11-10 after 
 before its checks finished. The earlier finding that rulesets return HTTP 403 belonged to a private
 Free repository; this one is public, so the gate is available and is now on.
 
-Do not merge while a check is running or red. `gh pr merge --auto` is safe precisely because the
-ruleset refuses the merge until every required check reports green; without it, `--auto` merges a
-mergeable pull request immediately and the checks run afterwards on `main`. A failing branch is
-fixed on the branch and re-run.
+Do not merge while a check is running or red. Auto-merge is disabled on this repository
+(`enablePullRequestAutoMerge: false`), so `gh pr merge --auto` is not an available gate here: it errors
+and never waits for the checks. The wait is explicit — `gh pr checks <n> --watch`, then merge on
+green. What refuses a premature merge is the ruleset at the server: on 2026-11-10 it refused #102 with
+"the base branch policy prohibits the merge" while the checks ran. PR #101 merged at 13:38:37 before
+its `verify` finished only because no ruleset existed yet. A failing branch is fixed on the branch
+and re-run.
 
 A red `main` is an incident:
 
