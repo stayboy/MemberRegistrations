@@ -110,8 +110,8 @@ files, so this is not a parallelism setting. Re-run once: 48 files, 581 passed, 
 class of flake recurred once in the pre-commit gate as a `3221226505` worker exit on
 `tests/api/ussd.test.ts`. Both signatures, verbatim:
 
-    gate-run 2026-11-10T16:41:59.176Z profile=full steps=4/6 lines=33 bytes=19408
-    gate-run 2026-11-10T08:54:19.579Z profile=fast steps=4/4 lines=4 bytes=514
+gate-run 2026-11-10T16:41:59.176Z profile=full steps=4/6 lines=33 bytes=19408
+gate-run 2026-11-10T08:54:19.579Z profile=fast steps=4/4 lines=4 bytes=514
 
 ## Review
 
