@@ -2,7 +2,7 @@
 
 |                     |                                                                         |
 | ------------------- | ----------------------------------------------------------------------- |
-| Status              | OPEN — implementing (Tier 2)                                            |
+| Status              | CLOSED - merged in #99 (`92bc553`)                                      |
 | Tier                | 2 (auth-adjacent config, payment callback surface)                      |
 | Mode                | attended (owner accepted the grill round)                               |
 | Base                | `335ae67`                                                               |

@@ -2,7 +2,7 @@
 
 |                     |                                                                          |
 | ------------------- | ------------------------------------------------------------------------ |
-| Status              | OPEN — spec ACCEPTED; awaiting the mock sign-off and the P0 restore      |
+| Status              | OPEN - spec merged in #98; mock signed; code parked on the P0 restore    |
 | Tier                | 2 (sign-in path, CSP, storage)                                           |
 | Mode                | attended (owner answered two grill rounds)                               |
 | Base                | `a162faf`                                                                |

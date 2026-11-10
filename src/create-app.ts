@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import pino, { type Logger } from 'pino';
 import { bearerAuth } from './auth.js';
 import { createMailer, type Mailer } from './authn/mailer.js';
-import { authRouter, corsMiddleware, gatewayAuth } from './authn/router.js';
+import { authRouter, corsHeader, corsMiddleware, gatewayAuth } from './authn/router.js';
 import { AuthService, DEFAULT_AUTH_CONFIG, type AuthConfig } from './authn/service.js';
 import {
   DEFAULT_CORS_ORIGINS,
@@ -232,6 +232,11 @@ export function createApp(options: AppOptions): Express {
   }
 
   app.use(express.json({ limit: '1mb' }));
+
+  // The operator UI probes /health before sign-in, so an allowlisted origin
+  // needs the CORS header to read the result. The endpoint stays public: an
+  // unknown origin answers normally without the header rather than a 403.
+  app.use('/health', corsHeader(corsOrigins));
 
   app.get('/health', async (_req, res) => {
     try {
