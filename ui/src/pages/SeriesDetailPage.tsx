@@ -31,6 +31,7 @@ import { isUnauthorized } from '../api/errors';
 import {
   getSeries,
   getSeriesOccurrences,
+  getSeriesSummary,
   removeSeriesException,
   updateSeries,
   type SeriesExceptionDto,
@@ -41,10 +42,16 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
 import { ministryLabel } from '../format/events';
-import { exceptionKindLabel, scheduleLabel, seriesStatusLabel } from '../format/series';
+import {
+  exceptionKindLabel,
+  exceptionNoteLabel,
+  scheduleLabel,
+  seriesStatusLabel,
+} from '../format/series';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { AddScheduleVersionDialog } from './AddScheduleVersionDialog';
 import { SeriesExceptionDialog } from './SeriesExceptionDialog';
+import { SeriesSummaryTiles } from './SeriesSummaryTiles';
 import { useEventStyles } from './events-styles';
 
 type BadgeColor = ComponentProps<typeof Badge>['color'];
@@ -108,6 +115,17 @@ export function SeriesDetailPage() {
     enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
   });
 
+  const summaryQuery = useQuery({
+    queryKey: ['series', baseUrl, 'summary', id, window.from, window.to],
+    queryFn: ({ signal }) =>
+      getSeriesSummary(baseUrl, token, id, {
+        from: window.from,
+        to: window.to,
+        signal,
+      }),
+    enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
+  });
+
   const removeMutation = useMutation({
     mutationFn: (date: string) => removeSeriesException(baseUrl, token, id, date),
   });
@@ -117,10 +135,14 @@ export function SeriesDetailPage() {
   });
 
   useEffect(() => {
-    if (isUnauthorized(seriesQuery.error) || isUnauthorized(occurrencesQuery.error)) {
+    if (
+      isUnauthorized(seriesQuery.error) ||
+      isUnauthorized(occurrencesQuery.error) ||
+      isUnauthorized(summaryQuery.error)
+    ) {
       void signOut();
     }
-  }, [seriesQuery.error, occurrencesQuery.error, signOut]);
+  }, [seriesQuery.error, occurrencesQuery.error, summaryQuery.error, signOut]);
 
   function invalidateSeries(): void {
     // Detail, list, occurrences and the list's per-row next-occurrence queries
@@ -224,8 +246,11 @@ export function SeriesDetailPage() {
             onClick={() => {
               void seriesQuery.refetch();
               void occurrencesQuery.refetch();
+              void summaryQuery.refetch();
             }}
-            disabled={seriesQuery.isFetching || occurrencesQuery.isFetching}
+            disabled={
+              seriesQuery.isFetching || occurrencesQuery.isFetching || summaryQuery.isFetching
+            }
           >
             Refresh
           </Button>
@@ -321,6 +346,34 @@ export function SeriesDetailPage() {
                 </MessageBarBody>
               </MessageBar>
             ) : null}
+
+            {summaryQuery.isError ? (
+              <MessageBar intent="error">
+                <MessageBarBody>
+                  <MessageBarTitle>The summary could not be loaded</MessageBarTitle>
+                  {errorMessage(summaryQuery.error)}
+                  <Button
+                    size="small"
+                    appearance="transparent"
+                    onClick={() => {
+                      void summaryQuery.refetch();
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </MessageBarBody>
+              </MessageBar>
+            ) : summaryQuery.isPending || !summaryQuery.data ? (
+              <div className={styles.state}>
+                <Spinner label="Loading the summary…" />
+              </div>
+            ) : (
+              <SeriesSummaryTiles
+                summary={summaryQuery.data}
+                occurrenceCount={occurrences.length}
+                formatDate={formatDate}
+              />
+            )}
 
             <section className={styles.panel} aria-label="Schedule versions">
               <div className={styles.sectionHeader}>
@@ -432,9 +485,16 @@ export function SeriesDetailPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {exception.note ?? (
-                              <Text size={200} className={styles.muted}>
-                                —
+                            {exception.note ? (
+                              exception.note
+                            ) : (
+                              <Text
+                                size={200}
+                                className={
+                                  exception.kind === 'cancelled' ? undefined : styles.muted
+                                }
+                              >
+                                {exceptionNoteLabel(exception.kind, exception.note)}
                               </Text>
                             )}
                           </TableCell>

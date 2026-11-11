@@ -53,6 +53,16 @@ test('the event detail opens the session attendance dialog with the API rows', a
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('a cancelled session shows its reason, and a legacy one says it is missing', async ({
+  page,
+}) => {
+  await open(page, '/events/event-cancelled');
+
+  const sessions = page.getByRole('table', { name: 'Event sessions' });
+  await expect(sessions.getByText('Reason: Venue flooded')).toBeVisible();
+  await expect(sessions.getByText('No reason recorded')).toBeVisible();
+});
+
 test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
   await open(page, '/events');
   await page.getByRole('link', { name: 'Sunday Service' }).click();

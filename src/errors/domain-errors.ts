@@ -16,6 +16,13 @@ export class ValidationError extends DomainError {
   }
 }
 
+/** A syntactically valid request whose values cannot be used as asked. */
+export class BadRequestError extends DomainError {
+  constructor(message: string, code = 'bad_request') {
+    super(message, code);
+  }
+}
+
 export class NotFoundError extends DomainError {
   constructor(message: string, code = 'not_found') {
     super(message, code);

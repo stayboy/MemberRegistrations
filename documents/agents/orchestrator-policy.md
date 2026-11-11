@@ -84,9 +84,9 @@ why (the catalog conflates the 1M context window with the output cap).
 - A round that changes a user-visible UI or USSD surface must have a comparison mock and an owner
   sign-off **before its first code commit**. The spec may land first. Tier 0 and Tier 1 bug/copy-only
   rounds are exempt; API, migration and security-only rounds are exempt unless they alter the UI.
-- A mock is a static HTML prototype plus a PNG per state (empty, loading, error, success), captured
-  with the existing Playwright pattern. A PNG alone is not a mock. A clickable prototype is required
-  only for a multi-step USSD flow.
+- A mock is a PNG per state (empty, loading, error, success), usually captured from a static HTML
+  prototype with the existing Playwright pattern. A PNG is a mock (owner, 2026-11-11); a clickable
+  prototype is required only for a multi-step USSD flow.
 - Mocks reuse one compact shell — the 56 px top bar, 260 px contextual sidebar with the Section header
   and pinned date/time + appearance footer, and the dense content grid captured in
   `mockups/v2-settings/02-date-time-sidebar.png`. Do not invent new chrome per surface and do not

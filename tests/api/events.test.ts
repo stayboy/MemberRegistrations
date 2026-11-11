@@ -261,6 +261,7 @@ describe('GET /v1/events', () => {
           startTime: '09:00',
           endTime: '10:30',
           status: 'held',
+          note: null,
           present: 2,
           expected: 0,
           importedRows: 1,
@@ -492,6 +493,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 0,
         importedRows: 0,
@@ -502,6 +504,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 0,
         importedRows: 0,
@@ -512,6 +515,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 0,
         importedRows: 0,
@@ -868,7 +872,7 @@ describe('POST /v1/events/generate', () => {
     const cancelled = await request(harness.app)
       .post(`/v1/series/${id}/exceptions`)
       .set(writeHeaders)
-      .send({ date: '2026-03-08', kind: 'cancelled' });
+      .send({ date: '2026-03-08', kind: 'cancelled', note: 'Snow' });
     expect(cancelled.status).toBe(201);
 
     const extra = await request(harness.app)

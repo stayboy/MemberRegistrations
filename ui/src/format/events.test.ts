@@ -22,6 +22,7 @@ const SESSION: EventSessionItem = {
   startTime: '17:30',
   endTime: '20:30',
   status: 'held',
+  note: null,
   present: 86,
   expected: 120,
   importedRows: 86,

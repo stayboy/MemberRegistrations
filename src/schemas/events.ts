@@ -48,6 +48,8 @@ export const eventSessionInputSchema = z.object({
   endTime: timeStringSchema.nullable().optional(),
   status: eventSessionStatusSchema.optional(),
   venueType: venueTypeSchema.optional(),
+  /** A non-empty reason when the session is cancelled (FR-4a); legacy rows may be null. */
+  note: z.string().trim().max(200).nullable().optional(),
 });
 
 export const createEventSchema = z.object({
@@ -87,6 +89,8 @@ export const eventSessionSchema = z.object({
   endTime: z.string().nullable(),
   status: eventSessionStatusSchema,
   venueType: venueTypeSchema.optional(),
+  /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
+  note: z.string().nullable(),
   present: z.number().int(),
   expected: z.number().int(),
   importedRows: z.number().int(),

@@ -80,3 +80,49 @@ export const occurrenceListSchema = z.object({
   to: z.string(),
   dates: z.array(z.string()),
 });
+
+export const seriesSummaryQuerySchema = z.object({
+  from: dateStringSchema,
+  to: dateStringSchema,
+});
+
+/**
+ * The series window summary (FR-6). `rate` is present/expected over held
+ * member-tracking sessions, null when expected is 0; headcount-only sessions
+ * are a count and never enter the ratio.
+ */
+export const seriesSummarySchema = z.object({
+  from: dateStringSchema,
+  to: dateStringSchema,
+  nextOccurrence: dateStringSchema.nullable(),
+  attendance: z.object({
+    memberSessions: z.object({
+      held: z.number().int(),
+      expected: z.number().int(),
+      present: z.number().int(),
+      rate: z.number().nullable(),
+    }),
+    lastHeld: z
+      .object({
+        date: dateStringSchema,
+        expected: z.number().int(),
+        present: z.number().int(),
+      })
+      .nullable(),
+    headcountSessions: z.object({ held: z.number().int() }),
+    cancelled: z.number().int(),
+    upcoming: z.number().int(),
+  }),
+  offerings: z.object({
+    attachedCount: z.number().int(),
+    currency: z.string(),
+    paidMinor: z.number().int(),
+    pledgedMinor: z.number().int(),
+    outstandingMinor: z.number().int(),
+    countedMinor: z.number().int(),
+    visitors: z.object({ count: z.number().int(), paidMinor: z.number().int() }),
+  }),
+});
+
+export type SeriesSummary = z.infer<typeof seriesSummarySchema>;
+export type SeriesSummaryQuery = z.infer<typeof seriesSummaryQuerySchema>;

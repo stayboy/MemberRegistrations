@@ -22,6 +22,8 @@ export interface EventSessionSummary {
   readonly endTime: string | null;
   readonly status: EventSessionStatus;
   readonly venueType?: EventVenueType;
+  /** A non-empty reason when the session is cancelled; null on a legacy cancellation (FR-4a). */
+  readonly note: string | null;
 }
 
 /** Mirrors `EventSessionItem`: one dated session and its attendance summary. */

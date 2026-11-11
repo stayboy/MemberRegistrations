@@ -27,6 +27,8 @@ export interface EventSessionItem {
   endTime: string | null;
   status: EventSessionStatus;
   venueType?: VenueType;
+  /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
+  note: string | null;
   present: number;
   /** The register at this session date: joined on or before it, not archived or purged. */
   expected: number;
@@ -78,6 +80,7 @@ interface StoredSession {
   endTime?: string | null;
   status?: string;
   venueType?: string;
+  note?: string | null;
 }
 
 interface WrittenSession {
@@ -86,6 +89,7 @@ interface WrittenSession {
   endTime?: string | null;
   status?: EventSessionStatus;
   venueType?: VenueType;
+  note?: string | null;
 }
 
 interface SessionCount {
@@ -439,13 +443,32 @@ function normalizeSessions(
   startTime: string,
   endTime: string | null,
 ): StoredSession[] {
-  return sessions.map((session) => ({
-    date: session.date,
-    startTime: session.startTime ?? startTime,
-    endTime: session.endTime === undefined ? endTime : session.endTime,
-    status: session.status ?? 'scheduled',
-    ...(session.venueType ? { venueType: session.venueType } : {}),
-  }));
+  return sessions.map((session) => {
+    const note = session.note?.trim();
+    return {
+      date: session.date,
+      startTime: session.startTime ?? startTime,
+      endTime: session.endTime === undefined ? endTime : session.endTime,
+      status: session.status ?? 'scheduled',
+      ...(session.venueType ? { venueType: session.venueType } : {}),
+      note: note ? note : null,
+    };
+  });
+}
+
+/**
+ * A cancelled session carries a reason (FR-4a). Checked on the written set only:
+ * a legacy cancellation may have no note and must not block an unrelated edit.
+ */
+function validateSessionReasons(sessions: StoredSession[]): void {
+  for (const session of sessions) {
+    if (session.status !== 'cancelled') continue;
+    if (typeof session.note === 'string' && session.note.trim().length > 0) continue;
+    throw new ValidationError(
+      `A cancelled session on ${String(session.date)} needs a reason`,
+      'reason_required',
+    );
+  }
 }
 
 /** Cross-field rules that need the merged event, so Zod cannot own them alone. */
@@ -549,6 +572,7 @@ export class EventRepository {
     const endDate = assertDate(input.endDate, 'endDate');
     const sessions = normalizeSessions(input.sessions, input.startTime, input.endTime ?? null);
     validateEventShape({ startDate, endDate, sessions });
+    validateSessionReasons(sessions);
 
     let id: string;
     try {
@@ -698,6 +722,7 @@ export class EventRepository {
       ? normalizeSessions(input.sessions, startTime, endTime)
       : (parseJsonArray(current.sessions) as Array<{ date?: unknown }>);
     validateEventShape({ startDate, endDate, sessions });
+    if (input.sessions) validateSessionReasons(sessions as StoredSession[]);
 
     const name = input.name !== undefined ? input.name.trim() : current.name;
     if (!name) throw new ValidationError('name is required');
@@ -977,6 +1002,7 @@ export class EventRepository {
         endTime: session.endTime ?? null,
         status: asSessionStatus(session.status),
         ...(sessionVenueType ? { venueType: sessionVenueType } : {}),
+        note: typeof session.note === 'string' && session.note.trim() ? session.note : null,
         present: count.present,
         expected: expectedByDate.get(date) ?? 0,
         importedRows: count.importedRows,

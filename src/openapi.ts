@@ -38,6 +38,7 @@ import {
   scheduleSchema,
   seriesExceptionInputSchema,
   seriesSchema,
+  seriesSummarySchema,
   updateSeriesSchema,
 } from './schemas/reference.js';
 import {
@@ -176,6 +177,7 @@ const json = (description: string, name: string) => ({
 const noContent = (description: string) => ({ description });
 
 const unauthorized = problem('Missing or invalid bearer token.');
+const badRequest = problem('A valid request whose values cannot be used as asked.');
 const validation = problem('Invalid request body or query parameters.');
 const notFound = problem('The requested record was not found.');
 const conflict = problem('The request conflicts with the current state.');
@@ -290,6 +292,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         Schedule: toSchema(scheduleSchema, 'output'),
         ScheduleInput: toSchema(scheduleInputSchema, 'input'),
         SeriesExceptionInput: toSchema(seriesExceptionInputSchema, 'input'),
+        SeriesSummary: toSchema(seriesSummarySchema, 'output'),
         OccurrenceList: toSchema(occurrenceListSchema, 'output'),
         Event: toSchema(eventSchema, 'output'),
         EventList: toSchema(eventListSchema, 'output'),
@@ -1405,6 +1408,29 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             204: noContent('Exception removed.'),
             401: unauthorized,
             404: notFound,
+          },
+        },
+      },
+
+      '/v1/series/{id}/summary': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Window summary: attendance, offering money and the next occurrence',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            200: json('The series window summary.', 'SeriesSummary'),
+            400: badRequest,
+            401: unauthorized,
+            404: notFound,
+            422: validation,
           },
         },
       },

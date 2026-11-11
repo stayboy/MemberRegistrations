@@ -59,6 +59,7 @@ async function createEvent(
     endTime?: string | null;
     status?: 'scheduled' | 'held' | 'cancelled';
     venueType?: 'auditorium' | 'virtual' | 'hybrid';
+    note?: string | null;
   }> = dates.map((date) => ({ date })),
 ): Promise<string> {
   const response = await request(harness.app)
@@ -119,7 +120,7 @@ beforeAll(async () => {
   cancelledSessionEvent = await createEvent(
     'OC-300',
     [today],
-    [{ date: today, startTime: '09:00', status: 'cancelled' }],
+    [{ date: today, startTime: '09:00', status: 'cancelled', note: 'Venue flooded' }],
   );
   archivedEvent = await createEvent('OC-400', [today]);
   summaryEvent = await createEvent('OC-500', [shiftDate(summaryDate, -1), summaryDate]);

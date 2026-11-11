@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 import {
+  BadRequestError,
   ConflictError,
   DuplicateImportError,
   ImportError,
@@ -113,6 +114,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof ValidationError) {
     sendProblem(res, 422, 'Validation failed', error.message, error.code);
+    return;
+  }
+
+  if (error instanceof BadRequestError) {
+    sendProblem(res, 400, 'Bad Request', error.message, error.code);
     return;
   }
 

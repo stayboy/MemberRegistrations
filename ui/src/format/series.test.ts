@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXCEPTION_KIND_LABELS,
   exceptionKindLabel,
+  exceptionNoteLabel,
   nextOccurrenceLabel,
   scheduleLabel,
   seriesStatusLabel,
@@ -73,6 +74,13 @@ describe('exception labels', () => {
     expect(EXCEPTION_KIND_LABELS).toEqual({ cancelled: 'Cancelled', extra: 'Extra' });
     expect(exceptionKindLabel('cancelled')).toBe('Cancelled');
     expect(exceptionKindLabel('extra')).toBe('Extra');
+  });
+
+  it('shows the reason, says one is missing on a legacy cancellation, and keeps extras bare', () => {
+    expect(exceptionNoteLabel('cancelled', 'Public holiday')).toBe('Public holiday');
+    expect(exceptionNoteLabel('cancelled', null)).toBe('No reason recorded');
+    expect(exceptionNoteLabel('cancelled', '   ')).toBe('No reason recorded');
+    expect(exceptionNoteLabel('extra', null)).toBe('—');
   });
 });
 

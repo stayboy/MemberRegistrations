@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { actorOf } from '../actor.js';
-import { NotFoundError } from '../errors/domain-errors.js';
+import { BadRequestError, NotFoundError } from '../errors/domain-errors.js';
 import { dateStringSchema } from '../schemas/common.js';
 import {
   createSeriesSchema,
   scheduleInputSchema,
   seriesExceptionInputSchema,
+  seriesSummaryQuerySchema,
   updateSeriesSchema,
 } from '../schemas/reference.js';
 import type { SeriesRepository } from '../repos/series.js';
@@ -75,6 +76,15 @@ export function seriesRouter(repo: SeriesRepository): Router {
     actorOf(req);
     await repo.removeException(req.params.id, date);
     res.status(204).end();
+  });
+
+  router.get('/:id/summary', async (req, res) => {
+    const query = seriesSummaryQuerySchema.parse(req.query);
+    if (query.from > query.to) {
+      throw new BadRequestError('from must be on or before to', 'invalid_window');
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await repo.summary(req.params.id, query.from, query.to));
   });
 
   router.get('/:id/occurrences', async (req, res) => {

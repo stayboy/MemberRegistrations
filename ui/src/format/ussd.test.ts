@@ -23,6 +23,7 @@ const SESSION: EventSessionItem = {
   startTime: '09:00',
   endTime: null,
   status: 'scheduled',
+  note: null,
   present: 0,
   expected: 0,
   importedRows: 0,

@@ -122,7 +122,7 @@ describe('attendance counts', () => {
     await request(app)
       .post(`/v1/series/${seriesId}/exceptions`)
       .set(writeHeaders)
-      .send({ date: '2026-01-11', kind: 'cancelled' })
+      .send({ date: '2026-01-11', kind: 'cancelled', note: 'Public holiday' })
       .expect(201);
 
     const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
