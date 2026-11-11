@@ -33,6 +33,11 @@ function shift(date: string, days: number): string {
   return format(new Date(toUtc(date).getTime() + days * DAY_MS));
 }
 
+/** UTC calendar-date arithmetic on an ISO date string. */
+export function shiftDate(date: string, days: number): string {
+  return shift(date, days);
+}
+
 function assertTimeZone(timeZone: string): string {
   try {
     new Intl.DateTimeFormat('en-CA', { timeZone });

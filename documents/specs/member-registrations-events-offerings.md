@@ -8,7 +8,10 @@
 MVP offering-count amendment (phase 5, Q18–Q24) accepted 2026-11-08**, both by the fallback reviewer
 seat (first-choice `0813` unavailable: weekly usage limit). The **offering-denomination grid
 amendment (slice A, 2026-11-09)** was accepted by the owner from the grill round and reviewed by
-`ollama-cloud/deepseek-v4-pro:0813`: REWORK (2 P1, 4 P2) → fixes → **ACCEPT**. Events/series V2 and
+`ollama-cloud/deepseek-v4-pro:0813`: REWORK (2 P1, 4 P2) → fixes → **ACCEPT**. The **series-summary
+amendment (2026-11-11, round `series-detail-summary`)** adds `GET /v1/series/{id}/summary?from&to` and
+fixes what the series summary counts; it was reviewed by `ollama-cloud/deepseek-v4-pro:0813` across
+two rounds — REWORK (2 P1, 7 P2) → REWORK (1 P1, 1 P2) → **ACCEPT**. Events/series V2 and
 offerings V3; implementation is gated by tickets 07–11, 20–24 and the MVP capture round. The
 Strategic Conference is the reference event.
 
@@ -67,8 +70,10 @@ contracts they will use.
 - **Event detail**: series/standalone, date range, 17:30 start, venue, per-date present/expected,
   imported-row source, the read-only Active offerings panel and a link to the attendance import.
 - **Series**: list and detail with schedule versions, exceptions, generated events, attendance summary
-  and attached offerings. Adding a schedule version and adding/removing an exception use the existing
-  endpoints; archiving is a soft end.
+  and attached offerings. The detail summary is one aggregate read, `GET /v1/series/{id}/summary`, and
+  renders as four tiles above the schedule versions: next occurrence, occurrences in the window,
+  attendance over held member-tracking sessions, and the window's offering totals. Adding a schedule
+  version and adding/removing an exception use the existing endpoints; archiving is a soft end.
 - **Attendance import** remains in `Imports`; it is scoped to one event session (`eventId` +
   `sessionDate`), and its rows are `memberNo` plus an optional `datetime` checked against that session.
   The event/series screen links to the import with the occurrence preselected.
@@ -410,14 +415,14 @@ The owner accepted this amendment from the grill round. Decisions, with the reje
 
 ### Navigation
 
-| Top-level | Submenu         | Route                    | API                                     | Slice |
-| --------- | --------------- | ------------------------ | --------------------------------------- | ----- |
-| Events    | Events          | `#/events`               | `GET /v1/events` (proposed)             | E1    |
-| Events    | Series          | `#/events/series`        | `GET /v1/series`                        | E2    |
-| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (ticket 23) | O4    |
-| Events    | Event detail    | `#/events/:eventId`      | `GET /v1/events/:eventId` (proposed)    | E1    |
-| Events    | Series detail   | `#/events/series/:id`    | `GET /v1/series/:id` + occurrences      | E2    |
-| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)      | O1    |
+| Top-level | Submenu         | Route                    | API                                          | Slice |
+| --------- | --------------- | ------------------------ | -------------------------------------------- | ----- |
+| Events    | Events          | `#/events`               | `GET /v1/events` (proposed)                  | E1    |
+| Events    | Series          | `#/events/series`        | `GET /v1/series`                             | E2    |
+| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (ticket 23)      | O4    |
+| Events    | Event detail    | `#/events/:eventId`      | `GET /v1/events/:eventId` (proposed)         | E1    |
+| Events    | Series detail   | `#/events/series/:id`    | `GET /v1/series/:id` + summary + occurrences | E2    |
+| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)           | O1    |
 
 The current **Attendance** top-level is replaced by **Events**; attendance recording is an action on
 an event/series detail, and attendance imports stay under **Imports**. If the owner prefers to keep a
@@ -453,14 +458,52 @@ separate Attendance section, that is Q1.
 - FR-4: Selecting an event MUST open `#/events/:eventId` with the event detail: name, date range,
   start time, venue, series/standalone, status, per-date attendance, imported-row source and the
   read-only Active offerings panel (FR-39).
+- FR-4a: An event session written with `status = 'cancelled'` MUST carry a non-empty reason in
+  `sessions[].note`; the API rejects one without it with `422 reason_required`. A legacy row without a
+  reason is displayed as "No reason recorded".
 - FR-5: The series list MUST use `GET /v1/series` and show name, ministry, a human-readable schedule,
   next occurrence and archived state.
 - FR-6: The series detail MUST show each schedule version (`effectiveFrom`, `rrule`, `endsOn`),
   exceptions (`cancelled` / `extra`), a date-window occurrence list and the attendance/offering
   summary for the series.
+- FR-6a: The summary MUST come from **one** request, `GET /v1/series/{id}/summary?from&to`. `from` and
+  `to` are required UTC dates with `from <= to` (400 otherwise); an unknown series answers 404; the
+  response is `no-store`. The UI MUST NOT build the summary by summing the paginated events list, the
+  church-wide offering summary or per-offering reads (NFR-1, NFR-5).
+- FR-6b: The summary window is the page's single UTC `from`/`to`, shared with the occurrence list;
+  attendance and offering money are bounded by it. "Today" is the date in the **series timezone**
+  (FR-12). The Occurrences tile is the count of dates the schedule generates inside that window — the
+  same list the occurrence table renders (cancelled exceptions removed, extras added) — so an
+  unbounded series (no `endsOn`) never has a lifetime total. `nextOccurrence` is the first generated
+  date on or after that today, capped at 90 days, and null when there is none. `lastHeld` is the latest
+  held **member-tracking** session inside the window.
+- FR-6c: A session is **held** when its date is on or before today in the series timezone and neither
+  the session nor its event is cancelled or archived; **upcoming** when its date is after that today;
+  **cancelled** when the session or its event is cancelled or archived (the `scopedSessions` predicate
+  in `src/repos/members.ts`; the stored session status records cancellation, never the clock). The
+  attendance ratio is `present / expected` over **held** sessions of member-tracking events in the
+  window, where `expected` is the register count for that date under the event detail's rule
+  (`joined_on <= date`, not archived, not purged, and presbyters only for a `presbyter_only` event) and
+  `present` is the attendance-row count. `cancelled` and `upcoming` are reported as counts and excluded
+  from the ratio. Held headcount-only sessions are reported as a count in their own block and never
+  enter the ratio; no expected headcount exists, so none is invented. The ratio is null when
+  `expected` is 0.
+- FR-6d: The summary's offering money reuses the church-summary semantics scoped to the series: the
+  largest paid currency in the window is the reporting currency, counted cash is reported beside the
+  gifts and never added to them, pledges are as at `min(to, today)` with today in the series timezone,
+  and visitor gifts are reported separately.
+- FR-6e: The summary MUST render as four tiles above Schedule versions: **Next occurrence** (the date;
+  caption "None in 90 days" when null), **Occurrences** (the window count; caption "in this window"),
+  **Attendance** (the ratio as a percentage; caption "{present} of {expected} on {lastHeld.date}", or
+  "No held sessions in this window"), and **Offerings** (the attached count; caption "{currency} {paid}
+  paid this window", or "No offerings attached"). The attached count is the number of active
+  attachments made to the series itself; offerings attached per event are not counted. An archived
+  series still shows the tiles, read-only (AC-10). The mock's attached-offerings rail and the
+  per-occurrence attendance/offering columns are separate queued work, not part of this requirement.
 - FR-7: “Add schedule version”, “Add exception”, “Remove exception” and “Archive series” MUST use the
-  documented series endpoints. Archive MUST confirm; the API preserves history and does not hard
-  delete.
+  documented series endpoints. A `cancelled` exception MUST carry a non-empty reason in `note`; the API
+  rejects one without it with `422 reason_required`. Archive MUST confirm; the API preserves history
+  and does not hard delete.
 - FR-8: “Import attendance” on an event/series MUST link to the existing import flow; after a
   successful batch the event/series queries MUST be invalidated.
 - FR-9: An event MUST show all offerings attached to it (two or more) in the read-only Active
@@ -597,9 +640,15 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-4: **Given** the series list, **When** it loads, **Then** each series shows a human-readable schedule, next occurrence and archived state. (FR-5)
 
-### AC-5: **Given** a series detail, **When** it opens, **Then** schedule versions, exceptions, occurrences and attendance/offering summary are visible. (FR-6)
+### AC-5: **Given** a series detail, **When** it opens, **Then** schedule versions, exceptions, occurrences and the four summary tiles are visible; the three window figures come from one `GET /v1/series/{id}/summary` request and the Occurrences tile counts the same occurrence list the table renders. (FR-6, FR-6a, FR-6b, FR-6e)
+
+### AC-5a: **Given** a window containing held, cancelled, upcoming and headcount-only sessions, **When** the summary is read, **Then** the ratio counts held member-tracking sessions only, the cancelled/upcoming counts are reported separately, headcount-only sessions never enter the ratio, and the ratio is null when expected is 0. (FR-6c)
+
+### AC-5b: **Given** a window whose events carry paid, pledged, counted and visitor money, **When** the summary is read, **Then** the offering figures follow the church-summary rules scoped to the series (largest paid currency, counted beside gifts, pledges as at the report date, visitors separate); an empty window returns zeros and a null `lastHeld`, and `nextOccurrence` is null when the schedule has no date in the next 90 days. (FR-6d, FR-6e)
 
 ### AC-6: **Given** a series detail, **When** the operator adds a schedule version or exception, **Then** the documented endpoint is called and the occurrence list refreshes. (FR-7)
+
+### AC-6a: **Given** a cancelled series exception or an event session written as cancelled, **When** it is submitted without a reason, **Then** the API answers `422 reason_required` and nothing is written; a legacy row without a reason is shown as "No reason recorded". (FR-4a, FR-7)
 
 ### AC-7: **Given** an event or series, **When** “Import attendance” is chosen, **Then** the import flow opens and a successful batch invalidates the event/series queries. (FR-8)
 
@@ -729,7 +778,10 @@ export interface EventSession {
   date: string;
   startTime: string;
   endTime: string | null;
+  /** 'held' is reserved and never written to a session; held/upcoming are date-derived (FR-6c). */
   status: EventDateStatus;
+  /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
+  note: string | null;
   present: number;
   expected: number;
   importedRows: number;
@@ -788,13 +840,15 @@ export interface EventAttendance {
 
 `EventAttendance.rows` lists only the stored attendance rows (`status: 'present'`); the data model has
 no absence record, so absent members are never fabricated. `expected` is the register at the session
-date (`joined_on <= sessionDate`, not archived, not purged).
+date (`joined_on <= sessionDate`, not archived, not purged, and for a `presbyter_only` event only the
+members who are presbyters).
 
 **Event fields and storage.** `event_instances` holds `id`, `event_no` (unique), `name`, `series_id`
 (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`,
 `venue_type`, `venue_name`, `description`, `status`, `source`, `sessions` (JSONB), timestamps.
-`sessions` is an array of `{ date, startTime, endTime, status, venueType? }`; dates are unique, inside
-`start_date`/`end_date`, and non-empty. Attendance and pledge rows carry `session_date`, not a child
+`sessions` is an array of `{ date, startTime, endTime, status, venueType?, note? }`; dates are unique,
+inside `start_date`/`end_date`, and non-empty. `note` is a non-empty reason when `status` is
+`cancelled`, and null on a legacy cancellation. Attendance and pledge rows carry `session_date`, not a child
 table id. A generated event
 inherits the series name/ministry/timezone and the default venue; a standalone event supplies its own.
 The event `event_no` is the key used by the import rows; the import date must match one of the event's
@@ -1006,37 +1060,75 @@ export interface ChurchOfferingSummary {
 }
 ```
 
+`GET /v1/series/{id}/summary?from&to` returns the series window summary (FR-6a–FR-6d). It is one read
+and is `no-store`.
+
+```jsonc
+{
+  "from": "2026-08-13", // the occurrence window, echoed
+  "to": "2026-11-11",
+  "nextOccurrence": "2026-11-15", // first generated date >= today, <= 90 days; null when none
+  "attendance": {
+    "memberSessions": { "held": 11, "expected": 1980, "present": 1564, "rate": 0.79 },
+    "lastHeld": { "date": "2026-11-08", "expected": 180, "present": 142 },
+    "headcountSessions": { "held": 2 },
+    "cancelled": 1,
+    "upcoming": 1,
+  },
+  "offerings": {
+    "attachedCount": 2,
+    "currency": "GHS",
+    "paidMinor": 560000,
+    "pledgedMinor": 3400000,
+    "outstandingMinor": 3400000,
+    "countedMinor": 0,
+    "visitors": { "count": 0, "paidMinor": 0 },
+  },
+}
+```
+
+`rate` is a ratio in [0, 1] or null; the UI formats it as a percentage. `lastHeld` is null when the
+window holds no held member-tracking session. `memberSessions.expected` is the register count for each
+held date under the event detail's rule (`joined_on <= date`, not archived, not purged, presbyters
+only for a `presbyter_only` event), `present` is the `attendance` row count for that date, and both are
+bounded by `session_date` and the window — never a sum over the events list.
+`headcountSessions.held` counts held sessions on headcount-only events; no expected headcount exists,
+so the block carries a count only. `attachedCount` counts active attachments made to the series
+itself, not offerings attached to its events. `countedMinor` follows the church summary's
+current-observation rule; `visitors` is `{ count, paidMinor }` and never carries contact data.
+
 ### Endpoints
 
-| Method       | Path                                                                 | Purpose                                                                   | Status          |
-| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------- |
-| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed        |
-| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed        |
-| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed        |
-| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20       |
-| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20       |
-| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20       |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20       |
-| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20       |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20       |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20       |
-| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20       |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20       |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21       |
-| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21       |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21       |
-| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22       |
-| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22       |
-| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22       |
-| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22       |
-| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22       |
-| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22       |
-| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals (gifts + counted/variance)                          | ticket 23 / MVP |
-| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`)                  | MVP             |
-| `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a      |
-| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d      |
-| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d      |
-| `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a      |
+| Method       | Path                                                                 | Purpose                                                                   | Status           |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------- |
+| `GET`        | `/v1/events?from&to&seriesId&ministry&venueType`                     | Event list + attendance/offering summaries                                | proposed         |
+| `GET`        | `/v1/series/{id}/summary?from&to`                                    | Series window summary: attendance, offerings, next occurrence             | MVP — this round |
+| `GET`        | `/v1/events/{eventId}`                                               | Event detail with sessions and offerings                                  | proposed         |
+| `GET`        | `/v1/events/{eventId}/attendance?date=`                              | Attendance rows for one event date                                        | proposed         |
+| `GET`/`POST` | `/v1/offerings`                                                      | List (default active; `active`/`includeArchived`) or create with terms v1 | ticket 20        |
+| `GET`/`PUT`  | `/v1/offerings/{id}`                                                 | Read the offering; update the active flag only                            | ticket 20        |
+| `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions, newest first, or publish one (`baseVersion`)               | ticket 20        |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments, or attach                                        | ticket 20        |
+| `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end the attachment)                                               | ticket 20        |
+| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments, or attach for every occurrence                   | ticket 20        |
+| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                    | ticket 20        |
+| `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows, or append a skip/opt-in                                        | ticket 20        |
+| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows, or append a skip/opt-in                                        | ticket 20        |
+| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                               | ticket 21        |
+| `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                         | ticket 21        |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                     | ticket 21        |
+| `POST`       | `/v1/pledges`                                                        | Create pledge with follow-up officer                                      | ticket 22        |
+| `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                  | ticket 22        |
+| `POST`       | `/v1/pledges/{id}/honor`                                             | Append honor event                                                        | ticket 22        |
+| `POST`       | `/v1/pledges/{id}/dishonor`                                          | Append dishonor event with reason                                         | ticket 22        |
+| `POST`       | `/v1/pledges/{id}/reassign`                                          | Admin assigns/reassigns follow-up officer + reason                        | ticket 22        |
+| `GET`/`POST` | `/v1/pledges/{id}/reminders`                                         | List or schedule reminder records                                         | ticket 22        |
+| `GET`        | `/v1/offerings/summary?from&to`                                      | Church landing totals (gifts + counted/variance)                          | ticket 23 / MVP  |
+| `GET`/`POST` | `/v1/events/{eventId}/offering-counts?sessionDate&offeringId`        | Read or record/correct the counted offering (`no-store`)                  | MVP              |
+| `POST`       | `/ussd/session`                                                      | USSD entry, HMAC, **not bearer**; see the USSD spec                       | ticket 24a       |
+| `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry, `USERID` auth, **not bearer**; see the USSD spec         | ticket 24d       |
+| `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway, not bearer; refuses in production             | ticket 24d       |
+| `POST`       | `/v1/payments/callback`                                              | Gateway callback, signature-verified                                      | ticket 24a       |
 
 The former `/v1/ussd/session/{id}/select` and `…/commit` routes are retired: the USSD flow is one
 server-owned route at `POST /ussd/session` with a `seq` frame number, specified in
@@ -1054,6 +1146,7 @@ server-owned route at `POST /ussd/session` with a `seq` frame number, specified 
 | 422     | `offering_not_on_event`     | Show valid offerings                |
 | 422     | `session_not_in_event`      | Pick one of the event's sessions    |
 | 422     | `headcount_only`            | This event has no member attendance |
+| 422     | `reason_required`           | Ask for a reason                    |
 | 422     | `offering_expired`          | Show the closed offering            |
 | 422     | `invalid_exception_date`    | Inline date error                   |
 | 422     | `officer_required`          | Assign an active presbyter          |
@@ -1066,22 +1159,22 @@ server-owned route at `POST /ussd/session` with a `seq` frame number, specified 
 
 All money is `bigint` minor units plus an ISO currency. All history tables are append-only.
 
-| Table                                | Key fields                                                                                                                                                                                                                                                                                                                                 | Constraints                                                                                                                                                                                                                                                                                      |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `event_instances`                    | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `tracks_members` (boolean, default true), `sessions` (JSONB `{date,startTime,endTime,status,venueType?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` means headcount-only; ministry is the series' ministry (a standalone event is general)                                                                                                  |
-| `event_attendance`                   | `id`, `event_instance_id`, `session_date`, `member_id`, `source` (`import`/`manual`)                                                                                                                                                                                                                                                       | unique `(event_instance_id, session_date, member_id)`; session_date in sessions                                                                                                                                                                                                                  |
-| `offerings`                          | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                                                   | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                   |
-| `offering_terms`                     | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                                                    | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                      |
-| `event_instance_offerings`           | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                                                 | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null                                                                                                                                                          |
-| `offering_exceptions`                | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                                                | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                                                                               |
-| `contributions`                      | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                                                       | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                                                                                   |
-| `event_session_offering_counts`      | `id`, `event_instance_id`, `offering_id`, `session_date`, `currency`, `terms_version`, `as_of`, `recorded_by`, `recorded_at`, `supersedes_id`                                                                                                                                                                                              | multiple observations per `(event_instance_id, offering_id, session_date)` are allowed; `current` is the newest non-superseded by `as_of`, `recorded_at`; `session_date` in sessions; the offering must be attached; `supersedes_id` unique when present; at least one line and a positive total |
-| `event_session_offering_count_lines` | `count_id`, `denomination_minor`, `pieces`                                                                                                                                                                                                                                                                                                 | primary key `(count_id, denomination_minor)`; `denomination_minor > 0`; `pieces > 0`                                                                                                                                                                                                             |
-| `pledges`                            | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                                                       | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                                                                                   |
-| `pledge_events`                      | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                                                       | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                 |
-| `reminders`                          | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                         | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                               |
-| `ussd_sessions`                      | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                                                     | short TTL; no raw phone in logs                                                                                                                                                                                                                                                                  |
-| `payment_intents`                    | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                                             | unique gateway reference                                                                                                                                                                                                                                                                         |
+| Table                                | Key fields                                                                                                                                                                                                                                                                                                                                       | Constraints                                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `event_instances`                    | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type` (`auditorium`/`virtual`/`hybrid`), `venue_name`, `description`, `status`, `source`, `tracks_members` (boolean, default true), `sessions` (JSONB `{date,startTime,endTime,status,venueType?,note?}[]`), timestamps | unique `event_no`; end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` means headcount-only; ministry is the series' ministry (a standalone event is general)                                                                                                  |
+| `attendance`                         | `id`, `event_instance_id`, `session_date`, `member_id`, `source` (`import`/`manual`)                                                                                                                                                                                                                                                             | unique `(event_instance_id, session_date, member_id)`; session_date in sessions                                                                                                                                                                                                                  |
+| `offerings`                          | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                                                         | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                   |
+| `offering_terms`                     | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                                                          | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                      |
+| `event_instance_offerings`           | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                                                       | exactly one of event_instance/series; one active attachment per (offering, event) and per (offering, series) when `detached_on` is null                                                                                                                                                          |
+| `offering_exceptions`                | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                                                      | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                                                                               |
+| `contributions`                      | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`                                                                                             | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                                                                                   |
+| `event_session_offering_counts`      | `id`, `event_instance_id`, `offering_id`, `session_date`, `currency`, `terms_version`, `as_of`, `recorded_by`, `recorded_at`, `supersedes_id`                                                                                                                                                                                                    | multiple observations per `(event_instance_id, offering_id, session_date)` are allowed; `current` is the newest non-superseded by `as_of`, `recorded_at`; `session_date` in sessions; the offering must be attached; `supersedes_id` unique when present; at least one line and a positive total |
+| `event_session_offering_count_lines` | `count_id`, `denomination_minor`, `pieces`                                                                                                                                                                                                                                                                                                       | primary key `(count_id, denomination_minor)`; `denomination_minor > 0`; `pieces > 0`                                                                                                                                                                                                             |
+| `pledges`                            | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                                                                                             | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                                                                                   |
+| `pledge_events`                      | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                                                             | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                 |
+| `reminders`                          | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                                               | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                               |
+| `ussd_sessions`                      | `id`, `phone_hash`, `member_id` (nullable), `visitor_name`, `event_instance_id`, `state`, `selected_offerings`, `amount_minor`, `action`, `expires_at`                                                                                                                                                                                           | short TTL; no raw phone in logs                                                                                                                                                                                                                                                                  |
+| `payment_intents`                    | `id`, `contribution_id`, `gateway`, `reference`, `status`, `raw_callback_hash`                                                                                                                                                                                                                                                                   | unique gateway reference                                                                                                                                                                                                                                                                         |
 
 ## Out of Scope
 
@@ -1170,6 +1263,25 @@ read model — was **parked for a later round** (owner, 2026-11-07) and is recor
 `documents/backlog.md`. The owner **parked Redis for the MVP release** on 2026-11-08, so MVP ships on
 compute-on-read; this round reads the source tables and adds no aggregate store or migration.
 
+### Series-summary grill — settled 2026-11-11
+
+The series-summary design tree was grilled in two rounds against the local, unsigned
+`mockups/v2-events/04-series-detail.png`; the owner accepted every recommendation ("all as
+recommended"). Ids are `S-Qn`.
+
+| ID    | Decision            | Answer                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S-Q1  | Read shape          | A dedicated `GET /v1/series/{id}/summary?from&to`, not a windowed field on the detail and not a browser-side composition. This answer is the named §17 pre-authorisation for that wire addition in round `series-detail-summary`.                                                                                                                                                                   |
+| S-Q2  | Summary shape       | The read returns the three window figures the tiles need: `nextOccurrence`, window attendance (member sessions, last held session, headcount-only held count, cancelled, upcoming) and window offering money. The Occurrences tile counts the occurrence list the page already fetches, so the DTO carries no occurrence count. Per-offering rows and per-occurrence attendance stay queued (S-Q6). |
+| S-Q3  | Ratio scope         | Held member-tracking sessions only; cancelled and upcoming excluded from the ratio; headcount-only reported as a held count and never in the ratio; null when expected is 0.                                                                                                                                                                                                                        |
+| S-Q4  | Money semantics     | Reuse the church summary's rules scoped by series: largest paid currency in the window is the reporting currency, counted cash reported beside the gifts, pledges as at `min(to, today)`, visitors separate.                                                                                                                                                                                        |
+| S-Q5  | Window              | One window for occurrences, attendance and money (the page's `DateWindowControl`, default last 90 UTC days). `nextOccurrence` looks forward at most 90 days from today in the **series timezone**; `lastHeld` is inside the window. The mock's "this quarter"/"last Sunday"/"this month" mix is rejected. The series list's UTC-based forward window is a backlog row, not fixed here.              |
+| S-Q6  | Surface             | Four tiles above Schedule versions, per the mock; the rail and per-row columns stay queued; an archived series shows the tiles read-only; explicit zeros, never a hidden card. The tile captions are enumerated in FR-6e so the e2e assertion does not depend on the mock.                                                                                                                          |
+| S-Q7  | Process             | Tier 2 round `series-detail-summary`; spec review by a separate `0813` session before code; independent code review; the wire addition pre-authorised by name.                                                                                                                                                                                                                                      |
+| S-Q8  | Mock                | The mock exists and is the design reference for the tiles but was never signed; `ui-mock-parity.md`'s "no mock exists for series-detail" line is corrected in the same round.                                                                                                                                                                                                                       |
+| S-Q9  | Cancellation reason | A cancelled meeting date carries a reason on both surfaces: the series exception (`note` required for `kind='cancelled'`) and an event session written with `status='cancelled'` (`sessions[].note` required). Enforced at the API boundary with `422 reason_required`, not by a database constraint, so append-only history with legacy null reasons survives and displays "No reason recorded".   |
+| S-Q10 | Infinite series     | The Occurrences tile is period-bound: it counts the dates generated inside the requested window (the same list the table shows). A series with no `endsOn` never has a lifetime total; a bounded series counts the intersection of its schedule and the window. Only `nextOccurrence` looks forward, capped at 90 days.                                                                             |
+
 ## Definition of Done
 
 - Q1–Q12 answered and recorded, including rejected options.
@@ -1185,6 +1297,25 @@ compute-on-read; this round reads the source tables and adds no aggregate store 
 
 ## Change log
 
+- 2026-11-11: clarifies the summary's `attachedCount`: it is the number of active attachments made to
+  the series itself, not offerings attached per event. FR-6e and the DTO note say so; no behaviour
+  changes. (S-Q2.)
+
+- 2026-11-11: series summary specified (round `series-detail-summary`) from a two-round grill
+  (S-Q1–S-Q10, all "as recommended"), after the 0813 spec review returned REWORK (2 P1, 7 P2) and the
+  fixes below. `GET /v1/series/{id}/summary?from&to` is a new request — the named §17 pre-authorisation
+  — returning the three window figures: a forward `nextOccurrence` (≤ 90 days, series timezone),
+  window attendance split into held member sessions, the last held session and a headcount-only held
+  count, and window offering money under the church-summary rules scoped by series. The Occurrences
+  tile counts the occurrence list the page already fetches and is period-bound, so an infinite series
+  never has a lifetime total. Held/upcoming/cancelled are date-derived in the series timezone (the
+  `scopedSessions` precedent), not read from the stored status, which never becomes `held`. One window
+  drives occurrences, attendance and money; the mock's mixed periods are rejected. The tiles render
+  above Schedule versions with enumerated captions and stay visible read-only on an archived series;
+  the rail and per-row columns stay queued. A cancelled series exception and a cancelled event session
+  now require a reason (`422 reason_required`, checked at the API boundary). FR-4a and FR-7 gain that
+  rule; FR-6 gains FR-6a–FR-6e; AC-5 is tightened and AC-5a/AC-5b/AC-6a added. The attendance table is
+  named `attendance` (not `event_attendance`) in both specs' data models.
 - 2026-11-09: FR-39/AC-3 narrowed (Option B, owner re-approved) to the read-only Active-offerings
   panel; the default amount is carried by the terms view, and per-date exceptions/full detail are O1.
   FR-4/FR-9/AC-3 "stats" wording aligned with R8 (zeroed on the event detail).

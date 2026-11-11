@@ -39,6 +39,38 @@ export interface OccurrenceListDto {
   readonly dates: readonly string[];
 }
 
+/** Mirrors `seriesSummarySchema` (FR-6). */
+export interface SeriesSummaryDto {
+  readonly from: string;
+  readonly to: string;
+  readonly nextOccurrence: string | null;
+  readonly attendance: {
+    readonly memberSessions: {
+      readonly held: number;
+      readonly expected: number;
+      readonly present: number;
+      readonly rate: number | null;
+    };
+    readonly lastHeld: {
+      readonly date: string;
+      readonly expected: number;
+      readonly present: number;
+    } | null;
+    readonly headcountSessions: { readonly held: number };
+    readonly cancelled: number;
+    readonly upcoming: number;
+  };
+  readonly offerings: {
+    readonly attachedCount: number;
+    readonly currency: string;
+    readonly paidMinor: number;
+    readonly pledgedMinor: number;
+    readonly outstandingMinor: number;
+    readonly countedMinor: number;
+    readonly visitors: { readonly count: number; readonly paidMinor: number };
+  };
+}
+
 export interface ListSeriesOptions {
   /** `GET /v1/series?includeArchived=true`; the API defaults to active only. */
   readonly includeArchived?: boolean;
@@ -110,6 +142,32 @@ export async function listSeries(
 /** The detail path; the id is encoded as one path segment. */
 export function seriesDetailPath(seriesId: string): string {
   return `${SERIES_PATH}/${encodeURIComponent(seriesId)}`;
+}
+
+export function seriesSummaryPath(seriesId: string, from: string, to: string): string {
+  const params = new URLSearchParams();
+  params.set('from', from);
+  params.set('to', to);
+  return `${seriesDetailPath(seriesId)}/summary?${params.toString()}`;
+}
+
+/**
+ * `GET /v1/series/:id/summary?from&to`: one request for the window's attendance,
+ * offering money and next occurrence (FR-6a). The UI never sums the events list.
+ */
+export async function getSeriesSummary(
+  baseUrl: string,
+  sessionToken: string,
+  seriesId: string,
+  options: { readonly from: string; readonly to: string; readonly signal?: AbortSignal },
+): Promise<SeriesSummaryDto> {
+  const result = await gatewayRequest<SeriesSummaryDto>(
+    baseUrl,
+    seriesSummaryPath(seriesId, options.from, options.to),
+    { sessionToken, signal: options.signal },
+  );
+  if (!result) throw new ApiError(500, 'The series summary response was empty.');
+  return result;
 }
 
 /** `GET /v1/series/:id`: the series with all schedule versions and exceptions. */

@@ -116,7 +116,11 @@ describe('series through Drizzle', () => {
       '2026-02-01',
     ]);
 
-    await series.setException(created.id, { date: '2026-01-18', kind: 'cancelled' }, 'test');
+    await series.setException(
+      created.id,
+      { date: '2026-01-18', kind: 'cancelled', note: 'Weather' },
+      'test',
+    );
     expect(await series.occurrences(created.id, '2026-01-01', '2026-03-01')).toEqual([
       '2026-01-04',
       '2026-01-11',

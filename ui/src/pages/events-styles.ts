@@ -174,4 +174,8 @@ export const useEventStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold,
     lineHeight: tokens.lineHeightBase600,
   },
+  metricCaption: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+  },
 });

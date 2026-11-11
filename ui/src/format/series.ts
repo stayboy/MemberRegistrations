@@ -141,6 +141,17 @@ export function exceptionKindLabel(kind: SeriesExceptionKind): string {
   return EXCEPTION_KIND_LABELS[kind];
 }
 
+/**
+ * The exceptions table's Note cell. A cancelled date must carry a reason; a
+ * legacy row that predates the rule says so instead of showing a bare dash
+ * (FR-7, AC-6a).
+ */
+export function exceptionNoteLabel(kind: SeriesExceptionKind, note: string | null): string {
+  const trimmed = note?.trim() ?? '';
+  if (trimmed) return trimmed;
+  return kind === 'cancelled' ? 'No reason recorded' : '—';
+}
+
 /** A series is active until the API gives it an archive timestamp. */
 export function seriesStatusLabel(archivedAt: string | null): 'Active' | 'Archived' {
   return archivedAt ? 'Archived' : 'Active';

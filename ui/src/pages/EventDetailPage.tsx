@@ -323,9 +323,20 @@ export function EventDetailPage() {
                           <TableCell>{formatTime(item.startTime)}</TableCell>
                           <TableCell>{item.endTime ? formatTime(item.endTime) : '—'}</TableCell>
                           <TableCell>
-                            <Badge appearance="tint" color={statusColor(item.status)} size="small">
-                              {sessionStatusLabel(item.status)}
-                            </Badge>
+                            <div className={styles.identity}>
+                              <Badge
+                                appearance="tint"
+                                color={statusColor(item.status)}
+                                size="small"
+                              >
+                                {sessionStatusLabel(item.status)}
+                              </Badge>
+                              {item.status === 'cancelled' ? (
+                                <Text size={200} className={styles.muted}>
+                                  {item.note ? `Reason: ${item.note}` : 'No reason recorded'}
+                                </Text>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell>{sessionSourceLabel(item.source)}</TableCell>
                           <TableCell>{formatPresentExpected(item)}</TableCell>

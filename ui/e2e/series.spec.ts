@@ -17,7 +17,7 @@ test('the series list shows the schedule and the next occurrence', async ({ page
   await expect(sunday.getByText('FREQ=WEEKLY;BYDAY=SU')).toBeVisible();
   // The next occurrence is the first date the API returned for the window.
   await expect(sunday.getByText('Jan 4, 2026', { exact: true })).toBeVisible();
-  await expect(sunday.getByText('1 cancelled · 0 extra')).toBeVisible();
+  await expect(sunday.getByText('2 cancelled · 0 extra')).toBeVisible();
 
   const bibleStudy = table.getByRole('row').filter({ hasText: 'Bible Study' });
   await expect(bibleStudy.getByText('Monthly on day 15')).toBeVisible();
@@ -41,8 +41,10 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(versions.getByText('Dec 27, 2026', { exact: true })).toBeVisible();
 
   const exceptions = page.getByRole('table', { name: 'Series exceptions' });
-  await expect(exceptions.getByText('Cancelled')).toBeVisible();
+  await expect(exceptions.getByText('Cancelled')).toHaveCount(2);
   await expect(exceptions.getByText('Public holiday')).toBeVisible();
+  // A legacy cancellation carries no reason; the table says so rather than a dash.
+  await expect(exceptions.getByText('No reason recorded')).toBeVisible();
 
   await expect(page.getByRole('group', { name: 'Series occurrence window' })).toBeVisible();
   const occurrences = page.getByRole('table', { name: 'Series occurrences' });
@@ -50,4 +52,17 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(occurrences.getByRole('row')).toHaveCount(4); // header plus three dates
   await expect(occurrences.getByRole('link', { name: 'View events' })).toHaveCount(3);
   await expect(occurrences.getByText('Jan 18, 2026', { exact: true })).toBeVisible();
+
+  // FR-6e: one summary request feeds three tiles; the Occurrences tile counts the
+  // same list the table renders, so it always agrees with the rows beneath it.
+  const summary = page.getByRole('region', { name: 'Series summary' });
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText('Next occurrence')).toBeVisible();
+  await expect(summary.getByText('Jan 4, 2026', { exact: true })).toBeVisible();
+  await expect(summary.getByText('Occurrences')).toBeVisible();
+  await expect(summary.getByText('in this window')).toBeVisible();
+  await expect(summary.getByText('75%')).toBeVisible();
+  await expect(summary.getByText('3 of 4 on Jan 25, 2026')).toBeVisible();
+  await expect(summary.getByText('2', { exact: true })).toBeVisible();
+  await expect(summary.getByText('paid this window')).toBeVisible();
 });

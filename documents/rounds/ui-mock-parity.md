@@ -198,13 +198,17 @@ below are confirmed against that capture, not the stale files.
 
 ### No mock exists for
 
-`imports-attendance`, `imports-batches`, `event-attendance-dialog`, `series-detail`, `settings`.
+`imports-attendance`, `imports-batches`, `event-attendance-dialog`, `settings`.
 Those are baselines without a design reference; they cannot be triaged for parity, only reviewed for
 consistency with the pattern.
 
+**Correction (2026-11-11):** `series-detail` was listed here in error. `v2-events/04-series-detail.png`
+exists and is triaged in the findings below as **R — FR-6/AC-5 unmet**. The mock is unsigned, so it is
+a design reference, not a sign-off.
+
 ### Still to compare
 
-`v2-shell/12-subscriptions` (member detail tab), `v2-settings/01-date-time-settings`, `v2-events/04-series-detail`.
+`v2-shell/12-subscriptions` (member detail tab), `v2-settings/01-date-time-settings`.
 
 ## Queued — needs a read before it can be built
 

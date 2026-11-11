@@ -23,7 +23,7 @@ import type {
   MinistryRef,
 } from '../src/api/members';
 import type { ChurchReport, OfficerSummary, Roster } from '../src/api/shepherding';
-import type { OccurrenceListDto, SeriesDto } from '../src/api/series';
+import type { OccurrenceListDto, SeriesDto, SeriesSummaryDto } from '../src/api/series';
 import type { AccentId, Scheme } from '../src/theme/brand';
 
 export const SESSION_STORAGE_KEY = 'mr.session.v1';
@@ -371,6 +371,7 @@ export const EVENTS: readonly EventItem[] = [
         startTime: '09:00',
         endTime: '11:00',
         status: 'held',
+        note: null,
         present: 3,
         expected: 42,
         importedRows: 2,
@@ -392,6 +393,52 @@ export const EVENTS: readonly EventItem[] = [
         terms: offeringTerms(1, 'Building fund', { kind: 'building' }),
       }),
     ],
+    stats: EMPTY_OFFERING_STATS,
+  },
+  {
+    id: 'event-cancelled',
+    eventNo: 'EVT-2026-777',
+    name: 'Cancelled conference',
+    seriesId: null,
+    ministry: null,
+    timezone: 'UTC',
+    startDate: '2026-06-01',
+    endDate: '2026-06-02',
+    startTime: '09:00',
+    endTime: '11:00',
+    venueType: 'auditorium',
+    venueName: 'Main auditorium',
+    description: null,
+    status: 'cancelled',
+    source: 'manual',
+    tracksMembers: true,
+    presbyterOnly: false,
+    sessions: [
+      {
+        date: '2026-06-01',
+        startTime: '09:00',
+        endTime: '11:00',
+        status: 'cancelled',
+        note: 'Venue flooded',
+        present: 0,
+        expected: 0,
+        importedRows: 0,
+        source: 'none',
+      },
+      {
+        // A legacy cancellation written before the reason rule (FR-4a/AC-6a).
+        date: '2026-06-02',
+        startTime: '09:00',
+        endTime: '11:00',
+        status: 'cancelled',
+        note: null,
+        present: 0,
+        expected: 0,
+        importedRows: 0,
+        source: 'none',
+      },
+    ],
+    offerings: [],
     stats: EMPTY_OFFERING_STATS,
   },
   {
@@ -418,6 +465,7 @@ export const EVENTS: readonly EventItem[] = [
         startTime: '08:30',
         endTime: null,
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 12,
         importedRows: 0,
@@ -428,6 +476,7 @@ export const EVENTS: readonly EventItem[] = [
         startTime: '08:30',
         endTime: null,
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 12,
         importedRows: 0,
@@ -461,6 +510,7 @@ export const EVENTS: readonly EventItem[] = [
         startTime: '09:00',
         endTime: '11:00',
         status: 'scheduled',
+        note: null,
         present: 0,
         expected: 10,
         importedRows: 0,
@@ -730,7 +780,11 @@ const SERIES: readonly SeriesDto[] = [
         endsOn: '2026-12-27',
       },
     ],
-    exceptions: [{ date: '2026-01-11', kind: 'cancelled', note: 'Public holiday' }],
+    exceptions: [
+      { date: '2026-01-11', kind: 'cancelled', note: 'Public holiday' },
+      // A legacy cancellation written before the reason rule (FR-7/AC-6a).
+      { date: '2026-02-01', kind: 'cancelled', note: null },
+    ],
   },
   {
     id: 'series-2',
@@ -747,6 +801,48 @@ const SERIES: readonly SeriesDto[] = [
 const OCCURRENCES: Readonly<Record<string, readonly string[]>> = {
   'series-1': ['2026-01-04', '2026-01-18', '2026-01-25'],
   'series-2': ['2026-01-15'],
+};
+
+const SERIES_SUMMARIES: Record<string, Omit<SeriesSummaryDto, 'from' | 'to'>> = {
+  'series-1': {
+    nextOccurrence: '2026-01-04',
+    attendance: {
+      memberSessions: { held: 3, expected: 12, present: 9, rate: 0.75 },
+      lastHeld: { date: '2026-01-25', expected: 4, present: 3 },
+      headcountSessions: { held: 0 },
+      cancelled: 1,
+      upcoming: 0,
+    },
+    offerings: {
+      attachedCount: 2,
+      currency: 'GHS',
+      paidMinor: 560000,
+      pledgedMinor: 3400000,
+      outstandingMinor: 3400000,
+      countedMinor: 0,
+      visitors: { count: 0, paidMinor: 0 },
+    },
+  },
+};
+
+const EMPTY_SUMMARY: Omit<SeriesSummaryDto, 'from' | 'to'> = {
+  nextOccurrence: null,
+  attendance: {
+    memberSessions: { held: 0, expected: 0, present: 0, rate: null },
+    lastHeld: null,
+    headcountSessions: { held: 0 },
+    cancelled: 0,
+    upcoming: 0,
+  },
+  offerings: {
+    attachedCount: 0,
+    currency: 'GHS',
+    paidMinor: 0,
+    pledgedMinor: 0,
+    outstandingMinor: 0,
+    countedMinor: 0,
+    visitors: { count: 0, paidMinor: 0 },
+  },
 };
 
 const ATTENDANCE_EVENT_1: EventAttendance = {
@@ -1394,6 +1490,18 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
       method: 'GET',
       pattern: /^\/gateway\/v1\/series$/,
       handle: () => reply({ items: SERIES }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/series\/([^/]+)\/summary$/,
+      handle: (call, [seriesId]) => {
+        const summary = SERIES_SUMMARIES[seriesId!] ?? EMPTY_SUMMARY;
+        return reply({
+          from: call.search.get('from') ?? '',
+          to: call.search.get('to') ?? '',
+          ...summary,
+        });
+      },
     },
     {
       method: 'GET',
