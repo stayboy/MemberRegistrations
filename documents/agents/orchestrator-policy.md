@@ -43,14 +43,15 @@ reviewer / plan-gate / spec-review / acceptance seat is `cline-pass/cline-pass/m
 | Worker (Tier 2+ implementer)                                | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
 | Reviewer / plan gate / spec review / acceptance (all tiers) | 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `cline-pass/cline-pass/mimo-v2.6-pro`                |
 | Grill-me (go-forward round)                                 | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
-| Git executor (all git writes)                               | 1. `opencode/beam-free`; 2. `ollama-cloud/beam`                                                 |
+| Git executor (all git writes)                               | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                      |
 
 The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the
 file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the
 parent verifies every result. One brief authorises one verb; the seat never infers consent. Rung 2
-(`ollama-cloud/beam`) runs only inside a `git-seat-budget:` the owner declared in the round doc
-before the round starts; auto-accept never declares it, and with no budget line the action parks.
-Every push, PR, merge and tag names the variant that performed it in the round doc's per-write table,
+(`ollama-cloud/mimo-v2.6-flash`) runs only inside a `git-seat-budget:` the owner declared in the
+round doc before the round starts; auto-accept never declares it, and with no budget line the action
+parks. Every push, PR, merge and tag names the variant that performed it in the round doc's per-write
+table,
 with a `fallbackReason` on every switch; each seat commit carries a `Model-Seat` trailer.
 Unavailability is a provider auth or model-not-found, HTTP 4xx/5xx, HTTP 429, a timed-out tool call,
 a prose-only response, a context/output cap too small for the brief, or an empty/refusal response.

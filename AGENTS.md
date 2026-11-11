@@ -117,9 +117,9 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
   unattended" pre-authorises those four for that round (§17). Every action outside the round still
   needs its own instruction. Verb definitions: `.github/merge-policy.md` (Verb glossary).
 - The **git-executor** seat (`.opencode/agents/git-executor.md`, ranked `opencode/beam-free` then
-  `ollama-cloud/beam`) may execute the command on a brief that quotes the owner's verb; the parent
-  keeps the decision and verifies every result. The seat never infers consent, runs one verb per
-  brief, and parks when unavailable. Seat and budget rules: `documents/agents/orchestrator-policy.md`.
+  `ollama-cloud/mimo-v2.6-flash`) may execute the command on a brief that quotes the owner's verb;
+  the parent keeps the decision and verifies every result. The seat never infers consent, runs one
+  verb per brief, and parks when unavailable. Seat and budget rules: `documents/agents/orchestrator-policy.md`.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for

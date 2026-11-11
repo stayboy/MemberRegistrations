@@ -19,9 +19,9 @@ function read(path: string): string {
 }
 
 describe('git executor seat', () => {
-  it('pins rung 1 to opencode/beam-free and rung 2 to ollama-cloud/beam', () => {
+  it('pins rung 1 to opencode/beam-free and rung 2 to ollama-cloud/mimo-v2.6-flash', () => {
     expect(read(SEAT_FILES[0])).toContain('model: opencode/beam-free');
-    expect(read(SEAT_FILES[1])).toContain('model: ollama-cloud/beam');
+    expect(read(SEAT_FILES[1])).toContain('model: ollama-cloud/mimo-v2.6-flash');
   });
 
   it('forbids the destructive commands and hook bypasses', () => {
