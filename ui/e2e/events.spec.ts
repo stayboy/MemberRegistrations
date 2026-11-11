@@ -63,6 +63,25 @@ test('a cancelled session shows its reason, and a legacy one says it is missing'
   await expect(sessions.getByText('No reason recorded')).toBeVisible();
 });
 
+test('the series-backed event entry seeds the import flow', async ({ page }) => {
+  await open(page, '/events/event-1');
+
+  const entry = page.getByRole('button', { name: 'Import attendance' });
+  await expect(entry).toBeVisible();
+  await entry.click();
+
+  await expect(page).toHaveURL(/\/imports\/attendance\?event=event-1/);
+  // The event and its start-date session are resolved from the deep link.
+  await expect(page.getByRole('button', { name: 'Change occurrence' })).toBeVisible();
+});
+
+test('a standalone event has no import entry', async ({ page }) => {
+  await open(page, '/events/event-2');
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Leaders retreat' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import attendance' })).toHaveCount(0);
+});
+
 test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
   await open(page, '/events');
   await page.getByRole('link', { name: 'Sunday Service' }).click();

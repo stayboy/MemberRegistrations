@@ -19,6 +19,7 @@ import {
   AddRegular,
   ArchiveRegular,
   ArrowClockwiseRegular,
+  ArrowImportRegular,
   ArrowLeftRegular,
   ArrowUndoRegular,
   DeleteRegular,
@@ -211,6 +212,12 @@ export function SeriesDetailPage() {
             onClick={() => navigate('/events/series')}
           >
             Back to series
+          </Button>
+          <Button
+            icon={<ArrowImportRegular />}
+            onClick={() => navigate(`/imports/attendance?series=${encodeURIComponent(id)}`)}
+          >
+            Import attendance
           </Button>
           {archived ? null : (
             <Button

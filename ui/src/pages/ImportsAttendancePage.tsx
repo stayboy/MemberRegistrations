@@ -204,7 +204,9 @@ function AttendanceWorkspace({
       : undefined;
     return event && session ? occurrenceFrom(event, session) : null;
   });
-  const [draftEventId, setDraftEventId] = useState<string | null>(null);
+  const [draftEventId, setDraftEventId] = useState<string | null>(() =>
+    new URLSearchParams(searchParams).get('event'),
+  );
 
   const draftEvent = events.find((event) => event.id === draftEventId);
   const sessions = useMemo(() => importableSessions(draftEvent), [draftEvent]);
@@ -415,16 +417,18 @@ export function ImportsAttendancePage() {
   const token = session?.token ?? '';
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const seriesId = searchParams.get('series')?.trim() || undefined;
 
   const [range, setRange] = useState(() => initialRange(searchParams));
   const rangeValid = range.from <= range.to;
 
   const eventsQuery = useQuery({
-    queryKey: ['events', baseUrl, range.from, range.to],
+    queryKey: ['events', baseUrl, range.from, range.to, seriesId ?? ''],
     queryFn: ({ signal }) =>
       listEvents(baseUrl, token, {
         from: range.from,
         to: range.to,
+        seriesId,
         limit: EVENT_LIMIT,
         signal,
       }),
@@ -467,6 +471,9 @@ export function ImportsAttendancePage() {
     // The prefix covers an open session report, the event detail's present/expected column and the
     // list counts.
     void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
+    // The series detail's summary tile and the imports batch list (AC-7).
+    void queryClient.invalidateQueries({ queryKey: ['series', baseUrl] });
+    void queryClient.invalidateQueries({ queryKey: ['imports', baseUrl] });
   }
 
   return (

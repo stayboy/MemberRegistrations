@@ -106,6 +106,8 @@ export interface EventListItem {
   /** Null for a series-minted instance that has not been numbered yet. */
   readonly eventNo: string | null;
   readonly name: string;
+  /** Null for a standalone event; attendance imports require a series-backed event. */
+  readonly seriesId: string | null;
   readonly startDate: string;
   readonly status: EventStatus;
   readonly sessions: readonly EventSessionSummary[];

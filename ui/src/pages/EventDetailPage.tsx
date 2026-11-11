@@ -15,7 +15,7 @@ import {
   TableRow,
   Text,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular, ArrowLeftRegular } from '@fluentui/react-icons';
+import { ArrowClockwiseRegular, ArrowImportRegular, ArrowLeftRegular } from '@fluentui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -123,6 +123,20 @@ export function EventDetailPage() {
           >
             Refresh
           </Button>
+          {event && event.seriesId ? (
+            <Button
+              icon={<ArrowImportRegular />}
+              onClick={() => {
+                const params = new URLSearchParams({
+                  event: event.id,
+                  date: event.startDate,
+                });
+                navigate(`/imports/attendance?${params.toString()}`);
+              }}
+            >
+              Import attendance
+            </Button>
+          ) : null}
         </>
       }
     >

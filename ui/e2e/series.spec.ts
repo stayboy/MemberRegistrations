@@ -66,3 +66,19 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(summary.getByText('2', { exact: true })).toBeVisible();
   await expect(summary.getByText('paid this window')).toBeVisible();
 });
+
+test('the series entry opens the import flow filtered to the series', async ({ page }) => {
+  await open(page, '/events/series');
+  await page.getByRole('link', { name: 'Sunday Service' }).click();
+
+  const entry = page.getByRole('button', { name: 'Import attendance' });
+  await expect(entry).toBeVisible();
+  await entry.click();
+
+  await expect(page).toHaveURL(/\/imports\/attendance\?series=series-1/);
+
+  // The picker lists only series-backed events, so the standalone retreat is absent.
+  await page.getByRole('combobox', { name: 'Event' }).click();
+  await expect(page.getByRole('option', { name: /Sunday Service/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Leaders retreat/ })).toHaveCount(0);
+});
