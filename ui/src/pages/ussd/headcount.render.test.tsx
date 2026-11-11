@@ -23,6 +23,7 @@ const CURRENT: Headcount = {
   childFemale: 0,
   childUnspecified: 9,
   total: 142,
+  ended: false,
   recordedBy: 'demo.officer',
   recordedAt: '2026-11-08T10:44:00.000Z',
   supersedesId: 'headcount-1',
@@ -76,7 +77,7 @@ describe('HeadcountDialogFields', () => {
     expect(markup).toContain('Defaults to now');
     expect(markup).toContain('Adult men');
     expect(markup).toContain('Adult women');
-    expect(markup).toContain('Children (unspecified)');
+    expect(markup).toContain('>Children</label>');
     expect(markup).toContain('value="62"');
     expect(markup).toContain('type="datetime-local"');
     expect(markup).not.toContain('Keeping asOf');
@@ -89,7 +90,8 @@ describe('HeadcountDialogFields', () => {
     expect(markup).toContain('Adult women');
     expect(markup).toContain('Boys');
     expect(markup).toContain('Girls');
-    expect(markup).not.toContain('Children (unspecified)');
+    expect(markup).not.toContain('>Children</label>');
+    expect(markup).not.toContain('>Adults</label>');
   });
 
   it('corrects the current observation with the kept asOf and no date input', () => {

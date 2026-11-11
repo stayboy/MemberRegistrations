@@ -3,12 +3,14 @@ import {
   CardInUseError,
   ConflictError,
   NotFoundError,
+  SessionClosedError,
   ValidationError,
 } from '../errors/domain-errors.js';
 import { ageInYears } from '../domain/age.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
+import { sessionIsClosed } from './captures.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
 import {
   memberContactLinks,
@@ -1362,6 +1364,27 @@ export class MemberRepository {
       throw new ValidationError(`${date} was not a held occurrence of ${series.name}`);
     }
 
+    // The shared close is checked before the today rule, so a closed past
+    // session answers `session_closed`, not a date refusal (AC-33). This path
+    // only reads the occurrence; the instance is minted inside the transaction.
+    const [closedTarget] = await this.db.query<{ id: string }>(
+      'select id from event_instances where series_id = $1 and start_date = $2',
+      [input.seriesId, date],
+    );
+    if (closedTarget && (await sessionIsClosed(this.db, closedTarget.id, date))) {
+      throw new SessionClosedError(
+        `The session on ${date} is closed; no further per-member write is accepted`,
+      );
+    }
+
+    // A manual row is accepted only for a session dated today in the event
+    // timezone, and never after a shared close.
+    if (date !== todayIn(series.timezone)) {
+      throw new ValidationError(
+        `Per-member attendance is accepted only for a session dated today in ${series.timezone}`,
+      );
+    }
+
     try {
       const eventInstanceId = await this.db.transaction(async (tx) => {
         const [instance] = await tx.query<{ id: string }>(
@@ -1375,6 +1398,11 @@ export class MemberRepository {
            returning id`,
           [input.seriesId, date],
         );
+        if (await sessionIsClosed(tx, instance!.id, date)) {
+          throw new SessionClosedError(
+            `The session on ${date} is closed; no further per-member write is accepted`,
+          );
+        }
         await tx.query(
           `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
            values ($1,$2,$3,'manual',$4)`,
@@ -1418,6 +1446,12 @@ export class MemberRepository {
         [attendanceId, row.id],
       );
       if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
+
+      if (await sessionIsClosed(tx, entry.event_instance_id, entry.session_date)) {
+        throw new SessionClosedError(
+          `The session on ${entry.session_date} is closed; no further per-member write is accepted`,
+        );
+      }
 
       await tx.query('delete from attendance where id = $1', [attendanceId]);
 

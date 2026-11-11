@@ -64,6 +64,8 @@ export interface AttendanceImportRequest {
   readonly eventId: string;
   readonly sessionDate: string;
   readonly rows: readonly AttendanceImportRow[];
+  /** True closes the session; an end-only capture sends no rows. */
+  readonly ended?: boolean;
 }
 
 /** The `rows` member of a `422 import_failed` problem body. */

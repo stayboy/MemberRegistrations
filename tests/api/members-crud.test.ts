@@ -30,6 +30,45 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
   return response;
 }
 
+/** A UTC calendar date `offset` days from today. */
+function day(offset: number): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Seeds a manual attendance row for a series date. Per-member writes are
+ * accepted only for a session dated today, so history is inserted directly and
+ * the event instance is minted the way the write path mints it.
+ */
+async function seedAttendance(seriesId: string, memberNo: string, date: string): Promise<void> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [instance] = await harness.db.query<{ id: string }>(
+    `insert into event_instances (
+       series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
+     )
+     select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
+            jsonb_build_array(jsonb_build_object('date', $2::date, 'status', 'scheduled'))
+       from event_series s where s.id = $1
+     on conflict (series_id, start_date) do update set start_date = excluded.start_date
+     returning id`,
+    [seriesId, date],
+  );
+  const [inserted] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     on conflict (event_instance_id, session_date, member_id) do nothing
+     returning id`,
+    [member!.id, instance!.id, date],
+  );
+  expect(inserted).toBeTruthy();
+}
+
 type PurgedRow = {
   first_name: string | null;
   last_name: string | null;
@@ -468,18 +507,12 @@ describe('members list contract', () => {
     await create('L-3001', { joinedOn: '2026-09-01' });
     await create('L-3002', { joinedOn: '2026-09-20' });
 
+    // Per-member writes are accepted only for a session dated today, so the rows
+    // this read aggregates are seeded directly; the read contract is unchanged.
     for (const date of ['2026-09-06', '2026-10-04']) {
-      await request(app)
-        .post('/v1/members/L-3001/attendance')
-        .set(writeHeaders)
-        .send({ seriesId, date })
-        .expect(201);
+      await seedAttendance(seriesId, 'L-3001', date);
     }
-    await request(app)
-      .post('/v1/members/L-3002/attendance')
-      .set(writeHeaders)
-      .send({ seriesId, date: '2026-09-27' })
-      .expect(201);
+    await seedAttendance(seriesId, 'L-3002', '2026-09-27');
 
     const fullWindow = await request(app)
       .get('/v1/members')
@@ -541,6 +574,72 @@ describe('members list contract', () => {
       .set(readHeaders);
     expect(unknown.status).toBe(404);
     expect(unknown.body.code).toBe('not_found');
+  });
+
+  it('refuses a manual attendance write for a non-today session and accepts a today one', async () => {
+    await create('L-3003', { joinedOn: '2026-09-01' });
+
+    const pastSeries = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Write Rule Past Series',
+        timezone: 'UTC',
+        schedule: {
+          effectiveFrom: '2026-09-06',
+          rrule: 'FREQ=WEEKLY;BYDAY=SU',
+          endsOn: '2026-10-04',
+        },
+      });
+    expect(pastSeries.status).toBe(201);
+    const pastSeriesId = pastSeries.body.id as string;
+
+    // 2026-09-06 is a held occurrence of the series, but it is not today.
+    const refused = await request(app)
+      .post('/v1/members/L-3003/attendance')
+      .set(writeHeaders)
+      .send({ seriesId: pastSeriesId, date: '2026-09-06' });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('validation_error');
+
+    const [notWritten] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance a
+         join members m on m.id = a.member_id
+        where m.member_no = 'L-3003' and a.session_date = '2026-09-06'`,
+    );
+    expect(Number(notWritten!.count)).toBe(0);
+
+    const todaySeries = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Write Rule Today Series',
+        timezone: 'UTC',
+        schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY', endsOn: day(0) },
+      });
+    expect(todaySeries.status).toBe(201);
+
+    const accepted = await request(app)
+      .post('/v1/members/L-3003/attendance')
+      .set(writeHeaders)
+      .send({ seriesId: todaySeries.body.id, date: day(0) });
+    expect(accepted.status).toBe(201);
+    expect(accepted.body).toMatchObject({ date: day(0), source: 'manual' });
+
+    // The created row is the one the member's attendance collection reads.
+    const attendance = await request(app)
+      .get('/v1/members/L-3003/attendance')
+      .set(readHeaders)
+      .expect(200);
+    const entry = attendance.body.series.find(
+      (item: { seriesName: string }) => item.seriesName === 'Write Rule Today Series',
+    );
+    expect(entry).toMatchObject({ attended: 1, expected: 1 });
+    expect(entry.entries).toContainEqual({
+      id: accepted.body.id,
+      date: day(0),
+      source: 'manual',
+    });
   });
 
   it('aggregates a page of 25 rows with the same number of queries as one row', async () => {

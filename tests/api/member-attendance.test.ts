@@ -59,12 +59,24 @@ async function createEvent(
   return response.body.id as string;
 }
 
-async function attend(eventId: string, memberNo: string, date: string): Promise<void> {
-  await request(app)
-    .post(`/v1/events/${eventId}/attendance`)
-    .set(writeHeaders)
-    .send({ memberNo, date })
-    .expect(201);
+/**
+ * Seeds a historical attendance row. Per-member writes are accepted only for a
+ * session dated today, so history is inserted directly; the read paths under
+ * test never go through the write rule.
+ */
+async function seedAttendance(eventId: string, memberNo: string, date: string): Promise<void> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [inserted] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     on conflict (event_instance_id, session_date, member_id) do nothing
+     returning id`,
+    [member!.id, eventId, date],
+  );
+  expect(inserted).toBeTruthy();
 }
 
 async function summary(memberNo: string, from: string, to: string) {
@@ -105,9 +117,9 @@ beforeAll(async () => {
   await createMember('ATT-HEADCOUNT', { joinedOn: day(0) });
 
   await createMember('ATT-MAIN');
-  await attend(summaryEvent.get(-50)!, 'ATT-MAIN', day(-50));
-  await attend(summaryEvent.get(-30)!, 'ATT-MAIN', day(-30));
-  await attend(summaryEvent.get(-10)!, 'ATT-MAIN', day(-10));
+  await seedAttendance(summaryEvent.get(-50)!, 'ATT-MAIN', day(-50));
+  await seedAttendance(summaryEvent.get(-30)!, 'ATT-MAIN', day(-30));
+  await seedAttendance(summaryEvent.get(-10)!, 'ATT-MAIN', day(-10));
 
   await createMember('ATT-JOINED', { joinedOn: day(-25) });
 
@@ -120,10 +132,10 @@ beforeAll(async () => {
   await createMember('PROFILE-FEW', { joinedOn: day(-4) });
 
   for (const offset of [-7, -6, -5]) {
-    await attend(profileEvent.get(offset)!, 'PROFILE-REG', day(offset));
+    await seedAttendance(profileEvent.get(offset)!, 'PROFILE-REG', day(offset));
   }
   for (const offset of [-7, -6]) {
-    await attend(profileEvent.get(offset)!, 'PROFILE-NON', day(offset));
+    await seedAttendance(profileEvent.get(offset)!, 'PROFILE-NON', day(offset));
   }
 });
 
@@ -211,7 +223,7 @@ describe('attendance summary', () => {
     const included = await summary('ATT-MINISTRY', day(-60), day(-10));
     expect(included.body.expected).toBe(6);
 
-    await attend(ministryEventId, 'ATT-MINISTRY', day(-25));
+    await seedAttendance(ministryEventId, 'ATT-MINISTRY', day(-25));
     const attended = await summary('ATT-MINISTRY', day(-60), day(-10));
     expect(attended.body.attended).toBe(1);
     expect(attended.body.events[0]).toMatchObject({

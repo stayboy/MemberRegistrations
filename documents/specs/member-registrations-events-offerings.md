@@ -462,8 +462,18 @@ separate Attendance section, that is Q1.
   `sessions[].note`; the API rejects one without it with `422 reason_required`. A legacy row without a
   reason is displayed as "No reason recorded".
 - FR-4b: The event detail MUST show, per session, the latest capture's time and whether it ended the
-  session — "Live · 10:42" or "End of session · 11 Nov" — derived from the capture's `asOf` and `ended`.
-  The UI MUST NOT read a stored live flag or ask the operator to declare "live".
+  session — "Live · 11 Nov 10:42" while the session's window is current, "Not started · 11 Nov 10:42" for
+  an open session on or after today whose window has not begun, "Past session · 11 Nov 10:42" for an open
+  session whose window has passed, or "End of session · 11 Nov 11:05" once ended. The day is always shown
+  because the closing capture may fall on a later day, and the stamp is the event timezone's wall clock
+  with no zone suffix (the header names the zone), never the browser's. The time and ended-ness come from
+  the session's `capture` field (the latest capture of either channel, import or headcount); the
+  live/not-started/past split is computed from the session's date and start/end window against the clock
+  in the event timezone, per the live definition in the API spec's import section. A session with no
+  capture shows "No capture yet", and a
+  cancelled session never shows "Live"; one that is not ended shows "Cancelled · 10:42 GMT" with its
+  capture time. The UI MUST NOT read a stored live flag or ask the operator to
+  declare "live".
 - FR-5: The series list MUST use `GET /v1/series` and show name, ministry, a human-readable schedule,
   next occurrence and archived state.
 - FR-6: The series detail MUST show each schedule version (`effectiveFrom`, `rrule`, `endsOn`),
@@ -503,10 +513,13 @@ separate Attendance section, that is Q1.
   attachments made to the series itself; offerings attached per event are not counted. An archived
   series still shows the tiles, read-only (AC-10). The mock's attached-offerings rail and the
   per-occurrence attendance/offering columns are separate queued work, not part of this requirement.
-- FR-6f: An attendance import MUST be a capture. The page MUST show the computed state (live or past) and
-  one **End of session** action; it MUST NOT ask the operator to choose "live". A capture outside the live
-  window is the end capture, live captures may repeat, and after the close the page MUST refuse another
-  capture with the API's `409 session_closed`.
+- FR-6f: An attendance import MUST be a capture. The page MUST show the computed state — "Live · recorded
+  10:42" with one **End of session** action while live, "Not started - this capture will end it" for an open session on or after today whose window has not begun, "Past session — this capture will end it" for an
+  open session whose window has passed, or "End of session · recorded 11:05" once closed with the action
+  disabled; with no capture yet the state shows without a time — "Live", "Not started — this capture will
+  end it" or "Past session — this capture will end it". It MUST NOT ask the
+  operator to choose "live". An import capture outside the live window is the end capture (a headcount never auto-ends), live captures may
+  repeat, and after the close the page MUST refuse another capture with the API's `409 session_closed`. A cancelled session is read-only and offers no capture.
 - FR-7: “Add schedule version”, “Add exception”, “Remove exception” and “Archive series” MUST use the
   documented series endpoints. A `cancelled` exception MUST carry a non-empty reason in `note`; the API
   rejects one without it with `422 reason_required`. Archive MUST confirm; the API preserves history
@@ -660,11 +673,11 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-6a: **Given** a cancelled series exception or an event session written as cancelled, **When** it is submitted without a reason, **Then** the API answers `422 reason_required` and nothing is written; a legacy row without a reason is shown as "No reason recorded". (FR-4a, FR-7)
 
-### AC-4a: **Given** a session with captures, **When** the event detail opens, **Then** its row shows the latest capture's time and whether it ended the session, computed from `asOf`/`ended`, never from a stored live flag. (FR-4b)
+### AC-4a: **Given** a session with captures, **When** the event detail opens, **Then** its row shows the latest capture's time and whether it ended the session, the time and ended-ness taken from the session's `capture` field (latest of either channel) and the live/not-started/past split computed from the session window in the event timezone, never from a stored live flag; **Given** an open session whose window has passed, **Then** the row reads "Past session · …"; **Given** no capture, **Then** the row reads "No capture yet"; **Given** an open session on or after today whose window has not begun, **Then** the row reads "Not started · …"; **Given** a cancelled session, **Then** the row never reads "Live" and, when the session is not ended, reads "Cancelled · …". (FR-4b)
 
 ### AC-7: **Given** a series-backed event or a series, **When** “Import attendance” is chosen, **Then** the import flow opens at `/imports/attendance?event=<id>` seeded with that event, or at `?series=<id>` with the picker filtered to that series (`date` optional), a successful batch invalidates the events, series and imports queries, and a standalone event shows no entry. (FR-8)
 
-### AC-7a: **Given** a live session, **When** an import is captured without ending it, **Then** the page shows "Live" with the capture time and another capture may replace it; **Given** a capture outside the window or an End of session action, **Then** the session closes and a further capture is refused. (FR-6f)
+### AC-7a: **Given** a live session, **When** an import is captured without ending it, **Then** the page shows "Live" with the capture time and one **End of session** action, and another capture may replace it; **Given** a past open session, **Then** the page reads "Past session — this capture will end it"; **Given** an import captured outside the live window with no prior close, **Then** it is accepted as the end capture and the session closes; **Given** an ended session, **Then** the page shows "End of session" with the action disabled and a further capture is refused; **Given** a not-yet-started open session, **Then** the page reads "Not started — this capture will end it"; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled session, **Then** the page offers no capture. (FR-6f)
 
 ### AC-8: **Given** an event attendance report, **When** it loads, **Then** one aggregate request returns present/expected and optional member rows; no per-member requests are made. (FR-10, FR-11)
 
@@ -794,6 +807,19 @@ export interface EventSession {
   endTime: string | null;
   /** 'held' is reserved and never written to a session; held/upcoming are date-derived (FR-6c). */
   status: EventDateStatus;
+  venueType?: VenueType;
+  /**
+   * The session's capture state. `asOf` is the later `asOf` of the current (non-superseded) headcount
+   * observation and the latest import batch (latest by `asOf`, then `createdAt`, then `id`); when the
+   * two share an `asOf`, the one with the later recorded time (headcount `recordedAt` vs batch
+   * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the session's shared
+   * close state: `true` when any capture for the session (import or headcount, superseded rows
+   * included) carries `ended`, `false` otherwise. `asOf` is an ISO-8601 instant, never zone-shifted;
+   * the client renders it in the event timezone. Null when the session has no capture. The detail takes
+   * the capture time and ended-ness from it and computes live/past from the session's date and window
+   * (FR-4b).
+   */
+  capture: { asOf: string; ended: boolean } | null;
   /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
   note: string | null;
   present: number;
@@ -1313,10 +1339,18 @@ recommended"). Ids are `S-Qn`.
 
 ## Change log
 
+- 2026-11-11: the FR-4b/FR-6f examples are corrected to the rendered, owner-signed form: the event detail
+  line always carries the day and renders in the event timezone with no zone suffix, the import page says
+  "recorded", and the ended action is **disabled** (not absent). The wording, not the behaviour, changed;
+  the signed `v2-imports/03` mock is corrected on its next refresh.
+
 - 2026-11-11: attendance becomes a capture model: live is computed from the session date and window, the
   operator only ends the session, one close is shared across channels, and the event detail shows the
-  latest capture per session. FR-4b/FR-6f and AC-4a/AC-7a added; the API spec carries the contract and
-  migration `0020_attendance_captures`.
+  latest capture per session. The event session DTO gains `capture: { asOf, ended } | null` (latest of
+  either channel; `asOf` an ISO-8601 instant rendered in the event timezone) — the named §17 pre-authorisation for that wire addition. FR-4b/FR-6f and
+  AC-4a/AC-7a added; the capture time shows in the event timezone, End is offered only while live, and the
+  page carries a past-open label. The API spec carries the contract and migration
+  `0020_attendance_captures`.
 
 - 2026-11-11: the Import-attendance entry is placed on the series detail and on a series-backed
   event's detail, links with `event=<id>` or `series=<id>`, and a standalone event shows no entry; the

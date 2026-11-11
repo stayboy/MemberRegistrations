@@ -89,6 +89,8 @@ export const eventSessionSchema = z.object({
   endTime: z.string().nullable(),
   status: eventSessionStatusSchema,
   venueType: venueTypeSchema.optional(),
+  /** The latest capture of either channel, with the shared close state; null when none (FR-4b). */
+  capture: z.object({ asOf: z.string(), ended: z.boolean() }).nullable(),
   /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
   note: z.string().nullable(),
   present: z.number().int(),
@@ -259,6 +261,8 @@ export const headcountInputSchema = z
     childUnspecified: headcountBucketSchema.default(0),
     asOf: z.string().datetime({ offset: true }).optional(),
     supersedesId: z.string().uuid().optional(),
+    /** True closes the session; a headcount never ends automatically. */
+    ended: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     const total =
@@ -290,6 +294,7 @@ export const headcountSchema = z.object({
   childFemale: z.number().int(),
   childUnspecified: z.number().int(),
   total: z.number().int(),
+  ended: z.boolean(),
   recordedBy: z.string(),
   recordedAt: z.string(),
   supersedesId: z.string().nullable(),

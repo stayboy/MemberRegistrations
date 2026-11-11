@@ -79,6 +79,8 @@ export const GLOSSARY = {
   },
   'error.code_invalid': { full: 'Invalid code', short: 'Bad code' },
   'error.code_used': { full: 'Code already used', short: 'Code used' },
+  'error.session_closed': { full: 'Session already closed', short: 'Closed' },
+  'error.session_not_today': { full: 'Attendance is only for today', short: 'Not today' },
   'error.not_shepherd': { full: 'Not your member', short: 'Not yours' },
   'error.not_senior': { full: 'Not a senior presbyter', short: 'Not senior' },
   'error.delegate_required': { full: 'Delegate first', short: 'Delegate' },

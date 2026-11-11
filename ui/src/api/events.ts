@@ -22,6 +22,11 @@ export interface EventSessionSummary {
   readonly endTime: string | null;
   readonly status: EventSessionStatus;
   readonly venueType?: EventVenueType;
+  /**
+   * The latest capture of either channel, with the session's shared close state
+   * (FR-4b). Null when the session has no capture.
+   */
+  readonly capture?: { readonly asOf: string; readonly ended: boolean } | null;
   /** A non-empty reason when the session is cancelled; null on a legacy cancellation (FR-4a). */
   readonly note: string | null;
 }
@@ -109,6 +114,8 @@ export interface EventListItem {
   /** Null for a standalone event; attendance imports require a series-backed event. */
   readonly seriesId: string | null;
   readonly startDate: string;
+  /** The event's IANA zone: the session window and capture times use it. */
+  readonly timezone: string;
   readonly status: EventStatus;
   readonly sessions: readonly EventSessionSummary[];
 }

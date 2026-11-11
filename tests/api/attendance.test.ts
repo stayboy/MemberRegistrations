@@ -12,6 +12,79 @@ function dobYearsAgo(years: number): string {
   return `${new Date().getUTCFullYear() - years}-01-01`;
 }
 
+/** A UTC calendar date `offset` days from today. */
+function day(offset: number): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+/** A series whose only occurrence is today, for the today-gated writes. */
+async function createTodaySeries(name: string): Promise<string> {
+  const response = await request(app)
+    .post('/v1/series')
+    .set(writeHeaders)
+    .send({
+      name,
+      timezone: 'UTC',
+      schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY', endsOn: day(0) },
+    });
+  expect(response.status).toBe(201);
+  return response.body.id as string;
+}
+
+/**
+ * Seeds a historical attendance row for a series date. Per-member writes are
+ * accepted only for a session dated today, so history is inserted directly and
+ * the event instance is minted the way the write path mints it; the read paths
+ * under test never go through the write rule.
+ */
+async function seedAttendance(seriesId: string, memberNo: string, date: string): Promise<void> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [instance] = await harness.db.query<{ id: string }>(
+    `insert into event_instances (
+       series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
+     )
+     select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
+            jsonb_build_array(jsonb_build_object('date', $2::date, 'status', 'scheduled'))
+       from event_series s where s.id = $1
+     on conflict (series_id, start_date) do update set start_date = excluded.start_date
+     returning id`,
+    [seriesId, date],
+  );
+  const [inserted] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     on conflict (event_instance_id, session_date, member_id) do nothing
+     returning id`,
+    [member!.id, instance!.id, date],
+  );
+  expect(inserted).toBeTruthy();
+}
+
+/** Seeds a manual row on an event session, for the report's manual coverage. */
+async function seedManualAttendance(
+  eventId: string,
+  memberNo: string,
+  date: string,
+): Promise<string> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [row] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     returning id`,
+    [member!.id, eventId, date],
+  );
+  return row!.id;
+}
+
 beforeAll(async () => {
   harness = await createTestApp();
   app = harness.app;
@@ -81,23 +154,59 @@ describe('series and occurrences', () => {
 });
 
 describe('attendance counts', () => {
-  it('records a manual entry and reports attended out of expected', async () => {
+  it('reports attended out of expected from the recorded history', async () => {
+    // Per-member writes are accepted only for a session dated today, so the
+    // January history is seeded directly; the count and status are unchanged.
     for (const date of ['2026-01-04', '2026-01-18']) {
-      const response = await request(app)
-        .post('/v1/members/M-5001/attendance')
-        .set(writeHeaders)
-        .send({ seriesId, date });
-      expect(response.status).toBe(201);
-      expect(response.body.source).toBe('manual');
+      await seedAttendance(seriesId, 'M-5001', date);
     }
 
     const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
 
-    const entry = attendance.body.series[0];
+    const entry = attendance.body.series.find(
+      (item: { seriesName: string }) => item.seriesName === 'Sunday Main English Service',
+    );
     expect(entry.seriesName).toBe('Sunday Main English Service');
     expect(entry.attended).toBe(2);
     expect(entry.expected).toBe(5);
     expect(entry.status).toBe('completed');
+  });
+
+  it('records a manual entry for a session dated today in the event timezone', async () => {
+    const todaySeriesId = await createTodaySeries('Today Manual Service');
+
+    const response = await request(app)
+      .post('/v1/members/M-5001/attendance')
+      .set(writeHeaders)
+      .send({ seriesId: todaySeriesId, date: day(0) });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ source: 'manual', date: day(0) });
+
+    const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
+    const entry = attendance.body.series.find(
+      (item: { seriesName: string }) => item.seriesName === 'Today Manual Service',
+    );
+    expect(entry).toMatchObject({ attended: 1, expected: 1 });
+  });
+
+  it('refuses a manual entry for a session that is not today', async () => {
+    // 2026-01-25 is a held occurrence of the series, but it is not today.
+    const response = await request(app)
+      .post('/v1/members/M-5001/attendance')
+      .set(writeHeaders)
+      .send({ seriesId, date: '2026-01-25' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('today');
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance a
+         join members m on m.id = a.member_id
+        where m.member_no = 'M-5001' and a.session_date = '2026-01-25'`,
+    );
+    expect(Number(row!.count)).toBe(0);
   });
 
   it('refuses a date the series did not meet', async () => {
@@ -110,12 +219,19 @@ describe('attendance counts', () => {
   });
 
   it('rejects a duplicate manual entry', async () => {
-    const response = await request(app)
+    const duplicateSeriesId = await createTodaySeries('Duplicate Manual Service');
+
+    const first = await request(app)
       .post('/v1/members/M-5001/attendance')
       .set(writeHeaders)
-      .send({ seriesId, date: '2026-01-04' });
+      .send({ seriesId: duplicateSeriesId, date: day(0) });
+    expect(first.status).toBe(201);
 
-    expect(response.status).toBe(409);
+    const second = await request(app)
+      .post('/v1/members/M-5001/attendance')
+      .set(writeHeaders)
+      .send({ seriesId: duplicateSeriesId, date: day(0) });
+    expect(second.status).toBe(409);
   });
 
   it('drops a cancelled date from the denominator', async () => {
@@ -127,8 +243,11 @@ describe('attendance counts', () => {
 
     const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
 
-    expect(attendance.body.series[0].expected).toBe(4);
-    expect(attendance.body.series[0].attended).toBe(2);
+    const entry = attendance.body.series.find(
+      (item: { seriesName: string }) => item.seriesName === 'Sunday Main English Service',
+    );
+    expect(entry.expected).toBe(4);
+    expect(entry.attended).toBe(2);
   });
 });
 
@@ -146,11 +265,77 @@ describe('imports', () => {
     eventId: string;
     sessionDate: string;
     rows: Array<{ memberNo: string; datetime?: string }>;
+    ended?: boolean;
   }) {
     return request(app).post('/v1/imports/attendance').set(writeHeaders).send(body);
   }
 
+  /**
+   * A series-backed event with a single session, inserted directly. A capture of
+   * a past session is that session's end capture, so every test that needs a
+   * successful import takes its own session.
+   */
+  async function sessionEvent(date: string): Promise<{ id: string; eventNo: string }> {
+    const [series] = await harness.db.query<{ timezone: string }>(
+      'select timezone from event_series where id = $1',
+      [seriesId],
+    );
+    const eventNo = `EVT-IMPORT-${date}`;
+    const [row] = await harness.db.query<{ id: string }>(
+      `insert into event_instances (
+         event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
+         venue_type, status, source, sessions
+       )
+       values ($1,$2,$3,$4,$5,$5,'09:00','10:30','auditorium','scheduled','manual',$6::jsonb)
+       returning id`,
+      [
+        eventNo,
+        seriesId,
+        `Import session ${date}`,
+        series!.timezone,
+        date,
+        JSON.stringify([{ date, startTime: '09:00', endTime: '10:30', status: 'scheduled' }]),
+      ],
+    );
+    return { id: row!.id, eventNo };
+  }
+
+  /** A series-backed event whose session is today, so captures are live. */
+  async function liveSessionEvent(eventNo: string): Promise<string> {
+    const [row] = await harness.db.query<{ id: string }>(
+      `insert into event_instances (
+         event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
+         venue_type, status, source, sessions
+       )
+       values ($1,$2,$3,'UTC',$4,$4,'00:00',null,'auditorium','scheduled','manual',$5::jsonb)
+       returning id`,
+      [
+        eventNo,
+        seriesId,
+        `Live ${eventNo}`,
+        day(0),
+        JSON.stringify([{ date: day(0), startTime: '00:00', endTime: null, status: 'scheduled' }]),
+      ],
+    );
+    return row!.id;
+  }
+
   beforeAll(async () => {
+    // A second member for the live capture and suppression coverage.
+    await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({
+        memberNo: 'M-5002',
+        firstName: 'Bisi',
+        lastName: 'Okafor',
+        gender: 'female',
+        dob: dobYearsAgo(30),
+        // After the October conference, so the register counts there are unchanged.
+        joinedOn: '2026-10-20',
+      })
+      .expect(201);
+
     const generated = await request(app)
       .post('/v1/events/generate')
       .query({ from: '2026-01-01', to: '2026-02-10' })
@@ -243,9 +428,9 @@ describe('imports', () => {
     });
 
     const attendance = await request(app).get('/v1/members/M-5001/attendance').set(readHeaders);
-    const entry = attendance.body.series[0].entries.find(
-      (row: { date: string }) => row.date === '2026-01-04',
-    );
+    const entry = attendance.body.series
+      .find((item: { seriesName: string }) => item.seriesName === 'Sunday Main English Service')
+      .entries.find((row: { date: string }) => row.date === '2026-01-04');
     expect(entry.source).toBe('manual');
   });
 
@@ -308,11 +493,11 @@ describe('imports', () => {
   });
 
   it('stores a time from the datetime and exposes it in the event report', async () => {
-    const target = event('2026-02-01');
+    const target = await sessionEvent('2026-02-15');
     const response = await importAttendance({
       eventId: target.id,
-      sessionDate: '2026-02-01',
-      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01 09:15:30' }],
+      sessionDate: '2026-02-15',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-15 09:15:30' }],
     });
 
     expect(response.status).toBe(201);
@@ -320,12 +505,12 @@ describe('imports', () => {
 
     const report = await request(app)
       .get(`/v1/events/${target.id}/attendance`)
-      .query({ date: '2026-02-01' })
+      .query({ date: '2026-02-15' })
       .set(readHeaders);
 
     const [row] = await harness.db.query<{ id: string }>(
       'select id from attendance where event_instance_id = $1 and session_date = $2',
-      [target.id, '2026-02-01'],
+      [target.id, '2026-02-15'],
     );
     expect(report.body.rows).toEqual([
       {
@@ -342,11 +527,11 @@ describe('imports', () => {
   });
 
   it('imports a lowercase-t datetime and stores the time', async () => {
-    const target = event('2026-02-01');
+    const target = await sessionEvent('2026-02-22');
     const response = await importAttendance({
       eventId: target.id,
-      sessionDate: '2026-02-01',
-      rows: [{ memberNo: 'M-5001', datetime: '2026-02-01t11:45' }],
+      sessionDate: '2026-02-22',
+      rows: [{ memberNo: 'M-5001', datetime: '2026-02-22t11:45' }],
     });
 
     expect(response.status).toBe(201);
@@ -354,7 +539,7 @@ describe('imports', () => {
 
     const report = await request(app)
       .get(`/v1/events/${target.id}/attendance`)
-      .query({ date: '2026-02-01' })
+      .query({ date: '2026-02-22' })
       .set(readHeaders);
 
     expect(report.body.rows[0].sessionTime).toBe('11:45');
@@ -453,10 +638,10 @@ describe('imports', () => {
   });
 
   it('rejects an unknown member and adds nothing', async () => {
-    const target = event('2026-01-25');
+    const target = await sessionEvent('2026-03-01');
     const response = await importAttendance({
       eventId: target.id,
-      sessionDate: '2026-01-25',
+      sessionDate: '2026-03-01',
       rows: [{ memberNo: 'M-9999' }],
     });
 
@@ -467,10 +652,10 @@ describe('imports', () => {
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-       where event_instance_id = $1 and session_date = '2026-01-25'`,
+       where event_instance_id = $1 and session_date = '2026-03-01'`,
       [target.id],
     );
-    expect(Number(attendance!.count)).toBe(1);
+    expect(Number(attendance!.count)).toBe(0);
   });
 
   it('rejects a duplicate memberNo in one file and writes nothing', async () => {
@@ -504,7 +689,9 @@ describe('imports', () => {
     expect(Number(attendance!.count)).toBe(1);
   });
 
-  it('refuses the same occurrence and rows twice with the first batch id', async () => {
+  it('refuses a capture after the session closed, with session_closed rather than a checksum conflict', async () => {
+    // The 2026-02-01 session was ended by its first capture in the batch-record
+    // test; a repeat is refused by the shared close, not by the checksum.
     const target = event('2026-02-01');
     const body = {
       eventId: target.id,
@@ -512,54 +699,78 @@ describe('imports', () => {
       rows: [{ memberNo: 'M-5001', datetime: '2026-02-01T10:30' }],
     };
 
-    const first = await importAttendance(body);
-    expect(first.status).toBe(201);
+    const response = await importAttendance(body);
 
-    const second = await importAttendance(body);
-    expect(second.status).toBe(409);
-    expect(second.headers['content-type']).toContain('application/problem+json');
-    expect(second.body.code).toBe('conflict');
-    expect(second.body.batchId).toBe(first.body.id);
-    expect(second.body.detail).toContain(first.body.id);
-    expect(second.body).not.toHaveProperty('rows');
+    expect(response.status).toBe(409);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.body.code).toBe('session_closed');
+    expect(response.body).not.toHaveProperty('batchId');
+    expect(response.body).not.toHaveProperty('rows');
 
     const [rows] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from import_batches where kind = 'attendance' and checksum = $1",
-      [first.body.checksum],
+      `select count(*)::int as count from import_batches
+        where event_instance_id = $1 and session_date = '2026-02-01'`,
+      [target.id],
     );
     expect(Number(rows!.count)).toBe(1);
   });
 
-  it('honours a deleted imported row suppression on a later import', async () => {
-    const target = event('2026-01-25');
+  it('honours a deleted imported row suppression on a later live capture', async () => {
+    // A suppression survives a capture, so the second capture must be live: the
+    // session is dated today and the first capture did not end it.
+    const targetId = await liveSessionEvent('EVT-IMPORT-LIVE-SUPPRESS');
+
+    const first = await importAttendance({
+      eventId: targetId,
+      sessionDate: day(0),
+      rows: [{ memberNo: 'M-5001' }],
+    });
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ written: 1, skipped: 0 });
+
     const [imported] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-5001' and a.event_instance_id = $1 and a.session_date = '2026-01-25'`,
-      [target.id],
+       where m.member_no = 'M-5001' and a.event_instance_id = $1 and a.session_date = $2`,
+      [targetId, day(0)],
     );
 
     await request(app)
-      .delete(`/v1/events/${target.id}/attendance/${imported!.id}`)
+      .delete(`/v1/events/${targetId}/attendance/${imported!.id}`)
       .set(writeHeaders)
       .expect(204);
 
-    // A different row set has a different checksum, so the duplicate-batch
-    // guard does not fire; the deletion's suppression is what stops the row.
     const again = await importAttendance({
-      eventId: target.id,
-      sessionDate: '2026-01-25',
-      rows: [{ memberNo: 'M-5001', datetime: '2026-01-25T10:00' }],
+      eventId: targetId,
+      sessionDate: day(0),
+      rows: [{ memberNo: 'M-5001' }, { memberNo: 'M-5002' }],
     });
     expect(again.status).toBe(201);
-    expect(again.body).toMatchObject({ written: 0, skipped: 1 });
+    expect(again.body).toMatchObject({ written: 1, skipped: 1 });
 
     const after = await request(app)
-      .get(`/v1/events/${target.id}/attendance`)
-      .query({ date: '2026-01-25' })
+      .get(`/v1/events/${targetId}/attendance`)
+      .query({ date: day(0) })
       .set(readHeaders);
-    expect(after.body.present).toBe(0);
-    expect(after.body.rows).toEqual([]);
+    expect(after.body.present).toBe(1);
+    const [surviving] = await harness.db.query<{ id: string }>(
+      `select a.id from attendance a
+       join members m on m.id = a.member_id
+       where m.member_no = 'M-5002' and a.event_instance_id = $1 and a.session_date = $2`,
+      [targetId, day(0)],
+    );
+    expect(after.body.rows).toEqual([
+      {
+        id: surviving!.id,
+        memberNo: 'M-5002',
+        name: 'Bisi Okafor',
+        gender: 'female',
+        age: 30,
+        status: 'present',
+        source: 'import',
+        sessionTime: null,
+      },
+    ]);
   });
 });
 
@@ -572,16 +783,18 @@ describe('generation backfill', () => {
       await request(app).post('/v1/members').set(writeHeaders).send(member).expect(201);
     }
 
+    // A per-member write is accepted only for a session dated today, so the
+    // series meets today and nowhere else.
     const series = await request(app)
       .post('/v1/series')
       .set(writeHeaders)
       .send({
-        name: 'Backfill Sunday Service',
+        name: 'Backfill Today Service',
         timezone: 'UTC',
         schedule: {
-          effectiveFrom: '2026-12-06',
-          rrule: 'FREQ=WEEKLY;BYDAY=SU',
-          endsOn: '2026-12-06',
+          effectiveFrom: day(0),
+          rrule: 'FREQ=DAILY',
+          endsOn: day(0),
         },
       });
     expect(series.status).toBe(201);
@@ -591,30 +804,37 @@ describe('generation backfill', () => {
     await request(app)
       .post('/v1/members/M-5101/attendance')
       .set(writeHeaders)
-      .send({ seriesId: backfillSeriesId, date: '2026-12-06' })
+      .send({ seriesId: backfillSeriesId, date: day(0) })
       .expect(201);
 
     const [before] = await harness.db.query<{ id: string; event_no: string | null }>(
       `select id, event_no from event_instances
-       where series_id = $1 and start_date = '2026-12-06'`,
-      [backfillSeriesId],
+       where series_id = $1 and start_date = $2`,
+      [backfillSeriesId, day(0)],
     );
     expect(before!.event_no).toBeNull();
 
     const generated = await request(app)
       .post('/v1/events/generate')
-      .query({ from: '2026-12-06', to: '2026-12-06' })
+      .query({ from: day(0), to: day(0) })
       .set(writeHeaders);
     expect(generated.status).toBe(200);
-    expect(generated.body.created).toBe(0);
-    expect(generated.body.skipped).toBe(1);
 
     const [after] = await harness.db.query<{ id: string; event_no: string | null }>(
       `select id, event_no from event_instances
-       where series_id = $1 and start_date = '2026-12-06'`,
-      [backfillSeriesId],
+       where series_id = $1 and start_date = $2`,
+      [backfillSeriesId, day(0)],
     );
+    expect(after!.id).toBe(before!.id);
     expect(after!.event_no).toBeTruthy();
+
+    // Generation is idempotent: the manual instance is numbered, not duplicated.
+    const [instances] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from event_instances
+       where series_id = $1 and start_date = $2`,
+      [backfillSeriesId, day(0)],
+    );
+    expect(Number(instances!.count)).toBe(1);
 
     // The assigned number now lets an attendance import target that instance.
     await request(app)
@@ -622,14 +842,14 @@ describe('generation backfill', () => {
       .set(writeHeaders)
       .send({
         eventId: before!.id,
-        sessionDate: '2026-12-06',
+        sessionDate: day(0),
         rows: [{ memberNo: 'M-5102' }],
       })
       .expect(201);
 
     const report = await request(app)
       .get(`/v1/events/${before!.id}/attendance`)
-      .query({ date: '2026-12-06' })
+      .query({ date: day(0) })
       .set(readHeaders);
     expect(report.status).toBe(200);
     expect(report.body.present).toBe(2);
@@ -764,9 +984,8 @@ describe('event attendance per session', () => {
   let cancelledSessionEventId: string;
   let standaloneEventId: string;
   let seriesId: string;
+  let convertSeriesId: string;
   const memberIds: Record<string, string> = {};
-
-  let duplicateImportBatchId: string;
 
   function importRows(
     eventId: string,
@@ -796,26 +1015,51 @@ describe('event attendance per session', () => {
     status: string;
     startDate: string;
     endDate: string;
-    sessions: Array<{ date: string; status?: string }>;
+    startTime?: string;
+    sessions: Array<{
+      date: string;
+      status?: string;
+      startTime?: string | null;
+      endTime?: string | null;
+    }>;
     seriesId?: string | null;
   }): Promise<string> {
     const [row] = await harness.db.query<{ id: string }>(
       `insert into event_instances (
          event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions, series_id
        )
-       values ($1,$2,'UTC',$3,$4,'17:00','auditorium',$5,'manual',$6::jsonb,$7)
+       values ($1,$2,'UTC',$3,$4,$5,'auditorium',$6,'manual',$7::jsonb,$8)
        returning id`,
       [
         body.eventNo,
         body.name,
         body.startDate,
         body.endDate,
+        body.startTime ?? '17:00',
         body.status,
         JSON.stringify(body.sessions),
         body.seriesId ?? null,
       ],
     );
     return row!.id;
+  }
+
+  /**
+   * An event whose only session is today. Per-member writes are accepted only
+   * for a session dated today, so the write-path coverage gets a fresh event per
+   * test rather than sharing one closed or already-written session.
+   */
+  function todayEvent(eventNo: string, name: string, seriesId?: string | null): Promise<string> {
+    return insertEvent({
+      eventNo,
+      name,
+      status: 'scheduled',
+      startDate: day(0),
+      endDate: day(0),
+      startTime: '00:00',
+      sessions: [{ date: day(0), startTime: '00:00', endTime: null }],
+      seriesId: seriesId ?? null,
+    });
   }
 
   beforeAll(async () => {
@@ -926,6 +1170,10 @@ describe('event attendance per session', () => {
       sessions: [{ date: '2026-12-01', status: 'scheduled' }],
       seriesId: null,
     });
+
+    // An import is series-backed only; a live capture needs its own series, and
+    // the unique (series, start_date) index gives each today event one.
+    convertSeriesId = await createTodaySeries('Convert Today Service');
   });
 
   it('stores an import row on the session date, not the event start date', async () => {
@@ -983,17 +1231,9 @@ describe('event attendance per session', () => {
   });
 
   it('returns present, expected and rows with their source', async () => {
-    const manual = await addManual(eventId, 'M-7002', '2026-10-14');
-    expect(manual.status).toBe(201);
-    expect(manual.body).toMatchObject({
-      memberNo: 'M-7002',
-      name: 'Chika Okafor',
-      gender: 'female',
-      age: 25,
-      sessionDate: '2026-10-14',
-      source: 'manual',
-    });
-    expect(manual.headers.location).toBe(`/v1/events/${eventId}/attendance/${manual.body.id}`);
+    // A manual row is today-only, so this session's manual row is seeded; the
+    // report under test is the read path and is unchanged.
+    const manualId = await seedManualAttendance(eventId, 'M-7002', '2026-10-14');
 
     const response = await readReport(eventId, '2026-10-14');
 
@@ -1023,7 +1263,7 @@ describe('event attendance per session', () => {
           sessionTime: null,
         },
         {
-          id: manual.body.id,
+          id: manualId,
           memberNo: 'M-7002',
           name: 'Chika Okafor',
           gender: 'female',
@@ -1036,21 +1276,44 @@ describe('event attendance per session', () => {
     });
   });
 
+  it('records a manual row for a session dated today and returns its Location', async () => {
+    const target = await todayEvent('EVT-2026-018', 'Today Manual Conference');
+
+    const created = await addManual(target, 'M-7002', day(0));
+
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      memberNo: 'M-7002',
+      name: 'Chika Okafor',
+      gender: 'female',
+      age: 25,
+      sessionDate: day(0),
+      source: 'manual',
+    });
+    expect(created.headers.location).toBe(`/v1/events/${target}/attendance/${created.body.id}`);
+
+    const report = await readReport(target, day(0));
+    expect(report.body.present).toBe(1);
+    expect(report.body.rows[0]).toMatchObject({ memberNo: 'M-7002', source: 'manual' });
+  });
+
   it('carries the attendance id the row delete accepts', async () => {
-    const created = await addManual(eventId, 'M-7002', '2026-10-13');
+    const target = await todayEvent('EVT-2026-019', 'Today Delete Conference');
+
+    const created = await addManual(target, 'M-7002', day(0));
     expect(created.status).toBe(201);
 
-    const before = await readReport(eventId, '2026-10-13');
+    const before = await readReport(target, day(0));
     expect(before.body.rows).toHaveLength(1);
     const rowId = before.body.rows[0].id as string;
     expect(rowId).toBe(created.body.id);
 
     await request(app)
-      .delete(`/v1/events/${eventId}/attendance/${rowId}`)
+      .delete(`/v1/events/${target}/attendance/${rowId}`)
       .set(writeHeaders)
       .expect(204);
 
-    const after = await readReport(eventId, '2026-10-13');
+    const after = await readReport(target, day(0));
     expect(after.body.rows).toEqual([]);
   });
 
@@ -1077,77 +1340,88 @@ describe('event attendance per session', () => {
   });
 
   it('converts an import row to manual and refuses a second manual post', async () => {
-    const converted = await addManual(eventId, 'M-7001', '2026-10-14');
+    const target = await todayEvent('EVT-2026-020', 'Today Convert Conference', convertSeriesId);
+
+    const imported = await importRows(target, day(0), [{ memberNo: 'M-7001' }]);
+    expect(imported.status).toBe(201);
+    expect(imported.body).toMatchObject({ written: 1, skipped: 0 });
+
+    const converted = await addManual(target, 'M-7001', day(0));
     expect(converted.status).toBe(201);
     expect(converted.body.source).toBe('manual');
 
-    const duplicate = await addManual(eventId, 'M-7001', '2026-10-14');
+    const duplicate = await addManual(target, 'M-7001', day(0));
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.code).toBe('conflict');
 
-    const report = await readReport(eventId, '2026-10-14');
-    expect(report.body.present).toBe(2);
+    const report = await readReport(target, day(0));
+    expect(report.body.present).toBe(1);
     expect(report.body.importedRows).toBe(0);
-    expect(report.body.rows.map((row: { source: string }) => row.source)).toEqual([
-      'manual',
-      'manual',
-    ]);
+    expect(report.body.rows.map((row: { source: string }) => row.source)).toEqual(['manual']);
   });
 
   it('deletes a manual row', async () => {
-    const created = await addManual(eventId, 'M-7003', '2026-10-13');
+    const target = await todayEvent('EVT-2026-021', 'Today Delete Only Conference');
+
+    const created = await addManual(target, 'M-7003', day(0));
     expect(created.status).toBe(201);
 
     await request(app)
-      .delete(`/v1/events/${eventId}/attendance/${created.body.id}`)
+      .delete(`/v1/events/${target}/attendance/${created.body.id}`)
       .set(writeHeaders)
       .expect(204);
 
-    const report = await readReport(eventId, '2026-10-13');
+    const report = await readReport(target, day(0));
     expect(report.body.present).toBe(0);
     expect(report.body.rows).toEqual([]);
   });
 
-  it('suppresses a deleted import row against a later import', async () => {
-    const imported = await importRows(eventId, '2026-10-15', [{ memberNo: 'M-7003' }]);
+  it('suppresses a deleted import row against a later live capture', async () => {
+    // A suppression survives a capture, and captures repeat only while the
+    // session is live, so this session is dated today.
+    const suppressSeriesId = await createTodaySeries('Suppress Today Service');
+    const target = await todayEvent(
+      'EVT-2026-022',
+      'Today Suppression Conference',
+      suppressSeriesId,
+    );
+
+    const imported = await importRows(target, day(0), [{ memberNo: 'M-7003' }]);
     expect(imported.status).toBe(201);
 
     const [row] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-7003' and a.event_instance_id = $1 and a.session_date = '2026-10-15'`,
-      [eventId],
+       where m.member_no = 'M-7003' and a.event_instance_id = $1 and a.session_date = $2`,
+      [target, day(0)],
     );
 
     await request(app)
-      .delete(`/v1/events/${eventId}/attendance/${row!.id}`)
+      .delete(`/v1/events/${target}/attendance/${row!.id}`)
       .set(writeHeaders)
       .expect(204);
 
     const [suppression] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance_suppressions
-       where member_id = $1 and event_instance_id = $2 and session_date = '2026-10-15'`,
-      [memberIds['M-7003'], eventId],
+       where member_id = $1 and event_instance_id = $2 and session_date = $3`,
+      [memberIds['M-7003'], target, day(0)],
     );
     expect(Number(suppression!.count)).toBe(1);
 
-    // A different row set has a different checksum, so the duplicate-batch
-    // guard does not fire; the suppression is what stops the deleted member.
-    const again = await importRows(eventId, '2026-10-15', [
+    const again = await importRows(target, day(0), [
       { memberNo: 'M-7003' },
       { memberNo: 'M-7001' },
     ]);
     expect(again.status).toBe(201);
     expect(again.body).toMatchObject({ written: 1, skipped: 1 });
-    duplicateImportBatchId = again.body.id as string;
 
-    const report = await readReport(eventId, '2026-10-15');
+    const report = await readReport(target, day(0));
     expect(report.body.present).toBe(1);
     const [surviving] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-7001' and a.event_instance_id = $1 and a.session_date = '2026-10-15'`,
-      [eventId],
+       where m.member_no = 'M-7001' and a.event_instance_id = $1 and a.session_date = $2`,
+      [target, day(0)],
     );
     expect(report.body.rows).toEqual([
       {
@@ -1177,23 +1451,21 @@ describe('event attendance per session', () => {
       .expect(404);
   });
 
-  it('refuses a repeat of the same occurrence and rows, and creates no second batch', async () => {
-    const response = await importRows(eventId, '2026-10-15', [
-      { memberNo: 'M-7003' },
-      { memberNo: 'M-7001' },
-    ]);
+  it('refuses a capture after the session closed, with session_closed rather than a checksum conflict', async () => {
+    // 2026-10-14 was ended by its first capture, which the report test reads back.
+    const response = await importRows(eventId, '2026-10-14', [{ memberNo: 'M-7001' }]);
 
     expect(response.status).toBe(409);
-    expect(response.body.code).toBe('conflict');
-    expect(response.body.batchId).toBe(duplicateImportBatchId);
-    expect(response.body.detail).toContain(duplicateImportBatchId);
+    expect(response.body.code).toBe('session_closed');
+    expect(response.body).not.toHaveProperty('batchId');
+    expect(response.body).not.toHaveProperty('rows');
 
     const [row] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from import_batches
-       where event_instance_id = $1 and session_date = '2026-10-15'`,
+       where event_instance_id = $1 and session_date = '2026-10-14'`,
       [eventId],
     );
-    expect(Number(row!.count)).toBe(2);
+    expect(Number(row!.count)).toBe(1);
   });
 
   it('refuses a standalone event, and writes nothing', async () => {
@@ -1276,13 +1548,17 @@ describe('event attendance per session', () => {
   });
 
   it('rejects an unknown member with 404', async () => {
-    const unknown = await addManual(eventId, 'M-9999', '2026-10-14');
+    const target = await todayEvent('EVT-2026-023', 'Today Unknown Member Conference');
+
+    const unknown = await addManual(target, 'M-9999', day(0));
     expect(unknown.status).toBe(404);
     expect(unknown.body.code).toBe('not_found');
   });
 
   it('rejects a manual write for an archived member', async () => {
-    const response = await addManual(eventId, 'M-7004', '2026-10-14');
+    const target = await todayEvent('EVT-2026-024', 'Today Archived Member Conference');
+
+    const response = await addManual(target, 'M-7004', day(0));
     expect(response.status).toBe(404);
     expect(response.body.code).toBe('not_found');
   });

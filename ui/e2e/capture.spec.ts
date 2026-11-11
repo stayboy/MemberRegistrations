@@ -238,6 +238,17 @@ test('imports attendance', async ({ page }) => {
   await capture(page, 'imports-attendance');
 });
 
+test('headcount capture', async ({ page }) => {
+  await openScreen(page, '/ussd/headcount', { width: 1440, height: 900 });
+  await expect(page.getByRole('heading', { level: 1, name: 'USSD headcount' })).toBeVisible();
+  // The USSD page selects an event and a session before it reads a capture.
+  await page.getByRole('combobox', { name: 'Event' }).click();
+  await page.getByRole('option', { name: /Foundation service/ }).click();
+  await expect(page.getByRole('button', { name: 'Record headcount' })).toBeVisible();
+  await expect(page.getByText('Current headcount')).toBeVisible();
+  await capture(page, 'headcount-capture');
+});
+
 test('imports batch lookup', async ({ page }) => {
   await openScreen(page, '/imports/batches', { width: 1440, height: 900 });
   await expect(page.getByRole('heading', { level: 1, name: 'Batch lookup' })).toBeVisible();

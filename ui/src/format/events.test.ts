@@ -11,6 +11,7 @@ import {
   offeringsLabel,
   seriesColumnLabel,
   seriesLabel,
+  sessionCaptureLine,
   sessionAttendanceLabels,
   sessionSourceLabel,
   sessionStatusLabel,
@@ -101,5 +102,35 @@ describe('event formatting', () => {
     expect(offeringsLabel(0)).toBe('0 offerings');
     expect(offeringsLabel(1)).toBe('1 offering');
     expect(offeringsLabel(3)).toBe('3 offerings');
+  });
+});
+
+describe('sessionCaptureLine', () => {
+  const captureSession = {
+    date: '2026-01-04',
+    startTime: '09:00',
+    endTime: '11:00',
+    timezone: 'Pacific/Auckland',
+    status: 'scheduled' as const,
+    capture: { asOf: '2026-01-04T23:30:00.000Z', ended: true },
+  };
+
+  it('renders the capture instant in the event timezone, date included', () => {
+    // 23:30 UTC is 12:30 the next day in Auckland, not the host zone's 23:30.
+    expect(sessionCaptureLine(captureSession, new Date('2026-01-05T00:30:00.000Z'))).toBe(
+      'End of session · 5 Jan 12:30',
+    );
+  });
+
+  it('says No capture yet, and Cancelled for a cancelled session with none', () => {
+    expect(
+      sessionCaptureLine({ ...captureSession, capture: null }, new Date('2026-01-05T00:30:00.000Z')),
+    ).toBe('No capture yet');
+    expect(
+      sessionCaptureLine(
+        { ...captureSession, status: 'cancelled', capture: null },
+        new Date('2026-01-05T00:30:00.000Z'),
+      ),
+    ).toBe('Cancelled');
   });
 });

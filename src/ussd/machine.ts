@@ -515,7 +515,11 @@ function memberName(firstName: string | null, lastName: string | null): string {
 }
 
 /** A code error never reveals whether an unknown, expired, used or voided code exists. */
-function codeErrorKey(error: unknown, usedKey: GlossaryKey = 'error.code_invalid'): GlossaryKey {
+function codeErrorKey(
+  error: unknown,
+  usedKey: GlossaryKey = 'error.code_invalid',
+  attendancePunch = false,
+): GlossaryKey {
   const code = (error as { code?: string }).code;
   switch (code) {
     case 'too_many_tries':
@@ -532,6 +536,13 @@ function codeErrorKey(error: unknown, usedKey: GlossaryKey = 'error.code_invalid
       return 'error.delegate_required';
     case 'delegation_exists':
       return 'error.delegate_required';
+    case 'session_closed':
+      return attendancePunch ? 'error.session_closed' : 'error.code_invalid';
+    case 'validation_error':
+      // Only the punch flow can reach a validation refusal here (its own
+      // event/session/member are always supplied), and that refusal is the
+      // today rule; registration keeps the opaque code error.
+      return attendancePunch ? 'error.session_not_today' : 'error.code_invalid';
     default:
       return 'error.code_invalid';
   }
@@ -2676,7 +2687,7 @@ export async function advance(
         done: true,
       };
     } catch (error) {
-      const key = codeErrorKey(error);
+      const key = codeErrorKey(error, 'error.code_invalid', true);
       if (key === 'error.too_many_tries') {
         return {
           state: 'error',

@@ -73,6 +73,14 @@ async function insertAttendance(
   );
 }
 
+/** A UTC calendar date `offset` days from today. */
+function day(offset: number): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
 function listEvents(query: Record<string, string | number> = {}) {
   return request(harness.app).get('/v1/events').query(query).set(readHeaders);
 }
@@ -261,6 +269,7 @@ describe('GET /v1/events', () => {
           startTime: '09:00',
           endTime: '10:30',
           status: 'held',
+          capture: null,
           note: null,
           present: 2,
           expected: 0,
@@ -493,6 +502,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        capture: null,
         note: null,
         present: 0,
         expected: 0,
@@ -504,6 +514,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        capture: null,
         note: null,
         present: 0,
         expected: 0,
@@ -515,6 +526,7 @@ describe('POST /v1/events', () => {
         startTime: '17:30',
         endTime: '20:00',
         status: 'scheduled',
+        capture: null,
         note: null,
         present: 0,
         expected: 0,
@@ -598,10 +610,18 @@ describe('POST /v1/events', () => {
   });
 
   it('creates a headcount-only event and refuses per-member attendance', async () => {
+    // A per-member write is accepted only for a session dated today, so the
+    // headcount-only refusal is checked on today's session; the old rule is
+    // exercised after the date gate has passed.
     const created = await createEvent({
       ...validBody,
       eventNo: 'SC-HEADCOUNT',
       name: 'Headcount-only Rally',
+      timezone: 'UTC',
+      startDate: day(0),
+      endDate: day(0),
+      startTime: '00:00',
+      sessions: [{ date: day(0) }],
       tracksMembers: false,
     });
     expect(created.status).toBe(201);
@@ -615,14 +635,14 @@ describe('POST /v1/events', () => {
     const manual = await request(harness.app)
       .post(`/v1/events/${id}/attendance`)
       .set(writeHeaders)
-      .send({ memberNo: 'EL-001', date: '2026-12-01' });
+      .send({ memberNo: 'EL-001', date: day(0) });
     expect(manual.status).toBe(422);
     expect(manual.body.code).toBe('headcount_only');
 
     // The per-session report still reads, with no fabricated rows.
     const report = await request(harness.app)
       .get(`/v1/events/${id}/attendance`)
-      .query({ date: '2026-12-01' })
+      .query({ date: day(0) })
       .set(readHeaders)
       .expect(200);
     expect(report.body.rows).toEqual([]);

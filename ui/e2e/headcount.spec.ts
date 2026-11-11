@@ -42,7 +42,7 @@ test('the headcount page is read-first and records and corrects through dialogs'
   await recordDialog.getByLabel('As of').fill('2999-01-10T10:15');
   await recordDialog.getByLabel('Adult men').fill('20');
   await recordDialog.getByLabel('Adult women').fill('10');
-  await recordDialog.getByLabel('Children (unspecified)').fill('5');
+  await recordDialog.getByLabel('Children', { exact: true }).fill('5');
   await expect(recordDialog.getByText('Total 35')).toBeVisible();
   await recordDialog.getByRole('button', { name: 'Record headcount' }).click();
 

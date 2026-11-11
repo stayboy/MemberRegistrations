@@ -34,6 +34,7 @@ import {
   formatPresentExpected,
   offeringsLabel,
   seriesLabel,
+  sessionCaptureLine,
   sessionSourceLabel,
   sessionStatusLabel,
   venueLabel,
@@ -350,6 +351,19 @@ export function EventDetailPage() {
                                   {item.note ? `Reason: ${item.note}` : 'No reason recorded'}
                                 </Text>
                               ) : null}
+                              <Text size={200} className={styles.muted}>
+                                {sessionCaptureLine(
+                                  {
+                                    date: item.date,
+                                    startTime: item.startTime,
+                                    endTime: item.endTime,
+                                    timezone: event.timezone,
+                                    status: item.status,
+                                    capture: item.capture ?? null,
+                                  },
+                                  new Date(),
+                                )}
+                              </Text>
                             </div>
                           </TableCell>
                           <TableCell>{sessionSourceLabel(item.source)}</TableCell>

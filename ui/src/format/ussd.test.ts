@@ -200,9 +200,9 @@ describe('headcount entry', () => {
       'childUnspecified',
     ]);
     expect(headcountFields('children').map((field) => field.key)).toEqual([
-      'adultUnspecified',
       'childMale',
       'childFemale',
+      'adultUnspecified',
     ]);
     expect(headcountFields('mixed').map((field) => field.key)).toEqual([
       'adultMale',
@@ -267,6 +267,7 @@ describe('headcount entry', () => {
       childFemale: 0,
       childUnspecified: 9,
       total: 142,
+      ended: false,
       recordedBy: 'demo.officer',
       recordedAt: '2026-11-08T10:44:00.000Z',
       supersedesId: null,

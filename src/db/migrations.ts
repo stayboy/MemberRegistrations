@@ -1038,4 +1038,19 @@ create table event_session_offering_count_lines (
 );
 `,
   },
+  {
+    version: '0020_attendance_captures',
+    sql: `
+-- Attendance is a capture model: every import batch and every headcount
+-- observation is a capture stamped with the moment it observed the session.
+-- Live is computed from the session window; the only stored operator input is
+-- 'ended'. One close per (event, session) is derived from any ended capture, so
+-- there is no session-close table.
+alter table import_batches add column as_of timestamptz default now();
+update import_batches set as_of = created_at;
+alter table import_batches alter column as_of set not null;
+alter table import_batches add column ended boolean not null default false;
+alter table event_session_headcounts add column ended boolean not null default false;
+`,
+  },
 ];

@@ -35,20 +35,31 @@ export const memberImportSchema = z.object({
     .max(10_000),
 });
 
-export const attendanceImportSchema = z.object({
-  eventId: z.string().uuid(),
-  sessionDate: dateStringSchema,
-  rows: z
-    .array(
-      z.object({
-        memberNo: importMemberNoSchema,
-        /** `YYYY-MM-DD` or a date plus a time, parsed by the repository. */
-        datetime: z.string().trim().max(64).optional(),
-      }),
-    )
-    .min(1)
-    .max(10_000),
-});
+export const attendanceImportSchema = z
+  .object({
+    eventId: z.string().uuid(),
+    sessionDate: dateStringSchema,
+    rows: z
+      .array(
+        z.object({
+          memberNo: importMemberNoSchema,
+          /** `YYYY-MM-DD` or a date plus a time, parsed by the repository. */
+          datetime: z.string().trim().max(64).optional(),
+        }),
+      )
+      .max(10_000),
+    /** True closes the session. An end-only capture sends no rows. */
+    ended: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.rows.length === 0 && value.ended !== true) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['rows'],
+        message: 'rows must contain at least one row unless the capture ends the session',
+      });
+    }
+  });
 
 export const importBatchSchema = z.object({
   id: z.string(),

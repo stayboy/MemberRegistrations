@@ -32,6 +32,7 @@ import {
 import { useSession } from '../auth/SessionProvider';
 import { ImportPanel } from '../components/ImportPanel';
 import { PageFrame } from '../components/PageFrame';
+import { captureState, captureStateLabel, endActionState } from '../format/capture';
 import { saveBlob } from '../format/download';
 import { parseAttendanceFile } from '../format/import-file';
 import {
@@ -108,6 +109,23 @@ const useStyles = makeStyles({
     padding: tokens.spacingVerticalL,
     ...shorthands.border('1px', 'solid', tokens.colorBrandStroke1),
   },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+  },
+  stateLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+  },
+  stateDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: tokens.colorPaletteGreenBackground3,
+  },
 });
 
 function errorMessage(error: unknown): string {
@@ -135,7 +153,10 @@ interface Occurrence {
   readonly eventName: string;
   readonly date: string;
   readonly startTime: string;
+  readonly endTime: string | null;
+  readonly timezone: string;
   readonly sessionStatus: EventSessionSummary['status'];
+  readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
 }
 
 function occurrenceFrom(event: EventListItem, session: EventSessionSummary): Occurrence {
@@ -145,7 +166,10 @@ function occurrenceFrom(event: EventListItem, session: EventSessionSummary): Occ
     eventName: event.name,
     date: session.date,
     startTime: session.startTime,
+    endTime: session.endTime,
+    timezone: event.timezone,
     sessionStatus: session.status,
+    capture: session.capture ?? null,
   };
 }
 
@@ -163,6 +187,8 @@ interface AttendanceWorkspaceProps {
     rows: readonly AttendanceImportRow[],
   ) => Promise<ImportBatch>;
   readonly onCommitted: (batch: ImportBatch) => void;
+  /** The end-only capture: one shared close per event and session. */
+  readonly endSession: (occurrence: OccurrenceRef) => Promise<ImportBatch>;
 }
 
 /**
@@ -188,10 +214,13 @@ function AttendanceWorkspace({
   downloadTemplate,
   commitRows,
   onCommitted,
+  endSession,
 }: AttendanceWorkspaceProps) {
   const styles = useStyles();
   const { formatDate, formatTime } = useDateTimeFormat();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
 
   // Seed once. A later `events` refetch cannot unmount the panel because the
   // occurrence is state, not a value re-derived from the current event list.
@@ -223,10 +252,45 @@ function AttendanceWorkspace({
   function clearOccurrence(): void {
     setOccurrence(null);
     setDraftEventId(null);
+    setEndError(null);
     const next = new URLSearchParams(searchParams);
     next.delete('event');
     next.delete('date');
     setSearchParams(next, { replace: true });
+  }
+
+  // Prefer the freshly loaded session (a committed capture invalidates the
+  // events query); the snapshot covers a refetch that drops the event.
+  const freshEvent = events.find((event) => event.id === occurrence?.eventId);
+  const freshSession = freshEvent?.sessions.find((session) => session.date === occurrence?.date);
+  const captureSession = occurrence
+    ? {
+        date: occurrence.date,
+        startTime: freshSession?.startTime ?? occurrence.startTime,
+        endTime: freshSession?.endTime ?? occurrence.endTime,
+        timezone: occurrence.timezone,
+        status: freshSession?.status ?? occurrence.sessionStatus,
+        capture: freshSession ? (freshSession.capture ?? null) : occurrence.capture,
+      }
+    : null;
+  const state = captureSession ? captureState(captureSession, new Date()) : null;
+  const endAction = state ? endActionState(state) : 'hidden';
+
+  async function endOfSession(): Promise<void> {
+    if (!occurrence) return;
+    setEnding(true);
+    setEndError(null);
+    try {
+      const batch = await endSession({
+        eventId: occurrence.eventId,
+        sessionDate: occurrence.date,
+      });
+      onCommitted(batch);
+    } catch (error) {
+      setEndError(errorMessage(error));
+    } finally {
+      setEnding(false);
+    }
   }
 
   return (
@@ -252,11 +316,37 @@ function AttendanceWorkspace({
                   {occurrence.sessionStatus}
                 </Badge>
               </div>
+              {state ? (
+                <div className={styles.stateLabel}>
+                  {state.kind === 'live' ? (
+                    <span className={styles.stateDot} aria-hidden="true" />
+                  ) : null}
+                  <Text weight="semibold">{captureStateLabel(state, occurrence.timezone)}</Text>
+                </div>
+              ) : null}
             </div>
-            <Button appearance="secondary" onClick={clearOccurrence}>
-              Change occurrence
-            </Button>
+            <div className={styles.actions}>
+              {endAction !== 'hidden' ? (
+                <Button
+                  onClick={() => void endOfSession()}
+                  disabled={endAction === 'disabled' || ending}
+                >
+                  End of session
+                </Button>
+              ) : null}
+              <Button appearance="secondary" onClick={clearOccurrence}>
+                Change occurrence
+              </Button>
+            </div>
           </div>
+          {endError ? (
+            <MessageBar intent="error">
+              <MessageBarBody>
+                <MessageBarTitle>The session could not be ended</MessageBarTitle>
+                {endError}
+              </MessageBarBody>
+            </MessageBar>
+          ) : null}
           <Text size={200} className={styles.muted}>
             The file carries member numbers and an optional datetime, never an event column.
             Changing the occurrence clears any chosen file.
@@ -534,6 +624,14 @@ export function ImportsAttendancePage() {
               eventId: occurrence.eventId,
               sessionDate: occurrence.sessionDate,
               rows,
+            })
+          }
+          endSession={(occurrence) =>
+            postAttendanceImport(baseUrl, token, {
+              eventId: occurrence.eventId,
+              sessionDate: occurrence.sessionDate,
+              rows: [],
+              ended: true,
             })
           }
           onCommitted={onCommitted}
