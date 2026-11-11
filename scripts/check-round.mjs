@@ -18,7 +18,7 @@ const TIER_ROW_PATTERN = /^\|\s*Tier\s*\|([^\n]*)\|\s*$/m;
 
 // R2: "Tier 2 parent-authored: <reason>" (optionally bulleted) inside ## Deviations,
 // with a real reason.
-const PARENT_AUTHORED_PATTERN = /^(?:\s*[-*]\s+)?Tier 2 parent-authored:\s*(\S.*)$/;
+const PARENT_AUTHORED_PATTERN = /^(?:[-*]\s+)?Tier 2 parent-authored:\s*(\S.*)$/;
 const PARENT_AUTHORED_MIN_REASON = 20;
 const TIER_VALUES = new Set([0, 1, 2]);
 
@@ -93,14 +93,26 @@ function tierRow(text) {
   return { present: true, value: value === null ? null : Number(value[1]), cell };
 }
 
-/** The lines under `## Deviations`, stopping at the next top-level heading. */
-function deviationsLines(text) {
+/** The lines under a top-level heading, stopping at the next one. */
+function sectionLines(text, heading) {
   const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^##\s+Deviations\s*$/.test(line));
+  const pattern = new RegExp(`^##\\s+${heading}\\s*$`);
+  const start = lines.findIndex((line) => pattern.test(line));
   if (start === -1) return [];
   const body = lines.slice(start + 1);
   const end = body.findIndex((line) => /^#{1,2}\s/.test(line));
   return end === -1 ? body : body.slice(0, end);
+}
+
+const deviationsLines = (text) => sectionLines(text, 'Deviations');
+
+/** The reviewer's seat verdict (R5), the first `Seat:` line in `## Review`. */
+function seatVerdict(text) {
+  return (
+    sectionLines(text, 'Review')
+      .map((line) => line.trim())
+      .find((line) => /^Seat:/i.test(line)) ?? null
+  );
 }
 
 function hasParentAuthoredDeviation(text) {
@@ -207,6 +219,18 @@ export function checkDocuments(files, changedPaths, readText) {
         fail(
           `${file}: Tier 2 needs a "worker <provider>/<model>" Implementer segment or a "## Deviations" line "Tier 2 parent-authored: <reason>" of at least ${PARENT_AUTHORED_MIN_REASON} characters (R2)`,
         );
+      }
+    }
+
+    // R5: a Tier 2 round records the reviewer's seat verdict in "## Review".
+    if (tier.value === 2) {
+      const seat = seatVerdict(text);
+      if (seat === null) {
+        fail(
+          `${file}: Tier 2 needs a "Seat: consistent" line in "## Review" (R5: the reviewer's verdict on the Implementer row)`,
+        );
+      } else if (/contradicted/i.test(seat)) {
+        fail(`${file}: the Seat line records "contradicted"; a contradicted seat is REWORK (R5)`);
       }
     }
 

@@ -13,6 +13,8 @@ const check = checkDocuments as CheckDocuments;
 const DOC = 'documents/rounds/fixture.md';
 const GATE = 'gate-run 2026-11-11T09:00:00Z profile=full steps=12/12 lines=140 bytes=8192';
 const PARENT = 'parent opencode/deepseek-v4.1-flash-free';
+/** The header rows the guard requires, pinned here so a dropped row fails a test. */
+const REQUIRED_ROWS = ['Status', 'Tier', 'Base', 'Review rounds', 'Gate runs in parent'];
 
 interface DocOptions {
   tier?: string;
@@ -21,11 +23,19 @@ interface DocOptions {
   deviations?: string[];
   /** Header rows to omit by name, e.g. `['Base']`. */
   omitRows?: string[];
+  /** The `## Review` body; `null` omits the section (R5). */
+  review?: string[] | null;
 }
 
 /** A complete round doc: header rows, the gate-run signature and a `## Deviations` section. */
 function roundDoc(options: DocOptions = {}): string {
-  const { tier = '1', implementer = PARENT, deviations = [], omitRows = [] } = options;
+  const {
+    tier = '1',
+    implementer = PARENT,
+    deviations = [],
+    omitRows = [],
+    review = ['Seat: consistent'],
+  } = options;
   const rows: Array<[string, string]> = [
     ['Status', 'OPEN'],
     ['Tier', tier],
@@ -38,7 +48,7 @@ function roundDoc(options: DocOptions = {}): string {
     .filter(([name]) => !omitRows.includes(name))
     .map(([name, value]) => `| ${name} | ${value} |`);
   return [
-    '# Round — fixture',
+    '# Round - fixture',
     '',
     ...header,
     '',
@@ -50,6 +60,7 @@ function roundDoc(options: DocOptions = {}): string {
     '',
     GATE,
     '',
+    ...(review === null ? [] : ['## Review', '', ...review, '']),
     '## Acceptance',
     '',
     'Met.',
@@ -287,6 +298,67 @@ describe('check-round: the required header rows', () => {
     expect(failures).toHaveLength(2);
     expect(failures.join('\n')).toContain('"Base"');
     expect(failures.join('\n')).toContain('"Review rounds"');
+  });
+
+  it('names each of the five required rows when it is the one omitted', () => {
+    for (const row of REQUIRED_ROWS) {
+      const failures = checkText(roundDoc({ omitRows: [row] }));
+      expect(failures, row).toHaveLength(1);
+      expect(failures[0], row).toContain(`missing round-doc header row "${row}"`);
+    }
+  });
+});
+
+describe('check-round: the reviewer seat verdict (R5)', () => {
+  it('accepts a Tier 2 doc whose review records a consistent seat', () => {
+    const text = roundDoc({
+      tier: '2',
+      implementer: 'parent opencode/model-a; worker ollama-cloud/model-b',
+      review: ['Standards: PASS', 'Seat: consistent'],
+    });
+    expect(checkText(text)).toEqual([]);
+  });
+
+  it('rejects a Tier 2 doc with no Review section', () => {
+    const failures = checkText(
+      roundDoc({
+        tier: '2',
+        implementer: 'parent opencode/model-a; worker ollama-cloud/model-b',
+        review: null,
+      }),
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('Seat: consistent');
+    expect(failures[0]).toContain('R5');
+  });
+
+  it('rejects a Review section with no Seat line', () => {
+    const failures = checkText(
+      roundDoc({
+        tier: '2',
+        implementer: 'parent opencode/model-a; worker ollama-cloud/model-b',
+        review: ['Standards: PASS', 'Verdict: ACCEPTED'],
+      }),
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('R5');
+  });
+
+  it('rejects a contradicted seat', () => {
+    const failures = checkText(
+      roundDoc({
+        tier: '2',
+        implementer: 'parent opencode/model-a; worker ollama-cloud/model-b',
+        review: ['Seat: contradicted'],
+      }),
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('contradicted');
+    expect(failures[0]).toContain('REWORK');
+  });
+
+  it('does not apply below Tier 2', () => {
+    expect(checkText(roundDoc({ tier: '1', review: null }))).toEqual([]);
   });
 });
 

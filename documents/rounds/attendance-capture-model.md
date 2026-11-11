@@ -178,6 +178,9 @@ out of the block and fixed anyway: the FR-4b/FR-6f examples now match the render
 says "recorded"; the ended action is disabled), and the aggregate now carries the DTO comment's final
 `id` tie-break inside a channel. The reviewer also confirmed the gate record and the AC 8 baseline.
 
+Seat: consistent — parent source/UI/migration, worker tests (`cline-pass/cline-pass/deepseek-v4.1-flash-1017`,
+`ses_e34fe2afdffeORnZA8BEy0HkpB`); reviewer `ollama-cloud/mimo-v2.6-pro`, distinct from both.
+
 ## Mock sign-off
 
 | Surface                                   | Mock                                               | sha256                                                             | Signer | Date       | Verdict |

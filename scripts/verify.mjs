@@ -4,7 +4,7 @@ import { runGate } from './gates.mjs';
 const PROFILES = {
   fast: ['format', 'lint', 'typecheck', 'test'],
   precommit: ['format', 'lint', 'typecheck', 'test'],
-  full: ['skill', 'format', 'lint', 'typecheck', 'test', 'build'],
+  full: ['skill', 'check-round', 'format', 'lint', 'typecheck', 'test', 'build'],
 };
 
 const profile = process.argv[2];

@@ -16,6 +16,7 @@ const TAIL_LINES = 20;
 const ERROR_RE = /error|fail|✗|not ok/i;
 
 const STEP_COMMANDS = {
+  'check-round': ['npm', ['run', 'check-round']],
   format: ['npm', ['run', 'format:check']],
   lint: ['npm', ['run', 'lint']],
   typecheck: ['npm', ['run', 'typecheck']],
