@@ -217,8 +217,14 @@ export class TooManyTriesError extends DomainError {
   }
 }
 
-/** The member already has an attendance row for that event session. */
-export class AlreadyClockedError extends ConflictError {
+/** The session was closed by an ended capture; no further capture is accepted. */
+export class SessionClosedError extends ConflictError {
+  constructor(message = 'This session is closed; no further capture is accepted') {
+    super(message, 'session_closed');
+  }
+}
+
+/** The member already has an attendance row for that event session. */ export class AlreadyClockedError extends ConflictError {
   constructor(message = 'Attendance is already recorded for this member and session') {
     super(message, 'already_clocked');
   }

@@ -10,10 +10,13 @@ import {
   CodeWrongSessionError,
   ConflictError,
   NotFoundError,
+  SessionClosedError,
   TooManyTriesError,
   ValidationError,
 } from '../errors/domain-errors.js';
+import { todayIn } from '../domain/series.js';
 import { sqlState } from '../errors/sqlstate.js';
+import { sessionIsClosed } from './captures.js';
 
 export const CODE_PURPOSES = ['attendance_punch', 'registration'] as const;
 export type CodePurpose = (typeof CODE_PURPOSES)[number];
@@ -298,6 +301,25 @@ export class AttendanceCodeRepository {
       [input.memberId],
     );
     if (!member) throw new NotFoundError('The member was not found');
+
+    // A punch writes a `manual` attendance row, so it obeys the clocking rule:
+    // the session must not be closed and must be dated today in the event
+    // timezone. Both refusals leave the code unconsumed.
+    const [session] = await tx.query<{ timezone: string }>(
+      'select timezone from event_instances where id = $1',
+      [code.event_instance_id],
+    );
+    if (!session) throw new NotFoundError('The event was not found');
+    if (await sessionIsClosed(tx, code.event_instance_id, sessionDate)) {
+      throw new SessionClosedError(
+        `The session on ${sessionDate} is closed; the code cannot clock it`,
+      );
+    }
+    if (sessionDate !== todayIn(session.timezone)) {
+      throw new ValidationError(
+        `Attendance codes only clock a session dated today (${sessionDate})`,
+      );
+    }
 
     const [existing] = await tx.query<{ id: string }>(
       `select id from attendance

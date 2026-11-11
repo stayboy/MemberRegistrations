@@ -1,11 +1,17 @@
 import { createHash } from 'node:crypto';
 import type { Db, DbClient } from '../db/sql.js';
-import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import {
+  ConflictError,
+  NotFoundError,
+  SessionClosedError,
+  ValidationError,
+} from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
 import { todayIn } from '../domain/series.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
+import { sessionIsClosed } from './captures.js';
 import type { Gender } from './members.js';
 import {
   emptyOfferingStats,
@@ -27,6 +33,12 @@ export interface EventSessionItem {
   endTime: string | null;
   status: EventSessionStatus;
   venueType?: VenueType;
+  /**
+   * The session's latest capture of either channel (later `asOf`, then recorded
+   * time, then id), with the shared close state. Null when the session has no
+   * capture; the detail computes live/past from the window (FR-4b).
+   */
+  capture: { asOf: string; ended: boolean } | null;
   /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
   note: string | null;
   present: number;
@@ -103,6 +115,12 @@ interface SessionExpected {
   expected: number | string;
 }
 
+interface SessionCaptureRow {
+  date: unknown;
+  asOf: unknown;
+  ended: unknown;
+}
+
 export interface EventAttendanceRow {
   /** The `attendance.id` the row delete accepts; never the member id. */
   id: string;
@@ -158,12 +176,13 @@ type EventRow = {
   ministry_name: string | null;
   session_counts: unknown;
   session_expected: unknown;
+  session_captures: unknown;
 };
 
 /** The event_instances row without the joined ministry or attendance aggregate. */
 type EventRowCore = Omit<
   EventRow,
-  'session_counts' | 'session_expected' | 'ministry_code' | 'ministry_name'
+  'session_counts' | 'session_expected' | 'session_captures' | 'ministry_code' | 'ministry_name'
 >;
 
 const EVENT_COLUMNS = `
@@ -235,7 +254,41 @@ function sessionCounts(alias: string): string {
            and m.purged_at is null
           group by (session->>'date')::date
         ) d
-      ), '[]'::jsonb) as session_expected
+      ), '[]'::jsonb) as session_expected,
+      coalesce((
+        select jsonb_agg(
+                 jsonb_build_object('date', g.session_date, 'asOf', g.as_of, 'ended', g.ended)
+                 order by g.session_date
+               )
+        from (
+          -- The time is the later of the two channels' latest captures, and
+          -- only the current (non-superseded) headcount observation counts;
+          -- ended is the session's shared close, so it unions every capture
+          -- including a superseded row. A full tie resolves to the import.
+          select c.session_date,
+                 (array_agg(c.as_of order by c.as_of desc, c.recorded_at desc, c.channel asc, c.id desc)
+                    filter (where c.is_current))[1] as as_of,
+                 bool_or(c.ended) as ended
+          from (
+            select ib.session_date, ib.as_of, ib.created_at as recorded_at, ib.id,
+                   0 as channel, true as is_current, ib.ended
+            from import_batches ib
+            where ib.kind = 'attendance'
+              and ib.event_instance_id = ${alias}.id
+              and ib.session_date is not null
+            union all
+            select h.session_date, h.as_of, h.recorded_at, h.id,
+                   1 as channel,
+                   not exists (
+                     select 1 from event_session_headcounts s where s.supersedes_id = h.id
+                   ) as is_current,
+                   h.ended
+            from event_session_headcounts h
+            where h.event_instance_id = ${alias}.id
+          ) c
+          group by c.session_date
+        ) g
+      ), '[]'::jsonb) as session_captures
   ) counts on true`;
 }
 
@@ -261,7 +314,8 @@ with page as (
 )
 select p.*,
        coalesce(counts.session_counts, '[]'::jsonb) as session_counts,
-       coalesce(counts.session_expected, '[]'::jsonb) as session_expected
+       coalesce(counts.session_expected, '[]'::jsonb) as session_expected,
+       coalesce(counts.session_captures, '[]'::jsonb) as session_captures
 from page p
 ${sessionCounts('p')}
 order by p.start_date, p.id
@@ -270,7 +324,8 @@ order by p.start_date, p.id
 const DETAIL_SQL = `
 select ${EVENT_COLUMNS},
        coalesce(counts.session_counts, '[]'::jsonb) as session_counts,
-       coalesce(counts.session_expected, '[]'::jsonb) as session_expected
+       coalesce(counts.session_expected, '[]'::jsonb) as session_expected,
+       coalesce(counts.session_captures, '[]'::jsonb) as session_captures
 ${EVENT_FROM}
 ${sessionCounts('e')}
 where e.id = $1
@@ -369,6 +424,13 @@ function isoDate(value: unknown): string {
 function isoOptionalDate(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   return isoDate(value);
+}
+
+function isoInstant(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  const text = String(value);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? text : parsed.toISOString();
 }
 
 function parseJsonArray(value: unknown): unknown[] {
@@ -820,9 +882,10 @@ export class EventRepository {
         status: string;
         tracks_members: boolean;
         presbyter_only: boolean;
+        timezone: string;
         sessions: unknown;
       }>(
-        'select status, tracks_members, presbyter_only, sessions from event_instances where id = $1',
+        'select status, tracks_members, presbyter_only, timezone, sessions from event_instances where id = $1',
         [eventId],
       );
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
@@ -836,6 +899,18 @@ export class EventRepository {
       }
       if (session.status === 'cancelled') {
         throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
+      if (await sessionIsClosed(tx, eventId, sessionDate)) {
+        throw new SessionClosedError(
+          `The session on ${sessionDate} is closed; no further per-member write is accepted`,
+        );
+      }
+      // A manual or USSD row is accepted only for a session dated today in the
+      // event timezone; the session's time window does not gate it.
+      if (sessionDate !== todayIn(event.timezone)) {
+        throw new ValidationError(
+          `Per-member attendance is accepted only for a session dated today in ${event.timezone}`,
+        );
       }
       if (!event.tracks_members) {
         throw new ValidationError(
@@ -943,6 +1018,11 @@ export class EventRepository {
       if (session?.status === 'cancelled') {
         throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
       }
+      if (await sessionIsClosed(tx, eventId, sessionDate)) {
+        throw new SessionClosedError(
+          `The session on ${sessionDate} is closed; no further per-member write is accepted`,
+        );
+      }
 
       await tx.query('delete from attendance where id = $1', [attendanceId]);
       if (entry.source === 'import') {
@@ -966,6 +1046,7 @@ export class EventRepository {
     const endDate = isoDate(row.end_date);
     const status = deriveStatus(asStatus(row.status), startDate, endDate, today);
     const startTime = row.start_time ?? '';
+    const endTime = row.end_time ?? null;
 
     const counts = new Map(
       parseJsonArray(row.session_counts).map((entry) => {
@@ -987,6 +1068,16 @@ export class EventRepository {
       }),
     );
 
+    const capturesByDate = new Map(
+      parseJsonArray(row.session_captures).map((entry) => {
+        const capture = entry as SessionCaptureRow;
+        return [
+          isoDate(capture.date),
+          { asOf: isoInstant(capture.asOf), ended: capture.ended === true },
+        ] as const;
+      }),
+    );
+
     const sessions: EventSessionItem[] = parseJsonArray(row.sessions).map((entry) => {
       const session = entry as StoredSession;
       const date = isoDate(session.date);
@@ -999,9 +1090,10 @@ export class EventRepository {
       return {
         date,
         startTime: session.startTime ?? startTime,
-        endTime: session.endTime ?? null,
+        endTime: session.endTime ?? endTime,
         status: asSessionStatus(session.status),
         ...(sessionVenueType ? { venueType: sessionVenueType } : {}),
+        capture: capturesByDate.get(date) ?? null,
         note: typeof session.note === 'string' && session.note.trim() ? session.note : null,
         present: count.present,
         expected: expectedByDate.get(date) ?? 0,

@@ -1,7 +1,9 @@
 import type { Db, Row } from '../db/sql.js';
-import { NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import { NotFoundError, SessionClosedError, ValidationError } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { assertDate } from '../domain/contacts.js';
+import { todayIn } from '../domain/series.js';
+import { sessionIsClosed } from './captures.js';
 
 export type HeadcountMode = 'adults' | 'children' | 'mixed';
 
@@ -19,6 +21,8 @@ export interface Headcount extends HeadcountBuckets {
   eventId: string;
   sessionDate: string;
   asOf: string;
+  /** True when this observation ended the session. */
+  ended: boolean;
   mode: HeadcountMode;
   total: number;
   recordedBy: string;
@@ -39,6 +43,8 @@ export interface RecordHeadcountInput extends HeadcountBuckets {
   mode: HeadcountMode;
   asOf?: string;
   supersedesId?: string;
+  /** True closes the session; a headcount never ends automatically. */
+  ended?: boolean;
 }
 
 interface HeadcountRow extends Row {
@@ -54,6 +60,7 @@ interface HeadcountRow extends Row {
   child_female: number;
   child_unspecified: number;
   total: number;
+  ended: boolean;
   recorded_by: string;
   recorded_at: Date | string;
   supersedes_id: string | null;
@@ -68,7 +75,7 @@ const COLUMNS = `
   id, event_instance_id, session_date, as_of, mode,
   adult_male, adult_female, adult_unspecified,
   child_male, child_female, child_unspecified,
-  total, recorded_by, recorded_at, supersedes_id`;
+  total, ended, recorded_by, recorded_at, supersedes_id`;
 
 function isoDate(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -157,6 +164,7 @@ function toHeadcount(row: HeadcountRow, supersededBy: string | null): Headcount 
     childFemale: row.child_female,
     childUnspecified: row.child_unspecified,
     total: row.total,
+    ended: row.ended,
     recordedBy: row.recorded_by,
     recordedAt: isoTimestamp(row.recorded_at),
     supersedesId: row.supersedes_id,
@@ -215,6 +223,18 @@ export class HeadcountRepository {
   async record(eventId: string, input: RecordHeadcountInput, actor: string): Promise<Headcount> {
     const sessionDate = assertDate(input.sessionDate, 'sessionDate');
     const event = await this.requireEventSession(eventId, sessionDate);
+    // The close is checked before the calendar-day rule: a session a late
+    // import already closed answers `session_closed`, not a date refusal.
+    if (await sessionIsClosed(this.db, eventId, sessionDate)) {
+      throw new SessionClosedError(
+        `The session on ${sessionDate} is closed; no further headcount is accepted`,
+      );
+    }
+    if (sessionDate < todayIn(event.timezone)) {
+      throw new ValidationError(
+        `Headcounts are not accepted for a session dated before today (${sessionDate})`,
+      );
+    }
     const total = validateBuckets(input.mode, input);
 
     let supersedesId: string | null = null;
@@ -265,8 +285,8 @@ export class HeadcountRepository {
            event_instance_id, session_date, as_of, mode,
            adult_male, adult_female, adult_unspecified,
            child_male, child_female, child_unspecified,
-           total, recorded_by, supersedes_id
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           total, ended, recorded_by, supersedes_id
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          returning ${COLUMNS}`,
         [
           eventId,
@@ -280,6 +300,7 @@ export class HeadcountRepository {
           input.childFemale,
           input.childUnspecified,
           total,
+          input.ended === true,
           actor,
           supersedesId,
         ],

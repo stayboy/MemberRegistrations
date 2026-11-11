@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import {
   ImportError,
-  DuplicateImportError,
   NotFoundError,
+  SessionClosedError,
   ValidationError,
   type ImportRowError,
 } from '../errors/domain-errors.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
+import { isSessionLive } from '../domain/capture.js';
+import { sessionIsClosed } from './captures.js';
 import { GENDERS, type Gender } from './members.js';
 import type { Db, DbClient } from '../db/sql.js';
 
@@ -36,6 +38,8 @@ export interface AttendanceImportRequest {
   eventId: string;
   sessionDate: string;
   rows: AttendanceImportRow[];
+  /** True closes the session; a capture outside the live window closes it too. */
+  ended?: boolean;
 }
 
 export type ImportKind = 'members' | 'attendance';
@@ -231,6 +235,33 @@ function sessionStatus(value: unknown, date: string): string | null {
     if (isoDate(session.date) === date) {
       return typeof session.status === 'string' ? session.status : 'scheduled';
     }
+  }
+  return null;
+}
+
+interface StoredSessionEntry {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  status: string;
+}
+
+/** The stored session on `date`, including the window the live check needs. */
+function sessionEntry(value: unknown, date: string): StoredSessionEntry | null {
+  for (const entry of sessionEntries(value)) {
+    const session = entry as {
+      date?: unknown;
+      startTime?: unknown;
+      endTime?: unknown;
+      status?: unknown;
+    };
+    if (isoDate(session.date) !== date) continue;
+    return {
+      date,
+      startTime: typeof session.startTime === 'string' ? session.startTime : null,
+      endTime: typeof session.endTime === 'string' ? session.endTime : null,
+      status: typeof session.status === 'string' ? session.status : 'scheduled',
+    };
   }
   return null;
 }
@@ -490,11 +521,18 @@ export class ImportRepository {
   }
 
   async importAttendance(request: AttendanceImportRequest, actor: string): Promise<ImportBatchDto> {
-    assertRows(request.rows, 'rows');
+    const endOnly = request.rows.length === 0;
+    if (endOnly && request.ended !== true) {
+      throw new ValidationError(
+        'rows must contain at least one row unless the capture ends the session',
+      );
+    }
+    if (!endOnly) assertRows(request.rows, 'rows');
 
     const sessionDate = assertDate(request.sessionDate, 'sessionDate');
-    // The checksum covers the targeted occurrence as well as the rows, so the
-    // same member list against a different session is a different import.
+    // The checksum covers the targeted occurrence as well as the rows, so an
+    // audit can tell one capture from another; it no longer refuses a repeat,
+    // because a live capture may be taken more than once (FR-6a).
     const batchChecksum = checksum({
       eventId: request.eventId,
       sessionDate,
@@ -507,10 +545,15 @@ export class ImportRepository {
         name: string;
         status: string;
         series_id: string | null;
+        timezone: string;
+        start_time: string | null;
+        end_time: string | null;
         sessions: unknown;
-      }>('select event_no, name, status, series_id, sessions from event_instances where id = $1', [
-        request.eventId,
-      ]);
+      }>(
+        `select event_no, name, status, series_id, timezone, start_time, end_time, sessions
+           from event_instances where id = $1`,
+        [request.eventId],
+      );
       if (!event) {
         throw new ImportError(`Unknown event id: ${request.eventId}`);
       }
@@ -535,83 +578,107 @@ export class ImportRepository {
         throw new ImportError(`The session on ${sessionDate} is cancelled and read-only`);
       }
 
-      const [duplicate] = await tx.query<{ id: string }>(
-        "select id from import_batches where kind = 'attendance' and checksum = $1",
-        [batchChecksum],
-      );
-      if (duplicate) {
-        throw new DuplicateImportError(
-          `This attendance file was already imported (batch ${duplicate.id}).`,
-          duplicate.id,
+      const session = sessionEntry(event.sessions, sessionDate);
+      if (!session) {
+        throw new ImportError(`${eventLabel} has no session on ${sessionDate}`);
+      }
+      if (await sessionIsClosed(tx, request.eventId, sessionDate)) {
+        throw new SessionClosedError(
+          `The session on ${sessionDate} is closed; no further capture is accepted`,
         );
       }
 
-      const prepared = prepareRows(request.rows, (row, rowNumber) =>
-        prepareAttendanceRow(row, rowNumber, sessionDate),
-      );
-      const duplicates = duplicateMemberNos(prepared);
-      if (duplicates.length > 0) {
-        throw new ImportError(
-          `Duplicate memberNo in the file: ${duplicateMemberNoDetail(duplicates)}`,
-          duplicateMemberNoRows(duplicates),
+      // Live is computed from the session window in the event timezone. A
+      // capture outside that window is the end capture even without `ended`.
+      const live = isSessionLive({
+        date: sessionDate,
+        startTime: session.startTime ?? event.start_time ?? '00:00',
+        endTime: session.endTime ?? event.end_time,
+        timezone: event.timezone,
+      });
+      const ended = request.ended === true || !live;
+
+      let prepared: PreparedAttendanceRow[] = [];
+      if (!endOnly) {
+        prepared = prepareRows(request.rows, (row, rowNumber) =>
+          prepareAttendanceRow(row, rowNumber, sessionDate),
         );
+        const duplicates = duplicateMemberNos(prepared);
+        if (duplicates.length > 0) {
+          throw new ImportError(
+            `Duplicate memberNo in the file: ${duplicateMemberNoDetail(duplicates)}`,
+            duplicateMemberNoRows(duplicates),
+          );
+        }
       }
 
-      const memberNos = [...new Set(prepared.map((row) => row.memberNo.toLowerCase()))];
-      const members = await tx.query<{ id: string; member_no: string }>(
-        'select id, member_no from members where lower(member_no) = any($1::text[]) and purged_at is null',
-        [memberNos],
-      );
-      const memberMap = new Map(
-        members.map((member) => [member.member_no.toLowerCase(), member.id]),
-      );
-
-      const unknownRows = prepared.filter((row) => !memberMap.has(row.memberNo.toLowerCase()));
-      if (unknownRows.length > 0) {
-        const unknownMembers = [...new Set(unknownRows.map((row) => row.memberNo))].sort();
-        throw new ImportError(
-          `Unknown member numbers: ${unknownMembers.join(', ')}`,
-          unknownRows.map((row) => ({
-            row: row.rowNumber,
-            message: `Unknown member number ${row.memberNo}`,
-          })),
+      const memberMap = new Map<string, string>();
+      if (!endOnly) {
+        const memberNos = [...new Set(prepared.map((row) => row.memberNo.toLowerCase()))];
+        const members = await tx.query<{ id: string; member_no: string }>(
+          'select id, member_no from members where lower(member_no) = any($1::text[]) and purged_at is null',
+          [memberNos],
         );
+        for (const member of members) memberMap.set(member.member_no.toLowerCase(), member.id);
+
+        const unknownRows = prepared.filter((row) => !memberMap.has(row.memberNo.toLowerCase()));
+        if (unknownRows.length > 0) {
+          const unknownMembers = [...new Set(unknownRows.map((row) => row.memberNo))].sort();
+          throw new ImportError(
+            `Unknown member numbers: ${unknownMembers.join(', ')}`,
+            unknownRows.map((row) => ({
+              row: row.rowNumber,
+              message: `Unknown member number ${row.memberNo}`,
+            })),
+          );
+        }
       }
 
       const [batchRow] = await tx.query<{ id: string; created_at: Date | string }>(
         `insert into import_batches (
-           kind, actor, row_count, checksum, event_instance_id, session_date
+           kind, actor, row_count, checksum, event_instance_id, session_date, as_of, ended
          )
-         values ('attendance',$1,$2,$3,$4,$5) returning id, created_at`,
-        [actor, request.rows.length, batchChecksum, request.eventId, sessionDate],
+         values ('attendance',$1,$2,$3,$4,$5, now(), $6)
+         returning id, created_at`,
+        [actor, request.rows.length, batchChecksum, request.eventId, sessionDate, ended],
       );
       const batchId = batchRow!.id;
 
       let written = 0;
       let skipped = 0;
-      for (const row of prepared) {
-        const memberId = memberMap.get(row.memberNo.toLowerCase())!;
-        const inserted = await tx.query<{ id: string }>(
-          `insert into attendance (
-             member_id, event_instance_id, session_date, session_time,
-             source, import_batch_id, created_by
-           )
-           select $1,$2,$3,$4::time,'import',$5,$6
-           where not exists (
-             select 1 from attendance_suppressions s
-             where s.member_id = $1 and s.event_instance_id = $2 and s.session_date = $3
-           )
-           on conflict (event_instance_id, session_date, member_id) do update
-             set source = 'import',
-                 session_time = excluded.session_time,
-                 import_batch_id = excluded.import_batch_id,
-                 created_by = excluded.created_by
-             where attendance.source <> 'manual'
-           returning id`,
-          [memberId, request.eventId, sessionDate, row.sessionTime, batchId, actor],
+      if (!endOnly) {
+        // A capture replaces the session's imported rows; manual rows and
+        // suppressions survive, and an end-only capture leaves rows untouched.
+        await tx.query(
+          `delete from attendance
+            where event_instance_id = $1 and session_date = $2 and source = 'import'`,
+          [request.eventId, sessionDate],
         );
-        if (inserted.length > 0) written += 1;
-        else skipped += 1;
+
+        for (const row of prepared) {
+          const memberId = memberMap.get(row.memberNo.toLowerCase())!;
+          const inserted = await tx.query<{ id: string }>(
+            `insert into attendance (
+               member_id, event_instance_id, session_date, session_time,
+               source, import_batch_id, created_by
+             )
+             select $1,$2,$3,$4::time,'import',$5,$6
+             where not exists (
+               select 1 from attendance_suppressions s
+               where s.member_id = $1 and s.event_instance_id = $2 and s.session_date = $3
+             )
+             on conflict (event_instance_id, session_date, member_id) do update
+               set source = 'import',
+                   session_time = excluded.session_time,
+                   import_batch_id = excluded.import_batch_id,
+                   created_by = excluded.created_by
+               where attendance.source <> 'manual'
+             returning id`,
+            [memberId, request.eventId, sessionDate, row.sessionTime, batchId, actor],
+          );
+          if (inserted.length > 0) written += 1;
+          else skipped += 1;
+        }
       }
 
       await tx.query(

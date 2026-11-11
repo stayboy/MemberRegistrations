@@ -11,7 +11,7 @@ import { AddRegular, ArrowClockwiseRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isUnauthorized } from '../../api/errors';
-import { getEventAttendance } from '../../api/events';
+import { getEvent, getEventAttendance } from '../../api/events';
 import { getHeadcounts, recordHeadcount, type Headcount, type HeadcountMode } from '../../api/ussd';
 import { useSession } from '../../auth/SessionProvider';
 import {
@@ -19,6 +19,7 @@ import {
   type EventSessionSelection,
 } from '../../components/EventSessionPicker';
 import { PageFrame } from '../../components/PageFrame';
+import { captureState, captureStateLabel, offersEndOfSession } from '../../format/capture';
 import {
   emptyHeadcountForm,
   fromDateTimeLocal,
@@ -88,11 +89,23 @@ export function UssdHeadcountPage() {
     enabled: Boolean(token) && selection !== null,
   });
 
+  // The detail carries the event timezone and the session's `capture` field;
+  // the live/end state is computed from it, never stored.
+  const eventQuery = useQuery({
+    queryKey: ['event', baseUrl, selection?.eventId ?? ''],
+    queryFn: ({ signal }) => getEvent(baseUrl, token, selection!.eventId, signal),
+    enabled: Boolean(token) && selection !== null,
+  });
+
   useEffect(() => {
-    if (isUnauthorized(headcountsQuery.error) || isUnauthorized(rosterQuery.error)) {
+    if (
+      isUnauthorized(headcountsQuery.error) ||
+      isUnauthorized(rosterQuery.error) ||
+      isUnauthorized(eventQuery.error)
+    ) {
       void signOut();
     }
-  }, [headcountsQuery.error, rosterQuery.error, signOut]);
+  }, [headcountsQuery.error, rosterQuery.error, eventQuery.error, signOut]);
 
   function resetEntry(): void {
     setMode('adults');
@@ -117,6 +130,11 @@ export function UssdHeadcountPage() {
   }
 
   function startCorrection(row: Headcount): void {
+    if (closed) {
+      setNotice(null);
+      setActionError('This session is closed; a correction is no longer accepted.');
+      return;
+    }
     setRecordOpen(false);
     setCorrection(row);
     setMode(row.mode);
@@ -129,6 +147,27 @@ export function UssdHeadcountPage() {
     setSelection(next);
     closeDialog();
   }
+
+  const page = headcountsQuery.data;
+  const current = page?.current ?? null;
+  const observations = page?.observations ?? [];
+  const roster = rosterQuery.data?.expected;
+
+  const event = eventQuery.data?.event;
+  const sessionRow = event?.sessions.find((row) => row.date === selection?.sessionDate);
+  const captureSession =
+    event && sessionRow
+      ? {
+          date: sessionRow.date,
+          startTime: sessionRow.startTime,
+          endTime: sessionRow.endTime,
+          timezone: event.timezone,
+          status: sessionRow.status,
+          capture: sessionRow.capture ?? null,
+        }
+      : null;
+  const state = captureSession ? captureState(captureSession, new Date()) : null;
+  const closed = state !== null && (state.kind === 'ended' || state.kind === 'cancelled');
 
   const recordMutation = useMutation({
     mutationFn: () => {
@@ -166,10 +205,42 @@ export function UssdHeadcountPage() {
     },
   });
 
-  const page = headcountsQuery.data;
-  const current = page?.current ?? null;
-  const observations = page?.observations ?? [];
-  const roster = rosterQuery.data?.expected;
+  const endMutation = useMutation({
+    mutationFn: () => {
+      if (!selection) throw new Error('Choose an event session first.');
+      if (!current) {
+        throw new Error('Record a headcount first; the end capture carries the final count.');
+      }
+      // The shared close is a capture: a new observation with the same counts
+      // and `ended: true`. It supersedes nothing and keeps the count readable.
+      return recordHeadcount(baseUrl, token, selection.eventId, {
+        sessionDate: selection.sessionDate,
+        mode: current.mode,
+        adultMale: current.adultMale,
+        adultFemale: current.adultFemale,
+        adultUnspecified: current.adultUnspecified,
+        childMale: current.childMale,
+        childFemale: current.childFemale,
+        childUnspecified: current.childUnspecified,
+        ended: true,
+      });
+    },
+    onSuccess: () => {
+      setActionError(null);
+      setNotice('Session ended. No further headcounts or per-member captures are accepted.');
+      void queryClient.invalidateQueries({ queryKey: ['ussd', baseUrl, 'headcounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['event', baseUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
+    },
+    onError: (error: unknown) => {
+      if (isUnauthorized(error)) {
+        void signOut();
+        return;
+      }
+      setNotice(null);
+      setActionError(errorMessage(error));
+    },
+  });
 
   const parsedTotal = headcountPayload(mode, values);
   const liveTotal =
@@ -196,7 +267,7 @@ export function UssdHeadcountPage() {
           <Button
             icon={<AddRegular />}
             appearance="primary"
-            disabled={!selection || recordMutation.isPending}
+            disabled={!selection || recordMutation.isPending || closed}
             onClick={startRecord}
           >
             Record headcount
@@ -220,6 +291,39 @@ export function UssdHeadcountPage() {
             <EventSessionPicker value={selection} onChange={resetForSelection} />
           </div>
         </Card>
+
+        {selection && state && event ? (
+          <Card className={styles.panel}>
+            <div className={styles.panelBody}>
+              <div className={styles.captureState}>
+                <div className={styles.captureLabel}>
+                  {state.kind === 'live' ? (
+                    <span className={styles.captureDot} aria-hidden="true" />
+                  ) : null}
+                  <Text weight="semibold">{captureStateLabel(state, event.timezone)}</Text>
+                </div>
+                <div className={styles.badgeRow}>
+                  <Button
+                    appearance="primary"
+                    disabled={
+                      !offersEndOfSession(state) || endMutation.isPending || current === null
+                    }
+                    onClick={() => endMutation.mutate()}
+                  >
+                    End of session
+                  </Button>
+                </div>
+              </div>
+              <Text size={200} className={styles.muted}>
+                {state.kind === 'ended'
+                  ? 'This session is closed; no further headcounts or per-member captures. The line is derived from the latest capture’s as-of time and its end flag.'
+                  : state.kind === 'cancelled'
+                    ? 'A cancelled session is read-only.'
+                    : 'Live is computed from the session date and its start/end window in the event timezone. End of session closes the session for per-member attendance and headcounts.'}
+              </Text>
+            </div>
+          </Card>
+        ) : null}
 
         {actionError ? (
           <MessageBar intent="error">

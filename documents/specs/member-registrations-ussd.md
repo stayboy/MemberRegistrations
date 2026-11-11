@@ -235,6 +235,8 @@ fits.
 | `status.attendance_recorded` | Attendance recorded          | Recorded        |
 | `error.code_invalid`         | Invalid code                 | Bad code        |
 | `error.code_used`            | Code already used            | Code used       |
+| `error.session_closed`       | Session already closed       | Closed          |
+| `error.session_not_today`    | Attendance is only for today | Not today       |
 | `error.not_shepherd`         | Not your member              | Not yours       |
 | `error.not_senior`           | Not a senior presbyter       | Not senior      |
 | `error.delegate_required`    | Delegate first               | Delegate        |
@@ -750,6 +752,10 @@ remains a review artifact.
   durable record is this spec and the round docs, never the mock files.
 
 ## Change log
+
+- 2026-11-11: a code punch obeys the clocking rule: a session already closed answers `409 session_closed`
+  (`Closed`) and a session not dated today in the event timezone `422 validation_error` (`Not today`);
+  neither refusal consumes the code. The glossary table carries both keys.
 
 - 2026-11-11: the shared attendance capture model adds `ended` to `event_session_headcounts`: live is
   computed from the session date and window, the presbyter's End of session closes the session, and a

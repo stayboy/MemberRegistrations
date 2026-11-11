@@ -14,6 +14,7 @@ function event(overrides: Partial<EventListItem> = {}): EventListItem {
     name: 'Sunday service',
     seriesId: 'series-1',
     startDate: '2026-11-01',
+    timezone: 'UTC',
     status: 'scheduled',
     sessions: [
       { date: '2026-11-01', startTime: '09:00', endTime: null, status: 'held', note: null },

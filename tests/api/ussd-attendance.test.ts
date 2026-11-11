@@ -101,12 +101,24 @@ async function createEvent(name: string, date: string, extra: Record<string, unk
   return response.body.id as string;
 }
 
-async function attend(eventId: string, memberNo: string, date: string) {
-  const response = await request(harness.app)
-    .post(`/v1/events/${eventId}/attendance`)
-    .set(writeHeaders)
-    .send({ memberNo, date });
-  expect(response.status).toBe(201);
+/**
+ * Seeds an attendance row. Per-member writes are accepted only for a session
+ * dated today, so historical rows are inserted directly; the USSD read screens
+ * under test never go through the write rule.
+ */
+async function attend(eventId: string, memberNo: string, date: string): Promise<void> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [inserted] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     on conflict (event_instance_id, session_date, member_id) do nothing
+     returning id`,
+    [member!.id, eventId, date],
+  );
+  expect(inserted).toBeTruthy();
 }
 
 async function issueCode(eventId: string, sessionDate: string, purpose: string) {
@@ -467,6 +479,102 @@ describe('USSD attendance, codes and clocking', () => {
     const expiredResult = await frame(expiredSession, expiredPhone, expired.code, 4, expiredIp);
     expect(expiredResult.body.state).toBe('attendance.code');
     expect(expiredResult.body.text).toContain('Bad code');
+  });
+
+  it('answers Closed for a punch against a closed session, not Bad code', async () => {
+    // A past session is outside the live window, so its first import is the end
+    // capture and closes it; the punch refusal is the shared close.
+    const closedDate = shiftDate(today, -2);
+    const closedEventId = await createEvent('Closed Gathering', closedDate);
+    const [series] = await harness.db.query<{ id: string }>(
+      `insert into event_series (name, timezone, created_by, updated_by)
+       values ('USSD Closed Series', 'UTC', 'seed', 'seed')
+       returning id`,
+    );
+    await harness.db.query(
+      'update event_instances set series_id = $1, timezone = $2 where id = $3',
+      [series!.id, 'UTC', closedEventId],
+    );
+    const closed = await request(harness.app)
+      .post('/v1/imports/attendance')
+      .set(writeHeaders)
+      .send({ eventId: closedEventId, sessionDate: closedDate, rows: [], ended: true });
+    expect(closed.status).toBe(201);
+
+    const phone = '0822 000 0022';
+    const ip = '10.20.9.1';
+    await createMember('UA-CLOSED', phone, { firstName: 'Closed', lastName: 'Member' });
+    const punch = await issueCode(closedEventId, closedDate, 'attendance_punch');
+
+    const started = await start(phone, ip);
+    const sessionId = started.body.sessionId as string;
+    await frame(sessionId, phone, '2', 2, ip);
+    await frame(sessionId, phone, '8', 3, ip);
+    const list = await frame(sessionId, phone, ddmmyyyy(closedDate), 4, ip);
+    expect(list.body.text).toContain('Closed Gathering');
+    await frame(sessionId, phone, '1', 5, ip);
+    const attendance = await frame(sessionId, phone, '2', 6, ip);
+    expect(attendance.body.state).toBe('attendance.event');
+    const prompt = await frame(sessionId, phone, '1', 7, ip);
+    expect(prompt.body.state).toBe('attendance.code');
+
+    const refused = await frame(sessionId, phone, punch.code, 8, ip);
+    expect(refused.body.state).toBe('attendance.code');
+    expect(refused.body.text).toContain('Closed');
+    expect(refused.body.text).not.toContain('Bad code');
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance
+        where event_instance_id = $1 and session_date = $2`,
+      [closedEventId, closedDate],
+    );
+    expect(Number(row!.count)).toBe(0);
+
+    const [code] = await harness.db.query<{ used_at: Date | null }>(
+      'select used_at from attendance_codes where id = $1',
+      [punch.id],
+    );
+    expect(code!.used_at).toBeNull();
+  });
+
+  it('answers Not today for a punch against a past-dated activity, not Bad code', async () => {
+    const phone = '0823 000 0023';
+    const ip = '10.20.9.2';
+    await createMember('UA-NOTODAY', phone, { firstName: 'Not', lastName: 'Today' });
+    const punch = await issueCode(pastEventId, yesterday, 'attendance_punch');
+
+    const started = await start(phone, ip);
+    const sessionId = started.body.sessionId as string;
+    await frame(sessionId, phone, '2', 2, ip);
+    await frame(sessionId, phone, '8', 3, ip);
+    const list = await frame(sessionId, phone, ddmmyyyy(yesterday), 4, ip);
+    expect(list.body.text).toContain('Past Gathering');
+    await frame(sessionId, phone, '1', 5, ip);
+    const attendance = await frame(sessionId, phone, '2', 6, ip);
+    expect(attendance.body.state).toBe('attendance.event');
+    const prompt = await frame(sessionId, phone, '1', 7, ip);
+    expect(prompt.body.state).toBe('attendance.code');
+
+    const refused = await frame(sessionId, phone, punch.code, 8, ip);
+    expect(refused.body.state).toBe('attendance.code');
+    expect(refused.body.text).toContain('Not today');
+    expect(refused.body.text).not.toContain('Bad code');
+
+    const [row] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count
+         from attendance a
+         join members m on m.id = a.member_id
+        where m.member_no = 'UA-NOTODAY'
+          and a.event_instance_id = $1 and a.session_date = $2`,
+      [pastEventId, yesterday],
+    );
+    expect(Number(row!.count)).toBe(0);
+
+    const [code] = await harness.db.query<{ used_at: Date | null }>(
+      'select used_at from attendance_codes where id = $1',
+      [punch.id],
+    );
+    expect(code!.used_at).toBeNull();
   });
 
   it('registers an anonymous caller from a registration code and refuses a reuse', async () => {

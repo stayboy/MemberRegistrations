@@ -215,6 +215,25 @@ export const useUssdStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalXXS,
   },
+  captureState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+  captureLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  captureDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: tokens.colorPaletteGreenBackground3,
+  },
   errorText: {
     color: tokens.colorPaletteRedForeground1,
   },

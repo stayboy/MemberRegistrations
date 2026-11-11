@@ -343,7 +343,21 @@ describe('headcount correction', () => {
     expect(unknown.status).toBe(422);
   });
 
-  it('corrects a past session without sending an asOf', async () => {
+  it('refuses a headcount, including a correction, for a session dated before today', async () => {
+    // The observation is historical: seed it directly, because the API no longer
+    // accepts a headcount for a session dated before today (AC-33a).
+    const [seeded] = await harness.db.query<{ id: string }>(
+      `insert into event_session_headcounts (
+         event_instance_id, session_date, as_of, mode,
+         adult_male, adult_female, adult_unspecified,
+         child_male, child_female, child_unspecified,
+         total, ended, recorded_by
+       )
+       values ($1,$2,$3,'adults',7,8,0,0,0,0,15,false,'seed')
+       returning id`,
+      [pastEventId, yesterday, `${yesterday}T10:00:00.000Z`],
+    );
+
     const original = await request(harness.app)
       .post(`/v1/events/${pastEventId}/headcounts`)
       .set(writeHeaders)
@@ -354,7 +368,8 @@ describe('headcount correction', () => {
         adultFemale: 8,
         asOf: `${yesterday}T10:00:00.000Z`,
       });
-    expect(original.status).toBe(201);
+    expect(original.status).toBe(422);
+    expect(original.body.code).toBe('validation_error');
 
     const corrected = await request(harness.app)
       .post(`/v1/events/${pastEventId}/headcounts`)
@@ -364,12 +379,69 @@ describe('headcount correction', () => {
         mode: 'adults',
         adultMale: 7,
         adultFemale: 9,
-        supersedesId: original.body.id,
+        supersedesId: seeded!.id,
       });
-    expect(corrected.status).toBe(201);
-    expect(corrected.body.asOf).toBe(`${yesterday}T10:00:00.000Z`);
-    expect(corrected.body.total).toBe(16);
-    expect(corrected.body.recordedBy).toBe('late-corrector');
+    expect(corrected.status).toBe(422);
+    expect(corrected.body.code).toBe('validation_error');
+
+    const [stored] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from event_session_headcounts
+        where event_instance_id = $1 and session_date = $2`,
+      [pastEventId, yesterday],
+    );
+    expect(Number(stored!.count)).toBe(1);
+
+    const readBack = await request(harness.app)
+      .get(`/v1/events/${pastEventId}/headcounts/${seeded!.id}`)
+      .set(readHeaders);
+    expect(readBack.status).toBe(200);
+    expect(readBack.body.supersededBy).toBeNull();
+    // A row written before the capture model reads as not ended.
+    expect(readBack.body.ended).toBe(false);
+  });
+
+  it('answers session_closed when a late import already closed the past session', async () => {
+    // A past session is outside the live window, so its first attendance import
+    // is the end capture and closes it without an `ended` flag.
+    const sessionDate = shiftDate(today, -3);
+    const closedEventId = await createEvent('HC-400', [sessionDate]);
+    const [series] = await harness.db.query<{ id: string }>(
+      `insert into event_series (name, timezone, created_by, updated_by)
+       values ('Headcount Close Series', 'UTC', 'seed', 'seed')
+       returning id`,
+    );
+    await harness.db.query(
+      'update event_instances set series_id = $1, timezone = $2 where id = $3',
+      [series!.id, 'UTC', closedEventId],
+    );
+
+    const closed = await request(harness.app)
+      .post('/v1/imports/attendance')
+      .set(writeHeaders)
+      .send({ eventId: closedEventId, sessionDate, rows: [{ memberNo }] });
+    expect(closed.status).toBe(201);
+
+    const response = await request(harness.app)
+      .post(`/v1/events/${closedEventId}/headcounts`)
+      .set(writeHeaders)
+      .send({
+        sessionDate,
+        asOf: `${sessionDate}T10:00:00.000Z`,
+        mode: 'adults',
+        adultMale: 1,
+        adultFemale: 1,
+      });
+
+    // The close is terminal: it is reported before the calendar-day rule.
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('session_closed');
+
+    const [stored] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from event_session_headcounts
+        where event_instance_id = $1 and session_date = $2`,
+      [closedEventId, sessionDate],
+    );
+    expect(Number(stored!.count)).toBe(0);
   });
 });
 

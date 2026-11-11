@@ -374,6 +374,7 @@ export const eventSessionHeadcounts = pgTable(
     childFemale: integer('child_female').notNull().default(0),
     childUnspecified: integer('child_unspecified').notNull().default(0),
     total: integer('total').notNull(),
+    ended: boolean('ended').notNull().default(false),
     recordedBy: text('recorded_by').notNull(),
     recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
     supersedesId: uuid('supersedes_id'),

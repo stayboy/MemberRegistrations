@@ -176,24 +176,19 @@ export interface HeadcountField {
 
 const ADULT_MALE: HeadcountField = { key: 'adultMale', label: 'Adult men' };
 const ADULT_FEMALE: HeadcountField = { key: 'adultFemale', label: 'Adult women' };
-const ADULTS_UNSPECIFIED: HeadcountField = {
-  key: 'adultUnspecified',
-  label: 'Adults (unspecified)',
-};
+const ADULTS: HeadcountField = { key: 'adultUnspecified', label: 'Adults' };
 const CHILD_MALE: HeadcountField = { key: 'childMale', label: 'Boys' };
 const CHILD_FEMALE: HeadcountField = { key: 'childFemale', label: 'Girls' };
-const CHILDREN_UNSPECIFIED: HeadcountField = {
-  key: 'childUnspecified',
-  label: 'Children (unspecified)',
-};
+const CHILDREN: HeadcountField = { key: 'childUnspecified', label: 'Children' };
 
 /**
- * The three-number entry, four in Mixed. Adults mode counts children as one
- * unspecified bucket; children mode does the reverse; Mixed splits both.
+ * The three-number entry, four in Mixed. Adult service counts Adult men, Adult
+ * women and Children; children service counts Boys, Girls and Adults in that
+ * order. Mixed splits both and never shows an "(unspecified)" bucket.
  */
 export function headcountFields(mode: HeadcountMode): readonly HeadcountField[] {
-  if (mode === 'adults') return [ADULT_MALE, ADULT_FEMALE, CHILDREN_UNSPECIFIED];
-  if (mode === 'children') return [ADULTS_UNSPECIFIED, CHILD_MALE, CHILD_FEMALE];
+  if (mode === 'adults') return [ADULT_MALE, ADULT_FEMALE, CHILDREN];
+  if (mode === 'children') return [CHILD_MALE, CHILD_FEMALE, ADULTS];
   return [ADULT_MALE, ADULT_FEMALE, CHILD_MALE, CHILD_FEMALE];
 }
 

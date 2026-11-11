@@ -5,7 +5,7 @@ import type {
   EventVenueType,
   SessionSource,
 } from '../api/events';
-
+import { captureClock, captureState, type CaptureSession } from './capture';
 /**
  * Pure event labels and formatters (events FR-1/FR-2/FR-4/FR-10/FR-15). They
  * render the API's own values; no attendance count or status is derived here.
@@ -102,4 +102,41 @@ export function offeringsLabel(count: number): string {
 /** The per-session attendance cell: pairs in session order, never summed. */
 export function sessionAttendanceLabels(sessions: readonly EventSessionItem[]): string {
   return sessions.map((session) => formatPresentExpected(session)).join(' · ');
+}
+
+/**
+ * The event detail row's capture line (FR-4b): the latest capture of either
+ * channel, with the session's shared ended flag. The live/not-started/past
+ * split is computed from the session window in the event timezone; the line
+ * never reads a stored live flag. A session with no capture says so.
+ *
+ * The instant is rendered in the **event** timezone, never the browser's: the
+ * closing capture may fall on a later local day, and the spec's examples are
+ * event-zone ("End of session · 11 Nov 11:05 GMT").
+ */
+export function sessionCaptureLine(session: CaptureSession, now: Date): string {
+  const state = captureState(session, now);
+  if (!state.hasCapture) return state.kind === 'cancelled' ? 'Cancelled' : 'No capture yet';
+
+  const label =
+    state.kind === 'ended'
+      ? 'End of session'
+      : state.kind === 'cancelled'
+        ? 'Cancelled'
+        : state.kind === 'past-open'
+          ? 'Past session'
+          : state.kind === 'not-started'
+            ? 'Not started'
+            : 'Live';
+  return `${label} · ${captureStamp(state.asOf!, session.timezone)}`;
+}
+
+/** `8 Nov 11:05` in a zone: the date matters when a close falls on a later day. */
+function captureStamp(asOf: string, timeZone: string): string {
+  const date = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(asOf));
+  return `${date} ${captureClock(asOf, timeZone)}`;
 }

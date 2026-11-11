@@ -214,6 +214,8 @@ export interface Headcount {
   readonly childFemale: number;
   readonly childUnspecified: number;
   readonly total: number;
+  /** True when this observation ended the session (the shared close). */
+  readonly ended: boolean;
   readonly recordedBy: string;
   readonly recordedAt: string;
   readonly supersedesId: string | null;
@@ -237,6 +239,8 @@ export interface HeadcountInput {
   readonly childUnspecified: number;
   readonly asOf?: string;
   readonly supersedesId?: string;
+  /** True closes the session; a headcount never ends automatically. */
+  readonly ended?: boolean;
 }
 
 export function headcountsPath(eventId: string, sessionDate: string): string {

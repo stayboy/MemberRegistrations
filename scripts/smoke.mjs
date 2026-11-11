@@ -254,20 +254,22 @@ async function runScenario() {
 
   // Headcount: append, correct, read back the chain, and prove the retired
   // /expected route is gone. The presbyter-only roster is the active presbyters.
-  const headcountDate = shiftDate(TODAY, -1);
+  const headcountEventDate = shiftDate(TODAY, -1);
   const headcountEvent = await request('/v1/events', {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
       eventNo: 'SMOKE-HEAD',
       name: 'Smoke Headcount Event',
-      // Dated yesterday so it never competes with today's giving event.
-      startDate: shiftDate(TODAY, -1),
-      endDate: shiftDate(TODAY, -1),
+      // Dated yesterday so it never competes with today's giving event in the
+      // USSD activity picker; the headcount writes below target the today event,
+      // because a headcount is only accepted for the session's own day.
+      startDate: headcountEventDate,
+      endDate: headcountEventDate,
       startTime: '09:00',
       venueType: 'auditorium',
       presbyterOnly: true,
-      sessions: [{ date: headcountDate, startTime: '09:00' }],
+      sessions: [{ date: headcountEventDate, startTime: '09:00' }],
     }),
   });
   check(
@@ -276,15 +278,15 @@ async function runScenario() {
     JSON.stringify(headcountEvent.body),
   );
 
-  const headcount = await request(`/v1/events/${headcountEvent.body.id}/headcounts`, {
+  const headcount = await request(`/v1/events/${todayEvent.body.id}/headcounts`, {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
-      sessionDate: headcountDate,
+      sessionDate: TODAY,
       mode: 'adults',
       adultMale: 20,
       adultFemale: 30,
-      asOf: `${headcountDate}T08:00:00.000Z`,
+      asOf: `${TODAY}T08:00:00.000Z`,
     }),
   });
   check(
@@ -293,11 +295,11 @@ async function runScenario() {
     JSON.stringify(headcount.body),
   );
 
-  const correctedHeadcount = await request(`/v1/events/${headcountEvent.body.id}/headcounts`, {
+  const correctedHeadcount = await request(`/v1/events/${todayEvent.body.id}/headcounts`, {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
-      sessionDate: headcountDate,
+      sessionDate: TODAY,
       mode: 'adults',
       adultMale: 21,
       adultFemale: 30,
@@ -314,7 +316,7 @@ async function runScenario() {
   );
 
   const headcountPage = await request(
-    `/v1/events/${headcountEvent.body.id}/headcounts?sessionDate=${headcountDate}`,
+    `/v1/events/${todayEvent.body.id}/headcounts?sessionDate=${TODAY}`,
     { headers: read },
   );
   const supersededHeadcount = headcountPage.body.observations?.find(
@@ -330,7 +332,7 @@ async function runScenario() {
   );
 
   const retiredExpected = await request(
-    `/v1/events/${headcountEvent.body.id}/expected?sessionDate=${headcountDate}`,
+    `/v1/events/${todayEvent.body.id}/expected?sessionDate=${TODAY}`,
     { headers: read },
   );
   check(
@@ -340,7 +342,7 @@ async function runScenario() {
   );
 
   const presbyterReport = await request(
-    `/v1/events/${headcountEvent.body.id}/attendance?date=${headcountDate}`,
+    `/v1/events/${headcountEvent.body.id}/attendance?date=${headcountEventDate}`,
     { headers: read },
   );
   check(

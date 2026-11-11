@@ -35,11 +35,14 @@ beforeAll(async () => {
   app = harness.app;
   clocking = new ClockingRepository(harness.db);
 
+  // Per-member writes (clock-in and the manual row it wraps) are accepted only
+  // for a session dated today; delegation reads and the roster count work on
+  // any session date.
   sessions.delegation = day(-5);
   sessions.expected = day(-4);
-  sessions.shepherd = day(-3);
-  sessions.senior = day(-2);
-  sessions.delegated = day(-1);
+  sessions.shepherd = day(0);
+  sessions.senior = day(0);
+  sessions.delegated = day(0);
 
   await createMember('CLK-SENIOR', { isPresbyter: true, presbyterRank: 1 });
   await createMember('CLK-SENIOR-2', { isPresbyter: true, presbyterRank: 2 });
@@ -65,7 +68,7 @@ beforeAll(async () => {
       endDate: sessions.delegated,
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: Object.values(sessions).map((date) => ({ date })),
+      sessions: [...new Set(Object.values(sessions))].map((date) => ({ date })),
     })
     .expect(201);
   eventId = event.body.id as string;

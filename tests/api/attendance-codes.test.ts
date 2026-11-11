@@ -28,6 +28,8 @@ async function createEvent(dates: string[]): Promise<string> {
     .send({
       eventNo: `CODE-${eventNo}`,
       name: `Code event ${eventNo}`,
+      // UTC so a session dated today is today in the event timezone.
+      timezone: 'UTC',
       startDate: dates[0],
       endDate: dates[dates.length - 1],
       startTime: '09:00',
@@ -140,20 +142,23 @@ describe('code issuance and listing', () => {
 
 describe('redemption', () => {
   it('writes attendance and marks the code used', async () => {
+    // A punch writes a manual row, so it is accepted only for today's session.
+    const today = day(0);
+    const todayEventId = await createEvent([today]);
     const memberId = await createMember('CODE-M1');
-    const issued = await issue('attendance_punch');
+    const issued = await issue('attendance_punch', todayEventId, today);
 
     const result = await codes.redeem({
       code: issued.body.code,
       purpose: 'attendance_punch',
       phoneHash: 'phone-hash-punch',
       memberId,
-      eventId,
-      sessionDate,
+      eventId: todayEventId,
+      sessionDate: today,
       actor: 'test-admin',
     });
 
-    expect(result).toMatchObject({ kind: 'attendance', eventId, sessionDate });
+    expect(result).toMatchObject({ kind: 'attendance', eventId: todayEventId, sessionDate: today });
     const [row] = await harness.db.query<{ used_at: Date | null; used_by_member_id: string }>(
       'select used_at, used_by_member_id from attendance_codes where id = $1',
       [issued.body.id],
@@ -162,8 +167,8 @@ describe('redemption', () => {
     expect(row!.used_by_member_id).toBe(memberId);
 
     const attendance = await request(app)
-      .get(`/v1/events/${eventId}/attendance`)
-      .query({ date: sessionDate })
+      .get(`/v1/events/${todayEventId}/attendance`)
+      .query({ date: today })
       .set(readHeaders)
       .expect(200);
     expect(attendance.body.rows.map((entry: { memberNo: string }) => entry.memberNo)).toContain(
@@ -171,27 +176,114 @@ describe('redemption', () => {
     );
   });
 
+  it('refuses a punch for a session that is not today and leaves the code unused', async () => {
+    const session = day(-3);
+    const pastEventId = await createEvent([session]);
+    const memberId = await createMember('CODE-PAST');
+    const issued = await issue('attendance_punch', pastEventId, session);
+
+    await expect(
+      codes.redeem({
+        code: issued.body.code,
+        purpose: 'attendance_punch',
+        phoneHash: 'phone-hash-past',
+        memberId,
+        eventId: pastEventId,
+        sessionDate: session,
+        actor: 'test-admin',
+      }),
+    ).rejects.toMatchObject({ code: 'validation_error' });
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance
+        where event_instance_id = $1 and session_date = $2`,
+      [pastEventId, session],
+    );
+    expect(Number(attendance!.count)).toBe(0);
+
+    const [row] = await harness.db.query<{ used_at: Date | null }>(
+      'select used_at from attendance_codes where id = $1',
+      [issued.body.id],
+    );
+    expect(row!.used_at).toBeNull();
+  });
+
+  it('refuses a punch once the session is closed and leaves the code unused', async () => {
+    const today = day(0);
+    const closedEventId = await createEvent([today]);
+    // A punch code targets a session; an import needs the event to be
+    // series-backed, and an ended capture closes the shared session.
+    const [series] = await harness.db.query<{ id: string }>(
+      `insert into event_series (name, timezone, created_by, updated_by)
+       values ('Code Close Series', 'UTC', 'seed', 'seed')
+       returning id`,
+    );
+    await harness.db.query('update event_instances set series_id = $1 where id = $2', [
+      series!.id,
+      closedEventId,
+    ]);
+
+    const closed = await request(app)
+      .post('/v1/imports/attendance')
+      .set(writeHeaders)
+      .send({ eventId: closedEventId, sessionDate: today, rows: [], ended: true });
+    expect(closed.status).toBe(201);
+
+    const memberId = await createMember('CODE-CLOSED');
+    const issued = await issue('attendance_punch', closedEventId, today);
+
+    await expect(
+      codes.redeem({
+        code: issued.body.code,
+        purpose: 'attendance_punch',
+        phoneHash: 'phone-hash-closed',
+        memberId,
+        eventId: closedEventId,
+        sessionDate: today,
+        actor: 'test-admin',
+      }),
+    ).rejects.toMatchObject({ code: 'session_closed' });
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      `select count(*)::int as count from attendance
+        where event_instance_id = $1 and session_date = $2`,
+      [closedEventId, today],
+    );
+    expect(Number(attendance!.count)).toBe(0);
+
+    const [row] = await harness.db.query<{ used_at: Date | null }>(
+      'select used_at from attendance_codes where id = $1',
+      [issued.body.id],
+    );
+    expect(row!.used_at).toBeNull();
+  });
+
   it('refuses an already clocked member without consuming the code', async () => {
+    // A per-member manual write is accepted only for a session dated today, so
+    // the "already clocked" fixture is created on today's session; the code is
+    // issued and redeemed against the same session.
+    const today = day(0);
+    const todayEventId = await createEvent([today]);
     await createMember('CODE-M2');
     await request(app)
-      .post(`/v1/events/${eventId}/attendance`)
+      .post(`/v1/events/${todayEventId}/attendance`)
       .set(writeHeaders)
-      .send({ memberNo: 'CODE-M2', date: sessionDate })
+      .send({ memberNo: 'CODE-M2', date: today })
       .expect(201);
 
     const [member] = await harness.db.query<{ id: string }>(
       'select id from members where member_no = $1',
       ['CODE-M2'],
     );
-    const issued = await issue('attendance_punch');
+    const issued = await issue('attendance_punch', todayEventId, today);
     await expect(
       codes.redeem({
         code: issued.body.code,
         purpose: 'attendance_punch',
         phoneHash: 'phone-hash-already',
         memberId: member!.id,
-        eventId,
-        sessionDate,
+        eventId: todayEventId,
+        sessionDate: today,
         actor: 'test-admin',
       }),
     ).rejects.toMatchObject({ code: 'already_clocked' });

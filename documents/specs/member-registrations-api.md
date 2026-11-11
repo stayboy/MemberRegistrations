@@ -14,6 +14,13 @@
 
 ## Change log
 
+- 2026-11-11: capture precedence settled for two corners, both already implied by AC-33. The shared close
+  is checked before the headcount calendar-day rule, so a past session already closed by a late import
+  answers `409 session_closed`, not `422 validation_error`. A redeemed `attendance_punch` is a per-member
+  write and obeys §Clocking — today-only (`422`) and not after a close (`409`) — and neither refusal
+  consumes the code; the USSD glossary reports those as `Closed` / `Not today`, never `Bad code`. No new
+  acceptance criterion. Approved by the owner 2026-11-11 after the window-seat grill.
+
 - 2026-11-11: attendance is a **capture** model. An import or headcount stamps `asOf` and carries `ended`;
   live is computed from the session date and its time window in the event timezone, so the user only
   presses End of session. A capture outside the window with no close is the end capture. One close per
@@ -21,7 +28,11 @@
   `409 session_closed`. Captures replace the session's imported rows and manual rows survive; live
   captures may repeat. Manual and USSD per-member writes are limited to a session dated today in the
   event timezone and refused after a close. AC-32/AC-33 added; the import and headcount contracts, the
-  `Headcount` DTO and the error list say so. Migration `0020_attendance_captures`.
+  `Headcount` DTO and the error list say so. The migration `0020_attendance_captures` adds `as_of` nullable
+  with a `now()` default, backfills it from each batch's `created_at`, then applies `not null`; it adds
+  `ended boolean not null default false` to `import_batches` and `event_session_headcounts`, so existing
+  rows read `ended = false`. A headcount after the session's calendar day is refused with
+  `422 validation_error`, so only a late import closes a past session.
 
 - 2026-11-11: an attendance import is limited to series-backed events; a standalone event answers
   `422 series_required` and writes nothing. Existing standalone attendance history stays visible and
@@ -628,7 +639,9 @@ and are `no-store` on read.
   `ussd:code:<phoneHash>`. A valid `attendance_punch` writes the attendance row and marks the code used;
   if the member already has a row for that session the answer is `409 already_clocked` and the code is
   not consumed. A valid `registration` code creates the pending request and marks the code used; a
-  second use is `409 code_used`.
+  second use is `409 code_used`. A valid `attendance_punch` obeys §Clocking: the code is refused after
+  the session's close (`409 session_closed`) and for a session not dated today in the event timezone
+  (`422 validation_error`), and neither refusal consumes the code.
 - **Redemption and creation seam.** Code redemption and registration-request creation happen **inside
   `POST /ussd/session`**, through repository methods; there is no bearer route for either. The bearer
   seams are issuance/void/list, request list/approve/reject, delegation, headcounts, the
@@ -665,8 +678,14 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   observation carries a `mode` (`adults` | `children` | `mixed`), six buckets, a `total`, an `asOf`
   timestamp, `ended` (default false) and the recorder. **A headcount is a capture too**: the computed
   live window and the End of session action follow the import capture, and the session close is shared —
-  once any capture for the session is ended, a headcount write answers `409 session_closed`. The
-  register-derived `expected` is a separate thing, labelled **Roster**
+  once any capture for the session is ended, a headcount write answers `409 session_closed`. A headcount's
+  `asOf` stays inside the session's calendar day, and a headcount after that day is refused with `422
+validation_error`. A headcount is bounded by the calendar day, not the live window: within the day it is
+  accepted as written and `ended` comes only from the operator's `ended: true`; the import's
+  outside-the-window auto-end does not apply to a headcount, so only a late import closes a past session.
+  The close is checked before the calendar-day rule, so a past session already closed by a late import
+  answers `409 session_closed`, not `422 validation_error`; the `422` applies only while no close exists.
+  The register-derived `expected` is a separate thing, labelled **Roster**
   on the reading surfaces, and a headcount never derives from or feeds it.
   `GET /v1/events/{eventId}/headcounts?sessionDate` returns
   `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
@@ -1039,6 +1058,18 @@ export interface EventSession {
   endTime: string | null;
   status: 'scheduled' | 'held' | 'cancelled';
   venueType?: VenueType;
+  /**
+   * The session's capture state. `asOf` is the later `asOf` of the current (non-superseded) headcount
+   * observation and the latest import batch (latest by `asOf`, then `createdAt`, then `id`); when the
+   * two share an `asOf`, the one with the later recorded time (headcount `recordedAt` vs batch
+   * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the session's shared
+   * close state: `true` when any capture for the session (import or headcount, superseded rows
+   * included) carries `ended`, `false` otherwise. `asOf` is an ISO-8601 instant, never zone-shifted;
+   * the client renders it in the event timezone. Null when the session has no capture.
+   */
+  capture: { asOf: string; ended: boolean } | null;
+  /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
+  note: string | null;
   present: number;
   expected: number;
   importedRows: number;
@@ -1387,9 +1418,11 @@ migration `0017` and are defined in `member-registrations-events-offerings.md` (
 
 ### AC-31: **Given** a standalone event, **When** an attendance import targets one of its sessions, **Then** the response is `422 series_required` and no batch or attendance row is written; the same import against a series-backed event succeeds. (FR-6)
 
-### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** a capture outside the live window with no close, **Then** it is accepted as the end capture and closes the session. (FR-6)
+### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** an import capture outside the live window with no close, **Then** it is accepted as the end capture and closes the session. (FR-6)
 
 ### AC-33: **Given** a session closed by any ended capture, **When** a per-member manual write, an import or a headcount is attempted, **Then** each answers `409 session_closed` and writes nothing; a per-member manual write for a session not dated today in the event timezone is refused while no close exists. (FR-6, §Clocking)
+
+### AC-33a: **Given** a session dated before today in the event timezone, or a headcount whose `asOf` falls outside the session's calendar day, **When** a headcount is recorded, **Then** the API answers `422 validation_error` and writes nothing; **Given** a session dated today or later whose calendar day contains the headcount's `asOf`, **When** it is recorded outside the live window without `ended: true`, **Then** it is accepted as written and does not close the session — `ended` is set only by the operator's `ended: true` — and only a later import capture closes a past-open session. (§ Headcounts)
 
 ## Edge Cases
 
