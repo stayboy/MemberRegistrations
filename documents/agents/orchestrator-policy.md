@@ -36,7 +36,10 @@ fallback is used. The fallback is standing-approved for these seats (owner, 2026
 renegotiation of the gate. This supersedes the earlier "a fallback needs the owner's recorded approval":
 the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00 local the
 reviewer / plan-gate / spec-review / acceptance seat is `cline-pass/cline-pass/mimo-v2.6-pro` (owner,
-2026-11-09); outside that window the ranking applies.
+2026-11-09); outside that window the ranking applies. The same window moves the **grill-me** seat to
+the cline-pass provider for the same model (`cline-pass/cline-pass/deepseek-v4.1-flash-1017`) (owner,
+2026-11-11). No seat has any other clock rule: the **worker** seat is availability-ranked only, never
+clock-ranked.
 
 | Seat                                                        | Ranked models (first available wins)                                                            |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |

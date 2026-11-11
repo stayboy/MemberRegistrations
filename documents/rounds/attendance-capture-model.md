@@ -1,17 +1,17 @@
 # Round — attendance-capture-model
 
-|                     |                                                                                                                                                                            |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status              | OPEN                                                                                                                                                                       |
-| Tier                | 2                                                                                                                                                                          |
-| Mode                | attended (owner grill, 2026-11-11; "all as recommended")                                                                                                                   |
-| Base                | `1f5b995`                                                                                                                                                                  |
-| Review rounds       | 4 (spec: 2 on the window seat, 2 on 0813)                                                                                                                                  |
-| Gate runs in parent | 0                                                                                                                                                                          |
-| Spec                | events/offerings FR-4b/FR-6f; API §Imports/§Headcounts/§Clocking, AC-32/AC-33                                                                                              |
-| Workers             | `single`                                                                                                                                                                   |
-| Implementer         | parent `opencode/deepseek-v4.1-flash-free` (source, UI, migration 0020); worker `cline-pass/cline-pass/deepseek-v4.1-flash-1017` (tests, `ses_e34fe2afdffeORnZA8BEy0HkpB`) |
-| Migration           | **pre-authorised by name**: `0020_attendance_captures` (owner, 2026-11-11)                                                                                                 |
+|                     |                                                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status              | OPEN                                                                                                                                                                 |
+| Tier                | 2                                                                                                                                                                    |
+| Mode                | attended (owner grill, 2026-11-11; "all as recommended")                                                                                                             |
+| Base                | `1f5b995`                                                                                                                                                            |
+| Review rounds       | 4 (spec: 2 on the window seat, 2 on 0813)                                                                                                                            |
+| Gate runs in parent | 0                                                                                                                                                                    |
+| Spec                | events/offerings FR-4b/FR-6f; API §Imports/§Headcounts/§Clocking, AC-32/AC-33                                                                                        |
+| Workers             | `single`                                                                                                                                                             |
+| Implementer         | parent opencode/deepseek-v4.1-flash-free (source, UI, migration 0020); worker cline-pass/cline-pass/deepseek-v4.1-flash-1017 (tests, ses_e34fe2afdffeORnZA8BEy0HkpB) |
+| Migration           | **pre-authorised by name**: `0020_attendance_captures` (owner, 2026-11-11)                                                                                           |
 
 ### Decisions (grill, 2026-11-11)
 

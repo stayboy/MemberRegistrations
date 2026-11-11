@@ -244,7 +244,9 @@ reintroduce them silently.
   round attended by saying so. The consent is this rule, never the owner's silence.
 - **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session defaults to
   `ollama-cloud/deepseek-v4.1-flash:1017` — the ollama provider first; if that provider fails, use
-  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`.
+  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Between 12:00 and 18:00 local the provider preference
+  flips: the cline-pass provider is tried first and `ollama-cloud` is the fallback (owner, 2026-11-11). The
+  window moves **grill-me and the reviewer-class seats only**; the worker seat has no clock rule.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
   recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
   recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report

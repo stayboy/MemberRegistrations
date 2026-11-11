@@ -21,6 +21,14 @@ Report findings as `P1`, `P2` and `Nits`, each with `path:line` evidence, and en
 `Verdict:` line (`ACCEPT`, `REWORK` or `PARKED`). A finding without a location is a question, not a
 verdict.
 
+Two lines come with it:
+
+- `Seat: consistent | contradicted` — the round doc's `Implementer` row against the diff, and whether
+  this reviewer is a different model from both recorded authors. A contradicted seat is `REWORK`, not
+  a nit.
+- **Assert the test assertions.** A tests-only worker must not weaken one to match the implementation;
+  an assertion changed without a spec reason is a finding.
+
 ## Read-only
 
 Reviewers are read-only: never edit, commit, push, merge or run a mutating gate. They return blocks;
