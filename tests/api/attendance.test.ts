@@ -762,6 +762,8 @@ describe('event attendance per session', () => {
   let eventId: string;
   let cancelledEventId: string;
   let cancelledSessionEventId: string;
+  let standaloneEventId: string;
+  let seriesId: string;
   const memberIds: Record<string, string> = {};
 
   let duplicateImportBatchId: string;
@@ -795,12 +797,13 @@ describe('event attendance per session', () => {
     startDate: string;
     endDate: string;
     sessions: Array<{ date: string; status?: string }>;
+    seriesId?: string | null;
   }): Promise<string> {
     const [row] = await harness.db.query<{ id: string }>(
       `insert into event_instances (
-         event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions
+         event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions, series_id
        )
-       values ($1,$2,'UTC',$3,$4,'17:00','auditorium',$5,'manual',$6::jsonb)
+       values ($1,$2,'UTC',$3,$4,'17:00','auditorium',$5,'manual',$6::jsonb,$7)
        returning id`,
       [
         body.eventNo,
@@ -809,6 +812,7 @@ describe('event attendance per session', () => {
         body.endDate,
         body.status,
         JSON.stringify(body.sessions),
+        body.seriesId ?? null,
       ],
     );
     return row!.id;
@@ -856,6 +860,17 @@ describe('event attendance per session', () => {
     );
     for (const row of rows) memberIds[row.member_no] = row.id;
 
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Conference Series',
+        timezone: 'UTC',
+        schedule: { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
+      });
+    expect(series.status).toBe(201);
+    seriesId = series.body.id as string;
+
     const event = await request(app)
       .post('/v1/events')
       .set(writeHeaders)
@@ -872,6 +887,12 @@ describe('event attendance per session', () => {
       });
     expect(event.status).toBe(201);
     eventId = event.body.id as string;
+    // An import needs a series-backed event; the create route makes a standalone
+    // one, so link it here.
+    await harness.db.query('update event_instances set series_id = $1 where id = $2', [
+      seriesId,
+      eventId,
+    ]);
 
     cancelledEventId = await insertEvent({
       eventNo: 'EVT-2026-015',
@@ -880,6 +901,7 @@ describe('event attendance per session', () => {
       startDate: '2026-11-01',
       endDate: '2026-11-01',
       sessions: [{ date: '2026-11-01', status: 'scheduled' }],
+      seriesId,
     });
 
     cancelledSessionEventId = await insertEvent({
@@ -892,6 +914,17 @@ describe('event attendance per session', () => {
         { date: '2026-11-10', status: 'scheduled' },
         { date: '2026-11-11', status: 'cancelled' },
       ],
+      seriesId,
+    });
+
+    standaloneEventId = await insertEvent({
+      eventNo: 'EVT-2026-017',
+      name: 'Standalone Conference',
+      status: 'scheduled',
+      startDate: '2026-12-01',
+      endDate: '2026-12-01',
+      sessions: [{ date: '2026-12-01', status: 'scheduled' }],
+      seriesId: null,
     });
   });
 
@@ -1161,6 +1194,25 @@ describe('event attendance per session', () => {
       [eventId],
     );
     expect(Number(row!.count)).toBe(2);
+  });
+
+  it('refuses a standalone event, and writes nothing', async () => {
+    const response = await importRows(standaloneEventId, '2026-12-01', [{ memberNo: 'M-7001' }]);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('series_required');
+
+    const [batch] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      [standaloneEventId],
+    );
+    expect(Number(batch!.count)).toBe(0);
+
+    const [attendance] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from attendance where event_instance_id = $1',
+      [standaloneEventId],
+    );
+    expect(Number(attendance!.count)).toBe(0);
   });
 
   it('rejects an import against a cancelled session, and writes nothing', async () => {

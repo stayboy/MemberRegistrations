@@ -504,8 +504,11 @@ separate Attendance section, that is Q1.
   documented series endpoints. A `cancelled` exception MUST carry a non-empty reason in `note`; the API
   rejects one without it with `422 reason_required`. Archive MUST confirm; the API preserves history
   and does not hard delete.
-- FR-8: “Import attendance” on an event/series MUST link to the existing import flow; after a
-  successful batch the event/series queries MUST be invalidated.
+- FR-8: “Import attendance” MUST appear on the series detail and on a series-backed event's detail,
+  and MUST link to the existing import flow. A standalone event MUST NOT offer it. The link carries
+  `event=<id>` from an event and `series=<id>` from a series; `date` stays optional. After a successful
+  batch the events, series and imports queries MUST be invalidated (AC-7). The API refuses an import
+  for a standalone event with `422 series_required` (API spec).
 - FR-9: An event MUST show all offerings attached to it (two or more) in the read-only Active
   offerings panel. This data MUST come from the event aggregate or the offerings API; the UI MUST NOT
   aggregate contributions client-side from partial pages.
@@ -650,7 +653,7 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-6a: **Given** a cancelled series exception or an event session written as cancelled, **When** it is submitted without a reason, **Then** the API answers `422 reason_required` and nothing is written; a legacy row without a reason is shown as "No reason recorded". (FR-4a, FR-7)
 
-### AC-7: **Given** an event or series, **When** “Import attendance” is chosen, **Then** the import flow opens and a successful batch invalidates the event/series queries. (FR-8)
+### AC-7: **Given** a series-backed event or a series, **When** “Import attendance” is chosen, **Then** the import flow opens at `/imports/attendance?event=<id>` seeded with that event, or at `?series=<id>` with the picker filtered to that series (`date` optional), a successful batch invalidates the events, series and imports queries, and a standalone event shows no entry. (FR-8)
 
 ### AC-8: **Given** an event attendance report, **When** it loads, **Then** one aggregate request returns present/expected and optional member rows; no per-member requests are made. (FR-10, FR-11)
 
@@ -694,7 +697,7 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-28: **Given** an event, **When** it is created or displayed, **Then** `venue_type` is one of `auditorium`, `virtual`, `hybrid` and appears as a badge in the list and detail; `venue_name` is optional; a series-generated event inherits the default unless overridden. (FR-15)
 
-### AC-29: **Given** the Strategic Conference, **When** it is created standalone, **Then** it has no `series_id`, a unique `event_no`, three sessions on the `event_instances` row, and an attendance import targets one of those sessions by `eventId` + `sessionDate`. (FR-16)
+### AC-29: **Given** the Strategic Conference, **When** it is created standalone, **Then** it has no `series_id`, a unique `event_no`, and three sessions on the `event_instances` row. (FR-16)
 
 ### AC-30: **Given** a visitor, **When** they give, **Then** the contribution records name + phone hash, returns a receipt/reference, creates no member record, and appears only in the separate visitor total. (FR-17)
 
@@ -1147,6 +1150,7 @@ server-owned route at `POST /ussd/session` with a `seq` frame number, specified 
 | 422     | `session_not_in_event`      | Pick one of the event's sessions    |
 | 422     | `headcount_only`            | This event has no member attendance |
 | 422     | `reason_required`           | Ask for a reason                    |
+| 422     | `series_required`           | Use a series-backed event           |
 | 422     | `offering_expired`          | Show the closed offering            |
 | 422     | `invalid_exception_date`    | Inline date error                   |
 | 422     | `officer_required`          | Assign an active presbyter          |
@@ -1296,6 +1300,10 @@ recommended"). Ids are `S-Qn`.
   spec.
 
 ## Change log
+
+- 2026-11-11: the Import-attendance entry is placed on the series detail and on a series-backed
+  event's detail, links with `event=<id>` or `series=<id>`, and a standalone event shows no entry; the
+  API's `422 series_required` is the backstop. FR-8 and AC-7 updated; the error map gains the code.
 
 - 2026-11-11: clarifies the summary's `attachedCount`: it is the number of active attachments made to
   the series itself, not offerings attached per event. FR-6e and the DTO note say so; no behaviour

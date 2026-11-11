@@ -14,6 +14,11 @@
 
 ## Change log
 
+- 2026-11-11: an attendance import is limited to series-backed events; a standalone event answers
+  `422 series_required` and writes nothing. Existing standalone attendance history stays visible and
+  read-only, and manual and USSD per-member attendance are unchanged. AC-31 added; the import
+  paragraph, the endpoint row and the error list say so.
+
 - 2026-11-11: data-model table name corrected: the attendance table is `attendance`, not
   `event_attendance` (it was renamed when attendance was rekeyed to the generated event instance).
   No behaviour change.
@@ -507,7 +512,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
   single-session (its occurrence date), `source = series`, `startTime '00:00'`, `venueType
 'auditorium'`, and gets a unique `eventNo` of the form `EVT-<year>-<NNN>` from a per-year counter.
   Re-running adds nothing and never overwrites an existing event; it fills a missing `eventNo` so an
-  attendance import can target an instance created by a manual attendance entry.
+  attendance import can target a series-backed instance created by the series path.
 - `event_instances` is the evolved `event_occurrences` table: the primary key moves from
   `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
 - `presbyterOnly` (boolean, default false) is inherited by a series-generated instance from its series
@@ -712,7 +717,10 @@ An **attendance import** is scoped to one session. The request names the occurre
 `{ eventId, sessionDate, rows }` — and each row is `(memberNo, datetime?)`. `datetime` is optional and,
 when present, MUST fall on `sessionDate`; a time inside it is stored as the row's `sessionTime`, and its
 absence leaves `sessionTime` null. A row on another date fails the whole batch and names the row and the
-session. The batch records the event and session it targeted, the checksum covers the occurrence plus the
+session. **The event MUST belong to a series; a standalone event answers `422 series_required` and the
+batch writes nothing.** A standalone event's existing attendance history stays visible and read-only,
+and manual and USSD per-member attendance are unchanged by this rule.
+The batch records the event and session it targeted, the checksum covers the occurrence plus the
 rows, and repeating the same occurrence with the same rows is refused with `409` and the existing batch
 id. The result reports rows written and rows skipped — skipped because a suppression exists or because a
 manual row already holds that session — so an operator can tell an import that wrote ten rows from one
@@ -1037,20 +1045,21 @@ export interface Event {
 
 ### Imports
 
-| Method | Path                           | Result                                                                                              |
-| ------ | ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                           |
-| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }] }`, all-or-nothing; `409` on a repeat |
-| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                               |
-| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                      |
-| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                        |
+| Method | Path                           | Result                                                                                                                                            |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                                                                         |
+| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }] }`, all-or-nothing; `409` on a repeat; `422 series_required` for a standalone event |
+| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                                                                             |
+| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                                                                    |
+| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                                                                      |
 
 - JSON rows, 1 MB cap (~10k rows); larger files are chunked by the caller. The UI parses CSV or the
   downloaded `.xlsx` into these rows.
 - Idempotent by natural key: members on `memberNo`, attendance on
   `(eventInstanceId, sessionDate, memberId)`.
 - An attendance import fails as a whole when the `eventId` is unknown, the event is `cancelled` or
-  `archived` or headcount-only (`422 headcount_only`), the `sessionDate` is unlisted or its session is
+  `archived` or headcount-only (`422 headcount_only`), **the event is standalone (`422
+series_required`)**, the `sessionDate` is unlisted or its session is
   cancelled, or a row's `datetime` falls on another date. Series are created by an administrator or by
   generation, never by an import.
 
@@ -1238,7 +1247,7 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `unauthorized`, `invalid_json`, `payload_too_large`, `route_not_found`, `internal_error`,
 `import_failed`, `event_not_active`, `session_not_in_event`, `offering_already_attached`,
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
-`headcount_only`,
+`headcount_only`, `series_required`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
 `officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled` (`503`), `code_invalid`, `code_expired`,
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
@@ -1349,6 +1358,8 @@ migration `0017` and are defined in `member-registrations-events-offerings.md` (
 ### AC-29: **Given** `PAYMENTS_ENABLED` unset or `false`, **When** `POST /v1/payments/callback` is called even with a signature made with the development secret, **Then** the response is `404` and no contribution or pledge is written. (§ Subscriptions, payments and claims (24c))
 
 ### AC-30: **Given** `USSD_ENABLED=false`, **When** `/ussd/session` or `/ussd/nalo` is called with no signature, with a valid signature, and with a signature made with the development default secret, **Then** every response is `503 ussd_disabled` and no HMAC or `USERID` verification or write occurs. (§ USSD attendance, codes and clocking (24b))
+
+### AC-31: **Given** a standalone event, **When** an attendance import targets one of its sessions, **Then** the response is `422 series_required` and no batch or attendance row is written; the same import against a series-backed event succeeds. (FR-6)
 
 ## Edge Cases
 

@@ -506,8 +506,9 @@ export class ImportRepository {
         event_no: string | null;
         name: string;
         status: string;
+        series_id: string | null;
         sessions: unknown;
-      }>('select event_no, name, status, sessions from event_instances where id = $1', [
+      }>('select event_no, name, status, series_id, sessions from event_instances where id = $1', [
         request.eventId,
       ]);
       if (!event) {
@@ -519,6 +520,12 @@ export class ImportRepository {
       if (event.status === 'cancelled' || event.status === 'archived') {
         throw new ImportError(
           `${eventLabel} is ${event.status} and cannot accept an attendance import`,
+        );
+      }
+      if (!event.series_id) {
+        throw new ValidationError(
+          'A standalone event cannot accept an attendance import; use a series-backed event',
+          'series_required',
         );
       }
       if (!sessionDates(event.sessions).includes(sessionDate)) {

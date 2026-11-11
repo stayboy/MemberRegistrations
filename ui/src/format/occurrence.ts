@@ -25,9 +25,16 @@ function shiftUtcDate(date: Date, offsetDays: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-/** Drops `cancelled` and `archived` events from the picker. */
+/**
+ * Drops `cancelled` and `archived` events, and standalone events: an attendance
+ * import requires a series-backed event (FR-8; the API refuses with
+ * `series_required`).
+ */
 export function importableEvents(events: readonly EventListItem[]): EventListItem[] {
-  return events.filter((event) => event.status !== 'cancelled' && event.status !== 'archived');
+  return events.filter(
+    (event) =>
+      event.status !== 'cancelled' && event.status !== 'archived' && event.seriesId !== null,
+  );
 }
 
 /** Drops `cancelled` sessions; a cancelled session is read-only. */

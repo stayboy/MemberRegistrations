@@ -12,6 +12,7 @@ function event(overrides: Partial<EventListItem> = {}): EventListItem {
     id: 'event-1',
     eventNo: 'E-1',
     name: 'Sunday service',
+    seriesId: 'series-1',
     startDate: '2026-11-01',
     status: 'scheduled',
     sessions: [
@@ -40,13 +41,14 @@ function params(values: Record<string, string>): URLSearchParams {
 }
 
 describe('importableEvents', () => {
-  it('drops cancelled and archived events and keeps the rest', () => {
+  it('drops cancelled, archived and standalone events and keeps the rest', () => {
     const events = [
       event({ id: 'scheduled' }),
       event({ id: 'held', status: 'held' }),
       event({ id: 'draft', status: 'draft' }),
       event({ id: 'cancelled', status: 'cancelled' }),
       event({ id: 'archived', status: 'archived' }),
+      event({ id: 'standalone', seriesId: null }),
     ];
 
     expect(importableEvents(events).map((candidate) => candidate.id)).toEqual([

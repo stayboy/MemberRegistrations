@@ -21,14 +21,14 @@
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "872958b2b0aa39b639b9ea81ade09210ce175a49dc2ab3be10219317bd218d9d",
+      "sha256": "4113c1e8c23f3893bd00064827a34572dd98127ef5d4761da741c7f1e5bc5aa7",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
       "model": "deepseek-v4-pro",
-      "reason": "changes: the mock definition accepts a PNG per state as a mock, with the static HTML prototype as the usual capture method and the clickable-prototype rule kept for multi-step USSD. why: the owner ruled on 2026-11-11 that a PNG alone is a mock; the old sentence said the opposite and contradicted the round's signed sign-off row. rejected: leaving the sentence; deleting the prototype guidance; a separate glossary.",
+      "build": "0813",
+      "reason": "changes: the mock definition accepts a PNG per state as a mock, with the static HTML prototype as the usual capture method and the clickable-prototype rule kept for multi-step USSD; the mock section now also requires a surface's mock to live in its existing `mockups/<set>/` folder, refreshed in place, with a new state file only when the state is missing, and forbids a new folder per feature or round and duplicated states. why: the owner ruled on 2026-11-11 that a PNG alone is a mock, and later the same day that a feature must not create a new mock folder (an import-entry round had just created `mockups/import-entry/` beside the existing `mockups/v2-events/`). rejected: keeping the old 'a PNG alone is not a mock' sentence; a folder per feature; a folder per round; duplicating a refreshed state as a new file.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text of the \"## Mock parity\" section (lines 82-107) and confirmed the changed bullet now reads \"A mock is a PNG per state (empty, loading, error, success), usually captured from a static HTML prototype with the existing Playwright pattern. A PNG is a mock (owner, 2026-11-11); a clickable prototype is required only for a multi-step USSD flow.\" Checked it against AGENTS.md §14, documents/rounds/README.md's \"## Mock sign-off\" block and the SKILL step 4b opening sentence; none contradict the new wording. Verified the surrounding gates (sign-off before the first code commit, compact shell, sign-off record, no backfill, advisory parity, calibration precondition) are unchanged, and that the ruling matches the round's signed sign-off row and its deviations note. Two Nits only: the text says \"A PNG is a mock\" where the ruling said \"a PNG alone is a mock\", and \"usually captured from\" slightly softens the capture guidance; neither makes the qualification ambiguous. Made no edits, ran no gates and committed nothing.",
-      "at": "2026-11-11",
-      "build": "0813"
+      "attestation": "Reviewed the exact on-disk text of the \"## Mock parity\" section: the mock-definition bullet and the new set-folder bullet at lines 90-92, checked against the owner's 2026-11-11 rulings. The set-folder bullet faithfully records the rule - a surface's mock lives in its existing mockups/<set>/ folder, is refreshed in place, gains a new state file only when that state does not already exist, and forbids a new folder per feature or round and duplicated states - without contradicting the preceding 'a PNG per state' and 'A PNG is a mock' sentences or AGENTS.md section 14; documents/rounds/README.md's sign-off shape and the repo's parity references are compatible with a stable set path. One non-blocking clarity Nit (make 'refresh in place' explicit) was accepted without change. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-11"
     },
     {
       "path": "documents/agents/component-first.md",
