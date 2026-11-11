@@ -95,7 +95,7 @@ tests and e2e.
 | UI e2e    | `npm run ui:e2e`  | 63 passed                                                                                    |
 | Capture   | `ui:capture`      | `series-detail.png` refreshed after the exceptions-row fixture change                        |
 
-`gate-run 2026-11-11T09:26:33.003Z profile=full steps=6/6 lines=6 bytes=680`
+gate-run 2026-11-11T09:26:33.003Z profile=full steps=6/6 lines=6 bytes=680
 
 Flake note (§8): two earlier post-fix runs each lost one worker with exit `3221226505` (Windows), with
 0 failed tests — 583 and 576 passed of 592 (6 skipped), the crashed file differing between runs. Both
