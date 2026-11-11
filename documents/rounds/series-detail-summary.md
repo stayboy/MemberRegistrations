@@ -2,7 +2,7 @@
 
 |                     |                                                                                                                 |
 | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Status              | OPEN                                                                                                            |
+| Status              | CLOSED - merged in #107                                                                                         |
 | Tier                | 2                                                                                                               |
 | Mode                | attended (owner grill, 2026-11-11; "all as recommended")                                                        |
 | Base                | `648334b`                                                                                                       |
@@ -89,10 +89,12 @@ tests and e2e.
 | Spec      | 0813 review       | ACCEPT — two REWORK rounds, then ACCEPT; the `attachedCount` clarification separately ACCEPT |
 | Mock      | reduced target    | signed 2026-11-11: series tiles and the event-detail reason line                             |
 | Protected | 0813 review       | ACCEPTED — `orchestrator-policy.md` PNG definition; record updated; guard 7/7                |
+| Lessons   | 0813 review       | ACCEPTED — grill the next round only on the owner's consent; §17 amendment queued            |
 | Backend   | `npm run verify`  | 6/6 PASS on the final code at 09:26:33                                                       |
 | Wire      | `npm run smoke`   | PASS on the final code                                                                       |
 | UI unit   | `npm run ui:test` | 406 passed                                                                                   |
 | UI e2e    | `npm run ui:e2e`  | 63 passed                                                                                    |
+| CI        | PR #107           | `verify`, `ui`, `ui-e2e` green; squash-merged `e9303f5`                                      |
 | Capture   | `ui:capture`      | `series-detail.png` refreshed after the exceptions-row fixture change                        |
 
 gate-run 2026-11-11T09:26:33.003Z profile=full steps=6/6 lines=6 bytes=680
