@@ -79,6 +79,8 @@ Flake note (§8): the two full `verify` runs lost workers to exit `3221226505` w
 (544 and 585 passed of 593, 6 skipped). `tests/api/attendance.test.ts` and
 `tests/api/ussd-attendance.test.ts` pass alone (56 tests). CI is the gate for the commit.
 
+gate-run 2026-11-11T11:40:17.595Z profile=precommit steps=4/4 lines=4 bytes=536
+
 ## Review
 
 Independent 0813 pass over the frozen diff: **Standards ACCEPT**, **Spec ACCEPT**.
