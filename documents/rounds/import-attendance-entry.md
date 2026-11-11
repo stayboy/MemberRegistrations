@@ -2,7 +2,7 @@
 
 |                     |                                                                                                                     |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Status              | OPEN                                                                                                                |
+| Status              | CLOSED - merged in #109                                                                                             |
 | Tier                | 2                                                                                                                   |
 | Mode                | attended (owner grill, 2026-11-11; "all as recommended")                                                            |
 | Base                | `c03e6f1`                                                                                                           |
@@ -74,6 +74,7 @@ the UI tests and `ui/e2e/*`.
 | UI    | `npm run ui:test` | 406 passed                                                                                   |
 | UI    | `npm run ui:e2e`  | 66 passed                                                                                    |
 | Shot  | `ui:capture`      | `event-detail.png` and `series-detail.png` refreshed                                         |
+| CI    | PR #109           | `verify`, `ui`, `ui-e2e` green; squash-merged `1f5b995`                                      |
 
 Flake note (§8): the two full `verify` runs lost workers to exit `3221226505` with zero failed tests
 (544 and 585 passed of 593, 6 skipped). `tests/api/attendance.test.ts` and
@@ -123,15 +124,15 @@ entry on a standalone event - and it is not the signature target for this round.
 
 ## Acceptance
 
-| #   | Criterion                                    | Met     | Evidence                                                            | Verdict  |
-| --- | -------------------------------------------- | ------- | ------------------------------------------------------------------- | -------- |
-| 1   | Entry only on series and series-backed event | yes     | `EventDetailPage.tsx` conditional; `events.spec.ts` standalone test | ACCEPTED |
-| 2   | Event links seed, series links filter        | yes     | `events.spec.ts`, `series.spec.ts`; `ImportsAttendancePage.tsx`     | ACCEPTED |
-| 3   | Standalone import refused, nothing written   | yes     | `imports.ts`; `attendance.test.ts` 422 + zero rows                  | ACCEPTED |
-| 4   | Successful batch invalidates three prefixes  | yes     | `ImportsAttendancePage.tsx` handler (code evidence; no direct test) | ACCEPTED |
-| 5   | Standalone history stays visible read-only   | yes     | no change to the read paths; the diff touches the import write only | ACCEPTED |
-| 6   | Four gates green                             | partial | smoke/UI green; `verify` flaked with 0 failures; CI is the gate     | PARKED   |
-| 7   | Event and series capture baselines refreshed | yes     | both PNGs in the diff                                               | ACCEPTED |
+| #   | Criterion                                    | Met | Evidence                                                            | Verdict  |
+| --- | -------------------------------------------- | --- | ------------------------------------------------------------------- | -------- |
+| 1   | Entry only on series and series-backed event | yes | `EventDetailPage.tsx` conditional; `events.spec.ts` standalone test | ACCEPTED |
+| 2   | Event links seed, series links filter        | yes | `events.spec.ts`, `series.spec.ts`; `ImportsAttendancePage.tsx`     | ACCEPTED |
+| 3   | Standalone import refused, nothing written   | yes | `imports.ts`; `attendance.test.ts` 422 + zero rows                  | ACCEPTED |
+| 4   | Successful batch invalidates three prefixes  | yes | `ImportsAttendancePage.tsx` handler (code evidence; no direct test) | ACCEPTED |
+| 5   | Standalone history stays visible read-only   | yes | no change to the read paths; the diff touches the import write only | ACCEPTED |
+| 6   | Four gates green                             | yes | `verify`/`ui`/`ui-e2e` green on PR #109 (`1f5b995`)                 | ACCEPTED |
+| 7   | Event and series capture baselines refreshed | yes | both PNGs in the diff                                               | ACCEPTED |
 
 ## Deviations
 

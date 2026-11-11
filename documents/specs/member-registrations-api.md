@@ -14,6 +14,15 @@
 
 ## Change log
 
+- 2026-11-11: attendance is a **capture** model. An import or headcount stamps `asOf` and carries `ended`;
+  live is computed from the session date and its time window in the event timezone, so the user only
+  presses End of session. A capture outside the window with no close is the end capture. One close per
+  (event, session) is shared across channels; after it every per-member and headcount write answers
+  `409 session_closed`. Captures replace the session's imported rows and manual rows survive; live
+  captures may repeat. Manual and USSD per-member writes are limited to a session dated today in the
+  event timezone and refused after a close. AC-32/AC-33 added; the import and headcount contracts, the
+  `Headcount` DTO and the error list say so. Migration `0020_attendance_captures`.
+
 - 2026-11-11: an attendance import is limited to series-backed events; a standalone event answers
   `422 series_required` and writes nothing. Existing standalone attendance history stays visible and
   read-only, and manual and USSD per-member attendance are unchanged. AC-31 added; the import
@@ -227,10 +236,13 @@ deployed to Vercel as a single function.
   (`eventId` + `sessionDate`), not to an event number carried on every row. Each row MUST name a member
   and MAY repeat the session's date and an optional time; a row whose date does not match the selected
   session MUST fail the whole batch. The batch MUST record the event and session it targeted.
-- FR-6a: An import MUST be all-or-nothing, and its checksum MUST cover the targeted occurrence as well
-  as the rows, so the same member list against a different session is a different import.
-- FR-6b: A repeat of the same occurrence and rows MUST be refused with `409` carrying the existing batch
-  id, and MUST NOT create a second batch.
+- FR-6a: An import MUST be all-or-nothing, and its batch record MUST carry a checksum over the targeted
+  occurrence and the rows so a capture can be audited and compared with another; the checksum no longer
+  refuses a repeat, because a live capture may repeat.
+- FR-6b: An import MUST be a **capture**: the server stamps `asOf` and records `ended` (the operator may set
+  it, and a capture outside the live window is the end capture). A live capture MAY repeat and replaces the
+  session's imported rows; an end capture is once per session, and any capture after the close MUST answer
+  `409 session_closed` and create nothing.
 - FR-7: An imported attendance row MUST NOT overwrite a manual row; deleting an imported row MUST
   write a suppression so a later import cannot resurrect it.
 - FR-8: `GET /v1/members` MUST support a list-level attendance aggregate
@@ -591,20 +603,20 @@ Extras count when held; cancellations do not.
 The USSD session owns the menu; these are the bearer seams behind it. All writes require `X-Actor-Id`
 and are `no-store` on read.
 
-| Method       | Path                                                   | Result                                                               |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once     |
-| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                     |
-| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                   |
-| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                   |
-| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path    |
-| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                 |
-| `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`) |
-| `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                |
-| `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation; `201` the observation                |
-| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                 |
-| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                 |
-| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity             |
+| Method       | Path                                                   | Result                                                                              |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once                    |
+| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                                    |
+| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                                  |
+| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                                  |
+| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path                   |
+| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                                |
+| `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`)                |
+| `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                               |
+| `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation (`ended?` closes the session); `201` the observation |
+| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                                |
+| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                                |
+| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity                            |
 
 - **Codes.** `POST` body `{ purpose: 'attendance_punch' | 'registration', sessionDate }`. The code is
   six digits from a CSPRNG, valid for 15 minutes, single use, bound to that event session and stored
@@ -630,7 +642,10 @@ and are `no-store` on read.
   and creates nothing. A request is decided once; a second decision is `409
 registration_not_pending`. The request carries only `phoneHash`, never the raw phone.
 - **Clocking.** The existing `POST /v1/events/{eventId}/attendance` remains the write; the USSD layer
-  enforces the actor rules before calling it. The presence read is the event attendance report
+  enforces the actor rules before calling it. A per-member write is accepted only for a session dated
+  **today in the event timezone** and before that session is closed (`409 session_closed`); the session's
+  time window does not gate a manual write, and a manual or USSD row never carries `ended`. The presence
+  read is the event attendance report
   `GET /v1/events/{eventId}/attendance?date=`, whose rows carry `memberNo` (add it to the report DTO if
   it is absent). A presbyter may clock only a member they actively shepherd. A senior presbyter
   (`presbyterRank` non-null) may clock anyone for a session when they are themselves recorded present;
@@ -648,7 +663,10 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
 - **Headcounts.** A headcount is an actual count taken at a moment, never an "expected" figure. A
   presbyter or admin records it per session, append-only, in `event_session_headcounts`; each
   observation carries a `mode` (`adults` | `children` | `mixed`), six buckets, a `total`, an `asOf`
-  timestamp and the recorder. The register-derived `expected` is a separate thing, labelled **Roster**
+  timestamp, `ended` (default false) and the recorder. **A headcount is a capture too**: the computed
+  live window and the End of session action follow the import capture, and the session close is shared —
+  once any capture for the session is ended, a headcount write answers `409 session_closed`. The
+  register-derived `expected` is a separate thing, labelled **Roster**
   on the reading surfaces, and a headcount never derives from or feeds it.
   `GET /v1/events/{eventId}/headcounts?sessionDate` returns
   `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
@@ -659,10 +677,10 @@ registration_not_pending`. The request carries only `phoneHash`, never the raw p
   event is `404 not_found`. A superseded observation is **not
   invalid**: it remains the valid record of the count at its `asOf`, and its `supersededBy` names the
   correcting row. `Headcount` is
-  `{ id, eventId, sessionDate, asOf, mode, adultMale, adultFemale, adultUnspecified, childMale,
+  `{ id, eventId, sessionDate, asOf, ended, mode, adultMale, adultFemale, adultUnspecified, childMale,
 childFemale, childUnspecified, total, recordedBy, recordedAt, supersedesId, supersededBy }`. `POST` body
-  `{ sessionDate, asOf?, mode, adultMale?, adultFemale?, adultUnspecified?, childMale?, childFemale?,
-childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row, defaults to now and
+  `{ sessionDate, asOf?, mode, ended?, adultMale?, adultFemale?, adultUnspecified?, childMale?,
+childFemale?, childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row, defaults to now and
   must fall within the session's calendar day in the event timezone. Mode validation: `adults` splits
   adult male/female, sets `adultUnspecified` to 0 and counts children as one `childUnspecified` (both
   child gender buckets 0); `children` splits child male/female, sets `childUnspecified` to 0 and counts
@@ -702,8 +720,8 @@ failure that spans rows (a duplicate `memberNo`) emits one entry per involved ro
 message. Any other check that needs the database — an archived or purged member, a contact value
 already owned by another member — reports the row it stopped at. `detail` carries the `Row N: …`
 message of the first rejected row, unchanged from the wording before `rows` existed. Batch-level
-failures - an unknown or cancelled event, an unlisted or cancelled session, a repeated batch, or a
-headcount-only event - carry no `rows`. A headcount-only event (`tracksMembers = false`) is rejected with
+failures - an unknown or cancelled event, an unlisted or cancelled session, a capture after the session
+closed, or a headcount-only event - carry no `rows`. A headcount-only event (`tracksMembers = false`) is rejected with
 `422 headcount_only` before any row is read.
 
 A **member import** row `(memberNo, firstName, lastName, otherNames?, gender?, dob?, joinedOn?,
@@ -720,11 +738,18 @@ absence leaves `sessionTime` null. A row on another date fails the whole batch a
 session. **The event MUST belong to a series; a standalone event answers `422 series_required` and the
 batch writes nothing.** A standalone event's existing attendance history stays visible and read-only,
 and manual and USSD per-member attendance are unchanged by this rule.
-The batch records the event and session it targeted, the checksum covers the occurrence plus the
-rows, and repeating the same occurrence with the same rows is refused with `409` and the existing batch
-id. The result reports rows written and rows skipped — skipped because a suppression exists or because a
-manual row already holds that session — so an operator can tell an import that wrote ten rows from one
-that skipped ten.
+
+Each import is a **capture**: the server stamps `asOf` with the clock and records `ended` (default
+false). The body may set `ended: true` to close the session; a capture that falls outside the live
+window — session date today in the event timezone and the clock inside the session's start/end (a
+session with no end time is live for its whole date) — is treated as the end capture even when `ended`
+is omitted. A capture replaces that session's imported rows; manual rows and suppressions survive. Live
+captures may repeat, and the same rows may be captured again as a new observation; an end capture is
+once per session. **The close is any ended capture for that event and session — import or headcount —**
+and any further capture or per-member write answers `409 session_closed`. The batch records the event
+and session it targeted and the checksum covers the occurrence plus the rows. The result reports rows written and rows skipped — skipped because a
+suppression exists or because a manual row already holds that session — so an operator can tell an
+import that wrote ten rows from one that skipped ten.
 
 Rejected while settling this (2026-11-04): keeping a per-row event number (the occurrence is chosen once,
 so a stray row cannot silently target another event); letting an import rewrite the event session's
@@ -1045,18 +1070,18 @@ export interface Event {
 
 ### Imports
 
-| Method | Path                           | Result                                                                                                                                            |
-| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                                                                         |
-| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }] }`, all-or-nothing; `409` on a repeat; `422 series_required` for a standalone event |
-| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                                                                             |
-| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                                                                    |
-| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                                                                      |
+| Method | Path                           | Result                                                                                                                                                                                                   |
+| ------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                                                                                                                                |
+| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }], ended? }`; captures replace the session's imported rows; `422 series_required` for a standalone event; `409 session_closed` after the end |
+| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                                                                                                                                    |
+| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                                                                                                                           |
+| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                                                                                                                             |
 
 - JSON rows, 1 MB cap (~10k rows); larger files are chunked by the caller. The UI parses CSV or the
   downloaded `.xlsx` into these rows.
-- Idempotent by natural key: members on `memberNo`, attendance on
-  `(eventInstanceId, sessionDate, memberId)`.
+- Idempotent by natural key: members on `memberNo`; an attendance **row** is unique on
+  `(eventInstanceId, sessionDate, memberId)`, while a live capture may repeat as a new batch.
 - An attendance import fails as a whole when the `eventId` is unknown, the event is `cancelled` or
   `archived` or headcount-only (`422 headcount_only`), **the event is standalone (`422
 series_required`)**, the `sessionDate` is unlisted or its session is
@@ -1253,7 +1278,8 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
 `registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
 `delegate_required`, `delegation_exists`, `not_eligible`, `subscription_not_active`,
-`period_already_paid`, `not_covered`, `claim_not_pending`, `card_in_use`, `cors_rejected`.
+`period_already_paid`, `not_covered`, `claim_not_pending`, `card_in_use`, `cors_rejected`,
+`session_closed`.
 
 ### Concurrency and caching
 
@@ -1360,6 +1386,10 @@ migration `0017` and are defined in `member-registrations-events-offerings.md` (
 ### AC-30: **Given** `USSD_ENABLED=false`, **When** `/ussd/session` or `/ussd/nalo` is called with no signature, with a valid signature, and with a signature made with the development default secret, **Then** every response is `503 ussd_disabled` and no HMAC or `USERID` verification or write occurs. (§ USSD attendance, codes and clocking (24b))
 
 ### AC-31: **Given** a standalone event, **When** an attendance import targets one of its sessions, **Then** the response is `422 series_required` and no batch or attendance row is written; the same import against a series-backed event succeeds. (FR-6)
+
+### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** a capture outside the live window with no close, **Then** it is accepted as the end capture and closes the session. (FR-6)
+
+### AC-33: **Given** a session closed by any ended capture, **When** a per-member manual write, an import or a headcount is attempted, **Then** each answers `409 session_closed` and writes nothing; a per-member manual write for a session not dated today in the event timezone is refused while no close exists. (FR-6, §Clocking)
 
 ## Edge Cases
 

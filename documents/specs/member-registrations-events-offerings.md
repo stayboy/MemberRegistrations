@@ -461,6 +461,9 @@ separate Attendance section, that is Q1.
 - FR-4a: An event session written with `status = 'cancelled'` MUST carry a non-empty reason in
   `sessions[].note`; the API rejects one without it with `422 reason_required`. A legacy row without a
   reason is displayed as "No reason recorded".
+- FR-4b: The event detail MUST show, per session, the latest capture's time and whether it ended the
+  session — "Live · 10:42" or "End of session · 11 Nov" — derived from the capture's `asOf` and `ended`.
+  The UI MUST NOT read a stored live flag or ask the operator to declare "live".
 - FR-5: The series list MUST use `GET /v1/series` and show name, ministry, a human-readable schedule,
   next occurrence and archived state.
 - FR-6: The series detail MUST show each schedule version (`effectiveFrom`, `rrule`, `endsOn`),
@@ -500,6 +503,10 @@ separate Attendance section, that is Q1.
   attachments made to the series itself; offerings attached per event are not counted. An archived
   series still shows the tiles, read-only (AC-10). The mock's attached-offerings rail and the
   per-occurrence attendance/offering columns are separate queued work, not part of this requirement.
+- FR-6f: An attendance import MUST be a capture. The page MUST show the computed state (live or past) and
+  one **End of session** action; it MUST NOT ask the operator to choose "live". A capture outside the live
+  window is the end capture, live captures may repeat, and after the close the page MUST refuse another
+  capture with the API's `409 session_closed`.
 - FR-7: “Add schedule version”, “Add exception”, “Remove exception” and “Archive series” MUST use the
   documented series endpoints. A `cancelled` exception MUST carry a non-empty reason in `note`; the API
   rejects one without it with `422 reason_required`. Archive MUST confirm; the API preserves history
@@ -653,7 +660,11 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ### AC-6a: **Given** a cancelled series exception or an event session written as cancelled, **When** it is submitted without a reason, **Then** the API answers `422 reason_required` and nothing is written; a legacy row without a reason is shown as "No reason recorded". (FR-4a, FR-7)
 
+### AC-4a: **Given** a session with captures, **When** the event detail opens, **Then** its row shows the latest capture's time and whether it ended the session, computed from `asOf`/`ended`, never from a stored live flag. (FR-4b)
+
 ### AC-7: **Given** a series-backed event or a series, **When** “Import attendance” is chosen, **Then** the import flow opens at `/imports/attendance?event=<id>` seeded with that event, or at `?series=<id>` with the picker filtered to that series (`date` optional), a successful batch invalidates the events, series and imports queries, and a standalone event shows no entry. (FR-8)
+
+### AC-7a: **Given** a live session, **When** an import is captured without ending it, **Then** the page shows "Live" with the capture time and another capture may replace it; **Given** a capture outside the window or an End of session action, **Then** the session closes and a further capture is refused. (FR-6f)
 
 ### AC-8: **Given** an event attendance report, **When** it loads, **Then** one aggregate request returns present/expected and optional member rows; no per-member requests are made. (FR-10, FR-11)
 
@@ -1139,25 +1150,26 @@ server-owned route at `POST /ussd/session` with a `seq` frame number, specified 
 
 ### Error mapping additions
 
-| Status  | Code                        | UI response                         |
-| ------- | --------------------------- | ----------------------------------- |
-| 409     | `offering_already_attached` | Show the existing attachment        |
-| 409     | `terms_version_conflict`    | Reload the offering; base stale     |
-| 409     | `idempotency_conflict`      | Reload by idempotency key           |
-| 409     | `pledge_already_terminal`   | Refresh; no duplicate event         |
-| 409     | `event_not_active`          | Disable attachment/contribution     |
-| 422     | `offering_not_on_event`     | Show valid offerings                |
-| 422     | `session_not_in_event`      | Pick one of the event's sessions    |
-| 422     | `headcount_only`            | This event has no member attendance |
-| 422     | `reason_required`           | Ask for a reason                    |
-| 422     | `series_required`           | Use a series-backed event           |
-| 422     | `offering_expired`          | Show the closed offering            |
-| 422     | `invalid_exception_date`    | Inline date error                   |
-| 422     | `officer_required`          | Assign an active presbyter          |
-| 422     | `invalid_amount`            | Inline amount error                 |
-| 422     | `invalid_expected_date`     | Inline date error                   |
-| 422     | `invalid_reminder_date`     | Inline reminder date error          |
-| 402/409 | `payment_failed`            | Keep `initiated`, allow retry       |
+| Status  | Code                        | UI response                                |
+| ------- | --------------------------- | ------------------------------------------ |
+| 409     | `offering_already_attached` | Show the existing attachment               |
+| 409     | `terms_version_conflict`    | Reload the offering; base stale            |
+| 409     | `idempotency_conflict`      | Reload by idempotency key                  |
+| 409     | `pledge_already_terminal`   | Refresh; no duplicate event                |
+| 409     | `event_not_active`          | Disable attachment/contribution            |
+| 422     | `offering_not_on_event`     | Show valid offerings                       |
+| 422     | `session_not_in_event`      | Pick one of the event's sessions           |
+| 409     | `session_closed`            | The session is closed; no further captures |
+| 422     | `headcount_only`            | This event has no member attendance        |
+| 422     | `reason_required`           | Ask for a reason                           |
+| 422     | `series_required`           | Use a series-backed event                  |
+| 422     | `offering_expired`          | Show the closed offering                   |
+| 422     | `invalid_exception_date`    | Inline date error                          |
+| 422     | `officer_required`          | Assign an active presbyter                 |
+| 422     | `invalid_amount`            | Inline amount error                        |
+| 422     | `invalid_expected_date`     | Inline date error                          |
+| 422     | `invalid_reminder_date`     | Inline reminder date error                 |
+| 402/409 | `payment_failed`            | Keep `initiated`, allow retry              |
 
 ## Data Models
 
@@ -1300,6 +1312,11 @@ recommended"). Ids are `S-Qn`.
   spec.
 
 ## Change log
+
+- 2026-11-11: attendance becomes a capture model: live is computed from the session date and window, the
+  operator only ends the session, one close is shared across channels, and the event detail shows the
+  latest capture per session. FR-4b/FR-6f and AC-4a/AC-7a added; the API spec carries the contract and
+  migration `0020_attendance_captures`.
 
 - 2026-11-11: the Import-attendance entry is placed on the series detail and on a series-backed
   event's detail, links with `event=<id>` or `series=<id>`, and a standalone event shows no entry; the
