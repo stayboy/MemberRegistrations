@@ -12,7 +12,27 @@ that it be written only once the UI CI job landed, which it did the same day. Th
 and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as recommended"). The
 2026-11-06 process entries were accepted in the `quiet-gates-and-lessons` round (2026-11-06, "all as
 recommended"). The 2026-11-10 entries were accepted in reply to the session that proposed them
-(2026-11-10, "accept lessons").
+(2026-11-10, "accept lessons"). The 2026-11-11 entry was accepted in the `series-detail-summary` close
+round (2026-11-11, "all as recommended", with the Q6 rephrase).
+
+---
+
+## 2026-11-11 — Grill the next round only when the owner accepts that it may begin
+
+**Rule.** A round that completes successfully — acceptance `ACCEPTED` and its PR merged — ends there.
+Do not plan, mock, branch or write the next round on your own, and do not run a go-forward `grill-me`
+at the closing bell. When the owner accepts that the next round may begin, run the `grill-me` round on
+that round's scope before any branch, mock, spec edit or code; the backlog is input, not a queue that
+executes itself. In an unattended round §17 still auto-accepts the recommendations, but the next build
+starts only on an explicit go, unless that same instruction names the round. A pure typo or formatting
+round may skip the grill with the reason recorded. This narrows §17's end-of-round grill; amending
+that section is a separate protected-document round.
+
+**Evidence.** The `series-detail-summary` round closed and merged (#107, `e9303f5`); the agent had
+already framed the next step as a post-round ritual, and the owner asked for the grill to be gated on
+their consent to begin instead.
+
+**Trigger.** The end of any round that leaves a buildable next step, and the start of every new round.
 
 ---
 
