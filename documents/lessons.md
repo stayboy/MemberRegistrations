@@ -13,7 +13,40 @@ and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as rec
 2026-11-06 process entries were accepted in the `quiet-gates-and-lessons` round (2026-11-06, "all as
 recommended"). The 2026-11-10 entries were accepted in reply to the session that proposed them
 (2026-11-10, "accept lessons"). The 2026-11-11 entry was accepted in the `series-detail-summary` close
-round (2026-11-11, "all as recommended", with the Q6 rephrase).
+round (2026-11-11, "all as recommended", with the Q6 rephrase). The two 2026-11-11 seat entries were
+accepted with the seat-enforcement grill (2026-11-11, "all as recommended").
+
+---
+
+## 2026-11-11 — A rule with no failing artefact is a preference
+
+**Rule.** A workflow rule earns its place only with the check that fails when it is skipped. Name that
+check when the rule is written; if none exists, write the check in the same round, or stop citing the
+rule. A rule that only lives in prose will be skipped by the agent that is in a hurry, and nothing will
+notice.
+
+**Evidence.** `AGENTS.md` §3 required a worker at Tier 2; the `attendance-capture-model` round declared
+parent authorship in a hand-written field, nothing failed, and the round merged. Only in #113 did
+`check-round` gain R1/R2 — after which the same class of omission fails CI.
+
+**Trigger.** Writing or citing a process rule: ask which artefact fails, not whether the rule is clear.
+
+---
+
+## 2026-11-11 — The repo's record wins over a canonical sentence
+
+**Rule.** A canonical orchestrator-skill sentence can be wrong about this repository (it was verified on
+another day, or on another machine). When it disagrees with `AGENTS.md` or
+`documents/agents/orchestrator-policy.md`, the repo's record is the rule: follow it, record the divergence
+in `documents/backlog.md`, and fix the canonical file in its own protected-doc round with the manifest
+hash refreshed. Never let a catalogue sentence veto a seat the repo's own policy names.
+
+**Evidence.** Canonical `references/models.md` said no `cline-pass` provider existed and "do not
+dispatch", while §17 seated `cline-pass/cline-pass/deepseek-v4.1-flash-1017` inside the window; the
+stale text survived two rounds until a dispatch proved the seat live.
+
+**Trigger.** Before dispatching any seat, or when a reviewer reports that a canonical file contradicts the
+repo: resolve by dispatch and let the repo's record decide.
 
 ---
 
@@ -25,8 +58,8 @@ at the closing bell. When the owner accepts that the next round may begin, run t
 that round's scope before any branch, mock, spec edit or code; the backlog is input, not a queue that
 executes itself. In an unattended round §17 still auto-accepts the recommendations, but the next build
 starts only on an explicit go, unless that same instruction names the round. A pure typo or formatting
-round may skip the grill with the reason recorded. This narrows §17's end-of-round grill; amending
-that section is a separate protected-document round.
+round may skip the grill with the reason recorded. This replaced §17's end-of-round grill in the
+`seat-enforcement` round (2026-11-11).
 
 **Evidence.** The `series-detail-summary` round closed and merged (#107, `e9303f5`); the agent had
 already framed the next step as a post-round ritual, and the owner asked for the grill to be gated on

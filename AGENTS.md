@@ -143,10 +143,10 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown
 file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
-lands only after `deepseek-v4-pro` build `0813` has reviewed the exact text.
-`cline-pass/cline-pass/mimo-v2.6-pro` is admissible in the 12:00–18:00 local window **or** when no
-provider answers with that build (credit exhaustion, HTTP 429 and timeouts count as unavailable; a
-registry listing does not); the basis is stated in `fallbackReason`.
+lands only after the reviewer seat has reviewed the exact text — `deepseek-v4-pro` build `0813` outside
+the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider answers)
+between 12:00 and 18:00 local, or when no provider answers with `0813` (credit exhaustion, HTTP 429 and
+timeouts count as unavailable; a registry listing does not). The basis is stated in `fallbackReason`.
 
 The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
 (of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
@@ -239,9 +239,10 @@ reintroduce them silently.
 
 ## 17. Unattended rounds (owner, 2026-11-04)
 
-- **Standing instruction.** At the **end of a round**, run the go-forward `grill-me` round and **accept
-  its recommendations automatically**, so the next round starts without a wait. The owner may still run a
-  round attended by saying so. The consent is this rule, never the owner's silence.
+- **Standing instruction.** The go-forward `grill-me` round runs when the owner accepts that the next
+  round may begin, not automatically at the closing bell; when it runs, its recommendations are accepted
+  automatically, so the next round starts without a second wait. The owner may still run a round
+  attended by saying so. The consent is this rule, never the owner's silence.
 - **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session defaults to
   `ollama-cloud/deepseek-v4.1-flash:1017` — the ollama provider first; if that provider fails, use
   `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Between 12:00 and 18:00 local the provider preference
