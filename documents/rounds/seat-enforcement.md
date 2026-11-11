@@ -107,6 +107,9 @@ bounded exchange: the required-rows regression covers two of the five rows (dele
 removing one row would not), and `PARENT_AUTHORED_PATTERN` carries a leading `\s*` that is dead on
 already-trimmed input. Both are one-liners for a later round.
 
+Seat: consistent — parent protected text, worker guard + test; reviewers `ollama-cloud/mimo-v2.6-pro`
+(window) and `ollama-cloud/deepseek-v4-pro:0813`, both distinct from the two authors.
+
 ## Mock sign-off
 
 n/a — no user-visible surface

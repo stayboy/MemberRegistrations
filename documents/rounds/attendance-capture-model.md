@@ -234,6 +234,9 @@ advisory until a fully signed round is green. The reviewer confirms each row in 
 
 **ACCEPTED** (2026-11-11), on the parent's numbers and review round 2.
 
+Seat: consistent — parent source/UI/migration, worker tests (`cline-pass/.../deepseek-v4.1-flash-1017`,
+`ses_e34fe2afdffeORnZA8BEy0HkpB`); reviewer `ollama-cloud/mimo-v2.6-pro`, distinct from both.
+
 ## Deviations
 
 - The owner dropped the user-selected live/end mode (2026-11-11) in favour of a computed live state; the
