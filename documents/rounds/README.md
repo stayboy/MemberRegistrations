@@ -9,16 +9,17 @@ the durable record.
 ```md
 # Round — <slug>
 
-|                     |                                                                  |
-| ------------------- | ---------------------------------------------------------------- |
-| Status              | OPEN / CLOSED / PARKED                                           |
-| Tier                | 0 / 1 / 2                                                        |
-| Mode                | `attended` / `unattended (auto-accept recommendations)`          |
-| Base                | `<short sha>`                                                    |
-| Review rounds       | 0 / 1 / 2                                                        |
-| Gate runs in parent | 0                                                                |
-| Spec                | `documents/specs/<file>.md` (or `AGENTS.md` for process work)    |
-| Workers             | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)` |
+|                     |                                                                            |
+| ------------------- | -------------------------------------------------------------------------- |
+| Status              | OPEN / CLOSED / PARKED                                                     |
+| Tier                | 0 / 1 / 2                                                                  |
+| Mode                | `attended` / `unattended (auto-accept recommendations)`                    |
+| Base                | `<short sha>`                                                              |
+| Review rounds       | 0 / 1 / 2                                                                  |
+| Gate runs in parent | 0                                                                          |
+| Spec                | `documents/specs/<file>.md` (or `AGENTS.md` for process work)              |
+| Workers             | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)`           |
+| Implementer         | `parent <provider>/<model> (<scope>); worker <provider>/<model> (<scope>)` |
 
 ## Plan
 
@@ -56,6 +57,12 @@ Scope changes, skipped gates, residuals.
 
 `Review rounds` and `Gate runs in parent` are counters, and they are self-reported. The `gate-run`
 signature is the exception: the gate runner prints it and the round doc must paste it verbatim.
+
+The `Implementer` row is a **declaration, not attestation**: `check-round.mjs` enforces its shape and,
+at Tier 2, a `worker` segment (or a `Tier 2 parent-authored: <reason>` line in `## Deviations`). The
+cell is split on `;` with each segment trimmed; a segment is `parent|worker <provider>/<model>` with
+an optional `(<scope>)`. A typed string cannot prove a dispatch — the reviewer's reading of the diff is
+the control. Only a round doc changed by a round carries the row; there is no historical backfill.
 
 Every review is dispatched against `documents/rounds/review-brief.md`: one complete delta, findings
 batched into one fix pass, at most one confirmation round, `P1`/`P2`/`Nits` and an explicit verdict.
