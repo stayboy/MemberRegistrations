@@ -178,6 +178,9 @@ out of the block and fixed anyway: the FR-4b/FR-6f examples now match the render
 says "recorded"; the ended action is disabled), and the aggregate now carries the DTO comment's final
 `id` tie-break inside a channel. The reviewer also confirmed the gate record and the AC 8 baseline.
 
+Seat: consistent — parent source/UI/migration, worker tests (`cline-pass/cline-pass/deepseek-v4.1-flash-1017`,
+`ses_e34fe2afdffeORnZA8BEy0HkpB`); reviewer `ollama-cloud/mimo-v2.6-pro`, distinct from both.
+
 ## Mock sign-off
 
 | Surface                                   | Mock                                               | sha256                                                             | Signer | Date       | Verdict |
@@ -233,9 +236,6 @@ advisory until a fully signed round is green. The reviewer confirms each row in 
 | B   | A redeemed punch is today+close gated, reported `Closed` / `Not today`     | `attendance-codes.ts`, `machine.ts`, `glossary.ts`; two suites                        |
 
 **ACCEPTED** (2026-11-11), on the parent's numbers and review round 2.
-
-Seat: consistent — parent source/UI/migration, worker tests (`cline-pass/.../deepseek-v4.1-flash-1017`,
-`ses_e34fe2afdffeORnZA8BEy0HkpB`); reviewer `ollama-cloud/mimo-v2.6-pro`, distinct from both.
 
 ## Deviations
 
