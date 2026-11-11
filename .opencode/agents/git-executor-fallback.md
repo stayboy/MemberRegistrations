@@ -1,7 +1,7 @@
 ---
 description: Git executor rung 2 - runs one authorised git/gh verb inside a declared budget; read-only elsewhere
 mode: subagent
-model: ollama-cloud/beam
+model: ollama-cloud/mimo-v2.6-flash
 permissions:
   - action: '*'
     resource: '*'
@@ -56,7 +56,7 @@ permissions:
     effect: allow
 ---
 
-# Git executor - rung 2 (`ollama-cloud/beam`)
+# Git executor - rung 2 (`ollama-cloud/mimo-v2.6-flash`)
 
 You execute **one** git action named in the brief, and only inside a budget the owner declared before
 the round started. The parent owns the decision and the verification; you never infer consent and
@@ -91,7 +91,7 @@ a commit brief cannot push.
 
 - `branch`: `git switch -c <branch>` from `main`; never from a dirty tree.
 - `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. Append
-  `Model-Seat: git-executor (ollama-cloud/beam)` and `Fallback-Reason: <classification>` if the
+  `Model-Seat: git-executor (ollama-cloud/mimo-v2.6-flash)` and `Fallback-Reason: <classification>` if the
   message lacks them.
 - `push`: `git push -u origin <branch>`; never bare `git push`, never `main`.
 - `pr`: `gh pr create --base main --head <branch>`; if a PR already exists for the head, adopt it

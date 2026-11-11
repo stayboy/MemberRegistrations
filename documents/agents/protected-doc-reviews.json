@@ -10,25 +10,26 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "c25873615f0e29af4d1b0008bb74b7f14ed6702d6a35bf5a08015733746076f4",
+      "sha256": "d3e0c495ec4eea3cea194c11694e223e34a86028fc1cb5890f3f65b940b5348b",
       "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
       "model": "mimo-v2.6-pro",
-      "reason": "changes: section 9 defines the merge verb's chain - 'merge' invoked on uncommitted work authorises commit, push, PR, waiting for the checks, squash merge and pull - and names all three required checks instead of `verify` alone; its stop bullet now also forbids merging a blocked PR and using `--admin` to bypass the ruleset, and it points at merge-policy's Verb glossary. why: the owner instructed that invoking merge on uncommitted changes must mean commit, push, PR and merge, with the PR green, after PR #101 merged before its checks finished. rejected: leaving `verify` as the only named check; leaving the `--admin` and blocked-PR stops only in the secondary document; a separate glossary document (drift risk).",
-      "fallbackReason": "12:00-18:00 local window: the seat is cline-pass/cline-pass/mimo-v2.6-pro, and deepseek-v4-pro 0813 does not sit the reviewer seat in this window. cline-pass lists mimo-v2.6-pro in the registry but the harness rejects it as unavailable (model not found), and a registry listing does not count as available; the same window model, mimo-v2.6-pro, was served by ollama-cloud.",
+      "reason": "changes: rung 2 of the git-executor seat becomes `ollama-cloud/mimo-v2.6-flash` in every place the rule names it - the fallback agent file, its meta test, AGENTS.md section 9, the policy seats table and the rung-2 paragraph, and canonical references/role-contracts.md with its CHANGELOG and manifest hash. why: the owner instructed on 2026-11-11 that commit and all git operations use mimo-v2.6-flash on the ollama-cloud provider instead of `ollama-cloud/beam`; the literal id given (`:cloud`) does not resolve, and `ollama-cloud/mimo-v2.6-flash` was dispatch-probed before it was written. rejected: keeping `ollama-cloud/beam`; writing the unresolvable `:cloud` id; leaving the canonical rung-2 sentence stale, which would contradict the repo rule in a protected shared document.",
+      "fallbackReason": "12:00-18:00 local window: the reviewer seat for this window is cline-pass/cline-pass/mimo-v2.6-pro, which the harness rejects as unavailable (model not found - a registry listing does not count), so the same window model, mimo-v2.6-pro, was served by ollama-cloud.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text of section 9 (lines 112-131). Round 1 ACCEPTED with three P2s: the check list named only `verify`; the git-executor paragraph paraphrased the seat contract; the `--admin`/blocked-PR stops lived only in merge-policy. All three were applied and a final exact-text confirmation returned ACCEPTED with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-10"
+      "attestation": "Reviewed the exact on-disk diff of AGENTS.md section 9, the policy Seats table and rung-2 paragraph, the fallback agent file and tests/meta/git-executor.test.ts, and canonical references/role-contracts.md + CHANGELOG.md. Round 1 raised one blocking point - the canonical role-contracts.md still named `ollama-cloud/beam`, so the repo rule would contradict a protected shared document - plus two wrap nits; the canonical sentence, its CHANGELOG, the manifest hash and the record entries were added, and the wraps fixed. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-11"
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "4113c1e8c23f3893bd00064827a34572dd98127ef5d4761da741c7f1e5bc5aa7",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
+      "sha256": "89fa1b8476dbe1cffc259b39d80d4216da4c2908cba4f750bf8d41c4486ba749",
+      "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
       "build": "0813",
-      "reason": "changes: the mock definition accepts a PNG per state as a mock, with the static HTML prototype as the usual capture method and the clickable-prototype rule kept for multi-step USSD; the mock section now also requires a surface's mock to live in its existing `mockups/<set>/` folder, refreshed in place, with a new state file only when the state is missing, and forbids a new folder per feature or round and duplicated states. why: the owner ruled on 2026-11-11 that a PNG alone is a mock, and later the same day that a feature must not create a new mock folder (an import-entry round had just created `mockups/import-entry/` beside the existing `mockups/v2-events/`). rejected: keeping the old 'a PNG alone is not a mock' sentence; a folder per feature; a folder per round; duplicating a refreshed state as a new file.",
+      "reason": "changes: rung 2 of the git-executor seat becomes `ollama-cloud/mimo-v2.6-flash` in every place the rule names it - the fallback agent file, its meta test, AGENTS.md section 9, the policy seats table and the rung-2 paragraph, and canonical references/role-contracts.md with its CHANGELOG and manifest hash. why: the owner instructed on 2026-11-11 that commit and all git operations use mimo-v2.6-flash on the ollama-cloud provider instead of `ollama-cloud/beam`; the literal id given (`:cloud`) does not resolve, and `ollama-cloud/mimo-v2.6-flash` was dispatch-probed before it was written. rejected: keeping `ollama-cloud/beam`; writing the unresolvable `:cloud` id; leaving the canonical rung-2 sentence stale, which would contradict the repo rule in a protected shared document.",
       "verdict": "ACCEPTED",
-      "attestation": "Reviewed the exact on-disk text of the \"## Mock parity\" section: the mock-definition bullet and the new set-folder bullet at lines 90-92, checked against the owner's 2026-11-11 rulings. The set-folder bullet faithfully records the rule - a surface's mock lives in its existing mockups/<set>/ folder, is refreshed in place, gains a new state file only when that state does not already exist, and forbids a new folder per feature or round and duplicated states - without contradicting the preceding 'a PNG per state' and 'A PNG is a mock' sentences or AGENTS.md section 14; documents/rounds/README.md's sign-off shape and the repo's parity references are compatible with a stable set path. One non-blocking clarity Nit (make 'refresh in place' explicit) was accepted without change. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-11"
+      "attestation": "Reviewed the exact on-disk diff of AGENTS.md section 9, the policy Seats table and rung-2 paragraph, the fallback agent file and tests/meta/git-executor.test.ts, and canonical references/role-contracts.md + CHANGELOG.md. Round 1 raised one blocking point - the canonical role-contracts.md still named `ollama-cloud/beam`, so the repo rule would contradict a protected shared document - plus two wrap nits; the canonical sentence, its CHANGELOG, the manifest hash and the record entries were added, and the wraps fixed. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-11",
+      "fallbackReason": "12:00-18:00 local window: the reviewer seat for this window is cline-pass/cline-pass/mimo-v2.6-pro, which the harness rejects as unavailable (model not found - a registry listing does not count), so the same window model, mimo-v2.6-pro, was served by ollama-cloud."
     },
     {
       "path": "documents/agents/component-first.md",
@@ -98,14 +99,15 @@
     },
     {
       "path": "canonical/references/role-contracts.md",
-      "sha256": "0aa3627de9b01ba8a999bd86d6dbe90dde4701cf8b263ca18727aa550235e0f2",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
+      "sha256": "2fbd3a0e4c8fb7247388dd88046d7bbffb0706bf94f4a334e10d2ae02598f034",
+      "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
       "build": "0813",
-      "reason": "changes: the Parent section adds the git decision/verification delegation, and a new Git executor section fixes the one-verb brief, the tree-hash refusal, the forbidden commands, the ranked rungs, the per-write variant table, the Model-Seat trailer and the kill-switch. why: the canonical contract said the parent owns git, which the seat would otherwise contradict. rejected: letting workers commit; a seat with its own judgment; a silent fallback.",
+      "reason": "changes: rung 2 of the git-executor seat becomes `ollama-cloud/mimo-v2.6-flash` in every place the rule names it - the fallback agent file, its meta test, AGENTS.md section 9, the policy seats table and the rung-2 paragraph, and canonical references/role-contracts.md with its CHANGELOG and manifest hash. why: the owner instructed on 2026-11-11 that commit and all git operations use mimo-v2.6-flash on the ollama-cloud provider instead of `ollama-cloud/beam`; the literal id given (`:cloud`) does not resolve, and `ollama-cloud/mimo-v2.6-flash` was dispatch-probed before it was written. rejected: keeping `ollama-cloud/beam`; writing the unresolvable `:cloud` id; leaving the canonical rung-2 sentence stale, which would contradict the repo rule in a protected shared document.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09"
+      "attestation": "Reviewed the exact on-disk diff of AGENTS.md section 9, the policy Seats table and rung-2 paragraph, the fallback agent file and tests/meta/git-executor.test.ts, and canonical references/role-contracts.md + CHANGELOG.md. Round 1 raised one blocking point - the canonical role-contracts.md still named `ollama-cloud/beam`, so the repo rule would contradict a protected shared document - plus two wrap nits; the canonical sentence, its CHANGELOG, the manifest hash and the record entries were added, and the wraps fixed. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-11",
+      "fallbackReason": "12:00-18:00 local window: the reviewer seat for this window is cline-pass/cline-pass/mimo-v2.6-pro, which the harness rejects as unavailable (model not found - a registry listing does not count), so the same window model, mimo-v2.6-pro, was served by ollama-cloud."
     },
     {
       "path": "canonical/references/mock-parity.md",
@@ -131,14 +133,15 @@
     },
     {
       "path": "canonical/CHANGELOG.md",
-      "sha256": "eeee1a7b422feff40287acb3cc94991fb43fa27d90a586c785ef1c617537faa2",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
-      "model": "deepseek-v4-pro",
-      "reason": "changes: a 2026-11-09 entry records the git-executor seat, its ranking, the owner-declared budget and the role-contract amendment. why: every canonical skill change gets a changelog entry. rejected: shipping the seat with no entry.",
+      "sha256": "9320f32a7bd777b3563eddba20e30d1a342b3d62043f360707592b6fa7399438",
+      "reviewedBy": "ollama-cloud/mimo-v2.6-pro",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: rung 2 of the git-executor seat becomes `ollama-cloud/mimo-v2.6-flash` in every place the rule names it - the fallback agent file, its meta test, AGENTS.md section 9, the policy seats table and the rung-2 paragraph, and canonical references/role-contracts.md with its CHANGELOG and manifest hash. why: the owner instructed on 2026-11-11 that commit and all git operations use mimo-v2.6-flash on the ollama-cloud provider instead of `ollama-cloud/beam`; the literal id given (`:cloud`) does not resolve, and `ollama-cloud/mimo-v2.6-flash` was dispatch-probed before it was written. rejected: keeping `ollama-cloud/beam`; writing the unresolvable `:cloud` id; leaving the canonical rung-2 sentence stale, which would contradict the repo rule in a protected shared document.",
       "verdict": "ACCEPTED",
-      "attestation": "Read the exact on-disk text in full. Round 1 REWORK (1 P1, 4 P2); round 2 confirmed the P1 and three P2s and returned the role-contracts per-write bullet; that wording was applied verbatim and a final exact-text confirmation returned ACCEPT with no P1/P2. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-09",
-      "build": "0813"
+      "attestation": "Reviewed the exact on-disk diff of AGENTS.md section 9, the policy Seats table and rung-2 paragraph, the fallback agent file and tests/meta/git-executor.test.ts, and canonical references/role-contracts.md + CHANGELOG.md. Round 1 raised one blocking point - the canonical role-contracts.md still named `ollama-cloud/beam`, so the repo rule would contradict a protected shared document - plus two wrap nits; the canonical sentence, its CHANGELOG, the manifest hash and the record entries were added, and the wraps fixed. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
+      "at": "2026-11-11",
+      "build": "0813",
+      "fallbackReason": "12:00-18:00 local window: the reviewer seat for this window is cline-pass/cline-pass/mimo-v2.6-pro, which the harness rejects as unavailable (model not found - a registry listing does not count), so the same window model, mimo-v2.6-pro, was served by ollama-cloud."
     }
   ]
 }
