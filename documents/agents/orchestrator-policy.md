@@ -132,9 +132,10 @@ why (the catalog conflates the 1M context window with the output cap).
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical
 orchestrator skill's markdown
-are review-gated: a change lands only after `deepseek-v4-pro:0813` reviews the exact text, with
-`cline-pass/cline-pass/mimo-v2.6-pro` admissible in the 12:00–18:00 local window **or** when no provider
-answers with `0813`, the basis stated in `fallbackReason`. The record is `documents/agents/protected-doc-reviews.json`; the
+are review-gated: a change lands only after the reviewer seat reviews the exact text — `deepseek-v4-pro`
+`0813` outside the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider
+answers) between 12:00 and 18:00 local, or when no provider answers with `0813` — the basis stated in
+`fallbackReason`. The record is `documents/agents/protected-doc-reviews.json`; the
 guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
 while the repo checks always run.
@@ -144,8 +145,8 @@ while the repo checks always run.
 Adopted 2026-11-04 as a modifier on a round, never a tier. `AGENTS.md` §17 owns the rule. The local
 choices:
 
-- The go-forward `grill-me` round at the end of a round defaults to **auto-accept**; the owner can still
-  run a round attended by saying so.
+- The go-forward `grill-me` round, once the owner accepts that the next round may begin, defaults to
+  **auto-accept**; the owner can still run a round attended by saying so.
 - A migration, a wire-contract change, security/auth, tenant isolation, or deleting a public route still
   parks for the owner unless they pre-authorised that specific round by name. "Go unattended" authorises
   the round's commit/push/PR/merge, not those gates.

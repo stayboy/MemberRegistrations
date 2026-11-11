@@ -59,10 +59,11 @@ Scope changes, skipped gates, residuals.
 signature is the exception: the gate runner prints it and the round doc must paste it verbatim.
 
 The `Implementer` row is a **declaration, not attestation**: `check-round.mjs` enforces its shape and,
-at Tier 2, a `worker` segment (or a `Tier 2 parent-authored: <reason>` line in `## Deviations`). The
-cell is split on `;` with each segment trimmed; a segment is `parent|worker <provider>/<model>` with
-an optional `(<scope>)`. A typed string cannot prove a dispatch — the reviewer's reading of the diff is
-the control. Only a round doc changed by a round carries the row; there is no historical backfill.
+at Tier 2, a `worker` segment (or a `Tier 2 parent-authored: <reason>` line in `## Deviations`, bare or
+bulleted with `-`/`*`, with at least 20 characters of reason). The cell is split on `;` with each
+segment trimmed; a segment is `parent|worker <provider>/<model>` with an optional `(<scope>)`. A typed
+string cannot prove a dispatch — the reviewer's reading of the diff is the control. Only a round doc
+changed by a round carries the row; there is no historical backfill.
 
 Every review is dispatched against `documents/rounds/review-brief.md`: one complete delta, findings
 batched into one fix pass, at most one confirmation round, `P1`/`P2`/`Nits` and an explicit verdict.
