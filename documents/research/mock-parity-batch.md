@@ -1,8 +1,8 @@
 # Mock parity in batches with the decision model (`clef`)
 
-Research note for discussion. Not a rule; nothing here is wired into `verify` or CI. The authoritative
-behaviour of the screen is canonical `references/mock-parity.md` plus `documents/agents/orchestrator-policy.md`
-("Mock parity").
+Research note for discussion. The deterministic AC-inventory guard becomes a `verify:fast` step **only
+through** the protected-doc edit in Decision 13; the `clef` screen itself stays out of `verify` and CI,
+and nothing here is a rule until that edit lands.
 
 ## What the decision model is
 
@@ -86,8 +86,9 @@ the requirement unless a claim carries it).
 
 ## Decisions (owner, 2026-11-12)
 
-Decisions 1–9 were reviewed by `deepseek-v4-pro:0813`. **Decision 10 was added after that review,
-owner-only, and is outside it.**
+Decisions 1–9 were reviewed by `deepseek-v4-pro:0813`. **Decisions 10–17 were added after that review,
+owner-only, and are outside it; Decisions 11–14 passed their own `0813` pass, and 15–17 are pending
+theirs.**
 
 1. **Store expectations, not stories.** One observable, one named state, one verdict word; a story is a
    reference container (`id`, actor, so-that) rendered on demand. Claims are selected by set+state,
@@ -132,6 +133,48 @@ owner-only, and is outside it.**
     per set would leak the shell into a surface call. Chrome coverage is one **shell-geometry e2e case**
     (56 px header, 260/56 px rail, pinned footer, one scroll container) plus the five existing shell
     baselines. No `--include-shell` flag.
+11. **The reverse AC-inventory guard is deterministic and it blocks the PR.** It reads the tracked spec
+    headings as the denominator and the tracked **catalogue + inventory** as the subject, so it needs no
+    model and no git-ignored image. It runs at sign-off for early feedback **and** as a `verify:fast`
+    step, and it therefore blocks the merge. The earlier "blocks sign-off, not merge" wording was wrong:
+    a step in `verify:fast` cannot stop at sign-off. The model's calibration rule does not apply because
+    the guard scores nothing — calibration governs the `clef` screen only.
+12. **The inventory owns the dispositions; the catalogue owns the claims.** A per-surface `inventory`
+    block lists every AC of the surface's declared spec slice with `claimed | e2e-only | deferred`
+    (never absent), the deferral's backlog row, or the e2e test name. Chrome ACs are `e2e-only` **in the
+    inventory** while staying out of the catalogue's entries — that resolves the Decision 10 collision
+    without either excluding them from the denominator or inventing spec-less claims.
+13. **A blocking guard is a rule, so the round carries a protected-doc edit.** The "Mock parity" section
+    of `documents/agents/orchestrator-policy.md` gains the guard's rule (denominator, dispositions,
+    blocking, and the `assert: e2e` rule for absence/state clauses) and goes through the `0813`
+    protected-doc review in the same round. A blocking check cannot live only in a research note that
+    says it is not a rule.
+14. **Two honest limits.** The surface→AC slice is a **recorded manual assignment** over mechanically
+    derived headings (§7.1 maps FR→AC, not surface→AC), and the absence/state word match is a tripwire,
+    not a proof: a rephrased clause can slip it, so the reviewer audits the classification and a new AC
+    triggers re-derivation recorded in the round doc.
+15. **Canonical placement (owner, 2026-11-12).** No new step: `references/mock-parity.md` gains a
+    _Coverage guard (deterministic, blocking)_ section; `SKILL.md` gains one clause in 4b (the catalogue
+    is derived at sign-off, pre-code) and one in step 3 (the guard is part of verify when a catalogue is
+    declared); `references/role-contracts.md` gains the non-deriver audit duty; `CHANGELOG.md` and
+    `skill-manifest.json` move with them. The advisory ruling is scoped to the **screen**, not to mock
+    parity as a topic — calibration governs the screen because it scores; the guard scores nothing. The
+    live step-3 text is "Run the repo's `verify` gate (format, lint, typecheck, tests, build)", so the
+    clause attaches without rewording; `orchestrator-policy.md`'s "Parity stays advisory" becomes "the
+    screen stays advisory" — the one sentence whose meaning moves.
+16. **Tier 0 is not exempt at verify, only at the mock gate.** Tier 0 does not derive a catalogue and owes
+    no sign-off; it is not exempt from keeping a declared catalogue true — an AC heading added, removed
+    or reworded by a Tier 0 round moves the denominator and must carry a disposition or a recorded
+    re-derivation **in that round's record, which at Tier 0 is the commit body** (there is no round doc).
+17. **Canonical/repo split (amends 13).** Canonical: the two-instrument framing, denominator = tracked
+    spec AC headings, subject = tracked catalogue + per-surface inventory, dispositions never absent,
+    derivation at sign-off by the parent and audit by another seat, the guard in verify when a catalogue
+    is declared, and the two honest limits. Repo-local: the `documents/mock-claims/` path and fields, set
+    order, the chrome-`e2e-only` resolution, the `assert: e2e` clause list, the ≥3-ABSENT control floor,
+    the protected-doc record and the `verify:fast` wiring. Both halves go through the **same** `0813`
+    pass; the canonical text is parked in the round doc and reviewed as drafted bytes, and applying it
+    means **byte-identical text modulo the record's normalisation** (CRLF→LF, trailing whitespace
+    trimmed, BOM dropped) — no reformat between parking and applying.
 
 ## Adoption path, if the pilot passes
 

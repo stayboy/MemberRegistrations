@@ -209,6 +209,11 @@ hash.
 | Per-session capture line on the event detail | R    | `event-detail.png`       | FR-4b  | AC-33     | parent, baseline vs signed `08`                                      | PASS — line under the status pill; "No capture yet" on an uncaptured session, as signed                       |
 | Headcount capture state and actions          | R    | `headcount-capture.png`  | FR-6f  | AC-32     | parent, baseline vs signed `headcount/14` (not live) and `10` (live) | PASS — the baseline is the not-live state and shows no End action, matching `14`; the live state matches `10` |
 
+_Correction, 2026-11-12._ The row above described the intended state, not the committed artifact: at
+`2a5a443` the baseline still showed a **disabled** End action, because #116 changed the page and not the
+PNG. The refresh in that day's baseline round is the artifact that actually matches `14`. The row now
+names the state it compared, which is the rule the backlog row asks for.
+
 **Mock correction (done).** Signed `mockups/v2-imports/03-attendance-ended.png` showed the ended state with
 **no** End action, while FR-6f and AC-7a require the action _disabled_. The spec is authoritative, so the
 build renders a disabled button and the mock was redrawn on 2026-11-12 (`f661e1f5…`, auto-accepted as
