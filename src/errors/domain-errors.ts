@@ -165,16 +165,6 @@ export class ImportError extends DomainError {
   }
 }
 
-/** The same occurrence and rows were already imported; nothing was applied. */
-export class DuplicateImportError extends ConflictError {
-  constructor(
-    message: string,
-    readonly batchId: string,
-  ) {
-    super(message);
-  }
-}
-
 /** A one-time code matched no stored hash, or its purpose did not match. */
 export class CodeInvalidError extends ValidationError {
   constructor(message = 'The code is not valid for this action') {

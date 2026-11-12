@@ -28,6 +28,8 @@ test('the headcount page is read-first and records and corrects through dialogs'
   await expect(
     page.getByText('Register-derived attendance. Never merged with the headcount.'),
   ).toBeVisible();
+  // The fixture session is dated 2999: not live, so End of session is not offered.
+  await expect(page.getByRole('button', { name: 'End of session' })).toHaveCount(0);
   await expect(page.getByText('142', { exact: true }).first()).toBeVisible();
 
   const history = page.getByRole('table', { name: 'Headcount observations' });

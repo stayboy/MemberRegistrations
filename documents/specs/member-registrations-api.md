@@ -14,6 +14,11 @@
 
 ## Change log
 
+- 2026-11-11: capture-contract truth. `DuplicateImportError` is removed (a live capture may repeat, so
+  the `409` could never fire), the headcount End action uses the import page's three states, and the
+  event session's `capture` is required-nullable on the UI types. No behaviour change beyond the action
+  states.
+
 - 2026-11-11: capture precedence settled for two corners, both already implied by AC-33. The shared close
   is checked before the headcount calendar-day rule, so a past session already closed by a late import
   answers `409 session_closed`, not `422 validation_error`. A redeemed `attendance_punch` is a per-member
@@ -685,6 +690,9 @@ validation_error`. A headcount is bounded by the calendar day, not the live wind
   outside-the-window auto-end does not apply to a headcount, so only a late import closes a past session.
   The close is checked before the calendar-day rule, so a past session already closed by a late import
   answers `409 session_closed`, not `422 validation_error`; the `422` applies only while no close exists.
+  The headcount surface follows the same three action states as the import page: **End of session**
+  enabled while the session is live, disabled once it is closed, and not offered otherwise; a close
+  carries whatever capture is current, so a recorded headcount is not a precondition.
   The register-derived `expected` is a separate thing, labelled **Roster**
   on the reading surfaces, and a headcount never derives from or feeds it.
   `GET /v1/events/{eventId}/headcounts?sessionDate` returns
