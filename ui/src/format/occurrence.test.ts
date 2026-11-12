@@ -17,11 +17,19 @@ function event(overrides: Partial<EventListItem> = {}): EventListItem {
     timezone: 'UTC',
     status: 'scheduled',
     sessions: [
-      { date: '2026-11-01', startTime: '09:00', endTime: null, status: 'held', note: null },
+      {
+        date: '2026-11-01',
+        startTime: '09:00',
+        endTime: null,
+        status: 'held',
+        note: null,
+        capture: null,
+      },
       {
         date: '2026-11-08',
         startTime: '09:00',
         endTime: null,
+        capture: null,
         status: 'scheduled',
         note: null,
       },
@@ -29,6 +37,7 @@ function event(overrides: Partial<EventListItem> = {}): EventListItem {
         date: '2026-11-15',
         startTime: '09:00',
         endTime: null,
+        capture: null,
         status: 'cancelled',
         note: 'Snow',
       },

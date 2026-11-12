@@ -44,6 +44,7 @@ const EVENT: EventItem = {
       present: 4,
       expected: 5,
       importedRows: 4,
+      capture: null,
       source: 'import',
     },
     {
@@ -55,6 +56,7 @@ const EVENT: EventItem = {
       present: 0,
       expected: 5,
       importedRows: 0,
+      capture: null,
       source: 'none',
     },
   ],

@@ -22,6 +22,7 @@ const SESSION: EventSessionItem = {
   date: '2026-11-08',
   startTime: '09:00',
   endTime: null,
+  capture: null,
   status: 'scheduled',
   note: null,
   present: 0,

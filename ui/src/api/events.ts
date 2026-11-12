@@ -26,7 +26,7 @@ export interface EventSessionSummary {
    * The latest capture of either channel, with the session's shared close state
    * (FR-4b). Null when the session has no capture.
    */
-  readonly capture?: { readonly asOf: string; readonly ended: boolean } | null;
+  readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
   /** A non-empty reason when the session is cancelled; null on a legacy cancellation (FR-4a). */
   readonly note: string | null;
 }

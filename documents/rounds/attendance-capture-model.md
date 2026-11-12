@@ -183,18 +183,19 @@ Seat: consistent — parent source/UI/migration, worker tests (`cline-pass/cline
 
 ## Mock sign-off
 
-| Surface                                   | Mock                                               | sha256                                                             | Signer | Date       | Verdict |
-| ----------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ | ------ | ---------- | ------- |
-| Import page — live state + End action     | `mockups/v2-imports/02-attendance-live.png`        | `6fc03131c699db0f2ef267a486ee8d8de25d56e5a20b00d5c125eb6c20534206` | owner  | 2026-11-11 | signed  |
-| Import page — ended state, no End action  | `mockups/v2-imports/03-attendance-ended.png`       | `eb71d1304f2ecd88775dccda04a900afd0462debe6c0122b8735bf837bb1dd9d` | owner  | 2026-11-11 | signed  |
-| Import page — past and open               | `mockups/v2-imports/04-attendance-past-open.png`   | `446c94d1997230f217d3494e7ab002685c4eea3345c60b198094d708665dd91d` | owner  | 2026-11-11 | signed  |
-| Import page — not started, no capture     | `mockups/v2-imports/05-attendance-not-started.png` | `2722835fabb3d5bf370a7714ef9b159a34e251d4e9a2e811088756de2b9e3380` | owner  | 2026-11-11 | signed  |
-| Headcount page — live state + End action  | `mockups/headcount/10-capture-state.png`           | `632463051aa1cc8b11610aae03def16d543457658779c2d9fdbe539266ea39a1` | owner  | 2026-11-11 | signed  |
-| Headcount — children service              | `mockups/headcount/11-children-service.png`        | `863313e0a5cd5a19e44244a13c96f05a04b7406757b24666967a2eae7a24d8bd` | owner  | 2026-11-11 | signed  |
-| Headcount — mixed service (portal-only)   | `mockups/headcount/12-mixed-service.png`           | `855c962ba780a848b5918a678175a6d361e5bd45a4d702244d382f2aa339a2b4` | owner  | 2026-11-11 | signed  |
-| Headcount — ended state, actions disabled | `mockups/headcount/13-headcount-ended.png`         | `6fc440a06ec86d691d7596649a567954e48c570b471a4e182fccd4f25cb647ec` | owner  | 2026-11-11 | signed  |
-| Event detail — capture line               | `mockups/v2-events/08-event-detail-series.png`     | `f21776afbbf9e96e43073952bb1cf500f3b52306ead212c612b6c7d8e413cf25` | owner  | 2026-11-11 | signed  |
-| Event detail — cancelled session line     | `mockups/v2-events/09-event-detail-cancelled.png`  | `7694767252dec489b21cbaa8e27179c15d48ff689e9af598a58330881978d96b` | owner  | 2026-11-11 | signed  |
+| Surface                                                  | Mock                                               | sha256                                                             | Signer                         | Date       | Verdict |
+| -------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ---------- | ------- |
+| Import page — live state + End action                    | `mockups/v2-imports/02-attendance-live.png`        | `6fc03131c699db0f2ef267a486ee8d8de25d56e5a20b00d5c125eb6c20534206` | owner                          | 2026-11-11 | signed  |
+| Import page — ended state, End action disabled (redrawn) | `mockups/v2-imports/03-attendance-ended.png`       | `f661e1f5c27b78aae752dec55e00947e675b62343334dc284f96131a8c92bf6e` | owner (auto-accepted: matched) | 2026-11-12 | signed  |
+| Import page — past and open                              | `mockups/v2-imports/04-attendance-past-open.png`   | `446c94d1997230f217d3494e7ab002685c4eea3345c60b198094d708665dd91d` | owner                          | 2026-11-11 | signed  |
+| Import page — not started, no capture                    | `mockups/v2-imports/05-attendance-not-started.png` | `2722835fabb3d5bf370a7714ef9b159a34e251d4e9a2e811088756de2b9e3380` | owner                          | 2026-11-11 | signed  |
+| Headcount page — live state + End action                 | `mockups/headcount/10-capture-state.png`           | `632463051aa1cc8b11610aae03def16d543457658779c2d9fdbe539266ea39a1` | owner                          | 2026-11-11 | signed  |
+| Headcount — children service                             | `mockups/headcount/11-children-service.png`        | `863313e0a5cd5a19e44244a13c96f05a04b7406757b24666967a2eae7a24d8bd` | owner                          | 2026-11-11 | signed  |
+| Headcount — mixed service (portal-only)                  | `mockups/headcount/12-mixed-service.png`           | `855c962ba780a848b5918a678175a6d361e5bd45a4d702244d382f2aa339a2b4` | owner                          | 2026-11-11 | signed  |
+| Headcount — ended state, actions disabled (redrawn)      | `mockups/headcount/13-headcount-ended.png`         | `02b4cd5060731b4a3bc8ea22cfba73a5d0794ffacffe9f9bc253fe799eabf143` | owner (auto-accepted: matched) | 2026-11-12 | signed  |
+| Headcount — not live, no End action                      | `mockups/headcount/14-headcount-not-live.png`      | `aaaeae94ecfe230dd5d731dd3c90c6ee09d55dc6988e1cf33f1e3fddf7ee118c` | owner (auto-accepted: matched) | 2026-11-12 | signed  |
+| Event detail — capture line                              | `mockups/v2-events/08-event-detail-series.png`     | `f21776afbbf9e96e43073952bb1cf500f3b52306ead212c612b6c7d8e413cf25` | owner                          | 2026-11-11 | signed  |
+| Event detail — cancelled session line                    | `mockups/v2-events/09-event-detail-cancelled.png`  | `7694767252dec489b21cbaa8e27179c15d48ff689e9af598a58330881978d96b` | owner                          | 2026-11-11 | signed  |
 
 All states live inside the sets the surfaces already have (`v2-imports`, `headcount`, `v2-events`); no new
 folder. The event-detail file is refreshed from its entry state (`71c756…`), so this round signs the new
@@ -202,15 +203,17 @@ hash.
 
 ## Mock parity
 
-| Claim                                        | Type | State                    | Answer | Threshold | Confirmed by                                 | Disposition                                                                             |
-| -------------------------------------------- | ---- | ------------------------ | ------ | --------- | -------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Computed live/end state on captures          | R    | `imports-attendance.png` | FR-6f  | AC-32     | parent, baseline vs signed `02/03/04/05`     | PASS — past-open label present; no End action on a past session, as signed              |
-| Per-session capture line on the event detail | R    | `event-detail.png`       | FR-4b  | AC-33     | parent, baseline vs signed `08`              | PASS — line under the status pill; "No capture yet" on an uncaptured session, as signed |
-| Headcount capture state and actions          | R    | `headcount-capture.png`  | FR-6f  | AC-32     | parent, baseline vs signed `headcount/10-13` | PASS — state line and End action present; added after review round 1                    |
+| Claim                                        | Type | State                    | Answer | Threshold | Confirmed by                                                         | Disposition                                                                                                   |
+| -------------------------------------------- | ---- | ------------------------ | ------ | --------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Computed live/end state on captures          | R    | `imports-attendance.png` | FR-6f  | AC-32     | parent, baseline vs signed `02/03/04/05`                             | PASS — past-open label present; no End action on a past session, as signed                                    |
+| Per-session capture line on the event detail | R    | `event-detail.png`       | FR-4b  | AC-33     | parent, baseline vs signed `08`                                      | PASS — line under the status pill; "No capture yet" on an uncaptured session, as signed                       |
+| Headcount capture state and actions          | R    | `headcount-capture.png`  | FR-6f  | AC-32     | parent, baseline vs signed `headcount/14` (not live) and `10` (live) | PASS — the baseline is the not-live state and shows no End action, matching `14`; the live state matches `10` |
 
-**Mock correction.** Signed `mockups/v2-imports/03-attendance-ended.png` shows the ended state with **no**
-End action, while FR-6f and AC-7a require the action _disabled_. The spec is authoritative, so the build
-renders a disabled button and the mock is corrected on its next refresh; the spec was not amended.
+**Mock correction (done).** Signed `mockups/v2-imports/03-attendance-ended.png` showed the ended state with
+**no** End action, while FR-6f and AC-7a require the action _disabled_. The spec is authoritative, so the
+build renders a disabled button and the mock was redrawn on 2026-11-12 (`f661e1f5…`, auto-accepted as
+matched). The headcount `13` was redrawn the same day (`02b4cd50…`) because its disabled attribute was not
+visible, and `14` was added for the not-live state (`aaaeae94…`).
 
 The `clef:27b` screen was not run (it is optional and needs an endpoint this round did not have); the
 comparison is the rendered baseline against the owner-signed mock, which is the check the policy makes

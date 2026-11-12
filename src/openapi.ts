@@ -2240,9 +2240,6 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             // Problem does not declare the batchId extension, so the description
             // carries it, mirroring how the reassignment 409 documents currentAssignment.
-            409: problem(
-              'This attendance file was already imported. The problem body carries the existing batchId.',
-            ),
             422: problem('The import was rejected; nothing was applied.'),
           },
         },

@@ -19,7 +19,7 @@ import {
   type EventSessionSelection,
 } from '../../components/EventSessionPicker';
 import { PageFrame } from '../../components/PageFrame';
-import { captureState, captureStateLabel, offersEndOfSession } from '../../format/capture';
+import { captureState, captureStateLabel, endActionState } from '../../format/capture';
 import {
   emptyHeadcountForm,
   fromDateTimeLocal,
@@ -167,6 +167,7 @@ export function UssdHeadcountPage() {
         }
       : null;
   const state = captureSession ? captureState(captureSession, new Date()) : null;
+  const endAction = state ? endActionState(state) : 'hidden';
   const closed = state !== null && (state.kind === 'ended' || state.kind === 'cancelled');
 
   const recordMutation = useMutation({
@@ -303,15 +304,15 @@ export function UssdHeadcountPage() {
                   <Text weight="semibold">{captureStateLabel(state, event.timezone)}</Text>
                 </div>
                 <div className={styles.badgeRow}>
-                  <Button
-                    appearance="primary"
-                    disabled={
-                      !offersEndOfSession(state) || endMutation.isPending || current === null
-                    }
-                    onClick={() => endMutation.mutate()}
-                  >
-                    End of session
-                  </Button>
+                  {endAction !== 'hidden' ? (
+                    <Button
+                      appearance="primary"
+                      disabled={endAction === 'disabled' || endMutation.isPending}
+                      onClick={() => endMutation.mutate()}
+                    >
+                      End of session
+                    </Button>
+                  ) : null}
                 </div>
               </div>
               <Text size={200} className={styles.muted}>

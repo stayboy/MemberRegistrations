@@ -27,6 +27,7 @@ const SESSION: EventSessionItem = {
   present: 86,
   expected: 120,
   importedRows: 86,
+  capture: null,
   source: 'import',
 };
 
