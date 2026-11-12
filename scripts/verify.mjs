@@ -3,7 +3,7 @@ import { runGate } from './gates.mjs';
 
 const PROFILES = {
   fast: ['format', 'lint', 'typecheck', 'test'],
-  precommit: ['format', 'lint', 'typecheck', 'test'],
+  precommit: ['check-round', 'format', 'lint', 'typecheck', 'test'],
   full: ['skill', 'check-round', 'format', 'lint', 'typecheck', 'test', 'build'],
 };
 

@@ -24,6 +24,7 @@ import type {
 } from '../src/api/members';
 import type { ChurchReport, OfficerSummary, Roster } from '../src/api/shepherding';
 import type { OccurrenceListDto, SeriesDto, SeriesSummaryDto } from '../src/api/series';
+import { dateInZone } from '../src/format/capture';
 import type { AccentId, Scheme } from '../src/theme/brand';
 
 export const SESSION_STORAGE_KEY = 'mr.session.v1';
@@ -527,6 +528,90 @@ export const EVENTS: readonly EventItem[] = [
     stats: EMPTY_OFFERING_STATS,
   },
 ];
+
+/**
+ * The live/ended pair the End-of-session assertions drive (AC-7a). "Live" is never stored: it is the
+ * session date being today in the event timezone with the clock inside the window, so the date is
+ * computed when the routes are built rather than pinned in the fixture. `event-ended` carries a
+ * capture with `ended: true`, which wins over the window and renders the action disabled.
+ */
+const ACTION_STATE_EVENT_IDS: readonly string[] = ['event-live', 'event-ended'];
+
+function actionStateEvents(): readonly EventItem[] {
+  const today = dateInZone(new Date(), 'UTC');
+  return [
+    {
+      id: 'event-live',
+      eventNo: 'EVT-E2E-LIVE',
+      name: 'Live service',
+      seriesId: null,
+      ministry: null,
+      timezone: 'UTC',
+      startDate: today,
+      endDate: today,
+      startTime: '00:00',
+      endTime: '23:59',
+      venueType: 'auditorium',
+      venueName: 'Main auditorium',
+      description: null,
+      status: 'scheduled',
+      source: 'manual',
+      tracksMembers: true,
+      presbyterOnly: false,
+      sessions: [
+        {
+          date: today,
+          startTime: '00:00',
+          endTime: '23:59',
+          status: 'scheduled',
+          note: null,
+          present: 0,
+          expected: 0,
+          importedRows: 0,
+          capture: null,
+          source: 'none',
+        },
+      ],
+      offerings: [],
+      stats: EMPTY_OFFERING_STATS,
+    },
+    {
+      id: 'event-ended',
+      eventNo: 'EVT-E2E-ENDED',
+      name: 'Ended service',
+      seriesId: null,
+      ministry: null,
+      timezone: 'UTC',
+      startDate: today,
+      endDate: today,
+      startTime: '09:00',
+      endTime: '11:00',
+      venueType: 'auditorium',
+      venueName: 'Main auditorium',
+      description: null,
+      status: 'held',
+      source: 'manual',
+      tracksMembers: true,
+      presbyterOnly: false,
+      sessions: [
+        {
+          date: today,
+          startTime: '09:00',
+          endTime: '11:00',
+          status: 'held',
+          note: null,
+          present: 0,
+          expected: 0,
+          importedRows: 0,
+          capture: { asOf: `${today}T10:00:00.000Z`, ended: true },
+          source: 'manual',
+        },
+      ],
+      offerings: [],
+      stats: EMPTY_OFFERING_STATS,
+    },
+  ];
+}
 
 /**
  * The landing aggregate. Amounts are integer minor units; the by-member rows are
@@ -1144,7 +1229,15 @@ function createdDetail(input: unknown): MemberDetail {
  * available to handlers but never part of the key: one fixture serves every
  * window the pages ask for, so no assertion depends on today's date.
  */
-function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] {
+function buildRoutes(
+  created: Map<string, MemberDetail>,
+  actionStatesEnabled: () => boolean,
+): readonly RouteEntry[] {
+  // The action-state events exist for the capture-state tests; they are opt-in so a
+  // session dated today cannot win another surface's "next session" selection.
+  const currentEvents = () =>
+    actionStatesEnabled() ? [...EVENTS, ...actionStateEvents()] : EVENTS;
+
   const pledgeState = new Map<string, PledgeItem>(PLEDGES.map((pledge) => [pledge.id, pledge]));
   const contributionState = new Map<string, ContributionItem>(
     CONTRIBUTIONS.map((contribution) => [contribution.id, contribution]),
@@ -1244,7 +1337,7 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/events$/,
-      handle: () => reply({ items: EVENTS }),
+      handle: () => reply({ items: currentEvents() }),
     },
     {
       method: 'GET',
@@ -1258,6 +1351,17 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
         if (eventId === 'event-offerings') {
           return reply({ ...HEADCOUNT_ATTENDANCE, sessionDate: date });
         }
+        if (ACTION_STATE_EVENT_IDS.includes(eventId ?? '')) {
+          // No register-derived roster on the action-state fixtures: the capture state is the point.
+          return reply({
+            eventId,
+            sessionDate: date,
+            present: 0,
+            expected: 0,
+            importedRows: 0,
+            rows: [],
+          });
+        }
         if (eventId !== ATTENDANCE_EVENT_1.eventId) {
           return problem(404, `Event ${eventId} was not found`);
         }
@@ -1268,7 +1372,7 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
       method: 'GET',
       pattern: /^\/gateway\/v1\/events\/([^/]+)$/,
       handle: (_call, [eventId]) => {
-        const event = EVENTS.find((candidate) => candidate.id === eventId);
+        const event = currentEvents().find((candidate) => candidate.id === eventId);
         if (!event) return problem(404, `Event ${eventId} was not found`);
         return reply(event, 200, { ETag: '"e2e-event"' });
       },
@@ -1561,7 +1665,12 @@ function buildRoutes(created: Map<string, MemberDetail>): readonly RouteEntry[] 
 
 class GatewayStub {
   private readonly created = new Map<string, MemberDetail>();
-  private readonly routes: readonly RouteEntry[] = buildRoutes(this.created);
+  /** Opt-in: the action-state events a capture-state test asks for. */
+  includeActionStates = false;
+  private readonly routes: readonly RouteEntry[] = buildRoutes(
+    this.created,
+    () => this.includeActionStates,
+  );
   private readonly unmatched: string[] = [];
 
   /**

@@ -10,6 +10,12 @@ async function chooseFoundationService(page: Page): Promise<void> {
   await page.getByRole('option', { name: /Foundation service/ }).click();
 }
 
+/** Chooses an event by its option label; the picker auto-selects its default session. */
+async function chooseEvent(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole('combobox', { name: 'Event' }).click();
+  await page.getByRole('option', { name }).click();
+}
+
 test('the headcount page is read-first and records and corrects through dialogs', async ({
   page,
 }) => {
@@ -30,6 +36,11 @@ test('the headcount page is read-first and records and corrects through dialogs'
   ).toBeVisible();
   // The fixture session is dated 2999: not live, so End of session is not offered.
   await expect(page.getByRole('button', { name: 'End of session' })).toHaveCount(0);
+  // HC-ACTION-02/03/04: the not-started state line, and neither of the other two labels. The
+  // "starts with Live" pattern covers the label only — the hint below it is prose, not a label.
+  await expect(page.getByText(/^Not started [·—] this capture will end it$/)).toBeVisible();
+  await expect(page.getByText(/^Live(?: · recorded .*)?$/)).toHaveCount(0);
+  await expect(page.getByText(/^Past session(?: · .*)?$/)).toHaveCount(0);
   await expect(page.getByText('142', { exact: true }).first()).toBeVisible();
 
   const history = page.getByRole('table', { name: 'Headcount observations' });
@@ -79,4 +90,29 @@ test('the headcount page is read-first and records and corrects through dialogs'
   await expect(rowDialog.getByText('Keeping asOf Jan 10, 2999, 10:15 AM')).toBeVisible();
   await rowDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('a live session offers an enabled End of session action', async ({ page, gateway }) => {
+  gateway.includeActionStates = true;
+  await open(page, '/ussd/headcount');
+  await chooseEvent(page, /Live service/);
+
+  // Live is computed, never stored: the session is dated today in the event zone with the clock
+  // inside its window, so the action is offered and enabled.
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  const endAction = page.getByRole('button', { name: 'End of session' });
+  await expect(endAction).toBeVisible();
+  await expect(endAction).toBeEnabled();
+});
+
+test('an ended session shows End of session disabled, not absent', async ({ page, gateway }) => {
+  gateway.includeActionStates = true;
+  await open(page, '/ussd/headcount');
+  await chooseEvent(page, /Ended service/);
+
+  // An ended capture wins over the window: the action stays visible and is disabled.
+  await expect(page.getByText(/^End of session .*recorded 10:00$/)).toBeVisible();
+  const endAction = page.getByRole('button', { name: 'End of session' });
+  await expect(endAction).toBeVisible();
+  await expect(endAction).toBeDisabled();
 });

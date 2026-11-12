@@ -90,7 +90,10 @@ why (the catalog conflates the 1M context window with the output cap).
   rounds are exempt; API, migration and security-only rounds are exempt unless they alter the UI.
 - A mock is a PNG per state (empty, loading, error, success), usually captured from a static HTML
   prototype with the existing Playwright pattern. A PNG is a mock (owner, 2026-11-11); a clickable
-  prototype is required only for a multi-step USSD flow.
+  prototype is required only for a multi-step USSD flow. A surface with a catalogue also carries its
+  **atoms as data** in `documents/mock-claims/<set>.json`: every entry cites `file`, a resolving `anchor`
+  and a verbatim `quote`, and every spec-required atom is either an AC or a prose anchor marked
+  `anchorKind: "prose"`.
 - A mock lives in the surface's existing set under `mockups/<set>/` (for example `mockups/v2-events/`):
   refresh that set's PNGs and add a state file only when the state does not already exist. Never open a
   new folder per feature or round, and never duplicate a state (owner, 2026-11-11).
@@ -99,19 +102,33 @@ why (the catalog conflates the 1M context window with the output cap).
   `mockups/v2-settings/02-date-time-sidebar.png`. Do not invent new chrome per surface and do not
   stretch a page to fill height; the durable record is the spec and the round doc.
 - Sign-off is recorded in `documents/rounds/<slug>.md` under `## Mock sign-off` — surface, mock path,
-  sha256, signer, date and verdict — because `mockups/` is git-ignored. Only the owner signs a product
-  surface; the orchestrator records it.
-- Parity stays advisory until one fully-signed round is green; a blocking Acceptance check is then
-  proposed through a protected-doc round. A mock that contradicts the spec updates the spec first.
+  sha256, signer, date and verdict. For a catalogued surface the row must name a set+state the catalogue
+  marks `coverage: "signed"` and the round must carry a `Mock coverage: claimed … · e2e-only … ·
+deferred … · prose …` line. Because `mockups/` is git-ignored, the sha pin is a tripwire over an
+  untracked artefact, not proof. Only the owner signs a product surface; the orchestrator records it.
+- **The screen stays advisory; the guard blocks.** The coverage guard is deterministic: the denominator
+  is the spec's AC headings matched by the surface's recorded `acsMatch`, the subject is the tracked
+  catalogue plus its per-surface inventory, and every matched AC is `claimed | e2e-only | deferred` —
+  never absent. A prose-anchored `spec-required` atom reports in its own counter, so a prose requirement
+  can never leave the denominator silently. `check-round` R6 fails a round that changes `ui/src/**`
+  without a resolving sign-off row, in CI and in `--staged` mode. The guard proves naming and declared
+  atoms — not intent, styling, or states the prototype does not draw; the calibration bar below governs
+  only the screen, which scores.
+- The mock's own claim assertions run against the built page at acceptance; the mock-side run against the
+  mock's source, the verifiable pins and the tracked ledger land with the tracking round, and until then
+  the round doc records the mock side as attested.
+- A mock that contradicts the spec updates the spec first.
 - No historical backfill: a surface built before this rule gets a mock when it is next changed.
 - Applies at Tiers 1–3 when a round changes a surface with a mock under the local, git-ignored
-  `mockups/**`; otherwise record "no mock".
-- The screen is advisory: it flags atoms, the reviewer confirms each with `path:line`, and only
-  confirmed misses on **spec-required** atoms force `REWORK`; mock-only atoms are mock corrections.
+  `mockups/**`; otherwise record "no mock". Tier 0 owes no catalogue but is not exempt from keeping a
+  declared one true: an AC heading it moves needs a disposition or a recorded re-derivation, and at Tier 0
+  that record is the commit body.
+- The screen flags atoms; the reviewer confirms each with `path:line`, and only confirmed misses on
+  **spec-required** atoms force `REWORK`; mock-only atoms are mock corrections.
 - `clef:27b` is optional; `scripts/round/decision-probe.mjs` is the harness. It is not wired into
   `verify`/CI — a model endpoint is not a repo precondition.
-- A hard gate needs the labeled calibration set (≥100 rows, false-pass 0, false-rework ≤10%, ≥3
-  rounds) and a protected-doc round.
+- A hard gate on the **screen** needs the labeled calibration set (≥100 rows, false-pass 0, false-rework
+  ≤10%, ≥3 rounds) and a protected-doc round.
 
 ## Parallel workers
 
