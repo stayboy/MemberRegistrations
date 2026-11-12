@@ -33,7 +33,7 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `contacts-dialog.png`         | Contacts dialog for the first fixture member     | 1440 × 900  | `v2-shell/16-contacts.png`              |
 | `imports-members.png`         | Member database import, format and drop zone     | 1440 × 1150 | `v2-imports/01-members-import.png`      |
 | `imports-attendance.png`      | Attendance registry import, session selected     | 1440 × 1150 | `v2-imports/04-attendance-past-open.png` |
-| `headcount-capture.png`       | USSD headcount page, capture state and actions   | 1440 × 900  | `headcount/10-capture-state.png`        |
+| `headcount-capture.png` | USSD headcount page, not live: state line, no End action                     | 1440 × 900  | `headcount/14-headcount-not-live.png`   |
 | `imports-batches.png`         | Batch lookup, empty tab history                  | 1440 × 900  | none (no mock)                          |
 | `settings.png`                | Settings, appearance / date-time / session       | 1440 × 1150 | `v2-settings/01-date-time-settings.png` |
 
