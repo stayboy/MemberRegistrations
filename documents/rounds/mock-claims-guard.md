@@ -303,14 +303,14 @@ n/a — the round builds the machinery that will produce parity rows; no surface
 One verb per brief on the git-executor seat; rung 1 is unavailable (free-usage limit), so rung 2
 (`ollama-cloud/mimo-v2.6-flash`) runs inside the owner's budget.
 
-| Verb            | Variant | Result                                                                                                                      |
-| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| branch create   | parent  | `feat/mock-claims-guard` — the seat forbids a branch from a dirty tree, and the round's work is uncommitted by construction |
-| commit          | rung 2  | pending                                                                                                                     |
-| push            | rung 2  | pending                                                                                                                     |
-| PR create       | rung 2  | pending                                                                                                                     |
-| squash merge    | rung 2  | pending                                                                                                                     |
-| post-merge pull | rung 2  | pending                                                                                                                     |
+| Verb            | Variant | Result                                                                                                                                                                           |
+| --------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| branch create   | parent  | `feat/mock-claims-guard` — the seat forbids a branch from a dirty tree, and the round's work is uncommitted by construction                                                      |
+| commit          | rung 2  | `1c1af68` on the first green attempt; the attempt before it was rejected by the pre-commit hook's test step (Vitest worker crash, zero failed assertions), so the hook ran twice |
+| push            | rung 2  | `refs/heads/feat/mock-claims-guard` at `1c1af68`, tracking set                                                                                                                   |
+| PR create       | rung 2  | #119, body dry-run first; no second PR                                                                                                                                           |
+| squash merge    | rung 2  | `55b8de2` at 2026-11-12T17:56:21Z, `--squash --delete-branch`, all three checks green                                                                                            |
+| post-merge pull | rung 2  | `git switch main` + `git pull --ff-only`; `gh` had already fast-forwarded, so "Already up to date"                                                                               |
 
 `fallbackReason`: `opencode/beam-free` answered "Free usage limit reached" twice (a provider-side quota, so
 unavailable under `orchestrator-policy.md`); rung 2 is the ranked fallback and runs inside the declared
