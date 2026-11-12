@@ -1,6 +1,10 @@
 #!/usr/bin/env node
+// check-round — the round-doc gate. Modes:
+//   (default)   the change set from `origin/main...HEAD` (two-ref fallback for a shallow clone)
+//   --staged    `git diff --cached --name-only --diff-filter=ACM`, for the pre-commit hook
+//   --files ... an explicit document list; there is no diff, so the path-derived rules (R4, R6) skip
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,7 +30,31 @@ const TIER_VALUES = new Set([0, 1, 2]);
 const TIER2_PATHS = [/^src\/db\/migrations\.ts$/, /^src\/schemas\//, /^src\/authn\//];
 const TIER1_PATHS = [/^src\//, /^ui\/src\//];
 
+// R6: a change under ui/src/ is a surface change, so the round doc must carry a resolving sign-off
+// row and the catalogue's coverage line. R6 never reads a mock image: mocks are git-ignored today.
+const UI_SRC_PATTERN = /^ui\/src\//;
+const CATALOGUE_DIR = 'documents/mock-claims/';
+const MOCK_ROW_PATTERN = /mockups\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.png)/g;
+const MOCK_COVERAGE_PATTERN =
+  /^\s*(?:[-*]\s+)?Mock coverage: claimed \d+ .* e2e-only \d+ .* deferred \d+ .* prose \d+/m;
+const GIT_STAGED_ARGS = ['diff', '--cached', '--name-only', '--diff-filter=ACM'];
+
 const PREFIX = 'check-round: ';
+
+const defaultExecGit = (args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+
+/** Split `git ... --name-only` output into paths; CRLF and blank lines are tolerated. */
+export function parseNameOnly(output) {
+  return String(output ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/** The staged change set, for the pre-commit hook. `execGit` is injectable so tests never shell out. */
+export function stagedChangedPaths(execGit = defaultExecGit) {
+  return parseNameOnly(execGit(GIT_STAGED_ARGS));
+}
 
 function changedFiles() {
   const ranges = [
@@ -37,9 +65,7 @@ function changedFiles() {
   let lastError;
   for (const args of ranges) {
     try {
-      return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
-        .split(/\r?\n/)
-        .filter(Boolean);
+      return parseNameOnly(defaultExecGit(args));
     } catch (error) {
       lastError = error;
     }
@@ -134,13 +160,117 @@ function tierFloor(changedPaths) {
   return floor;
 }
 
+/** The catalogue set names under documents/mock-claims/; [] when the directory does not exist. */
+function catalogueNames() {
+  try {
+    return readdirSync(join(repoRoot, 'documents', 'mock-claims'))
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => name.slice(0, -'.json'.length));
+  } catch {
+    return [];
+  }
+}
+
+/** The `mockups/<set>/<state>.png` paths a `## Mock sign-off` row names, with that row's text. */
+function mockSignOffRows(text) {
+  const rows = [];
+  for (const line of sectionLines(text, 'Mock sign-off')) {
+    for (const match of line.matchAll(MOCK_ROW_PATTERN)) {
+      rows.push({ path: `mockups/${match[1]}/${match[2]}`, line });
+    }
+  }
+  return rows;
+}
+
+/** A catalogue file as JSON, or null when it is missing or not an object. */
+function readCatalogue(readText, file) {
+  try {
+    const parsed = JSON.parse(readText(file));
+    return parsed !== null && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * R6: a round that changes ui/src/** must carry a `## Mock sign-off` row naming a mock image whose
+ * catalogue state is `signed`, plus the coverage line the generator prints. The mock file is never
+ * read — mocks are git-ignored, so the row proves the sign-off and the catalogue, not the pixels.
+ */
+function checkMockSignOff(label, text, readText, listCatalogues, fail) {
+  const catalogues = listCatalogues === null ? null : listCatalogues();
+  if (catalogues !== null && catalogues.length === 0) {
+    fail(
+      `${label}: the change touches ui/src/ but ${CATALOGUE_DIR} holds no claim catalogue (R6: a surface change with no catalogue)`,
+    );
+    return;
+  }
+  if (sectionLines(text, 'Mock sign-off').length === 0) {
+    fail(
+      `${label}: a change under ui/src/ needs a "## Mock sign-off" section with a row naming "mockups/<set>/<state>.png", the state marked "signed", plus the "Mock coverage:" line (R6)`,
+    );
+    return;
+  }
+  const rows = mockSignOffRows(text);
+  if (rows.length === 0) {
+    fail(`${label}: "## Mock sign-off" has no row naming "mockups/<set>/<state>.png" (R6)`);
+  }
+  for (const row of rows) {
+    const set = row.path.split('/')[1];
+    const catalogueFile = `${CATALOGUE_DIR}${set}.json`;
+    const catalogue = readCatalogue(readText, catalogueFile);
+    if (catalogue === null) {
+      fail(
+        `${label}: the sign-off row names ${row.path}, but ${catalogueFile} does not exist (R6)`,
+      );
+      continue;
+    }
+    const states =
+      catalogue.states !== null && typeof catalogue.states === 'object' ? catalogue.states : {};
+    const hit = Object.entries(states).find(
+      ([, state]) =>
+        state !== null &&
+        typeof state === 'object' &&
+        typeof state.mock?.path === 'string' &&
+        state.mock.path.replaceAll('\\', '/') === row.path,
+    );
+    if (hit === undefined) {
+      fail(
+        `${label}: ${catalogueFile} has no state whose mock.path is ${row.path} (R6: the row must resolve to a state in the catalogue)`,
+      );
+      continue;
+    }
+    const [stateName, state] = hit;
+    if (state.coverage !== 'signed') {
+      fail(
+        `${label}: state "${stateName}" in ${catalogueFile} is coverage "${state.coverage}", not "signed" (R6)`,
+      );
+      continue;
+    }
+    if (!/\bsigned\b/i.test(row.line)) {
+      fail(`${label}: the row for ${row.path} does not mark the state "signed" (R6)`);
+    }
+  }
+  if (!MOCK_COVERAGE_PATTERN.test(text)) {
+    fail(
+      `${label}: missing the line "Mock coverage: claimed <n> · e2e-only <n> · deferred <n> · prose <n>" (R6; node scripts/round/mock-claims.mjs prints it)`,
+    );
+  }
+}
+
 /**
  * Pure check: the round docs selected by the change, the full changed-path list (null when there
- * is no diff, as in `--files` mode) and a reader. Returns the failure lines, prefixed for the CLI.
+ * is no diff, as in `--files` mode) and a reader. `options.listCatalogues` is the injectable
+ * `documents/mock-claims/` listing R6 needs. Returns the failure lines, prefixed for the CLI.
  */
-export function checkDocuments(files, changedPaths, readText) {
+export function checkDocuments(files, changedPaths, readText, options = {}) {
   const failures = [];
   const fail = (message) => failures.push(`${PREFIX}${message}`);
+  const listCatalogues =
+    typeof options.listCatalogues === 'function' ? options.listCatalogues : null;
+  // R6 applies only when the diff shows a surface change; `--files` mode has no diff to read.
+  const touchesUiSrc =
+    changedPaths !== null && changedPaths.some((path) => UI_SRC_PATTERN.test(path));
 
   // R3: code moved, so a round doc must have been selected. Only with a real changed-file list.
   if (changedPaths !== null && files.length === 0) {
@@ -240,6 +370,9 @@ export function checkDocuments(files, changedPaths, readText) {
         `${file}: Tier ${tier.value} is below the floor set by ${floor.path} (R4: Tier >= ${floor.tier} required)`,
       );
     }
+
+    // R6: a surface change cites the mock it was signed against.
+    if (touchesUiSrc) checkMockSignOff(file, text, readText, listCatalogues, fail);
   }
 
   return failures;
@@ -247,16 +380,35 @@ export function checkDocuments(files, changedPaths, readText) {
 
 function run(argv) {
   const supplied = filesFromArgs(argv);
+  const staged = argv.includes('--staged');
   // In `--files` mode the caller names the documents and there is no diff to consult.
-  const changedPaths =
-    supplied === null ? changedFiles().map((path) => path.replaceAll('\\', '/')) : null;
+  let changedPaths;
+  if (supplied !== null) {
+    changedPaths = null;
+  } else if (staged) {
+    try {
+      changedPaths = stagedChangedPaths();
+    } catch (error) {
+      console.error(
+        `check-round: could not compute the staged files (${GIT_STAGED_ARGS.join(' ')}):`,
+      );
+      console.error(String(error?.stderr ?? error?.message).trim());
+      process.exit(1);
+    }
+  } else {
+    changedPaths = changedFiles();
+  }
+  if (changedPaths !== null) changedPaths = changedPaths.map((path) => path.replaceAll('\\', '/'));
   const files = (supplied ?? changedPaths)
     .map((path) => path.replaceAll('\\', '/'))
     .filter((path) => path.endsWith('.md'))
     .filter(isRoundDoc);
 
-  const failures = checkDocuments(files, changedPaths, (file) =>
-    readFileSync(join(repoRoot, file), 'utf8'),
+  const failures = checkDocuments(
+    files,
+    changedPaths,
+    (file) => readFileSync(join(repoRoot, file), 'utf8'),
+    { listCatalogues: catalogueNames },
   );
 
   if (failures.length > 0) {

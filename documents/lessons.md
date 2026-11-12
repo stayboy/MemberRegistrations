@@ -14,7 +14,34 @@ and accent-ramp entries were accepted in the Q200 round (2026-11-05, "all as rec
 recommended"). The 2026-11-10 entries were accepted in reply to the session that proposed them
 (2026-11-10, "accept lessons"). The 2026-11-11 entry was accepted in the `series-detail-summary` close
 round (2026-11-11, "all as recommended", with the Q6 rephrase). The two 2026-11-11 seat entries were
-accepted with the seat-enforcement grill (2026-11-11, "all as recommended").
+accepted with the seat-enforcement grill (2026-11-11, "all as recommended"). The 2026-11-12 fixture entry
+and the 2026-11-10 serial-run amendment were accepted in the `mock-claims-guard` close (2026-11-12,
+"merge. review lessons with `deepseek-v4.1-flash-1017` if they are durable enough to keep"): the durability
+review returned KEEP for the fixture rule and MERGE-INTO the existing worker-crash entry.
+
+---
+
+## 2026-11-12 — A fixture row on a shared list route is another screen's dependency
+
+**Rule.** In the e2e harness a row added for one test is served to every screen that reads the same list
+route, and a screen that derives "the next" or "the current" item from that list silently selects the new
+row instead of its own. Add such a row behind an opt-in on the stub — a flag defaulting `false`, set by the
+tests that need it — and build the list in a function rather than appending to a shared array. The
+dangerous rows are the ones whose date comes from the wall clock, because they sort ahead of pinned data;
+gate their membership even when the data itself is legitimate.
+
+**Evidence.** `ui/e2e/fixtures.ts` appended `event-live` and `event-ended` (the action-state pair, both
+dated today by `dateInZone(new Date(), 'UTC')`) to the shared `GET /gateway/v1/events` list, so the
+offerings page's USSD preview picked the live session ahead of `Foundation service` (2999) and
+`ui/e2e/offerings.spec.ts` failed in a round that touched no offerings code — recorded in
+`documents/rounds/mock-claims-guard.md`. `buildRoutes` now takes `actionStatesEnabled`, driven by
+`GatewayStub.includeActionStates` (default `false`) and set only by the two headcount action-state tests;
+the flag gates list membership and the event-detail route, which both read `currentEvents()`, while the
+attendance route resolves the pair either way. The offerings assertion is the tripwire, so no new check is
+owed.
+
+**Trigger.** Any new row in `ui/e2e/fixtures.ts`, and any e2e failure in a spec whose page the round did
+not touch.
 
 ---
 
@@ -107,7 +134,14 @@ on that pull request returned "Auto merge is not allowed for this repository".
 ## 2026-11-10 — A Windows Vitest worker crash is an environment failure, not a test failure
 
 **Rule.** Exit `3221226505` from a Vitest worker is a Node fail-fast on Windows, not an assertion. Read
-the total, isolate the file that crashed, run it alone, and re-run the gate once. Bypassing the hook
+the total, isolate the file that crashed, run it alone, and re-run the gate once. When the retry dies the
+same way — a different file named each time and no failed assertion — the file passing alone does not clear
+the gate: run the whole suite serially and bare, `npx vitest run --no-file-parallelism` (the step the
+`precommit` profile itself runs in `scripts/gates.mjs`), and record that run in the round. That bare run is
+evidence, not another gate retry: no gate counts as passed until it is green. The crash is not confined to
+the `precommit` profile — the `full` profile's `test` step is the parallel one, so `verify` dies this way
+too — and the failure belongs to the environment rather than the diff only once the serial suite is green.
+Bypassing the hook
 does not fix it — "A hook that cannot pass is a hook people bypass" (2026-11-06) still stands, and the
 deterministic fix is queued in `documents/backlog.md`. A bypass is a recorded exception for a docs-only
 change, never a habit, and the required CI check stays the authority.

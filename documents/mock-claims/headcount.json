@@ -1,0 +1,286 @@
+{
+  "set": "headcount",
+  "specs": ["documents/specs/member-registrations-api.md"],
+  "surfaces": [
+    {
+      "id": "ussd-headcount",
+      "route": "/ussd/headcount",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-api.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["headcount"]
+    }
+  ],
+  "states": {
+    "live": {
+      "mock": {
+        "path": "mockups/headcount/10-capture-state.png",
+        "sha256": "632463051aa1cc8b11610aae03def16d543457658779c2d9fdbe539266ea39a1",
+        "source": "mockups/headcount/10-capture-state.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "ended": {
+      "mock": {
+        "path": "mockups/headcount/13-headcount-ended.png",
+        "sha256": "02b4cd5060731b4a3bc8ea22cfba73a5d0794ffacffe9f9bc253fe799eabf143",
+        "source": "mockups/headcount/13-headcount-ended.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "not-live": {
+      "mock": {
+        "path": "mockups/headcount/14-headcount-not-live.png",
+        "sha256": "aaaeae94ecfe230dd5d731dd3c90c6ee09d55dc6988e1cf33f1e3fddf7ee118c",
+        "source": "mockups/headcount/14-headcount-not-live.html"
+      },
+      "baseline": "headcount-capture.png",
+      "coverage": "signed"
+    }
+  },
+  "inventory": [
+    {
+      "surface": "ussd-headcount",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-api.md",
+          "id": "AC-33",
+          "disposition": "e2e-only",
+          "test": "tests/api/attendance-captures.test.ts::closes on an ended capture; a further import, headcount and manual write all answer session_closed"
+        },
+        {
+          "file": "documents/specs/member-registrations-api.md",
+          "id": "AC-33a",
+          "disposition": "e2e-only",
+          "test": "tests/api/attendance-captures.test.ts::rejects an asOf outside the session day and writes nothing"
+        },
+        {
+          "file": "documents/specs/member-registrations-api.md",
+          "anchorKind": "prose",
+          "anchor": "USSD attendance, codes and clocking (24b)",
+          "disposition": "claimed",
+          "entries": [
+            "HC-ACTION-01",
+            "HC-ACTION-03",
+            "HC-ACTION-04",
+            "HC-ACTION-05",
+            "HC-ACTION-07"
+          ]
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "HC-ACTION",
+      "as": "presbyter",
+      "iWant": "the headcount page to offer End of session only while the session is live",
+      "soThat": "a closed session cannot take a count or a per-member capture",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "enabled while the session is live, disabled once it is closed, and not offered otherwise"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "HC-ACTION-01",
+      "story": "HC-ACTION",
+      "state": "not-live",
+      "claim": "The End of session action is not offered on a session that is not live.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "button",
+          "name": "End of session",
+          "state": "absent"
+        },
+        "build": {
+          "role": "button",
+          "name": "End of session",
+          "state": "absent"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::the headcount page is read-first and records and corrects through dialogs",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "enabled while the session is live, disabled once it is closed, and not offered otherwise"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "HC-ACTION-02",
+      "story": "HC-ACTION",
+      "state": "not-live",
+      "claim": "The state line reads Not started and says this capture will end the session.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "generic",
+          "name": "Not started"
+        },
+        "build": {
+          "role": "generic",
+          "name": "Not started"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::the headcount page is read-first and records and corrects through dialogs",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "not offered otherwise"
+      }
+    },
+    {
+      "id": "HC-ACTION-03",
+      "story": "HC-ACTION",
+      "state": "not-live",
+      "claim": "No Live label appears on a session that has not started.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "generic",
+          "name": "Live",
+          "state": "absent"
+        },
+        "build": {
+          "role": "generic",
+          "name": "Live",
+          "state": "absent"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::the headcount page is read-first and records and corrects through dialogs",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "enabled while the session is live"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "HC-ACTION-04",
+      "story": "HC-ACTION",
+      "state": "not-live",
+      "claim": "No Past session label appears on a session that has not started.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "generic",
+          "name": "Past session",
+          "state": "absent"
+        },
+        "build": {
+          "role": "generic",
+          "name": "Past session",
+          "state": "absent"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::the headcount page is read-first and records and corrects through dialogs",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "enabled while the session is live, disabled once it is closed"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "HC-ACTION-05",
+      "story": "HC-ACTION",
+      "state": "ended",
+      "claim": "End of session is shown disabled once the session is closed.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "button",
+          "name": "End of session",
+          "state": "disabled"
+        },
+        "build": {
+          "role": "button",
+          "name": "End of session",
+          "state": "disabled"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::an ended session shows End of session disabled, not absent",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "disabled once it is closed"
+      }
+    },
+    {
+      "id": "HC-ACTION-06",
+      "story": "HC-ACTION",
+      "state": "ended",
+      "claim": "The state line reads End of session with the capture clock.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "generic",
+          "name": "End of session"
+        },
+        "build": {
+          "role": "generic",
+          "name": "End of session"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::an ended session shows End of session disabled, not absent",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "disabled once it is closed"
+      }
+    },
+    {
+      "id": "HC-ACTION-07",
+      "story": "HC-ACTION",
+      "state": "live",
+      "claim": "End of session is offered, enabled, while the session is live.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "button",
+          "name": "End of session",
+          "state": "enabled"
+        },
+        "build": {
+          "role": "button",
+          "name": "End of session",
+          "state": "enabled"
+        }
+      },
+      "test": "ui/e2e/headcount.spec.ts::a live session offers an enabled End of session action",
+      "spec": {
+        "file": "documents/specs/member-registrations-api.md",
+        "anchor": "USSD attendance, codes and clocking (24b)",
+        "quote": "enabled while the session is live"
+      }
+    }
+  ]
+}

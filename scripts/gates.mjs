@@ -30,6 +30,9 @@ function commandFor(name, profile) {
     const args = profile === 'precommit' ? ['--', '--no-file-parallelism'] : [];
     return ['npm', ['run', 'test', ...args]];
   }
+  if (name === 'check-round' && profile === 'precommit') {
+    return ['npm', ['run', 'check-round', '--', '--staged']];
+  }
   const command = STEP_COMMANDS[name];
   if (!command) throw new Error(`unknown gate step: ${name}`);
   return command;

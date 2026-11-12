@@ -71,7 +71,8 @@ Two pairs per call is the sweet spot: 4 images, 8–16 claims, well inside 64 qu
 1. Take the **nine signed states** in `v2-imports` (4) and `headcount` (5) — the round-B sign-off table
    lists eleven rows across three sets, and the ninth state (`v2-events/09`) has no baseline. Pair each
    state with its committed baseline where one exists: `v2-imports/04` -> `imports-attendance.png` and
-   `headcount/10` -> `headcount-capture.png`. The other seven are `target` stubs with no entries.
+   `headcount/14` -> `headcount-capture.png` (the baseline shows the not-live state, which is `14`; `10`
+   is live and has no baseline). The other seven are `target` stubs with no entries.
 2. Derive 4-6 claims per **pair** from the mock _and one from the spec clause the mock cites_; two pairs
    per call, so one two-pair call exercises the 4-image limit, plus one `--permute` re-run.
 3. Run `decision-probe.mjs` twice, second time `--permute`; record every result as `DM:` on the round-doc
@@ -175,6 +176,67 @@ theirs.**
     pass; the canonical text is parked in the round doc and reviewed as drafted bytes, and applying it
     means **byte-identical text modulo the record's normalisation** (CRLF→LF, trailing whitespace
     trimmed, BOM dropped) — no reformat between parking and applying.
+18. **PNG comparison of mock↔build is rejected as a gate (measured, 2026-11-12).** Same-size pairs differ
+    on 30–67% of pixels; the best structural correlation of an _intended_ pair is 0.44–0.56 while two
+    **different screens** correlate 0.51, so no threshold separates "same atoms, different styling" from
+    "different screen". Mock dimensions (1480×1000 fullPage, and 575–834 element shots) do not match the
+    baselines (1440×900/1000/1150), and one cited pair is a byte-identical duplicate of another screen.
+    Normalisation cannot recover signal: the mock is hand-written CSS with `Segoe UI`, the build is Fluent
+    v9 tokens with `Segoe UI Variable`. Pixel diffing survives only as **build↔baseline** drift, where both
+    sides come from the same renderer and the documented 6–30 px floor is calibratable.
+19. **The blocking half is the DOM, not the image.** Atoms are proved by `assert: dom | e2e | token`
+    (roles, names, exact text, `disabled`, computed Fluent token) — deterministic, free per round, already
+    CI-capable. The `clef` screen stays for irreducibly visual atoms and stays advisory; the AC inventory
+    and hash pins stay blocking. Stated plainly in the policy: **advisory = the screen and human
+    classification; blocking = derivation completeness, AC inventory, hash pins and the e2e interpreter.**
+20. **Mocks become tracked; that is its own round with its own protected pass.** Canonical gains the
+    _tracked artefact set_ claim (source, signed PNG, provenance script, append-only sign-off ledger) and
+    drops every repo-local path and git-ignore phrase; `mockups/<set>/`, the ledger file, the capture
+    script/manifests, the shared-CSS pre-step and the tranches stay repo-local. Two hashes (`mock.sha256`
+    and `htmlSha256`), append-only rows, and a capture `--states` filter are part of that round. It lands
+    after the first catalogue, because the catalogue's `states` block is the per-state truth both the
+    ledger and the manifest would otherwise re-invent.
+21. **"Guaranteed to match the spec" is retired as a phrase (owner, 2026-11-12).** It decomposes into
+    naming, nameable rendering, visual rendering, intent and scope; only the first two are mechanisable,
+    and visual comparison was measured and rejected in Decision 18. The policy says instead: _a round that
+    changes a user-visible surface does not merge until the mock's claims are catalogued and cited, the AC
+    inventory is complete, and the owner's sign-off row resolves to that catalogue; the mock-DOM assertion
+    runs at sign-off and is attested until mocks are tracked; the check proves naming and declared atoms —
+    not intent, styling, or states the prototype does not draw._ Two guarantees exist, not one: spec↔mock
+    before code, and build↔spec at acceptance — and only the tracked-catalogue half of the first can block
+    a merge today.
+22. **One declared atom, two targets.** Each entry declares the atom (role + accessible name, normalised
+    text, attribute, count, order) with a per-target locator/normaliser: the mock's raw HTML (`<button
+class="btn" disabled>`, separators as `·`) and the built page (Fluent `Button`, separators as `—`) do
+    not share a DOM, so "the same locator" is false — the _predicate_ is shared, the mapping is not. It
+    runs at sign-off against `mockups/<set>/<state>.html` (the `states[].mock.source` path) and at
+    acceptance against the built page.
+    Limits, stated: the mocks draw only the states they draw (headcount has live 10, ended 13, not-live
+    14 — no "past-open", "no capture" or "cancelled" fixture); styling truth is a proxy (attribute +
+    per-target computed-style expectation); mock-invented atoms stay `mock-only`; and separators and
+    whitespace are normalised because the same atom is written with `-`, `·` and `—`.
+23. **The sign-off gate has four artefacts, and only three can run in CI today.** Catalogue validity in
+    `npm test`; **`check-round` R6** — a round touching `ui/src/**` must carry a non-empty `## Mock
+sign-off` row naming a set+state that the tracked catalogue marks `coverage: "signed"`, plus the
+    `claimed a · e2e-only b · deferred c · prose d` coverage line - in CI, and with a new `--staged` path in the
+    pre-commit hook so the first commit fails; and `mock-dom: N/N` from a local `--check-mock` run.
+    **What R6 cannot check today:** the sha of the mock file, because `mockups/` is git-ignored and absent
+    in CI — the pin is a tripwire over an untracked artefact and is described as one until the tracking
+    round. The vacuous `it.skip` goes: no catalogue anywhere stays legal, but a round that declares one
+    must not pass because the guard had nothing to read.
+24. **The record is a coverage statement, not a claim of equality.** `Mock coverage: <n> states signed ·
+<n>/<n> atoms asserted on the mock · <n> ACs dispositioned (… · deferred → backlog) · owner sign-off
+<date>` plus a `Not covered:` line (styling truth, states with no baseline, ACs outside `acsMatch`,
+    intent). What stays human: the AC reading, `class`, the slice, the `signed` verdict.
+25. **The smallest slice is headcount, and three schema defects are fixed with it.** (i) `spec-required`
+    must accept a prose anchor — its core action-state requirement is prose in §Headcounts and FR-6f, not
+    an AC — but every such entry carries `anchorKind: "ac" | "prose"` and the round reports a **separate**
+    prose-coverage counter, so a prose requirement can never leave the denominator silently; an AC-anchored
+    entry keeps today's rule. (ii) `e2e-only` and `assert: "e2e"` names must resolve to a real test title
+    (`path::title`), not free text. (iii) Build-side assertions must cover live, ended and not-live; a
+    state needs a baseline only to be _scored_ by the model pair, never to carry `assert: e2e` entries —
+    so `10` and `13` get entries without becoming pairs. The mock-DOM run, verifiable pins, `htmlSha256`
+    and the ledger wait for the tracking round.
 
 ## Adoption path, if the pilot passes
 
