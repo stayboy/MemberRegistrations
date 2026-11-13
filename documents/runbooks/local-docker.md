@@ -63,9 +63,11 @@ npm run smoke:local
 
 That is the release smoke, not a health ping: it refuses politely if the stack is down (exit 2), then asserts
 the CORS matrix, that a protected read refuses an anonymous caller and answers with the bearer, that a member
-can be created and read back, that the UI shell is the built app, and it prints the revision baked into the
-image. Exit 0 means the stack is a working release. It creates one throwaway member per run
-(`SMOKE-<time>`), which is harmless in a local database and gone after `down -v`.
+can be created and read back, that a correctly signed USSD frame renders a menu and a forged or replayed one is
+refused, that a correctly signed payment callback reaches the repository and a forged one is refused, that the
+UI shell is the built app, and it prints the revision baked into the image. Exit 0 means the stack is a working
+release. It creates one throwaway member per run (`SMOKE-<time>`), which is harmless in a local database and
+gone after `down -v`.
 
 The three header checks it performs, by hand if you want them:
 
@@ -171,19 +173,22 @@ Note the order inside step 2: the old image's `migrate` service starts against t
 
 Compose sets everything the API needs for development; nothing has to be exported by hand:
 
-| Name                   | Value in compose                        | Why                                                         |
-| ---------------------- | --------------------------------------- | ----------------------------------------------------------- |
-| `DATABASE_URL`         | `postgresql://postgres:postgres@db:...` | The `db` service                                            |
-| `API_BEARER_TOKEN`     | `local-development-bearer-change-me`    | The API gate, on locally as in production                   |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:8080`                 | The nginx UI origin                                         |
-| `UI_BASE_URL`          | `http://localhost:8080/#/connect`       | Magic-link target                                           |
-| `NODE_ENV`             | `development`                           | Console mailer, dev defaults, no secrets                    |
-| `USSD_ENABLED`         | `true`                                  | Every USSD screen and the simulator are exercisable locally |
-| `PAYMENTS_ENABLED`     | `true`                                  | The HMAC callback is mounted for local testing              |
-| `VITE_GATEWAY_URL`     | `http://localhost:3000` (build arg)     | The UI's default gateway                                    |
+| Name                     | Value in compose                        | Why                                                         |
+| ------------------------ | --------------------------------------- | ----------------------------------------------------------- |
+| `DATABASE_URL`           | `postgresql://postgres:postgres@db:...` | The `db` service                                            |
+| `API_BEARER_TOKEN`       | `local-development-bearer-change-me`    | The API gate, on locally as in production                   |
+| `CORS_ALLOWED_ORIGINS`   | `http://localhost:8080`                 | The nginx UI origin                                         |
+| `UI_BASE_URL`            | `http://localhost:8080/#/connect`       | Magic-link target                                           |
+| `NODE_ENV`               | `development`                           | Console mailer, dev defaults, no secrets                    |
+| `USSD_ENABLED`           | `true`                                  | Every USSD screen and the simulator are exercisable locally |
+| `USSD_GATEWAY_SECRET`    | `local-development-ussd-gateway-secret` | The HMAC the smoke signs USSD frames with                   |
+| `PAYMENTS_ENABLED`       | `true`                                  | The HMAC callback is mounted for local testing              |
+| `PAYMENT_GATEWAY_SECRET` | `local-development-payment-secret`      | The HMAC the smoke signs the payment callback with          |
+| `VITE_GATEWAY_URL`       | `http://localhost:3000` (build arg)     | The UI's default gateway                                    |
 
 Both subsystems are on **for the local MVP only**; production keeps them off, so their secrets are not
-required there. Personal tweaks (another Postgres, extra ports) go in a git-ignored
+required there. Their HMAC secrets are explicit local values (like the bearer) so the stack cannot drift onto a
+library default; personal tweaks (another Postgres, extra ports) go in a git-ignored
 `docker-compose.override.yml`; override `DATABASE_URL` for **both** `app` and `migrate`.
 
 ## Teardown and reset

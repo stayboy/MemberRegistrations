@@ -55,6 +55,10 @@ services:
       # subsystems are on here. Development only — production keeps both off.
       USSD_ENABLED: 'true'
       PAYMENTS_ENABLED: 'true'
+      # Explicit local secrets, as for the bearer: the stack must not drift onto a
+      # library default, and the smoke signs with the same values the app verifies with.
+      USSD_GATEWAY_SECRET: local-development-ussd-gateway-secret
+      PAYMENT_GATEWAY_SECRET: local-development-payment-secret
       LOG_LEVEL: info
     depends_on:
       migrate:
