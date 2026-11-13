@@ -17,7 +17,29 @@ round (2026-11-11, "all as recommended", with the Q6 rephrase). The two 2026-11-
 accepted with the seat-enforcement grill (2026-11-11, "all as recommended"). The 2026-11-12 fixture entry
 and the 2026-11-10 serial-run amendment were accepted in the `mock-claims-guard` close (2026-11-12,
 "merge. review lessons with `deepseek-v4.1-flash-1017` if they are durable enough to keep"): the durability
-review returned KEEP for the fixture rule and MERGE-INTO the existing worker-crash entry.
+review returned KEEP for the fixture rule and MERGE-INTO the existing worker-crash entry. The 2026-11-13
+control-switch entry was accepted in the `mvp-local-ussd-payments` close, in a reply after the round's "all as
+recommended" (2026-11-13, "accept").
+
+---
+
+## 2026-11-13 — A security control behind a switch is off until something asserts it
+
+**Rule.** When a control is installed only if a setting is present — a bearer gate, an HMAC check, a feature
+switch — the environment that omits the setting runs with the control **off**, and every passing test proves
+nothing about it. Require the setting in the environment that ships, and assert the _refusing_ direction of
+every such control in the release smoke: a `401`, a `503`, a rejected signature. A control nobody has watched
+refuse is a control nobody knows is on.
+
+**Evidence.** `src/create-app.ts` installs the bearer gate only when a token is configured, and
+`src/config/env.ts` requires one only when `NODE_ENV=production`; `docker-compose.yml` set none, so the local
+release stack answered `200 {"items":[]}` on `/v1/members` with no `Authorization` header for as long as the
+stack has existed, while 741 tests were green and CI passed. The two HMAC secrets had the same shape, falling
+back to `dev-only-*` defaults. `fix(release)` (#123) set the token, and the smoke now asserts `401` without it
+and `200` with it; #124 added the USSD signature, USSD nonce replay and payment signature refusals.
+
+**Trigger.** Adding a control, or standing an environment up to release: ask what happens when the setting is
+absent, and which check would fail.
 
 ---
 
