@@ -1,0 +1,218 @@
+{
+  "set": "mvp-offerings",
+  "specs": ["documents/specs/member-registrations-events-offerings.md"],
+  "surfaces": [
+    {
+      "id": "ussd-offerings",
+      "route": "/ussd/offerings",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["pledge"]
+    }
+  ],
+  "states": {
+    "offertory": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-offertory.png",
+        "sha256": "b422f3d9a96ff57681e0fef1befb75a52acadc0893142c62265534c41fe980b5",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "pledge": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-pledge.png",
+        "sha256": "fdfde7eafd4bd524801cd6993ccd7f5cdcaf5692698431b90567b8a825caaa37",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    }
+  },
+  "inventory": [
+    {
+      "surface": "ussd-offerings",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-5b",
+          "disposition": "e2e-only",
+          "test": "tests/api/series-summary.test.ts::answers the window figures in one no-store response"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-14",
+          "disposition": "e2e-only",
+          "test": "tests/api/pledges.test.ts::rejects a supplied officer who is not an active presbyter"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-15",
+          "disposition": "e2e-only",
+          "test": "tests/api/payment-groups.test.ts::honors a pledge once when its redemption group is paid"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-16",
+          "disposition": "deferred",
+          "backlog": "Notifications (email/SMS)",
+          "revisit": "A delivery provider and consent model exist"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-17",
+          "disposition": "deferred",
+          "backlog": "FR-29 offering stats on the events list/detail",
+          "revisit": "The event or offering screens next need real stats"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-19",
+          "disposition": "e2e-only",
+          "test": "tests/api/ussd.test.ts::splits a multi-offering gift in selection order and renders the lay sentence"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-21",
+          "disposition": "e2e-only",
+          "test": "tests/api/pledges.test.ts::reassigns the officer and keeps both officers in pledge_events"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-25",
+          "disposition": "e2e-only",
+          "test": "tests/api/pledges.test.ts::returns 404 for an archived member"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-26",
+          "disposition": "e2e-only",
+          "test": "tests/api/pledges.test.ts::rejects an expected date before today (UTC)"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-27",
+          "disposition": "e2e-only",
+          "test": "tests/api/contributions.test.ts::rejects zero and negative amounts"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-31",
+          "disposition": "e2e-only",
+          "test": "tests/api/pledges.test.ts::prefers a supplied active presbyter and records the reason"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-32",
+          "disposition": "e2e-only",
+          "test": "tests/api/offerings.test.ts::resolves custom and fallback names, effective expiry, terms and zero stats"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "anchorKind": "prose",
+          "anchor": "Offerings",
+          "disposition": "claimed",
+          "entries": ["MP-MEMBER-01", "MP-MEMBER-02", "MP-MEMBER-03"]
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "MP-MEMBER",
+      "as": "operator",
+      "iWant": "to pick the member by name when I record an offertory or a pledge",
+      "soThat": "I do not have to know or type a member number that the API then rejects",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "Offerings",
+        "quote": "identify the member with the shared member picker"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "MP-MEMBER-01",
+      "story": "MP-MEMBER",
+      "state": "offertory",
+      "claim": "The offertory dialog names the member with a picker, not a typed member number.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "e2e",
+      "target": {
+        "mock": {
+          "role": "combobox",
+          "name": "Member"
+        },
+        "build": {
+          "role": "combobox",
+          "name": "Member"
+        }
+      },
+      "test": "ui/e2e/offerings-count.spec.ts::the page lists the session offertories and opens the record and pledge dialogs",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "Offerings",
+        "quote": "identify the member with the shared member picker"
+      }
+    },
+    {
+      "id": "MP-MEMBER-02",
+      "story": "MP-MEMBER",
+      "state": "pledge",
+      "claim": "The pledge dialog names the member with a picker and shows the chosen member's name.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "dom",
+      "target": {
+        "mock": {
+          "role": "combobox",
+          "name": "Member"
+        },
+        "build": {
+          "role": "combobox",
+          "name": "Member"
+        }
+      },
+      "test": "ui/src/pages/ussd/OfferingGivingForms.test.tsx::the pledge form picks a member by name",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "Offerings",
+        "quote": "identify the member with the shared member picker"
+      }
+    },
+    {
+      "id": "MP-MEMBER-03",
+      "story": "MP-MEMBER",
+      "state": "pledge",
+      "claim": "The pledge's follow-up officer is picked the same way, not typed.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "dom",
+      "target": {
+        "mock": {
+          "role": "combobox",
+          "name": "Follow-up officer"
+        },
+        "build": {
+          "role": "combobox",
+          "name": "Follow-up officer"
+        }
+      },
+      "test": "ui/src/pages/ussd/OfferingGivingForms.test.tsx::the pledge form picks the follow-up officer",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "Offerings",
+        "quote": "and the pledge's follow-up officer"
+      }
+    }
+  ]
+}

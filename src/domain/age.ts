@@ -45,3 +45,21 @@ export function ageInYears(dob: string | null, today = todayIn('UTC')): number |
   }
   return age < 0 ? null : age;
 }
+
+/**
+ * Completed months at `today` (UTC by default): the same derivation as
+ * `ageInYears`, in months. Null when the date of birth is missing, invalid or
+ * in the future. The picker uses it to tell an eight-month-old from a
+ * one-year-old (`8m` against `0y`).
+ */
+export function ageInMonths(dob: string | null, today = todayIn('UTC')): number | null {
+  if (!dob) return null;
+
+  const birth = parseCalendarDate(dob);
+  const now = parseCalendarDate(today);
+  if (!birth || !now) return null;
+
+  const months = (now.year - birth.year) * 12 + (now.month - birth.month);
+  const completed = now.day < birth.day ? months - 1 : months;
+  return completed < 0 ? null : completed;
+}

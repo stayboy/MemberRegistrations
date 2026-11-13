@@ -35,6 +35,13 @@ function dobYearsAgo(years: number): string {
   return `${new Date().getUTCFullYear() - years}-01-01`;
 }
 
+/** The first of the month `months` ago: exactly `months` completed months today. */
+function dobMonthsAgo(months: number): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
+  return date.toISOString().slice(0, 10);
+}
+
 describe('authentication and attribution', () => {
   it('rejects requests without a bearer token', async () => {
     const response = await request(app).get('/v1/members');
@@ -110,6 +117,19 @@ describe('member lifecycle', () => {
 
     const future = await create('M-1012', { dob: `${new Date().getUTCFullYear() + 1}-01-01` });
     expect(future.body.age).toBeNull();
+  });
+
+  it('derives ageMonths with the same rule, so an eight-month-old is not zero years', async () => {
+    const infant = await create('M-1013', { dob: dobMonthsAgo(8), gender: 'female' });
+    expect(infant.body).toMatchObject({ age: 0, ageMonths: 8 });
+
+    const list = await request(app).get('/v1/members').query({ q: 'M-1013' }).set(readHeaders);
+    expect(list.body.items[0]).toMatchObject({ age: 0, ageMonths: 8 });
+    expect(list.body.items[0]).not.toHaveProperty('dob');
+
+    const unknown = await create('M-1014');
+    expect(unknown.body.age).toBeNull();
+    expect(unknown.body.ageMonths).toBeNull();
   });
 
   it('rejects a stale If-Match', async () => {

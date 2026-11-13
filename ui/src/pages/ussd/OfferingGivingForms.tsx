@@ -9,6 +9,7 @@ import {
 } from '@fluentui/react-components';
 import { useState } from 'react';
 import type { EventOfferingItem } from '../../api/events';
+import { MemberPicker } from '../../components/MemberPicker';
 import { shiftUtcDate } from '../../format/date-window';
 import { utcToday } from '../../format/member-form';
 import { idempotencyKey, parseMoneyMinor } from '../../format/offering-counts';
@@ -35,8 +36,9 @@ export interface PledgeSubmission {
 
 /**
  * The member-announced offertory form (the existing contribution route with
- * `channel: manual`). Member number only; no contact value. It is separate from
- * the counted cash.
+ * `channel: manual`). The member is chosen with the shared picker, so a typed
+ * number is not the only way (FR-26a); no contact value is shown. It is
+ * separate from the counted cash.
  */
 export function AnnouncedOffertoryForm({
   offerings,
@@ -58,7 +60,8 @@ export function AnnouncedOffertoryForm({
   onCancel: () => void;
 }) {
   const styles = useUssdStyles();
-  const [memberNo, setMemberNo] = useState('');
+  const [memberNo, setMemberNo] = useState<string | null>(null);
+  const [memberTouched, setMemberTouched] = useState(false);
   const [offeringId, setOfferingId] = useState<string | null>(null);
   const [sessionDate, setSessionDate] = useState(defaultSessionDate);
   const [amount, setAmount] = useState('');
@@ -69,11 +72,13 @@ export function AnnouncedOffertoryForm({
     offerings.find((offering) => offering.offeringId === selectedOfferingId)?.terms.currency ??
     currency;
   const amountMinor = parseMoneyMinor(amount);
+  const memberMissing = memberTouched && memberNo === null;
 
   function submit(): void {
     setLocalError(null);
-    if (!memberNo.trim()) {
-      setLocalError('Enter the member number.');
+    if (memberNo === null) {
+      setMemberTouched(true);
+      setLocalError('Pick the member.');
       return;
     }
     if (!selectedOfferingId) {
@@ -89,7 +94,7 @@ export function AnnouncedOffertoryForm({
       return;
     }
     onSubmit({
-      memberNo: memberNo.trim(),
+      memberNo,
       offeringId: selectedOfferingId,
       sessionDate,
       amountMinor,
@@ -100,17 +105,20 @@ export function AnnouncedOffertoryForm({
   return (
     <div className={styles.panelBody}>
       <Text size={200} className={styles.muted}>
-        A member-announced offertory recorded through the existing contribution route. It is separate
-        from the counted cash and appears in the Offerings totals.
+        A member-announced offertory recorded through the existing contribution route. It is
+        separate from the counted cash and appears in the Offerings totals.
       </Text>
-      <Field label="Member number">
-        <Input
-          value={memberNo}
-          disabled={pending}
-          placeholder="e.g. M-1001"
-          onChange={(_, data) => setMemberNo(data.value)}
-        />
-      </Field>
+      <MemberPicker
+        label="Member"
+        value={memberNo}
+        disabled={pending}
+        validationState={memberMissing ? 'error' : undefined}
+        validationMessage={memberMissing ? 'Pick the member.' : undefined}
+        onChange={(next) => {
+          setMemberNo(next);
+          if (next === null) setMemberTouched(true);
+        }}
+      />
       <OfferingSelect
         offerings={offerings}
         value={selectedOfferingId}
@@ -195,13 +203,12 @@ export function PledgeForm({
   onCancel: () => void;
 }) {
   const styles = useUssdStyles();
-  const [memberNo, setMemberNo] = useState('');
+  const [memberNo, setMemberNo] = useState<string | null>(null);
+  const [memberTouched, setMemberTouched] = useState(false);
   const [offeringId, setOfferingId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
-  const [expectedOn, setExpectedOn] = useState(
-    () => shiftUtcDate(utcToday(), 7) ?? utcToday(),
-  );
-  const [officer, setOfficer] = useState('');
+  const [expectedOn, setExpectedOn] = useState(() => shiftUtcDate(utcToday(), 7) ?? utcToday());
+  const [officerMemberNo, setOfficerMemberNo] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const selectedOfferingId = offeringId ?? offerings[0]?.offeringId ?? null;
@@ -209,11 +216,13 @@ export function PledgeForm({
     offerings.find((offering) => offering.offeringId === selectedOfferingId)?.terms.currency ??
     currency;
   const amountMinor = parseMoneyMinor(amount);
+  const memberMissing = memberTouched && memberNo === null;
 
   function submit(): void {
     setLocalError(null);
-    if (!memberNo.trim()) {
-      setLocalError('Enter the member number.');
+    if (memberNo === null) {
+      setMemberTouched(true);
+      setLocalError('Pick the member.');
       return;
     }
     if (!selectedOfferingId) {
@@ -228,13 +237,12 @@ export function PledgeForm({
       setLocalError('Choose the expected date.');
       return;
     }
-    const followUp = officer.trim();
     onSubmit({
-      memberNo: memberNo.trim(),
+      memberNo,
       offeringId: selectedOfferingId,
       amountMinor,
       expectedOn,
-      ...(followUp ? { officerMemberNo: followUp } : {}),
+      ...(officerMemberNo ? { officerMemberNo } : {}),
       idempotencyKey: idempotencyKey('pledge'),
     });
   }
@@ -245,14 +253,17 @@ export function PledgeForm({
         A pledge is a member-level promise followed up by an officer. It is never merged with the
         counted cash and appears in the Offerings pledge worklist.
       </Text>
-      <Field label="Member number">
-        <Input
-          value={memberNo}
-          disabled={pending}
-          placeholder="e.g. M-1001"
-          onChange={(_, data) => setMemberNo(data.value)}
-        />
-      </Field>
+      <MemberPicker
+        label="Member"
+        value={memberNo}
+        disabled={pending}
+        validationState={memberMissing ? 'error' : undefined}
+        validationMessage={memberMissing ? 'Pick the member.' : undefined}
+        onChange={(next) => {
+          setMemberNo(next);
+          if (next === null) setMemberTouched(true);
+        }}
+      />
       <OfferingSelect
         offerings={offerings}
         value={selectedOfferingId}
@@ -278,14 +289,15 @@ export function PledgeForm({
             onChange={(_, data) => setExpectedOn(data.value)}
           />
         </Field>
-        <Field label="Follow-up officer member no" hint="Optional; defaults to the shepherd.">
-          <Input
-            value={officer}
-            disabled={pending}
-            placeholder="e.g. M-1002"
-            onChange={(_, data) => setOfficer(data.value)}
-          />
-        </Field>
+        <MemberPicker
+          label="Follow-up officer"
+          value={officerMemberNo}
+          disabled={pending}
+          onChange={setOfficerMemberNo}
+        />
+        <Text size={100} className={styles.muted}>
+          Optional; the API defaults to the member's active shepherd.
+        </Text>
       </div>
       {amountMinor !== null ? (
         <Text size={200} className={styles.muted}>

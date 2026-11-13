@@ -1,11 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EventOfferingItem } from '../../api/events';
 import type { OfferingCount } from '../../api/offering-counts';
 import type { ContributionItem } from '../../api/giving';
-import { emptyCountRows, gridDenominations, type CountRowDraft } from '../../format/offering-counts';
+import {
+  emptyCountRows,
+  gridDenominations,
+  type CountRowDraft,
+} from '../../format/offering-counts';
 import { formatMoneyMinor } from '../../format/welfare';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { OfferingCountEntry } from './OfferingCountEntry';
@@ -13,6 +17,12 @@ import { OfferingCountHistory } from './OfferingCountHistory';
 import { AnnouncedOffertoryForm, PledgeForm } from './OfferingGivingForms';
 import { PledgeRecordPanel } from './PledgeRecordPanel';
 import { RecordedOffertoriesList } from './RecordedOffertoriesList';
+
+// The real picker owns a debounced member search and needs the session and query providers; this
+// file only renders the surrounding form, so the picker is reduced to its label.
+vi.mock('../../components/MemberPicker', () => ({
+  MemberPicker: ({ label }: { label: string }) => <span>{label}</span>,
+}));
 
 const formatInstant = (value: string): string => value;
 const money = (amountMinor: number, currency = 'GHS'): string =>
@@ -266,7 +276,7 @@ describe('OfferingCountHistory', () => {
 });
 
 describe('AnnouncedOffertoryForm and PledgeForm', () => {
-  it('renders the announced-offertory form with member numbers only', () => {
+  it('renders the announced-offertory form with the member picker and no contact values', () => {
     const markup = render(
       <AnnouncedOffertoryForm
         offerings={OFFERINGS}
@@ -281,7 +291,7 @@ describe('AnnouncedOffertoryForm and PledgeForm', () => {
     );
 
     expect(markup).toContain('Record offertory');
-    expect(markup).toContain('Member number');
+    expect(markup).toContain('Member');
     expect(markup).toContain('Session date');
     expect(markup).toContain('Offertory');
     expect(markup).not.toContain('@');
@@ -303,7 +313,7 @@ describe('AnnouncedOffertoryForm and PledgeForm', () => {
 
     expect(markup).toContain('Record pledge');
     expect(markup).toContain('Expected on');
-    expect(markup).toContain('Follow-up officer member no');
+    expect(markup).toContain('Follow-up officer');
     expect(markup).not.toContain('@');
     expect(markup).not.toContain('+233');
   });

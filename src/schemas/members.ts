@@ -213,6 +213,7 @@ export const memberSummarySchema = z.object({
   otherNames: z.string().nullable(),
   gender: z.enum(GENDERS),
   age: z.number().int().nullable(),
+  ageMonths: z.number().int().nullable(),
   placeOfResidence: z.string().nullable(),
   joinedOn: z.string().nullable(),
   isPresbyter: z.boolean(),

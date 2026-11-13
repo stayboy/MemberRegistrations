@@ -94,9 +94,14 @@ test('the page lists the session offertories and opens the record and pledge dia
   await expect(
     giftDialog.getByRole('heading', { name: 'Record announced offertory' }),
   ).toBeVisible();
-  await expect(giftDialog.getByLabel('Member number')).toBeVisible();
+  await expect(giftDialog.getByRole('combobox', { name: 'Member' })).toBeVisible();
   await expect(giftDialog.getByLabel('Session date')).toHaveValue('2999-01-10');
-  await giftDialog.getByLabel('Member number').fill('M-1002');
+  // The member is picked, not typed: search by number, then choose the option.
+  const giftMember = giftDialog.getByRole('combobox', { name: 'Member' });
+  await giftMember.click();
+  await giftMember.fill('M-1002');
+  // Fluent renders the option list in a portal at body level, not inside the dialog.
+  await page.getByRole('option', { name: /M-1002/ }).click();
   await giftDialog.getByLabel('Amount').fill('75.00');
   await giftDialog.getByRole('button', { name: 'Record offertory' }).click();
   await expect(giftDialog.getByText(/Announced offertory recorded/)).toBeVisible();
@@ -112,7 +117,7 @@ test('the page lists the session offertories and opens the record and pledge dia
   const pledgeDialog = page.getByRole('dialog');
   await expect(pledgeDialog.getByRole('heading', { name: 'Record pledge' })).toBeVisible();
   await expect(pledgeDialog.getByLabel('Expected on')).toBeVisible();
-  await expect(pledgeDialog.getByLabel('Follow-up officer member no')).toBeVisible();
+  await expect(pledgeDialog.getByRole('combobox', { name: 'Follow-up officer' })).toBeVisible();
   await pledgeDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 

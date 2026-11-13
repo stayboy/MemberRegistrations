@@ -591,6 +591,28 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 - FR-26: A **pledge** MUST record member, offering, event, amount, currency, expected date, follow-up
   officer (an active presbyter), status (`pending`/`honored`/`dishonored`) and a reason for any
   dishonor. The follow-up officer is required.
+- FR-26a: The operator UI **MUST** identify the member with the shared member picker (search by member
+  number or name parts — never contact values, per `member-registrations-api.md` FR-31a — showing the member's
+  name), for a contribution, a pledge and the pledge's follow-up officer. The officer must still satisfy FR-26
+  (an active presbyter); the picker shows the member's name and the API's `422 officer_required` remains the
+  backstop. A free-typed member number **MUST NOT** be the only way to name a member: the API's `404` for an
+  unknown number is a backstop, not the interaction. Only **picking an option** sets the member number — typed
+  text alone never becomes the selection — and an empty result says so ("No matching members"), while an
+  unreachable search says the search is unavailable rather than looking empty.
+  Once a member is picked, the pledge form **MUST** show that member's follow-up default, read from
+  `GET /v1/members/{memberNo}/shepherding` (`shepherd: … | null`). The default is the **active shepherd**,
+  using the same predicate the pledge applies when it resolves the officer — the assignment's member
+  `is_presbyter`, not archived, not purged — so a summary shepherd that fails it **MUST** be shown as _no
+  active shepherd_; otherwise the form names someone the API will refuse, which is the failure this paragraph
+  exists to prevent. The read follows FR-14's states: while it is pending the officer field is disabled with a
+  loading hint, and a failed read says the default is unavailable and requires an officer rather than silently
+  dropping the requirement. With an active shepherd the officer field stays **optional** — an empty field means
+  "that shepherd", which the API persists as the follow-up officer — and without one it becomes **required**, so
+  the API's `422 officer_required` is never the first the operator hears of it. The requirement is evaluated
+  against the current summary **at submit**, not against the state when the member was picked. Showing the
+  absence is the point: the operator learns the member has no shepherd before they submit, not after. Each option **MUST** carry the picker's compact identity
+  variant of the UI spec's FR-22a — `M-1042 · Adjoa Mensah (M, 12y)` — so two members with the same name stay
+  distinguishable; the variant, its codes and its month boundary are defined there, not here.
 - FR-27: Pledges MUST be honored when paid, or dishonored with an explicit reason. Honors and
   dishonors MUST be append-only events with actor and timestamp; a pledge MUST NOT be hard-deleted.
 - FR-28: Pending and overdue pledges MUST be eligible for reminders. A reminder MUST record pledge,
@@ -1339,6 +1361,9 @@ recommended"). Ids are `S-Qn`.
 
 ## Change log
 
+- 2026-11-13: FR-26a added - the operator identifies a member with the shared member picker for a
+  contribution, a pledge and the pledge's follow-up officer, instead of making a typed member number the only
+  route. Owner request: a free-typed member number is unrealistic for the person recording it.
 - 2026-11-11: the FR-4b/FR-6f examples are corrected to the rendered, owner-signed form: the event detail
   line always carries the day and renders in the event timezone with no zone suffix, the import page says
   "recorded", and the ended action is **disabled** (not absent). The wording, not the behaviour, changed;
