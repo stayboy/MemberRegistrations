@@ -17,6 +17,9 @@ FROM deps AS prod-deps
 RUN npm prune --omit=dev
 
 FROM node:24.22.3-alpine AS api
+# Which commit this image was built from, so a running stack can say what it is.
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.revision=$GIT_SHA
 # Local-only image. The default is production so a bare `docker run` of this
 # image fails closed (env validation + Resend mailer); compose sets
 # NODE_ENV=development explicitly for the local stack.
@@ -41,4 +44,6 @@ WORKDIR /app/ui
 RUN npx vite build --mode development
 
 FROM nginx:1.31.2-alpine AS ui
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.revision=$GIT_SHA
 COPY --from=ui-build /app/ui/dist /usr/share/nginx/html

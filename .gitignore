@@ -15,3 +15,6 @@ ui/playwright-report/
 ui/test-results/
 /mockups/
 docker-compose.override.yml
+
+# Local database dumps from the backup drill
+/backups/
