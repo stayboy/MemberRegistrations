@@ -38,15 +38,16 @@ the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00
 reviewer / plan-gate / spec-review / acceptance seat is `cline-pass/cline-pass/mimo-v2.6-pro` (owner,
 2026-11-09); outside that window the ranking applies. The same window moves the **grill-me** seat to
 the cline-pass provider for the same model (`cline-pass/cline-pass/deepseek-v4.1-flash-1017`) (owner,
-2026-11-11). No seat has any other clock rule: the **worker** seat is availability-ranked only, never
-clock-ranked.
+2026-11-11). From 2026-11-13 the **worker** seat follows the window too, on the same provider rule, and
+no other seat is clocked. An explicit owner override for a named round beats any ranking here, and the
+round doc records it.
 
-| Seat                                                        | Ranked models (first available wins)                                                            |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Worker (Tier 2+ implementer)                                | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
-| Reviewer / plan gate / spec review / acceptance (all tiers) | 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `cline-pass/cline-pass/mimo-v2.6-pro`                |
-| Grill-me (go-forward round)                                 | 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017` |
-| Git executor (all git writes)                               | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                      |
+| Seat                                                        | Ranked models (first available wins)                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker (Tier 2+ implementer)                                | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
+| Reviewer / plan gate / spec review / acceptance (all tiers) | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `mimo-v2.6-pro` on whichever configured provider answers. Inside it: 1. `mimo-v2.6-pro` on whichever configured provider answers (`cline-pass` first, `ollama-cloud` as the fallback); 2. `ollama-cloud/deepseek-v4-pro:0813` |
+| Grill-me (go-forward round)                                 | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
+| Git executor (all git writes)                               | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                                                                                                                                                                                                                          |
 
 The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the
 file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the

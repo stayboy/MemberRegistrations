@@ -247,7 +247,13 @@ reintroduce them silently.
   `ollama-cloud/deepseek-v4.1-flash:1017` — the ollama provider first; if that provider fails, use
   `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Between 12:00 and 18:00 local the provider preference
   flips: the cline-pass provider is tried first and `ollama-cloud` is the fallback (owner, 2026-11-11). The
-  window moves **grill-me and the reviewer-class seats only**; the worker seat has no clock rule.
+  window moves **the grill-me, reviewer-class and worker seats**; every other seat is unclocked (owner,
+  2026-11-13).
+- **Worker seat (owner, 2026-11-13).** The Tier 2+ implementer follows the window like the seats above:
+  between 12:00 and 18:00 local it is `cline-pass/cline-pass/deepseek-v4.1-flash-1017`, and outside the
+  window the same model on `ollama-cloud` (`ollama-cloud/deepseek-v4.1-flash:1017`). An explicit owner
+  override for a round beats both, and the round doc records it. The parent integrates and commits; at
+  Tier 2+ it does not author the implementation.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
   recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
   recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report
