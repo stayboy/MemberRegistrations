@@ -40,7 +40,8 @@
     "officers:list": "tsx src/authn/cli.ts list",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "smoke:local": "node scripts/smoke-local.mjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.6",

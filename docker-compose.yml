@@ -5,6 +5,8 @@ x-api-image: &api-image
   build:
     context: .
     target: api
+    args:
+      GIT_SHA: ${GIT_SHA:-dev}
 
 services:
   db:
@@ -45,6 +47,10 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
       CORS_ALLOWED_ORIGINS: http://localhost:8080
       UI_BASE_URL: 'http://localhost:8080/#/connect'
+      # The API gate is on locally, as it is in production: without it `/v1` answers 200 to
+      # anyone and the release cannot prove a 401. A local value, not a secret -- the gateway
+      # injects it for the browser, exactly as it does in production.
+      API_BEARER_TOKEN: local-development-bearer-change-me
       # Local MVP: every screen must be exercisable, so the switched-off
       # subsystems are on here. Development only — production keeps both off.
       USSD_ENABLED: 'true'
@@ -59,6 +65,8 @@ services:
     build:
       context: .
       target: ui
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
     ports:
       - '8080:80'
     healthcheck:

@@ -58,6 +58,18 @@ officer's writes. Re-running `add` for an existing e-mail reactivates it instead
 ## Verify without a browser
 
 ```powershell
+npm run smoke:local
+```
+
+That is the release smoke, not a health ping: it refuses politely if the stack is down (exit 2), then asserts
+the CORS matrix, that a protected read refuses an anonymous caller and answers with the bearer, that a member
+can be created and read back, that the UI shell is the built app, and it prints the revision baked into the
+image. Exit 0 means the stack is a working release. It creates one throwaway member per run
+(`SMOKE-<time>`), which is harmless in a local database and gone after `down -v`.
+
+The three header checks it performs, by hand if you want them:
+
+```powershell
 # Health, no Origin: normal result, no CORS header
 curl.exe -s -i http://localhost:3000/health | Select-String -Pattern 'HTTP/|access-control-allow-origin'
 
@@ -73,6 +85,88 @@ curl.exe -s -i -H "Origin: http://evil.test" http://localhost:3000/health |
 The header is what lets the operator UI's pre-flight probe read the result; without it the connection
 badge reports the gateway down even though `app` is healthy.
 
+## The API gate is on locally
+
+Compose sets `API_BEARER_TOKEN` (a local development value), so `/v1` behaves as it does in production: a
+direct call without the bearer gets `401`, and the gateway injects the token for the browser. That is what
+lets the smoke prove the gate instead of assuming it:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}`n" http://localhost:3000/v1/members            # 401
+curl.exe -s -o NUL -w "%{http_code}`n" -H "Authorization: Bearer local-development-bearer-change-me" `
+  http://localhost:3000/v1/members                                                 # 200
+```
+
+The value is not a secret and must never be reused outside this local stack.
+
+## Which commit is running
+
+The image carries `org.opencontainers.image.revision`, taken from the `GIT_SHA` build arg:
+
+```powershell
+$env:GIT_SHA = (git rev-parse --short HEAD)
+docker compose build
+docker compose up -d
+docker image inspect member-registrations-api:local `
+  --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+```
+
+With `GIT_SHA` unset the label is `dev`. `npm run smoke:local` prints it as its last check, so a release
+smoke that passes and names `dev` means the image was not built from a commit — worth knowing.
+
+## Backup and restore
+
+The `db-data` volume is the only copy of the register. Dump it before any upgrade, and rehearse the restore
+once per release — an unexercised backup is not a backup.
+
+```powershell
+New-Item -ItemType Directory -Force backups | Out-Null
+$ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+
+# Dump inside the container, then copy the file out (never redirect a binary through the shell).
+docker compose exec -T db pg_dump -U postgres -d member_registrations -Fc -f /tmp/backup.pgc
+docker compose cp db:/tmp/backup.pgc "backups/$ts.pgc"
+```
+
+`backups/` is git-ignored; it holds real register data, so it is never committed and never put in `documents/`.
+
+Restore — the destructive step, which is why it is exercised:
+
+```powershell
+docker compose cp "backups/20261113-081542.pgc" db:/tmp/restore.pgc
+docker compose exec -T db pg_restore -U postgres -d member_registrations --clean --if-exists /tmp/restore.pgc
+npm run smoke:local
+```
+
+The drill run on 2026-11-13 was: smoke green (11/11), dump 127 368 bytes, `docker compose down -v` (volume
+destroyed), `up -d` (fresh migrate), the seeded member answered `404`, `pg_restore`, the same member answered
+`200` with its original `id` and `createdAt`, smoke green again (11/11).
+
+## Rollback
+
+Migrations have **no down path**, so a rollback is two steps and the order matters:
+
+1. **Snapshot first** — the dump above, before you start any upgrade. Without it, step 2 meets a forward
+   schema with no way back.
+2. **Roll the image back** and **restore the snapshot**:
+
+   ```powershell
+   git checkout <previous-commit>
+   $env:GIT_SHA = (git rev-parse --short HEAD)
+   docker compose build
+   docker compose up -d
+   docker compose cp "backups/<before-upgrade>.pgc" db:/tmp/restore.pgc
+   docker compose exec -T db pg_restore -U postgres -d member_registrations --clean --if-exists /tmp/restore.pgc
+   npm run smoke:local
+   ```
+
+Rebuilding the previous commit **without** restoring the snapshot is safe only when no migration ran between
+the two commits; when in doubt, restore. `docker compose down -v` is not a rollback — it is data loss.
+
+Note the order inside step 2: the old image's `migrate` service starts against the forward schema before
+`pg_restore` runs. That is a no-op, because the migration runner records what it has applied, but it is why
+`pg_restore` — not the image roll — is the step that returns the database to its old shape.
+
 ## Configuration
 
 Compose sets everything the API needs for development; nothing has to be exported by hand:
@@ -80,6 +174,7 @@ Compose sets everything the API needs for development; nothing has to be exporte
 | Name                   | Value in compose                        | Why                                                         |
 | ---------------------- | --------------------------------------- | ----------------------------------------------------------- |
 | `DATABASE_URL`         | `postgresql://postgres:postgres@db:...` | The `db` service                                            |
+| `API_BEARER_TOKEN`     | `local-development-bearer-change-me`    | The API gate, on locally as in production                   |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:8080`                 | The nginx UI origin                                         |
 | `UI_BASE_URL`          | `http://localhost:8080/#/connect`       | Magic-link target                                           |
 | `NODE_ENV`             | `development`                           | Console mailer, dev defaults, no secrets                    |
