@@ -14,6 +14,14 @@
 
 ## Change log
 
+- 2026-11-13: `officerReason` on `POST /v1/pledges` becomes an **optional note**, not a requirement (owner,
+  2026-11-13: "Reason should be an instruction note and optional. Not a required field"). The API accepted it
+  only alongside an explicit officer and rejected an officer without one, which made every pledge that named
+  an officer, and every note on a defaulted shepherd, impossible to record from the UI. It is now trimmed,
+  1-500 characters, accepted with or without `followUpOfficerMemberNo`, and stored in `reason`. Reassignment
+  keeps its own mandatory reason. This is the named §17 authorisation for the create-contract change: no wire
+  field was added or removed, only a validation rule.
+
 - 2026-11-11: capture-contract truth. `DuplicateImportError` is removed (a live capture may repeat, so
   the `409` could never fire), the headcount End action uses the import page's three states, and the
   event session's `capture` is required-nullable on the UI types. No behaviour change beyond the action
@@ -850,11 +858,18 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 
 - A pledge carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`, amount,
   currency, `expectedOn`, exactly one follow-up officer, the `termsVersion` and an `idempotencyKey`.
-- The officer is the member's active shepherd, or the active presbyter the administrator supplies with
-  a reason; otherwise the pledge is rejected (`422 officer_required`). A pledge always targets an
+- The officer is the member's active shepherd, or the active presbyter the administrator supplies; otherwise
+  the pledge is rejected (`422 officer_required`). The supplied officer carries no justification requirement —
+  `officerReason` is an optional note, not a condition of the write. A pledge always targets an
   existing offering attached to the event; it never creates an offering.
-- An administrator may assign at creation or reassign later with a reason; both officers and the reason
-  remain in `pledge_events` (`fromOfficerMemberNo`/`toOfficerMemberNo`).
+- An administrator may assign an officer at creation or reassign later with a reason; both officers and the
+  reason remain in `pledge_events` (`fromOfficerMemberNo`/`toOfficerMemberNo`). At creation the officer is
+  optional — leaving it out means the member's active shepherd, which needs no justification because the
+  assignment is the justification.
+- `officerReason` on create is an **optional note to whoever follows up** (trimmed, 1-500 characters), not a
+  justification the API demands and not an audit field: it is accepted with or without an explicit
+  `followUpOfficerMemberNo` and is stored in the pledge's `reason`. Reassignment keeps its own mandatory
+  reason, which is a different thing and stays required.
 - `POST /v1/pledges` is idempotent by `idempotencyKey`: an identical canonical payload returns `200`
   with the stored pledge, a different payload is `409 idempotency_conflict`.
 - A pledge is dated by `sessionDate`, else today (UTC), and that date must be on or before the

@@ -8,7 +8,12 @@ import {
 } from '@fluentui/react-components';
 import type { ReactNode } from 'react';
 import type { EventOfferingItem } from '../../api/events';
-import { AnnouncedOffertoryForm, PledgeForm, type GiftSubmission, type PledgeSubmission } from './OfferingGivingForms';
+import {
+  AnnouncedOffertoryForm,
+  PledgeForm,
+  type GiftSubmission,
+  type PledgeSubmission,
+} from './OfferingGivingForms';
 import { useUssdStyles } from './ussd-styles';
 
 function Shell({
@@ -65,13 +70,7 @@ export function RecordCountDialog({
   children: ReactNode;
 }) {
   return (
-    <Shell
-      open={open}
-      title={title}
-      description={description}
-      onClose={onClose}
-      wide
-    >
+    <Shell open={open} title={title} description={description} onClose={onClose} wide>
       {children}
     </Shell>
   );
@@ -121,8 +120,10 @@ export function PledgeDialog({
   pending,
   notice,
   error,
+  officerError,
   onClose,
   onSubmit,
+  onOfficerValueChange,
 }: {
   open: boolean;
   offerings: readonly EventOfferingItem[];
@@ -130,8 +131,11 @@ export function PledgeDialog({
   pending: boolean;
   notice: string | null;
   error: string | null;
+  officerError?: string | null;
   onClose: () => void;
   onSubmit: (input: PledgeSubmission) => void;
+  /** See `PledgeForm`: the form reports a member or officer change so the page can drop its message. */
+  onOfficerValueChange?: () => void;
 }) {
   return (
     <Shell open={open} title="Record pledge" onClose={onClose}>
@@ -141,8 +145,10 @@ export function PledgeDialog({
         pending={pending}
         notice={notice}
         error={error}
+        officerError={officerError}
         onSubmit={onSubmit}
         onCancel={onClose}
+        onOfficerValueChange={onOfficerValueChange}
       />
     </Shell>
   );

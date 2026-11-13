@@ -27,7 +27,43 @@
     "pledge": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge.png",
-        "sha256": "fdfde7eafd4bd524801cd6993ccd7f5cdcaf5692698431b90567b8a825caaa37",
+        "sha256": "78618315981316f38ec2e2e5ce20455709dfd5efa24499f1491e963d27c80eeb",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "pledge-no-shepherd": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-pledge-no-shepherd.png",
+        "sha256": "537fdb1a45c37620232972254567c7b8140c810960a1c2919ee3246bea465994",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "pledge-shepherd-loading": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-pledge-shepherd-loading.png",
+        "sha256": "adda8d9d21089cb2d9363d3bc5125449347aef53bb7084010ccd9853eb6afdb7",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "reference"
+    },
+    "pledge-shepherd-error": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-pledge-shepherd-error.png",
+        "sha256": "b1d73582067c030c83518dbb5573db51139f27b057b5cda8212a9464faa68e4a",
+        "source": "mockups/mvp-offerings/02-offerings-count.html"
+      },
+      "baseline": null,
+      "coverage": "reference"
+    },
+    "pledge-officer-reason": {
+      "mock": {
+        "path": "mockups/mvp-offerings/02-offerings-count-pledge-officer-reason.png",
+        "sha256": "9868e5e978ae9c38b07a2302496c037b620ff7acfd8bfd3b90d6556b05405b0f",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,

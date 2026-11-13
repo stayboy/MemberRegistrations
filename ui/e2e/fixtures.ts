@@ -1281,7 +1281,15 @@ function buildRoutes(
       handle: (_call, [memberNo]) => {
         const detail = DETAILS.get(memberNo!);
         if (!detail) return problem(404, `Member ${memberNo} was not found`);
-        return reply({ ...MEMBER_SHEPHERDING, memberNo: detail.memberNo, name: detail.firstName });
+        // The shepherd is keyed on the member asked for, not served to every member: a dialog that
+        // reads the wrong member number gets `shepherd: null` and its assertion fails. M-1002 is the
+        // only member whose fixture entry names one.
+        return reply({
+          ...MEMBER_SHEPHERDING,
+          memberNo: detail.memberNo,
+          name: detail.firstName,
+          shepherd: memberNo === MEMBER_SHEPHERDING.memberNo ? MEMBER_SHEPHERDING.shepherd : null,
+        });
       },
     },
     {

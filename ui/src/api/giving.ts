@@ -62,6 +62,12 @@ export interface PledgeInput {
   readonly amountMinor: number;
   readonly expectedOn: string;
   readonly followUpOfficerMemberNo?: string;
+  /**
+   * An optional instruction note for whoever follows up, accepted with or without
+   * `followUpOfficerMemberNo` (trimmed, 1–500 characters). Omit the key rather than sending an
+   * empty string: the request schema trims first and rejects a blank value.
+   */
+  readonly officerReason?: string;
   readonly idempotencyKey: string;
 }
 

@@ -168,6 +168,7 @@ describe('recordPledge', () => {
       amountMinor: 10_000,
       expectedOn: '2026-12-01',
       followUpOfficerMemberNo: 'M-2',
+      officerReason: 'Called the member',
       idempotencyKey: 'pledge-1',
     });
 
@@ -176,6 +177,51 @@ describe('recordPledge', () => {
       memberNo: 'M-1',
       expectedOn: '2026-12-01',
       followUpOfficerMemberNo: 'M-2',
+      // A note may accompany a named officer.
+      officerReason: 'Called the member',
     });
+  });
+
+  it('POSTs the note without a follow-up officer', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        id: 'pledge-1',
+        memberNo: 'M-1',
+        memberName: 'Kwame Asante',
+        offeringId: 'offering-1',
+        offeringName: 'Tithe',
+        eventId: 'event-1',
+        sessionDate: '2026-11-01',
+        amountMinor: 10_000,
+        currency: 'GHS',
+        expectedOn: '2026-12-01',
+        followUpOfficerMemberNo: 'M-2',
+        officerName: 'Ama Mensah',
+        status: 'pending',
+        reason: 'Visit planned for Sunday',
+        nextReminder: null,
+        settledContributionId: null,
+        termsVersion: 1,
+        idempotencyKey: 'pledge-1',
+        createdAt: '2026-11-01T10:00:00.000Z',
+      }),
+    );
+
+    await recordPledge(BASE, TOKEN, {
+      memberNo: 'M-1',
+      offeringId: 'offering-1',
+      eventId: 'event-1',
+      sessionDate: '2026-11-01',
+      amountMinor: 10_000,
+      expectedOn: '2026-12-01',
+      officerReason: 'Visit planned for Sunday',
+      idempotencyKey: 'pledge-1',
+    });
+
+    const body = JSON.parse(String(requestOptions(0).body));
+    // The note is optional and independent of the officer: it is sent on its own, and the
+    // officer key is simply absent so the API falls back to the member's shepherd.
+    expect(body).toMatchObject({ officerReason: 'Visit planned for Sunday' });
+    expect(body).not.toHaveProperty('followUpOfficerMemberNo');
   });
 });

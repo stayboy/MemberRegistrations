@@ -48,6 +48,21 @@ vi.mock('react', async (importOriginal) => {
 // Griffel's `makeStyles` hook reads React context; the form only uses the class names.
 vi.mock('./ussd-styles', () => ({ useUssdStyles: () => ({}) }));
 
+// The follow-up default needs the session and query providers, which this dispatcher harness does
+// not mount. The existing cases cover a member whose shepherd is active: the officer stays
+// optional. The states themselves are covered in the DOM lane.
+vi.mock('../../hooks/useFollowUpDefault', () => ({
+  useFollowUpDefault: () => ({
+    status: 'ready',
+    shepherd: {
+      memberNo: 'M-1002',
+      name: 'Kwesi Boateng',
+      gender: 'male',
+      age: 41,
+    },
+  }),
+}));
+
 const OFFERINGS: readonly EventOfferingItem[] = [
   {
     offeringId: 'offering-1',
@@ -124,6 +139,8 @@ interface FormHarness {
   select(label: string, memberNo: string | null): void;
   /** Text typed into the amount input. */
   typeAmount(value: string): void;
+  /** Text typed into the instruction note, which is always rendered and optional. */
+  typeNote(value: string): void;
   /** The pressed primary action of the latest render. */
   submit(): void;
 }
@@ -159,6 +176,22 @@ function harness(render: () => ReactNode): FormHarness {
       );
       const onChange = input.props.onChange;
       if (typeof onChange !== 'function') throw new Error('the amount input has no onChange');
+      (onChange as (event: unknown, data: { value: string }) => void)({}, { value });
+      draw();
+    },
+    typeNote(value) {
+      const field = onlyMatch(
+        tree,
+        (node) => node.props.label === 'Note for the follow-up officer',
+        'follow-up note field',
+      );
+      const input = onlyMatch(
+        field.props.children,
+        (node) => typeof node.props.onChange === 'function',
+        'follow-up note input',
+      );
+      const onChange = input.props.onChange;
+      if (typeof onChange !== 'function') throw new Error('the note input has no onChange');
       (onChange as (event: unknown, data: { value: string }) => void)({}, { value });
       draw();
     },
@@ -294,7 +327,8 @@ describe('PledgeForm', () => {
     const form = pledgeForm(onSubmit);
 
     // The follow-up officer is optional (FR-26: the API falls back to the shepherd), so a clear
-    // field is not an error; a picked officer must reach the payload.
+    // field is not an error; a picked officer must reach the payload, and the note written with it
+    // travels as the optional instruction note.
     expect(form.picker('Follow-up officer').type).toBe(MemberPicker);
 
     form.select('Member', 'M-1001');
@@ -302,13 +336,33 @@ describe('PledgeForm', () => {
     expect(form.picker('Follow-up officer').props.value).toBe('M-1002');
 
     form.typeAmount('100.00');
+    form.typeNote('Called the member');
     form.submit();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
       memberNo: 'M-1001',
       officerMemberNo: 'M-1002',
+      officerReason: 'Called the member',
     });
+  });
+
+  it('the pledge form submits the note without a follow-up officer', () => {
+    hookStore.reset();
+    const onSubmit = vi.fn();
+    const form = pledgeForm(onSubmit);
+
+    // The note is an instruction to the member's shepherd just as much as to a named presbyter, so
+    // it stands alone: sent without `officerMemberNo`.
+    form.select('Member', 'M-1001');
+    form.typeAmount('100.00');
+    form.typeNote('Visit planned for Sunday');
+    form.submit();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).toMatchObject({ officerReason: 'Visit planned for Sunday' });
+    expect(payload).not.toHaveProperty('officerMemberNo');
   });
 
   it('the pledge form submits without a follow-up officer', () => {
@@ -323,5 +377,6 @@ describe('PledgeForm', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(payload).not.toHaveProperty('officerMemberNo');
+    expect(payload).not.toHaveProperty('officerReason');
   });
 });

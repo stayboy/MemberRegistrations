@@ -24,6 +24,12 @@ vi.mock('../../components/MemberPicker', () => ({
   MemberPicker: ({ label }: { label: string }) => <span>{label}</span>,
 }));
 
+// The follow-up default reads the shepherding summary and needs the same providers; a static
+// render exercises the form's markup, so the hook answers as if no member had been picked yet.
+vi.mock('../../hooks/useFollowUpDefault', () => ({
+  useFollowUpDefault: () => ({ status: 'idle', shepherd: null }),
+}));
+
 const formatInstant = (value: string): string => value;
 const money = (amountMinor: number, currency = 'GHS'): string =>
   formatMoneyMinor(amountMinor, currency);

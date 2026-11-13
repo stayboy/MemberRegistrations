@@ -101,6 +101,18 @@ export const useUssdStyles = makeStyles({
   muted: {
     color: tokens.colorNeutralForeground3,
   },
+  /** Announced by assistive technology, absent from the visual layout (a live region's home). */
+  visuallyHidden: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: 0,
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+  },
   fields: {
     display: 'flex',
     alignItems: 'flex-start',

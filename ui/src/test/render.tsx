@@ -13,6 +13,8 @@ import { SESSION_STORAGE_KEY } from '../auth/session';
 export interface RenderWithProvidersOptions {
   /** Seed a usable session in storage; defaults to true. */
   readonly signedIn?: boolean;
+  /** A client the test owns, so it can invalidate a query or read the cache. */
+  readonly client?: QueryClient;
 }
 
 export function seedSession(expiresInMinutes = 15): void {
@@ -35,10 +37,9 @@ export function createTestQueryClient(): QueryClient {
 
 export function renderWithProviders(
   ui: ReactElement,
-  { signedIn = true }: RenderWithProvidersOptions = {},
+  { signedIn = true, client = createTestQueryClient() }: RenderWithProvidersOptions = {},
 ): RenderResult {
   if (signedIn) seedSession();
-  const client = createTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <SessionProvider>{children}</SessionProvider>
