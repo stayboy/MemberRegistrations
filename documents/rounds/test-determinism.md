@@ -57,6 +57,10 @@ Review-time additions (P2s, all accepted):
 5. `Dockerfile` `node:24.22.2-alpine` → `24.22.3-alpine`, so the image satisfies the floor this round declares.
 6. `.npmrc` with `engine-strict=true`, so `engines` binds rather than warns; without it the floor is advisory.
 7. CI service pinned `postgres:18.6` (not the floating `18`) to match `docker-compose.yml`'s `18.6-alpine`.
+8. CI reads the pin from `.nvmrc` (`node-version-file`) in all four jobs instead of `node-version: 24`:
+   the first CI run of this round failed `EBADENGINE` because GitHub's `24` resolved to **24.22.2**, one
+   patch below the floor the round declares. The floor was right; CI was stale. CI and the host now read one
+   file.
 
 **Rejected, on measured grounds:** a gate retry keyed on the exit code (there is nothing left to retry once the
 patch is current, and a retry that can swallow a transient failure is the one thing a gate must not do), and
@@ -98,6 +102,10 @@ run 10, above.
 A first attempt at this proof was discarded because I edited `Dockerfile`/`.npmrc`/`ci.yml` mid-run (runs 3 and
 4 failed `format:check` on a half-written file). The ten above ran on a frozen tree; only the round doc changed
 afterwards.
+
+The first CI run of the branch failed all three jobs in `npm ci` with `EBADENGINE: Required {"node":">=24.22.3"},
+Actual {"node":"v24.22.2"}` — `engine-strict` working as intended against a stale CI pin. `.nvmrc` became the
+single source of truth for both.
 
 ## Review
 
