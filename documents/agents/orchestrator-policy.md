@@ -152,10 +152,34 @@ orchestrator skill's markdown
 are review-gated: a change lands only after the reviewer seat reviews the exact text — `deepseek-v4-pro`
 `0813` outside the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider
 answers) between 12:00 and 18:00 local, or when no provider answers with `0813` — the basis stated in
-`fallbackReason`. The record is `documents/agents/protected-doc-reviews.json`; the
+`fallbackReason`. A document joins this set when it **owns a non-negotiable or a repo delta of the canonical
+skill** — not because it lives under `documents/agents/`: a runbook or a research note under `documents/` is not
+governing either, and the seat files under `.opencode/agents/` are operational, not governing (owner,
+2026-11-13). The parent proposes a new member and the owner confirms it; the seat reviews the text, not the
+membership decision. Adding one is a review-gated step, and the three lists that name the set — this section,
+`AGENTS.md` §10a and the guard — move together in that step. The record is `documents/agents/protected-doc-reviews.json`; the
 guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),
 while the repo checks always run.
+
+**A protected review also hunts for what the document fails to say** (owner, 2026-11-13). The reviewer's brief
+carries a grill pass over the amended document as well as a reading of its bytes: it names the rule, the case or
+the claim the text leaves unstated, in the shape of a grill round — numbered findings, each with a recommendation
+and the cost of taking it. **A gap finding is a proposal, never an auto-accepted edit**: it would add a rule the
+owner has never owned, so "the owner's rules still park" would not fire on the case this paragraph creates, and
+under auto-accept the reviewer would become the author of governance. It therefore parks for the owner; when
+accepted, the text is re-reviewed once and the hash records the final bytes — the same bound as a rework, never a
+loop. A finding that only reconciles the document with itself — a cross-reference, a stale name, a missing
+citation of a rule that already exists elsewhere — may be applied by the parent and re-reviewed. Every finding's
+disposition, accepted or rejected, is recorded where the round is recorded (the commit body at Tier 0, the round
+doc at Tiers 1-3) and restated in the record's `reason`. **A review is complete only when the hash-matched bytes
+and the gap pass come from the same qualifying seat**; a partial review — the bytes without a competent gap pass,
+or a gap pass from a seat that could not read the bytes — parks, naming the missing half where the round is
+recorded and restating it in the record's `reason` (owner, 2026-11-13). The seat's obligation is to have read the
+same bytes the record pins; the hash match is the parent's recomputation and the guard, which is the tripwire
+`AGENTS.md` §10a describes — a seat whose shell cannot run the hash is not thereby a partial review.
+Reviewing only the words on the page finds contradictions and misses absences, and an absence is what a protected
+document is for.
 
 ## Unattended rounds
 
