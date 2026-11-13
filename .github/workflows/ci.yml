@@ -79,6 +79,7 @@ jobs:
       - run: npm run ui:lint
       - run: npm run ui:typecheck
       - run: npm run ui:test
+      - run: npm run ui:test:dom
       - run: npm run ui:build
 
   # The browser harness runs the production build against stubbed gateway routes.

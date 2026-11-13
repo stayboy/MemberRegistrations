@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "e2e": "playwright test",
-    "capture": "playwright test --config playwright.capture.config.ts"
+    "capture": "playwright test --config playwright.capture.config.ts",
+    "test:dom": "vitest run --config vitest.dom.config.ts"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.75.1",
@@ -31,6 +32,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.10",
     "@types/node": "^24.19.2",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.3.0",
@@ -40,6 +45,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
+    "jsdom": "^31.0.1",
     "prettier": "^3.9.10",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.1",
