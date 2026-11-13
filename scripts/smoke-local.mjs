@@ -11,11 +11,16 @@
  * not up at all, which is a setup problem rather than a release defect.
  */
 
+import { createHmac, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 const API = process.env.SMOKE_API_URL ?? 'http://localhost:3000';
 const UI = process.env.SMOKE_UI_URL ?? 'http://localhost:8080';
 const BEARER = process.env.API_BEARER_TOKEN ?? 'local-development-bearer-change-me';
+// These must match docker-compose.yml's app environment; a one-sided edit fails the smoke closed
+// (401/404 instead of 200), which is loud but only at run time.
+const USSD_SECRET = process.env.USSD_GATEWAY_SECRET ?? 'local-development-ussd-gateway-secret';
+const PAYMENT_SECRET = process.env.PAYMENT_GATEWAY_SECRET ?? 'local-development-payment-secret';
 const UI_ORIGIN = UI;
 
 const failures = [];
@@ -124,6 +129,103 @@ async function writeThenRead() {
   return memberNo;
 }
 
+/** The USSD signature covers timestamp, nonce and the raw body, in that order. */
+function signUssd(timestamp, nonce, raw) {
+  return createHmac('sha256', USSD_SECRET)
+    .update(timestamp)
+    .update(nonce)
+    .update(raw)
+    .digest('hex');
+}
+
+async function ussdFrame(body, overrides = {}) {
+  const raw = JSON.stringify(body);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = overrides.nonce ?? `smoke-${randomBytes(8).toString('hex')}`;
+  const signature = overrides.signature ?? signUssd(timestamp, nonce, raw);
+  const response = await call(`${API}/ussd/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'X-USSD-Timestamp': timestamp,
+      'X-USSD-Nonce': nonce,
+      'X-USSD-Signature': signature,
+      'X-Forwarded-For': '10.99.0.1',
+    },
+    body: raw,
+  });
+  return { response, status: response.status };
+}
+
+async function ussd() {
+  const start = await ussdFrame({ phone: '0244000000', input: '', seq: 1 });
+  const wire = start.status === 200 ? await start.response.json() : null;
+  record(
+    'a signed USSD start frame renders a menu',
+    start.status === 200 && typeof wire?.text === 'string' && wire.text.length > 0,
+    `status ${start.status}`,
+  );
+
+  const forged = await ussdFrame(
+    { phone: '0244000000', input: '', seq: 1 },
+    { signature: 'deadbeef' },
+  );
+  record(
+    'the USSD endpoint refuses a bad signature',
+    forged.status === 401,
+    `status ${forged.status}`,
+  );
+
+  // A nonce is consumed once, so a fresh valid signature over the same nonce must still be refused.
+  const nonce = `smoke-${randomBytes(8).toString('hex')}`;
+  const first = await ussdFrame({ phone: '0244000000', input: '', seq: 1 }, { nonce });
+  const replay = await ussdFrame({ phone: '0244000000', input: '', seq: 1 }, { nonce });
+  record(
+    'a replayed USSD nonce is refused',
+    first.status === 200 && replay.status === 401,
+    `first ${first.status}, replay ${replay.status}`,
+  );
+}
+
+async function payments() {
+  const reference = `SMOKE-${Date.now().toString(36).toUpperCase()}`;
+  const raw = JSON.stringify({
+    reference,
+    status: 'paid',
+    amountMinor: 100,
+    currency: 'GHS',
+    occurredAt: new Date().toISOString(),
+  });
+  const signature = createHmac('sha256', PAYMENT_SECRET).update(raw).digest('hex');
+
+  const accepted = await call(`${API}/v1/payments/callback`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Payment-Signature': signature },
+    body: raw,
+  });
+  // 404 is the success condition here: it means the signature verified and the body parsed, and
+  // only then did the repository report an unknown reference (401 would mean auth failed). A bare
+  // 404 from an unmounted route would not echo the reference, so the body is asserted too.
+  const detail = accepted.status === 404 ? await accepted.json() : null;
+  const echoesReference = typeof detail?.detail === 'string' && detail.detail.includes(reference);
+  record(
+    'a signed payment callback reaches the repository',
+    accepted.status === 404 && echoesReference,
+    `status ${accepted.status}, body ${echoesReference ? 'names the reference' : 'does not name it'}`,
+  );
+
+  const forged = await call(`${API}/v1/payments/callback`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Payment-Signature': 'deadbeef' },
+    body: raw,
+  });
+  record(
+    'the payment callback refuses a bad signature',
+    forged.status === 401,
+    `status ${forged.status}`,
+  );
+}
+
 async function uiShell() {
   const page = await call(`${UI}/`);
   const html = page.ok ? await page.text() : '';
@@ -161,6 +263,8 @@ async function main() {
   await healthAndCors();
   await apiGate();
   const memberNo = await writeThenRead();
+  await ussd();
+  await payments();
   await uiShell();
   imageRevision();
 
