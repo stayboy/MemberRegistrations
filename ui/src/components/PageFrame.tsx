@@ -10,6 +10,7 @@ import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { ConnectionBadge, connectionErrorDetail, useGatewayHealth } from '../shell/ConnectionBadge';
 import { SECTIONS, firstItemOf, type SectionId } from '../shell/navigation';
+import { PageActions, type PageAction } from './PageActions';
 
 const useStyles = makeStyles({
   frame: {
@@ -20,12 +21,15 @@ const useStyles = makeStyles({
     maxWidth: '1440px',
     marginInline: 'auto',
   },
-  topRow: {
+  // FR-9a: the breadcrumb row spans the content width, so the `Actions` menu sits at its
+  // right edge and never covers the page's title.
+  actionRow: {
     display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalL,
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    rowGap: tokens.spacingVerticalS,
     flexWrap: 'wrap',
+    width: '100%',
   },
   headingBlock: {
     minWidth: 0,
@@ -72,11 +76,26 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase300,
     lineHeight: tokens.lineHeightBase300,
   },
+  controls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+    minWidth: 0,
+  },
+  // A page with no menu (a form's commit/cancel pair, for example) keeps its controls at
+  // the row's right edge, where the header actions used to sit.
+  controlsTrailing: {
+    marginInlineStart: 'auto',
+  },
+  // `marginInlineStart: auto` keeps the menu at the row's right edge; where the row wraps,
+  // the menu wraps below the breadcrumb and stays right-aligned (FR-9a).
   actions: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
     flexWrap: 'wrap',
+    marginInlineStart: 'auto',
   },
   body: {
     minWidth: 0,
@@ -101,6 +120,7 @@ export function PageFrame({
   submenu,
   description,
   actions,
+  controls,
   hideBadge = false,
   children,
 }: {
@@ -108,7 +128,14 @@ export function PageFrame({
   title: string;
   submenu?: string;
   description?: string;
-  actions?: ReactNode;
+  /** The page's action-row verbs; they render as the `Actions` menu (FR-9a). */
+  actions?: readonly PageAction[];
+  /**
+   * Header controls that stay visible outside the menu: filters, date windows and view
+   * switches, plus a form's commit/cancel pair and a `Back` navigation control. They are
+   * laid out on the breadcrumb row, left of the menu (FR-9a).
+   */
+  controls?: ReactNode;
   /** The landing drops the API-connected pill; the operator pages keep it. */
   hideBadge?: boolean;
   children?: ReactNode;
@@ -118,27 +145,40 @@ export function PageFrame({
   const health = useGatewayHealth();
   const { pathname } = useLocation();
   const showUssdNotice = showsUssdProductionNotice(sectionId, pathname);
+  const hasActions = (actions?.length ?? 0) > 0;
 
   return (
     <div className={styles.frame}>
-      <div className={styles.topRow}>
-        <div className={styles.headingBlock}>
-          <nav className={styles.breadcrumb} aria-label="Breadcrumb">
-            <Link to={firstItemOf(section).path} className={styles.breadcrumbLink}>
-              {section.label}
-            </Link>
-            <span aria-hidden="true">/</span>
-            <span className={styles.breadcrumbCurrent} aria-current="page">
-              {submenu ?? title}
-            </span>
-          </nav>
-          <div className={styles.titleRow}>
-            <h1 className={styles.title}>{title}</h1>
-            {hideBadge ? null : <ConnectionBadge />}
+      <div className={styles.actionRow}>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link to={firstItemOf(section).path} className={styles.breadcrumbLink}>
+            {section.label}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className={styles.breadcrumbCurrent} aria-current="page">
+            {submenu ?? title}
+          </span>
+        </nav>
+        {controls ? (
+          <div
+            className={
+              hasActions ? styles.controls : `${styles.controls} ${styles.controlsTrailing}`
+            }
+          >
+            {controls}
           </div>
-          {description ? <p className={styles.description}>{description}</p> : null}
+        ) : null}
+        <div className={styles.actions}>
+          <PageActions actions={actions ?? []} />
         </div>
-        {actions ? <div className={styles.actions}>{actions}</div> : null}
+      </div>
+
+      <div className={styles.headingBlock}>
+        <div className={styles.titleRow}>
+          <h1 className={styles.title}>{title}</h1>
+          {hideBadge ? null : <ConnectionBadge />}
+        </div>
+        {description ? <p className={styles.description}>{description}</p> : null}
       </div>
 
       {health.isError ? (

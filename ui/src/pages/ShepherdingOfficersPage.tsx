@@ -64,17 +64,17 @@ export function ShepherdingOfficersPage() {
       title="Shepherding officers"
       submenu="Officers"
       description="Church coverage and the per-officer roster summary. Open an officer to review their members and log a call."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
             void officersQuery.refetch();
-          }}
-          disabled={officersQuery.isFetching}
-        >
-          Refresh
-        </Button>
-      }
+          },
+          disabled: officersQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <DateWindowControl

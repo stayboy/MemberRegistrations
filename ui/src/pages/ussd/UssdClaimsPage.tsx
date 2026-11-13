@@ -190,17 +190,17 @@ export function UssdClaimsPage() {
       title="USSD welfare claims"
       submenu="Claims"
       description="Record a claim with an amount and reason, then move it through its statuses with a decision note. Total claimed counts approved and paid claims only."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          disabled={!selectedSubscription || claimsQuery.isFetching}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: !selectedSubscription || claimsQuery.isFetching,
+          onSelect: () => {
             void claimsQuery.refetch();
-          }}
-        >
-          Refresh
-        </Button>
-      }
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

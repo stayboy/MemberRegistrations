@@ -149,18 +149,18 @@ export function UssdClockingPage() {
       title="USSD clocking"
       submenu="Clocking"
       description="Session attendance, manual clock-ins and one-session presbyter delegations. A delegate inherits the senior's broad clocking authority for this session only."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          disabled={!selection || attendanceQuery.isFetching}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: !selection || attendanceQuery.isFetching,
+          onSelect: () => {
             void attendanceQuery.refetch();
             void delegationsQuery.refetch();
-          }}
-        >
-          Refresh
-        </Button>
-      }
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

@@ -204,65 +204,66 @@ export function SeriesDetailPage() {
       title={series?.name ?? 'Series'}
       submenu={series?.name ?? 'Series detail'}
       description="Schedule versions, exceptions and the dates the API generates for this series."
-      actions={
-        <>
-          <Button
-            icon={<ArrowLeftRegular />}
-            appearance="secondary"
-            onClick={() => navigate('/events/series')}
-          >
-            Back to series
-          </Button>
-          <Button
-            icon={<ArrowImportRegular />}
-            onClick={() => navigate(`/imports/attendance?series=${encodeURIComponent(id)}`)}
-          >
-            Import attendance
-          </Button>
-          {archived ? null : (
-            <Button
-              icon={<EditRegular />}
-              onClick={() => navigate(`/events/series/${encodeURIComponent(id)}/edit`)}
-            >
-              Edit
-            </Button>
-          )}
-          {archived ? (
-            <Button
-              icon={<ArrowUndoRegular />}
-              onClick={() => {
+      controls={
+        <Button
+          icon={<ArrowLeftRegular />}
+          appearance="secondary"
+          onClick={() => navigate('/events/series')}
+        >
+          Back to series
+        </Button>
+      }
+      actions={[
+        {
+          id: 'import-attendance',
+          label: 'Import attendance',
+          icon: <ArrowImportRegular />,
+          onSelect: () => navigate(`/imports/attendance?series=${encodeURIComponent(id)}`),
+        },
+        ...(archived
+          ? []
+          : [
+              {
+                id: 'edit',
+                label: 'Edit',
+                icon: <EditRegular />,
+                onSelect: () => navigate(`/events/series/${encodeURIComponent(id)}/edit`),
+              },
+            ]),
+        archived
+          ? {
+              id: 'restore',
+              label: 'Restore',
+              icon: <ArrowUndoRegular />,
+              onSelect: () => {
                 setArchiveError(null);
                 setArchiveTarget(false);
-              }}
-            >
-              Restore
-            </Button>
-          ) : (
-            <Button
-              icon={<ArchiveRegular />}
-              onClick={() => {
+              },
+              destructive: true,
+            }
+          : {
+              id: 'archive',
+              label: 'Archive',
+              icon: <ArchiveRegular />,
+              onSelect: () => {
                 setArchiveError(null);
                 setArchiveTarget(true);
-              }}
-            >
-              Archive
-            </Button>
-          )}
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void seriesQuery.refetch();
-              void occurrencesQuery.refetch();
-              void summaryQuery.refetch();
-            }}
-            disabled={
-              seriesQuery.isFetching || occurrencesQuery.isFetching || summaryQuery.isFetching
-            }
-          >
-            Refresh
-          </Button>
-        </>
-      }
+              },
+              destructive: true,
+            },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void seriesQuery.refetch();
+            void occurrencesQuery.refetch();
+            void summaryQuery.refetch();
+          },
+          disabled:
+            seriesQuery.isFetching || occurrencesQuery.isFetching || summaryQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         {seriesQuery.isError ? (

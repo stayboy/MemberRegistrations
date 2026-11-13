@@ -170,17 +170,15 @@ export function UssdSimulatorPage() {
       title="USSD simulator"
       submenu="Simulator"
       description="A development-only handset over the real provider adapters and the real session pipeline. Every keypress goes through POST /dev/ussd/session; the screen shows the provider's real text and truncation."
-      actions={
-        <>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={resetSession}
-            disabled={sendMutation.isPending}
-          >
-            New session
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'new-session',
+          label: 'New session',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: resetSession,
+          disabled: sendMutation.isPending,
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

@@ -21,6 +21,7 @@ test('the members list renders the fixture rows', async ({ page }) => {
 
 test('the Contacts action opens the grouped contacts dialog', async ({ page }) => {
   await open(page, '/members');
+  // A table-row control, not a page action: FR-9a scopes the menu to the action row.
   await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante (Male, 41y)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });

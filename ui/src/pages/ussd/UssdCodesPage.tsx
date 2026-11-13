@@ -161,17 +161,17 @@ export function UssdCodesPage() {
       title="USSD codes"
       submenu="Codes"
       description="Issue a one-session attendance punch or registration code, read the plain code once, and void an active code with a reason."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          disabled={codesQuery.isFetching || !selection}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: codesQuery.isFetching || !selection,
+          onSelect: () => {
             void codesQuery.refetch();
-          }}
-        >
-          Refresh
-        </Button>
-      }
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

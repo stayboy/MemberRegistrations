@@ -137,17 +137,17 @@ export function UssdActivitiesPage() {
       title="USSD activities"
       submenu="Activities"
       description="The handset activity list with the same eligibility and ordering. A provider page is three events, or two at Nalo's 120-character cap."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          disabled={eventsQuery.isFetching}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: eventsQuery.isFetching,
+          onSelect: () => {
             void eventsQuery.refetch();
-          }}
-        >
-          Refresh
-        </Button>
-      }
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

@@ -1,4 +1,4 @@
-import { expect, open, seedSession, test } from './fixtures';
+import { expect, open, openActions, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -71,7 +71,8 @@ test('the series entry opens the import flow filtered to the series', async ({ p
   await open(page, '/events/series');
   await page.getByRole('link', { name: 'Sunday Service' }).click();
 
-  const entry = page.getByRole('button', { name: 'Import attendance' });
+  await openActions(page);
+  const entry = page.getByRole('menuitem', { name: 'Import attendance' });
   await expect(entry).toBeVisible();
   await entry.click();
 

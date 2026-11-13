@@ -1,5 +1,5 @@
 import type { Page } from 'playwright/test';
-import { expect, open, seedSession, test } from './fixtures';
+import { expect, open, openActions, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -33,7 +33,8 @@ test('the offerings count page reads the current observation, records a grid cou
   await expect(history.getByText('GHS 780.00')).toBeVisible();
 
   // The count entry is a single-pass grid: one input per configured denomination.
-  await page.getByRole('button', { name: 'Record count' }).click();
+  await openActions(page);
+  await page.getByRole('menuitem', { name: 'Record count' }).click();
   const recordDialog = page.getByRole('dialog');
   await expect(recordDialog.getByRole('heading', { name: 'Record offering count' })).toBeVisible();
   await expect(recordDialog.getByLabel('Pieces of GHS 200.00')).toHaveValue('');

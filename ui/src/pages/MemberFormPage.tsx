@@ -280,7 +280,7 @@ function MemberFormView({
       title={title}
       submenu={isEdit ? 'Edit member' : 'Add member'}
       description={description}
-      actions={
+      controls={
         <>
           <Button icon={<DismissRegular />} appearance="secondary" onClick={cancel}>
             Cancel

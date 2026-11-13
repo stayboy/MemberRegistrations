@@ -73,6 +73,15 @@ export async function open(page: Page, route: `/${string}`): Promise<void> {
   await page.goto(`./#${route}`);
 }
 
+/**
+ * FR-9a: a page's action-row verbs live in one `Actions` menu at the breadcrumb row's
+ * right edge. Opens that menu; the caller reads the verb it clicks from the page
+ * (`page.getByRole('menuitem', { name: … })`), so this returns nothing.
+ */
+export async function openActions(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Actions' }).click();
+}
+
 // ---------------------------------------------------------------------------
 // Fixture payloads — shapes are checked against the UI wire types
 // ---------------------------------------------------------------------------

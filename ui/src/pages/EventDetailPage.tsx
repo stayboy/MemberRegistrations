@@ -106,40 +106,42 @@ export function EventDetailPage() {
       title={event?.name ?? 'Event'}
       submenu={event?.name ?? 'Event detail'}
       description="Sessions and per-date attendance. Select a session to review the rows recorded against it."
-      actions={
-        <>
-          <Button
-            icon={<ArrowLeftRegular />}
-            appearance="secondary"
-            onClick={() => navigate('/events')}
-          >
-            Back to events
-          </Button>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void eventQuery.refetch();
-            }}
-            disabled={eventQuery.isFetching}
-          >
-            Refresh
-          </Button>
-          {event && event.seriesId ? (
-            <Button
-              icon={<ArrowImportRegular />}
-              onClick={() => {
-                const params = new URLSearchParams({
-                  event: event.id,
-                  date: event.startDate,
-                });
-                navigate(`/imports/attendance?${params.toString()}`);
-              }}
-            >
-              Import attendance
-            </Button>
-          ) : null}
-        </>
+      controls={
+        <Button
+          icon={<ArrowLeftRegular />}
+          appearance="secondary"
+          onClick={() => navigate('/events')}
+        >
+          Back to events
+        </Button>
       }
+      actions={[
+        ...(event && event.seriesId
+          ? [
+              {
+                id: 'import-attendance',
+                label: 'Import attendance',
+                icon: <ArrowImportRegular />,
+                onSelect: () => {
+                  const params = new URLSearchParams({
+                    event: event.id,
+                    date: event.startDate,
+                  });
+                  navigate(`/imports/attendance?${params.toString()}`);
+                },
+              },
+            ]
+          : []),
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void eventQuery.refetch();
+          },
+          disabled: eventQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         {eventQuery.isError ? (

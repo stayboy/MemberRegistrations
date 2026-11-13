@@ -142,7 +142,7 @@ export function OfferingsPage() {
       title="Offerings"
       submenu="Offerings"
       hideBadge
-      actions={
+      controls={
         <div className={styles.headerActions}>
           <div className={styles.quickRanges} role="group" aria-label="Quick ranges">
             <Button
@@ -180,19 +180,21 @@ export function OfferingsPage() {
             label="Offerings date window"
             hint=""
           />
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void summaryQuery.refetch();
-              void pledgesQuery.refetch();
-              void eventsQuery.refetch();
-            }}
-            disabled={summaryQuery.isFetching || pledgesQuery.isFetching}
-          >
-            Refresh
-          </Button>
         </div>
       }
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void summaryQuery.refetch();
+            void pledgesQuery.refetch();
+            void eventsQuery.refetch();
+          },
+          disabled: summaryQuery.isFetching || pledgesQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         {reassignMutation.isError ? (

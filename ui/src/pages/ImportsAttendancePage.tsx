@@ -572,17 +572,17 @@ export function ImportsAttendancePage() {
       title="Attendance registry"
       submenu="Attendance registry"
       description="Upload attendance for one event session. Choose the session first; the file's optional datetime must fall on it. A bad file changes nothing."
-      actions={
-        <Button
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          onSelect: () => {
             void eventsQuery.refetch();
             void formatsQuery.refetch();
-          }}
-          disabled={eventsQuery.isFetching || formatsQuery.isFetching}
-        >
-          Refresh
-        </Button>
-      }
+          },
+          disabled: eventsQuery.isFetching || formatsQuery.isFetching,
+        },
+      ]}
     >
       {eventsQuery.data === undefined ? (
         eventsQuery.isError ? (
