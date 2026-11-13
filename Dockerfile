@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.22.2-alpine AS deps
+FROM node:24.22.3-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # The root is an npm workspace containing ui; npm ci needs the workspace
@@ -16,7 +16,7 @@ RUN npm run build
 FROM deps AS prod-deps
 RUN npm prune --omit=dev
 
-FROM node:24.22.2-alpine AS api
+FROM node:24.22.3-alpine AS api
 # Local-only image. The default is production so a bare `docker run` of this
 # image fails closed (env validation + Resend mailer); compose sets
 # NODE_ENV=development explicitly for the local stack.
