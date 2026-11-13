@@ -41,7 +41,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "smoke:local": "node scripts/smoke-local.mjs"
+    "smoke:local": "node scripts/smoke-local.mjs",
+    "ui:test:dom": "npm --prefix ui run test:dom"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.6",

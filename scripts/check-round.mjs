@@ -32,7 +32,15 @@ const TIER1_PATHS = [/^src\//, /^ui\/src\//];
 
 // R6: a change under ui/src/ is a surface change, so the round doc must carry a resolving sign-off
 // row and the catalogue's coverage line. R6 never reads a mock image: mocks are git-ignored today.
+// A test or a test helper under ui/src is not a surface: it ships no rendered output, so requiring a
+// mock sign-off for one would be a false positive that invites a fake row (owner, 2026-11-13).
 const UI_SRC_PATTERN = /^ui\/src\//;
+const UI_SRC_NON_SURFACE = [
+  /^ui\/src\/test\//,
+  /\.test\.tsx?$/,
+  /\.dom\.test\.tsx$/,
+  /\.stories\.tsx?$/,
+];
 const CATALOGUE_DIR = 'documents/mock-claims/';
 const MOCK_ROW_PATTERN = /mockups\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+\.png)/g;
 const MOCK_COVERAGE_PATTERN =
@@ -270,7 +278,10 @@ export function checkDocuments(files, changedPaths, readText, options = {}) {
     typeof options.listCatalogues === 'function' ? options.listCatalogues : null;
   // R6 applies only when the diff shows a surface change; `--files` mode has no diff to read.
   const touchesUiSrc =
-    changedPaths !== null && changedPaths.some((path) => UI_SRC_PATTERN.test(path));
+    changedPaths !== null &&
+    changedPaths.some(
+      (path) => UI_SRC_PATTERN.test(path) && !UI_SRC_NON_SURFACE.some((skip) => skip.test(path)),
+    );
 
   // R3: code moved, so a round doc must have been selected. Only with a real changed-file list.
   if (changedPaths !== null && files.length === 0) {

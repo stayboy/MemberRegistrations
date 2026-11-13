@@ -446,6 +446,17 @@ describe('check-round: the mock sign-off (R6)', () => {
     expect(failures[0]).toContain('R6');
   });
 
+  it('does not treat a test or test helper under ui/src as a surface change', () => {
+    const doc = roundDoc({ mockSignOff: ['n/a — no visual surface'] });
+    for (const path of [
+      'ui/src/components/MemberPicker.dom.test.tsx',
+      'ui/src/format/member-form.test.ts',
+      'ui/src/test/render.tsx',
+    ]) {
+      expect(checkSurface(doc, {}, [path]), path).toEqual([]);
+    }
+  });
+
   it('fails when the row names a state whose coverage is "target"', () => {
     const failures = checkSurface(roundDoc({ mockSignOff: [SIGNED_ROW, COVERAGE] }), {
       [CATALOGUE]: catalogueText('target'),
