@@ -2018,7 +2018,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Create a pledge with exactly one follow-up officer',
           description:
-            'The officer is the member’s active shepherd, or an active presbyter supplied as followUpOfficerMemberNo with officerReason; otherwise 422 officer_required. Idempotent by idempotencyKey: an identical canonical payload returns 200 with the stored pledge; a different payload is 409 idempotency_conflict. Three sms reminders are created in the same transaction; one dated before today (UTC) is cancelled. Responses carry Cache-Control: no-store.',
+            'The officer is the member’s active shepherd, or the active presbyter supplied as followUpOfficerMemberNo; otherwise 422 officer_required. officerReason is an optional 1-500 character note for whoever follows up and is stored in reason, accepted with or without a supplied officer. Idempotent by idempotencyKey: an identical canonical payload returns 200 with the stored pledge; a different payload is 409 idempotency_conflict. Three sms reminders are created in the same transaction; one dated before today (UTC) is cancelled. Responses carry Cache-Control: no-store.',
           parameters: [actorHeader],
           requestBody: {
             required: true,

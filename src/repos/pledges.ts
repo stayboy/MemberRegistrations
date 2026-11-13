@@ -370,11 +370,7 @@ export class PledgeRepository {
       throw new InvalidExpectedDateError(`expectedOn ${expectedOn} is before today (UTC)`);
     }
 
-    const officerId = await this.resolveOfficer(
-      memberLookup.id,
-      input.followUpOfficerMemberNo,
-      input.officerReason,
-    );
+    const officerId = await this.resolveOfficer(memberLookup.id, input.followUpOfficerMemberNo);
     const reason = reasonOrNull(input.officerReason);
 
     const canonical: CanonicalPayload = {
@@ -710,17 +706,11 @@ export class PledgeRepository {
   private async resolveOfficer(
     memberId: string,
     suppliedOfficerMemberNo: string | undefined,
-    officerReason: string | undefined,
   ): Promise<string> {
     if (suppliedOfficerMemberNo) {
       const officer = await this.findActivePresbyter(this.db, suppliedOfficerMemberNo);
       if (!officer) {
         throw new ValidationError(`Member ${suppliedOfficerMemberNo} is not an active presbyter`);
-      }
-      if (!reasonOrNull(officerReason)) {
-        throw new ValidationError(
-          'officerReason is required when followUpOfficerMemberNo is supplied',
-        );
       }
       return officer.id;
     }

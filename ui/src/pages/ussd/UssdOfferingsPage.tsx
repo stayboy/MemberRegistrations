@@ -13,11 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { getEvent } from '../../api/events';
 import { isUnauthorized } from '../../api/errors';
-import {
-  listContributions,
-  recordManualContribution,
-  recordPledge,
-} from '../../api/giving';
+import { listContributions, recordManualContribution, recordPledge } from '../../api/giving';
 import {
   getOfferingCounts,
   recordOfferingCount,
@@ -29,6 +25,7 @@ import {
   type EventSessionSelection,
 } from '../../components/EventSessionPicker';
 import { PageFrame } from '../../components/PageFrame';
+import { officerProblemMessage } from '../../format/follow-up';
 import {
   addDenomination,
   countPayload,
@@ -46,11 +43,7 @@ import { useDateTimeFormat } from '../../shell/DateTimeProvider';
 import { OfferingCountEntry } from './OfferingCountEntry';
 import { OfferingCountHistory } from './OfferingCountHistory';
 import type { GiftSubmission, PledgeSubmission } from './OfferingGivingForms';
-import {
-  AnnouncedOffertoryDialog,
-  PledgeDialog,
-  RecordCountDialog,
-} from './OfferingDialogs';
+import { AnnouncedOffertoryDialog, PledgeDialog, RecordCountDialog } from './OfferingDialogs';
 import { OfferingSelect } from './OfferingSelect';
 import { PledgeRecordPanel } from './PledgeRecordPanel';
 import { RecordedOffertoriesList } from './RecordedOffertoriesList';
@@ -97,6 +90,7 @@ export function UssdOfferingsPage() {
   const [giftError, setGiftError] = useState<string | null>(null);
   const [pledgeNotice, setPledgeNotice] = useState<string | null>(null);
   const [pledgeError, setPledgeError] = useState<string | null>(null);
+  const [pledgeOfficerError, setPledgeOfficerError] = useState<string | null>(null);
 
   const eventQuery = useQuery({
     queryKey: ['ussd', baseUrl, 'offering-count-event', selection?.eventId ?? ''],
@@ -192,6 +186,7 @@ export function UssdOfferingsPage() {
     setGiftError(null);
     setPledgeNotice(null);
     setPledgeError(null);
+    setPledgeOfficerError(null);
     setOffertoriesExpanded(false);
     setCountOpen(false);
     setGiftOpen(false);
@@ -275,11 +270,13 @@ export function UssdOfferingsPage() {
         amountMinor: input.amountMinor,
         expectedOn: input.expectedOn,
         ...(input.officerMemberNo ? { followUpOfficerMemberNo: input.officerMemberNo } : {}),
+        ...(input.officerReason ? { officerReason: input.officerReason } : {}),
         idempotencyKey: input.idempotencyKey,
       });
     },
     onSuccess: (pledge) => {
       setPledgeError(null);
+      setPledgeOfficerError(null);
       setPledgeNotice(`Pledge recorded (${pledge.idempotencyKey}). It stays member-level.`);
       void queryClient.invalidateQueries({ queryKey: ['offerings', baseUrl, 'summary'] });
       void queryClient.invalidateQueries({ queryKey: ['offerings', baseUrl, 'pledges'] });
@@ -290,7 +287,11 @@ export function UssdOfferingsPage() {
         return;
       }
       setPledgeNotice(null);
-      setPledgeError(errorMessage(error));
+      // An officer rejection belongs on the officer field; the bar would name a message the
+      // operator cannot act on. `officerProblemMessage` recognises both API shapes.
+      const officer = officerProblemMessage(error);
+      setPledgeOfficerError(officer);
+      setPledgeError(officer ? null : errorMessage(error));
     },
   });
 
@@ -506,7 +507,9 @@ export function UssdOfferingsPage() {
                 {contributionsQuery.isError ? (
                   <MessageBar intent="error">
                     <MessageBarBody>
-                      <MessageBarTitle>The recorded offertories could not be loaded</MessageBarTitle>
+                      <MessageBarTitle>
+                        The recorded offertories could not be loaded
+                      </MessageBarTitle>
                       {errorMessage(contributionsQuery.error)}
                       <Button
                         size="small"
@@ -598,12 +601,23 @@ export function UssdOfferingsPage() {
         pending={pledgeMutation.isPending}
         notice={pledgeNotice}
         error={pledgeError}
+        officerError={pledgeOfficerError}
+        // The officer message belongs to the member and officer it was shown for. The form reports
+        // a change of either value (it owns both picks) and the page drops the message here; the
+        // form cannot clear a prop. The note is not part of that: it is a general instruction.
+        onOfficerValueChange={() => setPledgeOfficerError(null)}
         onClose={() => {
           setPledgeOpen(false);
           setPledgeNotice(null);
           setPledgeError(null);
+          setPledgeOfficerError(null);
         }}
-        onSubmit={(input) => pledgeMutation.mutate(input)}
+        onSubmit={(input) => {
+          // The previous attempt's answer no longer describes the value being submitted now.
+          setPledgeError(null);
+          setPledgeOfficerError(null);
+          pledgeMutation.mutate(input);
+        }}
       />
 
       <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />

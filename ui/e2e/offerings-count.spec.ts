@@ -50,12 +50,19 @@ test('the offerings count page reads the current observation, records a grid cou
 
   await expect(page.getByText('Offering count recorded.')).toBeVisible();
   await expect(page.getByText('GHS 800.00').first()).toBeVisible();
-  const currentAsOf = (await page.getByText(/^as of /).first().innerText()).replace(/^as of /, '');
+  const currentAsOf = (
+    await page
+      .getByText(/^as of /)
+      .first()
+      .innerText()
+  ).replace(/^as of /, '');
 
   // Correct the newly recorded current observation: the grid prefills and asOf is kept.
   await page.getByRole('button', { name: 'Correct' }).first().click();
   const correctDialog = page.getByRole('dialog');
-  await expect(correctDialog.getByRole('heading', { name: 'Correct offering count' })).toBeVisible();
+  await expect(
+    correctDialog.getByRole('heading', { name: 'Correct offering count' }),
+  ).toBeVisible();
   await expect(
     correctDialog.getByText(`Keeping asOf ${currentAsOf}`, { exact: false }).first(),
   ).toBeVisible();
@@ -118,6 +125,20 @@ test('the page lists the session offertories and opens the record and pledge dia
   await expect(pledgeDialog.getByRole('heading', { name: 'Record pledge' })).toBeVisible();
   await expect(pledgeDialog.getByLabel('Expected on')).toBeVisible();
   await expect(pledgeDialog.getByRole('combobox', { name: 'Follow-up officer' })).toBeVisible();
+
+  // FR-26a: picking the member shows who the API will record when the officer is left empty. The
+  // fixture gives M-1002 an active presbyter shepherd, so the officer stays optional.
+  const pledgeMember = pledgeDialog.getByRole('combobox', { name: 'Member' });
+  await pledgeMember.click();
+  await pledgeMember.fill('M-1002');
+  await page.getByRole('option', { name: /M-1002/ }).click();
+  await expect(
+    pledgeDialog.getByText(/Shepherd M-1001 · Kwame Asante \(Male, 41y\) is this member's active/),
+  ).toBeVisible();
+  await expect(pledgeDialog.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(pledgeDialog.getByRole('combobox', { name: 'Follow-up officer' })).toBeEnabled();
+  await expect(pledgeDialog.getByText('Required', { exact: true })).toHaveCount(0);
+
   await pledgeDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 

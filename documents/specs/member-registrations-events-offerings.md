@@ -233,9 +233,9 @@ currency?, expectedOn, followUpOfficerMemberNo?, officerReason?, idempotencyKey 
 idempotency_conflict`; a concurrent duplicate resolves through the unique index and a re-read. The
   three default reminders are created once, inside the creating transaction.
 - **Officer.** A supplied `followUpOfficerMemberNo` MUST be an active presbyter and wins over the
-  shepherd, with `officerReason` (3–500 characters) required; `officerReason` without an officer is
-  `422 validation_error`. Without a supplied officer, the member's active shepherd is used. If neither
-  exists, `422 officer_required`. A `created` event is appended with the actor.
+  shepherd; `officerReason` is an optional note of 1–500 characters, accepted with or without a supplied
+  officer and stored in the pledge's `reason`. Without a supplied officer, the member's active shepherd is
+  used. If neither exists, `422 officer_required`. A `created` event is appended with the actor.
 - **Honor, dishonor, reassign.** `POST /v1/pledges/{id}/honor` appends `honored`;
   `.../dishonor` requires `{ reason }` and appends `dishonored`; `.../reassign` requires
   `{ officerMemberNo, reason }`, validates an active presbyter and appends `reassigned` with
@@ -604,13 +604,35 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
   using the same predicate the pledge applies when it resolves the officer — the assignment's member
   `is_presbyter`, not archived, not purged — so a summary shepherd that fails it **MUST** be shown as _no
   active shepherd_; otherwise the form names someone the API will refuse, which is the failure this paragraph
-  exists to prevent. The read follows FR-14's states: while it is pending the officer field is disabled with a
-  loading hint, and a failed read says the default is unavailable and requires an officer rather than silently
-  dropping the requirement. With an active shepherd the officer field stays **optional** — an empty field means
-  "that shepherd", which the API persists as the follow-up officer — and without one it becomes **required**, so
-  the API's `422 officer_required` is never the first the operator hears of it. The requirement is evaluated
-  against the current summary **at submit**, not against the state when the member was picked. Showing the
-  absence is the point: the operator learns the member has no shepherd before they submit, not after. Each option **MUST** carry the picker's compact identity
+  exists to prevent. The read follows FR-14's states, evaluated as **one state** over the follow-up
+  evidence — today the shepherding summary plus, where it names a shepherd, that shepherd's member detail, and
+  tomorrow whatever single value supplies the same answer; the _states_ below are the contract, not the request
+  sequence: while no read has
+  completed for the picked member the officer field is disabled with a loading hint and submit is refused, and
+  a failed read says the default is unavailable and requires an officer rather than silently dropping the
+  requirement. The hint **MAY** render as the field's hint line; the loading hint, the no-active-shepherd
+  statement and the failed-read statement **MUST** be announced to assistive technology — by any association the
+  control or its validation exposes (an associated description, a field validation message, an error
+  association) where the control can receive focus, or by a live-region announcement where the control is
+  disabled and therefore unreachable — because a disabled control with an unannounced reason is not a state,
+  it is a dead end. Decorative status adornments, such as a badge or a static caption, carry no such
+  obligation. With an active shepherd the officer field stays **optional** — an empty field means "that
+  shepherd", which the API persists as the follow-up officer — and without one it becomes **required**, so the
+  API's `422 officer_required` is not the first the operator hears of it, except in the stale-read race
+  described below. Supplying an officer **MUST NOT** require a justification, and an officer **MAY** be named
+  explicitly even when a shepherd exists. The pledge **MAY** carry an **optional note for whoever follows up**
+  (trimmed, 1-500 characters) — an instruction such as a day or a time, accepted with or without an explicit
+  officer, stored with the pledge and never required; it is not the audit reason reassignment demands. The
+  requirement is evaluated **at submit
+  against the latest completed read** — never against the state when the member was picked, and never by
+  waiting on a fresh request, so a submit never depends on a network round trip. Focus and mount refetches are
+  permitted and simply become the latest completed read; there is no maximum age, because the rejection path is
+  the staleness answer. Both officer rejections are in scope — `422 officer_required` when there is no default
+  and none was supplied, and `422 validation_error` when the supplied member is not an active presbyter or the
+  reason is missing — and the form **MUST** route either to the officer field's own error rather than to a
+  generic failure. Showing the absence is the point: the operator learns the member has no shepherd before
+  submitting, not after — the one exception being a summary that moved between the last read and the submit,
+  which the rejection path answers. Each option **MUST** carry the picker's compact identity
   variant of the UI spec's FR-22a — `M-1042 · Adjoa Mensah (M, 12y)` — so two members with the same name stay
   distinguishable; the variant, its codes and its month boundary are defined there, not here.
 - FR-27: Pledges MUST be honored when paid, or dishonored with an explicit reason. Honors and
@@ -1361,6 +1383,27 @@ recommended"). Ids are `S-Qn`.
 
 ## Change log
 
+- 2026-11-13: FR-26a settled two questions its own review raised (owner: "all as recommended"). "Current at
+  submit" now means the **latest completed read** of the follow-up evidence — not the request sequence, which the
+  spec deliberately leaves open so a server-computed value can replace the two reads — a submit never waits on a
+  fresh request, focus and mount refetches are permitted and become that read, and the API's rejection is the
+  staleness answer. The loading hint may be the field's hint line, and the hint, the no-active-shepherd statement
+  and the failed-read statement MUST reach assistive technology, by any association the control or its validation
+  exposes or a live region where the control is disabled. This entry is **behavioural, not a clarification**,
+  which §2 requires: the owner's re-approval is recorded in the round doc's grill rows 8-9 and in the spec
+  review. One rule is stated rather than invented and one is new: supplying an officer requires `officerReason`,
+  which the API already refused to accept without — **superseded later the same day**: the owner ruled the note
+  optional, so no justification is required and only the routing of the API's officer rejections remains from
+  that pair.
+- 2026-11-13: the entry above was corrected to the text that actually landed, after a confirmation review found
+  it still describing two forms the body had de-normed: the "compound read" sequence, which the body now names as
+  today's evidence rather than the contract, and an association mechanism narrower than the body's "any
+  association … or a live region". A change log records what the contract says, not the first draft of it.
+- 2026-11-13: the officer's "reason" is an **optional instruction note**, not a justification the form demands
+  (owner: "Reason should be an instruction note and optional. Not a required field"). FR-26a no longer requires
+  it alongside a named officer; the pledge may carry a note of 1-500 characters with or without an explicit
+  officer, and reassignment keeps its own mandatory reason, which is audit and stays. The API's create contract
+  is amended in `member-registrations-api.md` in the same change — a validation rule, not a wire field.
 - 2026-11-13: FR-26a added - the operator identifies a member with the shared member picker for a
   contribution, a pledge and the pledge's follow-up officer, instead of making a typed member number the only
   route. Owner request: a free-typed member number is unrealistic for the person recording it.

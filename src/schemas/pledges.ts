@@ -14,30 +14,26 @@ export const reminderStatusSchema = z.enum(REMINDER_STATUSES);
 
 const memberNoRef = z.string().trim().min(1).max(32);
 
-export const createPledgeSchema = z
-  .object({
-    memberNo: memberNoRef,
-    offeringId: z.string().uuid(),
-    eventId: z.string().uuid(),
-    sessionDate: dateStringSchema.optional(),
-    amountMinor: z.number().int().positive(),
-    /** Defaults to the offering's current terms currency; a different value is rejected. */
-    currency: z
-      .string()
-      .regex(/^[A-Z]{3}$/, 'currency must be three uppercase letters')
-      .optional(),
-    expectedOn: dateStringSchema,
-    followUpOfficerMemberNo: memberNoRef.optional(),
-    officerReason: z.string().trim().min(3).max(500).optional(),
-    idempotencyKey: z.string().trim().min(1).max(128),
-  })
-  .refine(
-    (value) => value.officerReason === undefined || value.followUpOfficerMemberNo !== undefined,
-    {
-      message: 'officerReason requires followUpOfficerMemberNo',
-      path: ['officerReason'],
-    },
-  );
+export const createPledgeSchema = z.object({
+  memberNo: memberNoRef,
+  offeringId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  sessionDate: dateStringSchema.optional(),
+  amountMinor: z.number().int().positive(),
+  /** Defaults to the offering's current terms currency; a different value is rejected. */
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/, 'currency must be three uppercase letters')
+    .optional(),
+  expectedOn: dateStringSchema,
+  followUpOfficerMemberNo: memberNoRef.optional(),
+  /**
+   * An optional note for whoever follows up, accepted with or without
+   * `followUpOfficerMemberNo` and stored in the pledge's `reason`.
+   */
+  officerReason: z.string().trim().min(1).max(500).optional(),
+  idempotencyKey: z.string().trim().min(1).max(128),
+});
 
 export const listPledgesQuerySchema = z.object({
   status: pledgeStatusSchema.optional(),

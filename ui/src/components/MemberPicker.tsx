@@ -27,6 +27,12 @@ export interface MemberPickerProps {
   /** Mirrors Fluent `Field` so a caller can attach field-level validation. */
   readonly validationState?: 'none' | 'error' | 'warning' | 'success';
   readonly validationMessage?: string;
+  /**
+   * A short field-level explanation. Fluent's `Field` renders it and points the control's
+   * `aria-describedby` at it, so a screen-reader user hears why the field is disabled or required
+   * (FR-26a) instead of the text sitting beside the input as an unrelated sibling.
+   */
+  readonly hint?: string;
 }
 
 /**
@@ -46,6 +52,7 @@ export function MemberPicker({
   disabled = false,
   validationState,
   validationMessage,
+  hint,
 }: MemberPickerProps) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
@@ -88,7 +95,12 @@ export function MemberPicker({
     options.length === 0;
 
   return (
-    <Field label={label} validationState={validationState} validationMessage={validationMessage}>
+    <Field
+      label={label}
+      hint={hint}
+      validationState={validationState}
+      validationMessage={validationMessage}
+    >
       <Combobox
         value={query}
         selectedOptions={value ? [value] : []}

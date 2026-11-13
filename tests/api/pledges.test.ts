@@ -289,13 +289,27 @@ describe('POST /v1/pledges', () => {
     expect(response.body.reason).toBe('Administrator assigned the follow-up');
   });
 
-  it('rejects an officerReason without a supplied officer', async () => {
+  it('accepts an officerReason without a supplied officer and defaults to the shepherd', async () => {
     const response = await postPledge(
       baseBody({ officerReason: 'No officer named', idempotencyKey: nextKey('orphan-reason') }),
     );
 
-    expect(response.status).toBe(422);
-    expect(response.body.code).toBe('validation_error');
+    expect(response.status).toBe(201);
+    expect(response.body.followUpOfficerMemberNo).toBe('PL-9001');
+    expect(response.body.reason).toBe('No officer named');
+  });
+
+  it('accepts a supplied active presbyter with no note', async () => {
+    const response = await postPledge(
+      baseBody({
+        followUpOfficerMemberNo: 'PL-9002',
+        idempotencyKey: nextKey('supplied-officer-no-note'),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body.followUpOfficerMemberNo).toBe('PL-9002');
+    expect(response.body.reason).toBeNull();
   });
 
   it('rejects a supplied officer who is not an active presbyter', async () => {
