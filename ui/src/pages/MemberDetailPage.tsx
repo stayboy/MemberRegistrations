@@ -50,6 +50,7 @@ import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
+import type { PageAction } from '../components/PageActions';
 import { contactLabel, memberLabel, memberLabelFromName } from '../format/member';
 import { isNotFoundError } from '../format/member-form';
 import { MemberAttendanceTab } from './MemberAttendanceTab';
@@ -288,41 +289,46 @@ export function MemberDetailPage() {
     );
   }
 
-  const actions = (
-    <>
-      <Button
-        icon={<EditRegular />}
-        onClick={() => {
-          navigate(`/members/${encodeURIComponent(memberNo)}/edit`);
-        }}
-      >
-        Edit
-      </Button>
-      <Button icon={<ContactCardRegular />} onClick={() => setContactsOpen(true)}>
-        {contactLabel(member.contactCount)}
-      </Button>
-      {isArchived ? (
-        <Button
-          icon={<ArrowUndoRegular />}
-          onClick={confirmRestore}
-          disabled={restoreMutation.isPending}
-        >
-          Restore
-        </Button>
-      ) : (
-        <Button
-          icon={<ArchiveRegular />}
-          onClick={() => setArchiveOpen(true)}
-          disabled={archiveMutation.isPending}
-        >
-          Archive
-        </Button>
-      )}
-      <Button icon={<DeleteRegular />} onClick={() => setPurgeOpen(true)}>
-        Purge
-      </Button>
-    </>
-  );
+  const actions: PageAction[] = [
+    {
+      id: 'edit',
+      label: 'Edit',
+      icon: <EditRegular />,
+      onSelect: () => {
+        navigate(`/members/${encodeURIComponent(memberNo)}/edit`);
+      },
+    },
+    {
+      id: 'contacts',
+      label: contactLabel(member.contactCount),
+      icon: <ContactCardRegular />,
+      onSelect: () => setContactsOpen(true),
+    },
+    isArchived
+      ? {
+          id: 'restore',
+          label: 'Restore',
+          icon: <ArrowUndoRegular />,
+          onSelect: confirmRestore,
+          disabled: restoreMutation.isPending,
+          destructive: true,
+        }
+      : {
+          id: 'archive',
+          label: 'Archive',
+          icon: <ArchiveRegular />,
+          onSelect: () => setArchiveOpen(true),
+          disabled: archiveMutation.isPending,
+          destructive: true,
+        },
+    {
+      id: 'purge',
+      label: 'Purge',
+      icon: <DeleteRegular />,
+      onSelect: () => setPurgeOpen(true),
+      destructive: true,
+    },
+  ];
 
   return (
     <PageFrame

@@ -68,6 +68,15 @@
       },
       "baseline": null,
       "coverage": "signed"
+    },
+    "page-actions": {
+      "mock": {
+        "path": "mockups/mvp-offerings/03-page-actions.png",
+        "sha256": "8b27b520ffd883c6e684a4c06b05e1496802c2fa0485dc1806fcd73704151a64",
+        "source": "mockups/mvp-offerings/03-page-actions.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
     }
   },
   "inventory": [

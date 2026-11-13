@@ -140,17 +140,17 @@ export function EventsListPage() {
       title="Events"
       submenu="Events"
       description="Every dated event, whether generated from a series or created for a one-off conference. Attendance is per event date."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
             void eventsQuery.refetch();
-          }}
-          disabled={eventsQuery.isFetching}
-        >
-          Refresh
-        </Button>
-      }
+          },
+          disabled: eventsQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <div className={styles.toolbar}>

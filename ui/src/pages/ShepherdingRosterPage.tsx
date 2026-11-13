@@ -234,18 +234,18 @@ export function ShepherdingRosterPage() {
       title="Shepherding roster"
       submenu="Roster"
       description="One officer's active assignments for the selected window. Calls are append-only; a correction is a new call."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
             void rosterQuery.refetch();
             void officersQuery.refetch();
-          }}
-          disabled={rosterQuery.isFetching || officersQuery.isFetching}
-        >
-          Refresh
-        </Button>
-      }
+          },
+          disabled: rosterQuery.isFetching || officersQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <DateWindowControl

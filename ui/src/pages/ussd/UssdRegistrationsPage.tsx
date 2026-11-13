@@ -143,17 +143,17 @@ export function UssdRegistrationsPage() {
       title="USSD registrations"
       submenu="Registrations"
       description="Pending handset registration requests. Approval creates the member through the ordinary create path with the member number you supply; rejection needs a reason."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          disabled={requestsQuery.isFetching}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: requestsQuery.isFetching,
+          onSelect: () => {
             void requestsQuery.refetch();
-          }}
-        >
-          Refresh
-        </Button>
-      }
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         {actionError ? (

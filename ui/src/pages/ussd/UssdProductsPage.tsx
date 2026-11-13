@@ -174,30 +174,27 @@ export function UssdProductsPage() {
       title="USSD welfare products"
       submenu="Products"
       description="Welfare products and their eligibility, payer, period, cover and dependent rules. A product is created once and toggled active; pricing is fixed at creation."
-      actions={
-        <>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            disabled={productsQuery.isFetching}
-            onClick={() => {
-              void productsQuery.refetch();
-            }}
-          >
-            Refresh
-          </Button>
-          <Button
-            appearance="primary"
-            icon={<AddRegular />}
-            onClick={() => {
-              setForm(createEmptyProductForm());
-              setFormErrors({});
-              setFormOpen(true);
-            }}
-          >
-            New product
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'new-product',
+          label: 'New product',
+          icon: <AddRegular />,
+          onSelect: () => {
+            setForm(createEmptyProductForm());
+            setFormErrors({});
+            setFormOpen(true);
+          },
+        },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void productsQuery.refetch();
+          },
+          disabled: productsQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         {actionError ? (

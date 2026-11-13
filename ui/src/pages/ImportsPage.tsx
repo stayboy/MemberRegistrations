@@ -65,16 +65,16 @@ export function ImportsPage() {
       title="Member database"
       submenu="Member database"
       description="Import the member database export. Rows are matched on memberNo; a blank optional cell leaves the stored value unchanged. A bad file changes nothing."
-      actions={
-        <Button
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh-columns',
+          label: 'Refresh columns',
+          onSelect: () => {
             void formatsQuery.refetch();
-          }}
-          disabled={formatsQuery.isFetching}
-        >
-          Refresh columns
-        </Button>
-      }
+          },
+          disabled: formatsQuery.isFetching,
+        },
+      ]}
     >
       {formatsQuery.isPending ? (
         <Spinner label="Loading the import contract…" />

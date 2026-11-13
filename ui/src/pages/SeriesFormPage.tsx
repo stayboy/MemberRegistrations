@@ -242,7 +242,7 @@ function SeriesFormView({
       title={title}
       submenu={title}
       description={description}
-      actions={
+      controls={
         <>
           <Button icon={<DismissRegular />} appearance="secondary" onClick={cancel}>
             Cancel

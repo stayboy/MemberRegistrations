@@ -356,29 +356,26 @@ export function UssdOfferingsPage() {
       title="Offerings count"
       submenu="Offerings count"
       description="The counted cash for one event, offering and session. Every entry is an append-only observation with an asOf; a correction supersedes the current row without deleting it and keeps the moment counted. Counted cash is never merged with member or visitor offertories."
-      actions={
-        <>
-          <Button
-            icon={<AddRegular />}
-            appearance="primary"
-            disabled={!selection || !selectedOfferingId || recordMutation.isPending}
-            onClick={startRecordCount}
-          >
-            Record count
-          </Button>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            disabled={!selection || countsQuery.isFetching}
-            onClick={() => {
-              void eventQuery.refetch();
-              void countsQuery.refetch();
-              void contributionsQuery.refetch();
-            }}
-          >
-            Refresh
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'record-count',
+          label: 'Record count',
+          icon: <AddRegular />,
+          disabled: !selection || !selectedOfferingId || recordMutation.isPending,
+          onSelect: startRecordCount,
+        },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: !selection || countsQuery.isFetching,
+          onSelect: () => {
+            void eventQuery.refetch();
+            void countsQuery.refetch();
+            void contributionsQuery.refetch();
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>

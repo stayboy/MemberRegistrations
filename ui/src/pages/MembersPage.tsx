@@ -453,31 +453,25 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
       title="Members"
       submenu={status === 'archived' ? 'Archived' : 'All members'}
       description="Look up a registration, review attendance, ministries and coverage, or open a member record to make changes."
-      actions={
-        <>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void membersQuery.refetch();
-            }}
-            disabled={membersQuery.isFetching}
-          >
-            Refresh
-          </Button>
-          <Button
-            as="a"
-            href="#/members/new"
-            appearance="primary"
-            icon={<AddRegular />}
-            onClick={(event) => {
-              event.preventDefault();
-              navigate('/members/new');
-            }}
-          >
-            Add member
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'add-member',
+          label: 'Add member',
+          icon: <AddRegular />,
+          onSelect: () => {
+            navigate('/members/new');
+          },
+        },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void membersQuery.refetch();
+          },
+          disabled: membersQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <div className={styles.toolbar}>

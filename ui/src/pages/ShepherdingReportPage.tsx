@@ -74,17 +74,17 @@ export function ShepherdingReportPage() {
       title="Church report"
       submenu="Church report"
       description="Church-wide shepherding totals, coverage and the still-in-church distribution for the selected window."
-      actions={
-        <Button
-          icon={<ArrowClockwiseRegular />}
-          onClick={() => {
+      actions={[
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
             void reportQuery.refetch();
-          }}
-          disabled={reportQuery.isFetching}
-        >
-          Refresh
-        </Button>
-      }
+          },
+          disabled: reportQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <DateWindowControl

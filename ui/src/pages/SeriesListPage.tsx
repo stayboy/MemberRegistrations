@@ -115,29 +115,26 @@ export function SeriesListPage() {
       title="Series"
       submenu="Series"
       description="Recurring series, their current schedule and the dates the API generates. Schedule versions and exceptions are append-only history."
-      actions={
-        <>
-          <Button
-            icon={<AddRegular />}
-            appearance="primary"
-            onClick={() => navigate('/events/series/new')}
-          >
-            New series
-          </Button>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            onClick={() => {
-              void seriesQuery.refetch();
-              occurrenceQueries.forEach((query) => {
-                void query.refetch();
-              });
-            }}
-            disabled={seriesQuery.isFetching}
-          >
-            Refresh
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'new-series',
+          label: 'New series',
+          icon: <AddRegular />,
+          onSelect: () => navigate('/events/series/new'),
+        },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          onSelect: () => {
+            void seriesQuery.refetch();
+            occurrenceQueries.forEach((query) => {
+              void query.refetch();
+            });
+          },
+          disabled: seriesQuery.isFetching,
+        },
+      ]}
     >
       <div className={styles.page}>
         <div className={styles.toolbar}>

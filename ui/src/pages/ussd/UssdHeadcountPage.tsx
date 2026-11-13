@@ -263,28 +263,25 @@ export function UssdHeadcountPage() {
       title="USSD headcount"
       submenu="Headcount"
       description="The counted attendance for one session. Every entry is an append-only observation with an asOf; a correction supersedes the current row without deleting it. The register-derived roster is shown separately and is never merged."
-      actions={
-        <>
-          <Button
-            icon={<AddRegular />}
-            appearance="primary"
-            disabled={!selection || recordMutation.isPending || closed}
-            onClick={startRecord}
-          >
-            Record headcount
-          </Button>
-          <Button
-            icon={<ArrowClockwiseRegular />}
-            disabled={!selection || headcountsQuery.isFetching}
-            onClick={() => {
-              void headcountsQuery.refetch();
-              void rosterQuery.refetch();
-            }}
-          >
-            Refresh
-          </Button>
-        </>
-      }
+      actions={[
+        {
+          id: 'record-headcount',
+          label: 'Record headcount',
+          icon: <AddRegular />,
+          disabled: !selection || recordMutation.isPending || closed,
+          onSelect: startRecord,
+        },
+        {
+          id: 'refresh',
+          label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
+          disabled: !selection || headcountsQuery.isFetching,
+          onSelect: () => {
+            void headcountsQuery.refetch();
+            void rosterQuery.refetch();
+          },
+        },
+      ]}
     >
       <div className={styles.page}>
         <Card className={styles.panel}>
