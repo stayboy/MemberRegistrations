@@ -219,6 +219,16 @@ reintroduce them silently.
   `Table`, `Dialog`, `Tooltip`, `Badge`, `Spinner`, `MessageBar`, `Card`, `Divider`, `Text`. A
   hand-rolled `<button>`, `<input>`, `<select>`, `<table>` or `<dialog>` is a defect when Fluent has an
   equivalent; if it genuinely has none, the round doc records why.
+- **The Fluent component comes before a rewrite, at every level.** When Fluent provides the control, start
+  from it and shape it through its own props, slots, variants and `makeStyles`. A bespoke re-implementation
+  of a control Fluent already provides — a hand-built menu, combobox, dialog, table or popover — is a
+  defect in the same way a raw element is, and it is a **blocking (P1) review finding**, not a taste note:
+  it silently forks the behaviour the library gets right, including focus management, keyboard handling and
+  ARIA wiring. Replacing a Fluent component with a rewrite must be argued in the round doc: name the Fluent
+  component you tried and cite the limitation that ruled it out — a documented gap with its link, or a
+  reproducible blocker. "It was awkward to customise" is not a limitation, and "it did not look right" is
+  appearance, which belongs in props, slots and tokens rather than in a rewrite. A mock may hand-draw a
+  control to show a look; production code may not.
 - **Semantic elements are not controls.** `main`, `section`, `nav`, `form`, real headings, and lists
   stay HTML where semantics require them, styled with `makeStyles` and tokens; use Fluent `Label` for a
   form label. Heading levels are an accessibility contract, not a styling choice. The one other

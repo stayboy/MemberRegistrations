@@ -90,8 +90,12 @@ alternative (plain JSX, a local helper, or a class) with the reason.
 - **Fluent first.** A Fluent UI v9 component is the first choice for any control, before any raw
   element. A hand-rolled `<button>`, `<input>`, `<select>`, `<table>` or `<dialog>` is a defect when an
   equivalent exists; where none does, the round doc records why. Semantic landmarks, headings, lists
-  and `form` stay HTML with token styling, because their value is semantics, not appearance. The
-  non-negotiable and the full equivalents list are `AGENTS.md` §16.
+  and `form` stay HTML with token styling, because their value is semantics, not appearance. Fluent
+  before rewrite: when Fluent provides the control, start from it and shape it through its props, slots,
+  variants and `makeStyles`; a bespoke re-implementation of a control Fluent provides is the same defect
+  as a raw element and a **blocking review finding**, and the round doc names the Fluent component
+  attempted together with the limitation that ruled it out — a documented gap or a reproducible blocker,
+  not "awkward to customise". The non-negotiable and the full equivalents list are `AGENTS.md` §16.
 - **Compose, do not wrap.** Use `Dialog`, `Table`, `Button`, `Badge`, `Tooltip`, `MessageBar`,
   `SearchBox`, `Dropdown` and their siblings directly. Do not create `AppDialog`/`AppButton` wrappers
   to restyle them.
