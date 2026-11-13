@@ -100,7 +100,8 @@ test('the page lists the session offertories and opens the record and pledge dia
   const giftMember = giftDialog.getByRole('combobox', { name: 'Member' });
   await giftMember.click();
   await giftMember.fill('M-1002');
-  await giftDialog.getByRole('option', { name: /M-1002/ }).click();
+  // Fluent renders the option list in a portal at body level, not inside the dialog.
+  await page.getByRole('option', { name: /M-1002/ }).click();
   await giftDialog.getByLabel('Amount').fill('75.00');
   await giftDialog.getByRole('button', { name: 'Record offertory' }).click();
   await expect(giftDialog.getByText(/Announced offertory recorded/)).toBeVisible();
