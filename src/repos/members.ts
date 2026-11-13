@@ -6,7 +6,7 @@ import {
   SessionClosedError,
   ValidationError,
 } from '../errors/domain-errors.js';
-import { ageInYears } from '../domain/age.js';
+import { ageInMonths, ageInYears } from '../domain/age.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
 import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
@@ -155,6 +155,8 @@ export interface MemberSummary {
   gender: Gender;
   /** Derived current age, or null when `dob` is missing or in the future. */
   age: number | null;
+  /** The same derivation in completed months; the picker says `8m` rather than `0y`. */
+  ageMonths: number | null;
   placeOfResidence: string | null;
   joinedOn: string | null;
   isPresbyter: boolean;
@@ -1546,6 +1548,7 @@ export class MemberRepository {
       otherNames: row.other_names,
       gender: row.gender,
       age: ageInYears(isoDate(row.dob)),
+      ageMonths: ageInMonths(isoDate(row.dob)),
       placeOfResidence: row.place_of_residence,
       joinedOn: isoDate(row.joined_on),
       isPresbyter: row.is_presbyter,

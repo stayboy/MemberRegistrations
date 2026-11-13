@@ -110,6 +110,11 @@
   is 1–32 trimmed characters, unique case-insensitively when present. `verifiedAt` is a nullable
   officer-set timestamp with no expiry, refreshed on re-verification; the write payload takes
   `verified: boolean`. All three are on `MemberDetail` only; card and verification are independent.
+- 2026-11-13: `ageMonths` added to `MemberSummary`, derived like `age` but in completed months (null under the
+  same rule), so a picker can distinguish an eight-month-old from a one-year-old. It lands on the summary and,
+  by extension, `MemberDetail`; the relationship, shepherding and event-attendance DTOs are unchanged and gain
+  it only when a surface needs the month form. The UI spec owns the label rule, including the picker's compact
+  variant.
 - 2026-11-05: member references render a shared `FullName (Gender, Ny)` identity label. `MemberSummary`
   and `MemberDetail` gain a derived `age`; the relationship, shepherding and event-attendance DTOs gain
   `gender` and `age`; `dob` stays detail-only. Age is completed years at today (UTC), null when `dob`
@@ -346,6 +351,7 @@ deployed to Vercel as a single function.
 | `dob`                             | Date, nullable.                                                                                  |
 | `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                  |
 | `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.          |
+| `ageMonths` (derived)             | Completed months at today (UTC), same null rule; lets a picker say `8m` rather than `0y`.        |
 | `placeOfResidence`, `addressLine` | Free text.                                                                                       |
 | `joinedOn`                        | Date; defaults to the registration date when omitted.                                            |
 | `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                   |
@@ -360,7 +366,9 @@ is invisible to default reads but readable with `includeArchived=true`.
 
 `age` is derived, never stored: completed years at today (UTC), with a 29 February birthday reached on
 1 March in a non-leap year. Every member DTO reports the member's **current** age, never the age at a
-historical record's date. The members list carries `age` but not `dob`; the detail carries both.
+historical record's date. The members list carries `age` and `ageMonths` but not `dob`; the detail carries all
+three. `ageMonths` is the same derivation in months, and the picker uses it only to distinguish an infant from
+a year-old (`8m` against `0y`).
 
 `presbyterRank`, `membershipCardNo` and `verifiedAt` are **detail-only** back-office fields; the list
 stays lean. A rank is valid only with `isPresbyter = true` (otherwise `422 validation_error`), must be a
@@ -917,8 +925,9 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 
 **Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
 `archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
-The identity carries `gender` and the derived `age` (nullable); the list never carries `dob`. The
-detail adds `dob` and reports the same `age`.
+The identity carries `gender`, the derived `age` (nullable) and `ageMonths` (nullable; the same
+derivation in completed months); the list never carries `dob`. The detail adds `dob` and reports the
+same `age` and `ageMonths`.
 
 - `status=active|archived` selects the set; the default is `active`, and purged members are never
   returned. `includeArchived=true` is a deprecated alias for active + archived.

@@ -54,6 +54,8 @@ export interface MemberSummary {
   readonly gender: Gender;
   /** Derived current age, or null when the date of birth is unknown or in the future. */
   readonly age: number | null;
+  /** The same derivation in completed months; the picker says `8m` rather than `0y`. */
+  readonly ageMonths: number | null;
   readonly placeOfResidence: string | null;
   readonly joinedOn: string | null;
   readonly isPresbyter: boolean;
