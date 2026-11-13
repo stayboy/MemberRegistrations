@@ -8,7 +8,7 @@
   ],
   "description": "Member registration lookup and CRUD API (Express + TypeScript, deployable to Vercel)",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.22.3"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
