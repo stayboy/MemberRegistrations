@@ -19,7 +19,30 @@ and the 2026-11-10 serial-run amendment were accepted in the `mock-claims-guard`
 "merge. review lessons with `deepseek-v4.1-flash-1017` if they are durable enough to keep"): the durability
 review returned KEEP for the fixture rule and MERGE-INTO the existing worker-crash entry. The 2026-11-13
 control-switch entry was accepted in the `mvp-local-ussd-payments` close, in a reply after the round's "all as
-recommended" (2026-11-13, "accept").
+recommended" (2026-11-13, "accept"). The 2026-11-13 grep-the-claim entry was accepted in the `mvp-page-actions`
+close after a grill on whether it was worth its bytes (2026-11-13, "all as recommended": one entry, the guard's
+limit as its evidence, seventeen lines).
+
+---
+
+## 2026-11-13 — When a decision reverses a sentence, grep for the claim, not the sentence
+
+**Rule.** A decision that reverses a statement invalidates every copy of that claim, and the copy you edit is
+rarely the one that harms: an absolute left standing under the exception added beneath it, a change-log line
+describing a design the body just de-normed, a rule entry an owner ruling reversed, a record calling a change
+"unapplied" after it landed. Search the document — its table, its change log, its records — for the **claim**,
+not for the line you were editing. §10a's hash is a tripwire, not a signature: it proves the file did not move,
+never that the file still agrees with itself.
+
+**Evidence.** Four times on 2026-11-13 across two rounds — `pledge-shepherd-default` for the first three,
+`mvp-page-actions` for the last: a "not after" absolute survived the exception written below it; a change log
+still said "compound read" after the body de-normed the sequence; a change-log entry kept the officer note
+required after the owner made it optional; and `protected-doc-reviews.json` called two strengthenings
+unapplied after they landed, with the hash green over the false record.
+
+**Trigger.** Any edit that reverses, narrows or supersedes a sentence: sweep the spec's `## Change log`, the
+round doc's `## Deviations` and the record before calling it done — as a lesson, with a checklist line in the
+next spec-review brief; it becomes a rule only if it recurs after both.
 
 ---
 
