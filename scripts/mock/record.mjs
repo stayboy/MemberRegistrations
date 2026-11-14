@@ -35,17 +35,18 @@ const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest(
  * @param {string} input.state         state name, matching `<state>.png`/`<state>.html`
  * @param {(file: string) => Promise<void>} input.capture writes the PNG to `file`
  * @param {string} input.note          what moved in this cut, recorded in `history.json`
+ * @param {string} [input.root]        repository root; the tests point it at a temporary folder
  * @returns {Promise<{ changed: boolean, sha256: string, version: number | null }>}
  */
-export async function recordMock({ set, state, capture, note }) {
+export async function recordMock({ set, state, capture, note, root = repoRoot }) {
   if (typeof note !== 'string' || note.trim().length < 10) {
     throw new Error(`recordMock: a change note is required for ${set}/${state}`);
   }
 
-  const dir = join(repoRoot, 'mockups', set);
+  const dir = join(root, 'mockups', set);
   const live = join(dir, `${state}.png`);
   const tmp = join(dir, `.${state}.tmp.png`);
-  const archiveDir = join(repoRoot, 'mockups', '_archive', set);
+  const archiveDir = join(root, 'mockups', '_archive', set);
   const historyPath = join(dir, 'history.json');
 
   const history = existsSync(historyPath)
@@ -61,7 +62,19 @@ export async function recordMock({ set, state, capture, note }) {
   const current = existsSync(live) ? sha256(live) : null;
   if (next === current) {
     rmSync(tmp, { force: true });
-    return { changed: false, sha256: next, version: null };
+    // The bytes did not move, but the live image must still be named by history: `prune` removes a
+    // PNG that no state claims. Record it once when history does not know it yet.
+    if (versions.length === 0) {
+      versions.push({
+        version: 1,
+        at: new Date().toISOString().slice(0, 10),
+        sha256: next,
+        change: note.trim(),
+      });
+    }
+    history.states[state].live = `mockups/${set}/${state}.png`;
+    writeFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);
+    return { changed: false, sha256: next, version: versions.length };
   }
 
   // Archive the image this capture replaces, and mark its entry so the record never implies a file

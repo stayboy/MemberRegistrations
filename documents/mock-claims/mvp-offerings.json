@@ -22,7 +22,7 @@
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "reference"
     },
     "pledge": {
       "mock": {
@@ -31,7 +31,7 @@
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "reference"
     },
     "pledge-no-shepherd": {
       "mock": {
@@ -40,7 +40,7 @@
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "reference"
     },
     "pledge-shepherd-loading": {
       "mock": {
@@ -67,7 +67,7 @@
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "reference"
     },
     "page-actions": {
       "mock": {
@@ -259,5 +259,6 @@
         "quote": "and the pledge's follow-up officer"
       }
     }
-  ]
+  ],
+  "note": "The /ussd/offerings count entry is signed by documents/mock-claims/offering-grid.json (the single-pass grid, merged #93). These states draw the pre-grid page behind the same dialogs and stay as reference."
 }
