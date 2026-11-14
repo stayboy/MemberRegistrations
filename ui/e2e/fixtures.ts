@@ -819,6 +819,21 @@ const OFFERING_COUNTS: readonly OfferingCount[] = [
   },
 ];
 
+const BUCKET_LABELS: Readonly<Record<string, string>> = {
+  'adult-male': 'Adult men',
+  'adult-female': 'Adult women',
+  'child-unspecified': 'Children',
+  'child-male': 'Boys',
+  'child-female': 'Girls',
+  'adult-unspecified': 'Adults',
+  'visitor-male': 'Visitor men',
+  'visitor-female': 'Visitor women',
+  'visitor-children': 'Visitor children',
+  elder: 'Elders',
+  deaconess: 'Deaconess',
+  deacon: 'Deacons',
+};
+
 const HEADCOUNTS: readonly Headcount[] = [
   {
     id: 'headcount-1',
@@ -826,18 +841,17 @@ const HEADCOUNTS: readonly Headcount[] = [
     sessionDate: '2999-01-10',
     asOf: '2999-01-10T09:02:00.000Z',
     mode: 'adults',
-    adultMale: 58,
-    adultFemale: 71,
-    adultUnspecified: 0,
-    childMale: 0,
-    childFemale: 0,
-    childUnspecified: 9,
     total: 138,
     ended: false,
     recordedBy: 'officer-1',
     recordedAt: '2999-01-10T09:04:00.000Z',
     supersedesId: null,
     supersededBy: 'headcount-2',
+    lines: [
+      { code: 'adult-male', label: 'Adult men', count: 58 },
+      { code: 'adult-female', label: 'Adult women', count: 71 },
+      { code: 'child-unspecified', label: 'Children', count: 9 },
+    ],
   },
   {
     id: 'headcount-2',
@@ -845,18 +859,17 @@ const HEADCOUNTS: readonly Headcount[] = [
     sessionDate: '2999-01-10',
     asOf: '2999-01-10T09:08:00.000Z',
     mode: 'adults',
-    adultMale: 62,
-    adultFemale: 71,
-    adultUnspecified: 0,
-    childMale: 0,
-    childFemale: 0,
-    childUnspecified: 9,
     total: 142,
     ended: false,
     recordedBy: 'officer-2',
     recordedAt: '2999-01-10T09:10:00.000Z',
     supersedesId: 'headcount-1',
     supersededBy: null,
+    lines: [
+      { code: 'adult-male', label: 'Adult men', count: 62 },
+      { code: 'adult-female', label: 'Adult women', count: 71 },
+      { code: 'child-unspecified', label: 'Children', count: 9 },
+    ],
   },
 ];
 
@@ -1412,7 +1425,15 @@ function buildRoutes(
               right.recordedAt.localeCompare(left.recordedAt) ||
               right.id.localeCompare(left.id),
           );
-        const current = observations.find((headcount) => headcount.supersededBy === null) ?? null;
+        const current: Record<string, Headcount | null> = {
+          adults: null,
+          children: null,
+          visitors: null,
+          presbyters: null,
+        };
+        for (const row of observations) {
+          if (row.supersededBy === null) current[row.mode] = row;
+        }
         return reply({ sessionDate, current, observations });
       },
     },
@@ -1423,26 +1444,37 @@ function buildRoutes(
         const body = asRecord(call.body);
         const sessionDate = text(body.sessionDate) || '2999-01-10';
         const mode = text(body.mode);
-        if (mode !== 'adults' && mode !== 'children' && mode !== 'mixed') {
-          return problem(422, 'mode must be adults, children or mixed');
+        if (!['adults', 'children', 'visitors', 'presbyters'].includes(mode)) {
+          return problem(422, 'mode must be adults, children, visitors or presbyters');
         }
-        const buckets = {
-          adultMale: Number(body.adultMale ?? 0),
-          adultFemale: Number(body.adultFemale ?? 0),
-          adultUnspecified: Number(body.adultUnspecified ?? 0),
-          childMale: Number(body.childMale ?? 0),
-          childFemale: Number(body.childFemale ?? 0),
-          childUnspecified: Number(body.childUnspecified ?? 0),
-        };
-        const total = Object.values(buckets).reduce((sum, value) => sum + value, 0);
-        if (total > 30_000) return problem(422, 'The six buckets must not exceed 30,000.');
+        const rawLines = Array.isArray(body.lines) ? body.lines : [];
+        const lines: Array<Headcount['lines'][number]> = [];
+        for (const entry of rawLines) {
+          const line = asRecord(entry);
+          const code = text(line.code);
+          if (!code) return problem(422, 'each line needs a bucket code');
+          const count = Number(line.count ?? 0);
+          lines.push({ code, label: BUCKET_LABELS[code] ?? code, count });
+        }
+        const total = lines.reduce((sum, line) => sum + line.count, 0);
+        if (total > 30_000) return problem(422, 'The lines must not exceed 30,000.');
 
         const supersedesId = optionalText(body.supersedesId);
         const target = supersedesId ? headcountState.get(supersedesId) : undefined;
         if (supersedesId && (!target || target.supersededBy !== null)) {
           return problem(422, 'supersedesId must name the current observation');
         }
-        const asOf = target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
+        // A plain new count also supersedes its own lane's tip.
+        const laneTip =
+          target ??
+          [...headcountState.values()].find(
+            (headcount) =>
+              headcount.sessionDate === sessionDate &&
+              headcount.mode === mode &&
+              headcount.supersededBy === null,
+          );
+        const asOf =
+          target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
         if (!asOf.startsWith(sessionDate)) {
           return problem(422, 'asOf must fall within the session day');
         }
@@ -1454,17 +1486,17 @@ function buildRoutes(
           eventId: eventId!,
           sessionDate,
           asOf,
-          mode,
-          ...buckets,
+          mode: mode as Headcount['mode'],
           total,
-          ended: false,
+          ended: body.ended === true,
           recordedBy: 'officer-1',
           recordedAt: `${sessionDate}T09:12:00.000Z`,
-          supersedesId: target?.id ?? null,
+          supersedesId: laneTip?.id ?? null,
           supersededBy: null,
+          lines,
         };
 
-        if (target) headcountState.set(target.id, { ...target, supersededBy: id });
+        if (laneTip) headcountState.set(laneTip.id, { ...laneTip, supersededBy: id });
         headcountState.set(id, headcount);
         return reply(headcount, 201);
       },

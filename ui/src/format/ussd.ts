@@ -1,5 +1,11 @@
 import type { EventItem } from '../api/events';
-import type { CodePurpose, CodeStatus, Headcount, HeadcountMode } from '../api/ussd';
+import type {
+  CodePurpose,
+  CodeStatus,
+  Headcount,
+  HeadcountLineInput,
+  HeadcountReadMode,
+} from '../api/ussd';
 import { shiftUtcDate } from './date-window';
 
 /**
@@ -148,17 +154,26 @@ export function activityCountLabel(count: number): string {
   return `${count} ${count === 1 ? 'event' : 'events'}`;
 }
 
+export type HeadcountEntryMode = 'adults' | 'children';
+
 export const HEADCOUNT_MODE_OPTIONS: readonly {
-  readonly value: HeadcountMode;
+  readonly value: HeadcountEntryMode;
   readonly label: string;
 }[] = [
   { value: 'adults', label: 'Adult service' },
   { value: 'children', label: 'Children service' },
-  { value: 'mixed', label: 'Mixed service' },
 ];
 
-export function headcountModeLabel(mode: HeadcountMode): string {
-  return HEADCOUNT_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+const HEADCOUNT_MODE_LABELS: Record<HeadcountReadMode, string> = {
+  adults: 'Adult service',
+  children: 'Children service',
+  visitors: 'Visitors',
+  presbyters: 'Presbyters',
+  mixed: 'Mixed (retired)',
+};
+
+export function headcountModeLabel(mode: HeadcountReadMode): string {
+  return HEADCOUNT_MODE_LABELS[mode] ?? mode;
 }
 
 export type HeadcountFieldKey =
@@ -181,15 +196,23 @@ const CHILD_MALE: HeadcountField = { key: 'childMale', label: 'Boys' };
 const CHILD_FEMALE: HeadcountField = { key: 'childFemale', label: 'Girls' };
 const CHILDREN: HeadcountField = { key: 'childUnspecified', label: 'Children' };
 
+/** The bucket code behind each entry field, as the mode's reference rows declare it. */
+const BUCKET_CODES: Record<HeadcountFieldKey, string> = {
+  adultMale: 'adult-male',
+  adultFemale: 'adult-female',
+  adultUnspecified: 'adult-unspecified',
+  childMale: 'child-male',
+  childFemale: 'child-female',
+  childUnspecified: 'child-unspecified',
+};
+
 /**
- * The three-number entry, four in Mixed. Adult service counts Adult men, Adult
- * women and Children; children service counts Boys, Girls and Adults in that
- * order. Mixed splits both and never shows an "(unspecified)" bucket.
+ * The three-number entry. Adult service counts Adult men, Adult women and
+ * Children; children service counts Boys, Girls and Adults in that order. The
+ * visitors and presbyters lanes are entry surfaces for the next round.
  */
-export function headcountFields(mode: HeadcountMode): readonly HeadcountField[] {
-  if (mode === 'adults') return [ADULT_MALE, ADULT_FEMALE, CHILDREN];
-  if (mode === 'children') return [CHILD_MALE, CHILD_FEMALE, ADULTS];
-  return [ADULT_MALE, ADULT_FEMALE, CHILD_MALE, CHILD_FEMALE];
+export function headcountFields(mode: HeadcountEntryMode): readonly HeadcountField[] {
+  return mode === 'children' ? [CHILD_MALE, CHILD_FEMALE, ADULTS] : [ADULT_MALE, ADULT_FEMALE, CHILDREN];
 }
 
 export type HeadcountFormValues = Record<HeadcountFieldKey, string>;
@@ -205,68 +228,43 @@ export function emptyHeadcountForm(): HeadcountFormValues {
   };
 }
 
+/** Fills the form from the observation's lines; other lanes' buckets are ignored. */
 export function headcountFormFrom(row: Headcount): HeadcountFormValues {
-  return {
-    adultMale: String(row.adultMale),
-    adultFemale: String(row.adultFemale),
-    adultUnspecified: String(row.adultUnspecified),
-    childMale: String(row.childMale),
-    childFemale: String(row.childFemale),
-    childUnspecified: String(row.childUnspecified),
-  };
+  const values = emptyHeadcountForm();
+  for (const line of row.lines) {
+    const key = (Object.keys(BUCKET_CODES) as HeadcountFieldKey[]).find(
+      (candidate) => BUCKET_CODES[candidate] === line.code,
+    );
+    if (key) values[key] = String(line.count);
+  }
+  return values;
 }
 
-/** The bucket line for one observation, for example `AM 62 · AF 71 · C? 9`. */
+/** The bucket line for one observation, from the reference labels it carries. */
 export function headcountBucketSummary(row: Headcount): string {
-  const parts: string[] = [];
-  if (row.adultMale) parts.push(`AM ${row.adultMale}`);
-  if (row.adultFemale) parts.push(`AF ${row.adultFemale}`);
-  if (row.adultUnspecified) parts.push(`A? ${row.adultUnspecified}`);
-  if (row.childMale) parts.push(`CM ${row.childMale}`);
-  if (row.childFemale) parts.push(`CF ${row.childFemale}`);
-  if (row.childUnspecified) parts.push(`C? ${row.childUnspecified}`);
-  return parts.length === 0 ? 'All zero' : parts.join(' · ');
+  return row.lines.length === 0
+    ? 'All zero'
+    : row.lines.map((line) => `${line.label} ${line.count}`).join(' · ');
 }
 
-export interface HeadcountPayload {
-  readonly adultMale: number;
-  readonly adultFemale: number;
-  readonly adultUnspecified: number;
-  readonly childMale: number;
-  readonly childFemale: number;
-  readonly childUnspecified: number;
-}
-
-/**
- * Converts the visible fields into the six-bucket body, zeroing the buckets the
- * selected mode does not use. Invalid input returns the message the caller
- * shows inline instead of sending a request the API would reject.
- */
+/** The body of a record or correction: the lines the API validates against the mode. */
 export function headcountPayload(
-  mode: HeadcountMode,
+  mode: HeadcountEntryMode,
   values: HeadcountFormValues,
-): { readonly payload: HeadcountPayload } | { readonly error: string } {
-  const payload: Record<HeadcountFieldKey, number> = {
-    adultMale: 0,
-    adultFemale: 0,
-    adultUnspecified: 0,
-    childMale: 0,
-    childFemale: 0,
-    childUnspecified: 0,
-  };
-
+): { readonly payload: { readonly lines: HeadcountLineInput[] } } | { readonly error: string } {
+  const lines: HeadcountLineInput[] = [];
   for (const field of headcountFields(mode)) {
     const raw = values[field.key].trim();
     if (raw === '') continue;
     if (!/^\d+$/.test(raw)) return { error: `${field.label} must be a whole number.` };
-    const parsed = Number(raw);
-    if (parsed > 10_000) return { error: `${field.label} must be 10,000 or fewer.` };
-    payload[field.key] = parsed;
+    const count = Number(raw);
+    if (count > 10_000) return { error: `${field.label} must be 10,000 or fewer.` };
+    lines.push({ code: BUCKET_CODES[field.key], count });
   }
 
-  const total = Object.values(payload).reduce((sum, value) => sum + value, 0);
-  if (total > 30_000) return { error: 'The six buckets must not exceed 30,000.' };
-  return { payload };
+  const total = lines.reduce((sum, line) => sum + line.count, 0);
+  if (total > 30_000) return { error: 'The lines must not exceed 30,000.' };
+  return { payload: { lines } };
 }
 
 /** A local `datetime-local` value for an instant; the API receives the ISO instant. */

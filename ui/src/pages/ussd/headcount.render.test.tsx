@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import type { Headcount } from '../../api/ussd';
+import type { Headcount, HeadcountLine } from '../../api/ussd';
 import { headcountFormFrom } from '../../format/ussd';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { HeadcountDialogFields } from './HeadcountDialogs';
@@ -10,37 +10,55 @@ import { HeadcountReadFirst } from './HeadcountReadFirst';
 
 const formatInstant = (value: string): string => value;
 
+const ADULT_LINES: readonly HeadcountLine[] = [
+  { code: 'adult-male', label: 'Adult men', count: 62 },
+  { code: 'adult-female', label: 'Adult women', count: 71 },
+  { code: 'child-unspecified', label: 'Children', count: 9 },
+];
+
 const CURRENT: Headcount = {
   id: 'headcount-2',
   eventId: 'event-1',
   sessionDate: '2026-11-08',
   asOf: '2026-11-08T10:42:00.000Z',
   mode: 'adults',
-  adultMale: 62,
-  adultFemale: 71,
-  adultUnspecified: 0,
-  childMale: 0,
-  childFemale: 0,
-  childUnspecified: 9,
   total: 142,
   ended: false,
   recordedBy: 'demo.officer',
   recordedAt: '2026-11-08T10:44:00.000Z',
   supersedesId: 'headcount-1',
   supersededBy: null,
+  lines: ADULT_LINES,
 };
 
 const SUPERSEDED: Headcount = {
   ...CURRENT,
   id: 'headcount-1',
   asOf: '2026-11-08T09:58:00.000Z',
-  adultMale: 41,
-  adultFemale: 52,
-  childUnspecified: 6,
   total: 99,
   recordedAt: '2026-11-08T10:00:00.000Z',
   supersedesId: null,
   supersededBy: CURRENT.id,
+  lines: [
+    { code: 'adult-male', label: 'Adult men', count: 41 },
+    { code: 'adult-female', label: 'Adult women', count: 52 },
+    { code: 'child-unspecified', label: 'Children', count: 6 },
+  ],
+};
+
+const CHILDREN: Headcount = {
+  ...CURRENT,
+  id: 'headcount-3',
+  mode: 'children',
+  asOf: '2026-11-08T10:50:00.000Z',
+  total: 18,
+  recordedAt: '2026-11-08T10:52:00.000Z',
+  supersedesId: null,
+  lines: [
+    { code: 'child-male', label: 'Boys', count: 5 },
+    { code: 'child-female', label: 'Girls', count: 6 },
+    { code: 'adult-unspecified', label: 'Adults', count: 7 },
+  ],
 };
 
 function render(node: ReactElement): string {
@@ -81,17 +99,19 @@ describe('HeadcountDialogFields', () => {
     expect(markup).toContain('value="62"');
     expect(markup).toContain('type="datetime-local"');
     expect(markup).not.toContain('Keeping asOf');
+    expect(markup).not.toContain('Mixed service');
   });
 
-  it('shows four numbers and no unspecified buckets in Mixed service', () => {
-    const markup = fields({ mode: 'mixed' });
+  it('records Boys, Girls and Adults in Children service', () => {
+    const markup = fields({ mode: 'children', values: headcountFormFrom(CHILDREN) });
 
-    expect(markup).toContain('Adult men');
-    expect(markup).toContain('Adult women');
+    expect(markup).toContain('Children service');
     expect(markup).toContain('Boys');
     expect(markup).toContain('Girls');
+    expect(markup).toContain('>Adults</label>');
+    expect(markup).toContain('value="5"');
     expect(markup).not.toContain('>Children</label>');
-    expect(markup).not.toContain('>Adults</label>');
+    expect(markup).not.toContain('Mixed service');
   });
 
   it('corrects the current observation with the kept asOf and no date input', () => {
@@ -110,7 +130,8 @@ describe('HeadcountReadFirst', () => {
   it('is read-first: no record form or inputs, only the Current and row Correct actions', () => {
     const markup = render(
       <HeadcountReadFirst
-        current={CURRENT}
+        current={{ adults: CURRENT }}
+        lane="adults"
         observations={[CURRENT, SUPERSEDED]}
         roster={160}
         rosterPending={false}
@@ -122,6 +143,7 @@ describe('HeadcountReadFirst', () => {
     );
 
     expect(markup).toContain('Current headcount');
+    expect(markup).toContain('Adult service');
     expect(markup).toContain('142');
     expect(markup).toContain('Roster');
     expect(markup).toContain('160');
@@ -129,7 +151,7 @@ describe('HeadcountReadFirst', () => {
     expect(markup).toContain('Observation history');
     expect(markup).toContain('Current');
     expect(markup).toContain('Superseded');
-    expect(markup).toContain('AM 62 · AF 71 · C? 9');
+    expect(markup).toContain('Adult men 62 · Adult women 71 · Children 9');
     expect(markup).toContain('Valid for 2026-11-08T09:58:00.000Z');
     expect(markup).toContain('Correct');
     expect(markup).not.toContain('<input');
@@ -137,19 +159,12 @@ describe('HeadcountReadFirst', () => {
     expect(markup).not.toContain('Record a headcount');
   });
 
-  it('offers Correct only on the current row when two uncorrected records exist', () => {
-    const older: Headcount = {
-      ...CURRENT,
-      id: 'headcount-0',
-      asOf: '2026-11-08T10:30:00.000Z',
-      recordedAt: '2026-11-08T10:31:00.000Z',
-      supersedesId: null,
-      supersededBy: null,
-    };
+  it('reads one lane but marks every lane’s own current row', () => {
     const markup = render(
       <HeadcountReadFirst
-        current={CURRENT}
-        observations={[CURRENT, older]}
+        current={{ adults: CURRENT, children: CHILDREN }}
+        lane="adults"
+        observations={[CHILDREN, CURRENT, SUPERSEDED]}
         roster={160}
         rosterPending={false}
         rosterError={false}
@@ -159,17 +174,37 @@ describe('HeadcountReadFirst', () => {
       />,
     );
 
-    // One Correct on the current card, one on the current row — never a third
-    // on the older non-superseded row, whose submit the API would reject.
-    expect(markup.match(/Correct/g)?.length).toBe(2);
-    expect(markup).toContain('Earlier');
-    expect(markup).toContain('Valid for 2026-11-08T10:30:00.000Z');
+    // One Correct on the adults card, one on each lane's current history row.
+    expect(markup.match(/Correct/g)?.length).toBe(3);
+    // `>Current<` is the history badge; the card header reads "Current headcount · …".
+    expect(markup.match(/>Current</g)?.length).toBe(2);
+    expect(markup).toContain('Valid for 2026-11-08T09:58:00.000Z');
   });
 
-  it('renders the empty current card and history state', () => {
+  it('renders the named lane empty even when another lane has a count', () => {
     const markup = render(
       <HeadcountReadFirst
-        current={null}
+        current={{ adults: null, children: CHILDREN }}
+        lane="adults"
+        observations={[CHILDREN]}
+        roster={160}
+        rosterPending={false}
+        rosterError={false}
+        pending={false}
+        formatInstant={formatInstant}
+        onCorrect={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('No headcount recorded for this session yet.');
+    expect(markup).toContain('Current');
+  });
+
+  it('renders the empty history state', () => {
+    const markup = render(
+      <HeadcountReadFirst
+        current={{}}
+        lane="adults"
         observations={[]}
         roster={160}
         rosterPending={false}

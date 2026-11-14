@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isUnauthorized } from '../../api/errors';
 import { getEvent, getEventAttendance } from '../../api/events';
-import { getHeadcounts, recordHeadcount, type Headcount, type HeadcountMode } from '../../api/ussd';
+import { getHeadcounts, recordHeadcount, type Headcount } from '../../api/ussd';
 import { useSession } from '../../auth/SessionProvider';
 import {
   EventSessionPicker,
@@ -26,6 +26,7 @@ import {
   headcountFormFrom,
   headcountPayload,
   toDateTimeLocal,
+  type HeadcountEntryMode,
   type HeadcountFieldKey,
   type HeadcountFormValues,
 } from '../../format/ussd';
@@ -55,7 +56,7 @@ export function UssdHeadcountPage() {
   const token = session?.token ?? '';
 
   const [selection, setSelection] = useState<EventSessionSelection | null>(null);
-  const [mode, setMode] = useState<HeadcountMode>('adults');
+  const [mode, setMode] = useState<HeadcountEntryMode>('adults');
   const [values, setValues] = useState<HeadcountFormValues>(emptyHeadcountForm);
   const [asOf, setAsOf] = useState(() => toDateTimeLocal(new Date()));
   const [recordOpen, setRecordOpen] = useState(false);
@@ -135,6 +136,13 @@ export function UssdHeadcountPage() {
       setActionError('This session is closed; a correction is no longer accepted.');
       return;
     }
+    // The specialised and retired lanes are read-only here this round; the lane
+    // UI that corrects them is the next round.
+    if (row.mode !== 'adults' && row.mode !== 'children') {
+      setNotice(null);
+      setActionError('Only an adults or children observation can be corrected from this page.');
+      return;
+    }
     setRecordOpen(false);
     setCorrection(row);
     setMode(row.mode);
@@ -149,7 +157,9 @@ export function UssdHeadcountPage() {
   }
 
   const page = headcountsQuery.data;
-  const current = page?.current ?? null;
+  // The page names one lane. Its map carries every lane's tip, so a later lane
+  // view reads another key without a second request (HC-16, HC-17).
+  const current = page?.current[mode] ?? null;
   const observations = page?.observations ?? [];
   const roster = rosterQuery.data?.expected;
 
@@ -184,11 +194,13 @@ export function UssdHeadcountPage() {
           : { asOf: fromDateTimeLocal(asOf) || undefined }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (recorded) => {
       setActionError(null);
       setRecordOpen(false);
       setCorrection(null);
       resetEntry();
+      // Keep reading the lane the operator just wrote; the lane switcher is next round.
+      setMode(recorded.mode === 'children' ? 'children' : 'adults');
       setNotice(
         correction
           ? 'Correction saved. The earlier observation stays readable and valid for its asOf.'
@@ -212,17 +224,13 @@ export function UssdHeadcountPage() {
       if (!current) {
         throw new Error('Record a headcount first; the end capture carries the final count.');
       }
-      // The shared close is a capture: a new observation with the same counts
-      // and `ended: true`. It supersedes nothing and keeps the count readable.
+      // The shared close is a capture: a new observation in the named lane with
+      // the same counts and `ended: true`. It supersedes nothing and keeps the
+      // count readable.
       return recordHeadcount(baseUrl, token, selection.eventId, {
         sessionDate: selection.sessionDate,
-        mode: current.mode,
-        adultMale: current.adultMale,
-        adultFemale: current.adultFemale,
-        adultUnspecified: current.adultUnspecified,
-        childMale: current.childMale,
-        childFemale: current.childFemale,
-        childUnspecified: current.childUnspecified,
+        mode,
+        lines: current.lines.map((line) => ({ code: line.code, count: line.count })),
         ended: true,
       });
     },
@@ -247,7 +255,7 @@ export function UssdHeadcountPage() {
   const liveTotal =
     'error' in parsedTotal
       ? 0
-      : Object.values(parsedTotal.payload).reduce((sum, value) => sum + value, 0);
+      : parsedTotal.payload.lines.reduce((sum, line) => sum + line.count, 0);
 
   function submitHeadcount(): void {
     if ('error' in parsedTotal) {
@@ -358,7 +366,8 @@ export function UssdHeadcountPage() {
           </MessageBar>
         ) : (
           <HeadcountReadFirst
-            current={current}
+            current={page?.current ?? {}}
+            lane={mode}
             observations={observations}
             roster={roster}
             rosterPending={rosterQuery.isPending}

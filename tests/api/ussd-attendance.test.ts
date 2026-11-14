@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTestApp, writeHeaders, type TestApp } from '../helpers/app.js';
+import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
 
 const USSD_SECRET = 'test-ussd-gateway-secret-16';
 const USSD_PHONE_PEPPER = 'test-ussd-phone-pepper-16';
@@ -142,9 +142,11 @@ async function recordHeadcount(
     .send({
       sessionDate: date,
       mode: 'adults',
-      adultMale,
-      adultFemale,
-      childUnspecified,
+      lines: [
+        { code: 'adult-male', count: adultMale },
+        { code: 'adult-female', count: adultFemale },
+        { code: 'child-unspecified', count: childUnspecified },
+      ],
       asOf: `${date}T09:15:00.000Z`,
     });
   expect(response.status).toBe(201);
@@ -826,21 +828,46 @@ describe('USSD attendance, codes and clocking', () => {
     expect(rows[1]!.recorded_by).not.toBe(rows[0]!.recorded_by);
   });
 
-  it('displays a current mixed observation and never offers mixed entry', async () => {
-    // A portal-only mixed entry becomes current; USSD still shows it.
+  it('refuses a new mixed count and reads a legacy one without offering it', async () => {
+    // A retired lane is readable history, never a write: the API refuses a new
+    // mixed observation, so seed one as the migration would leave it.
     const response = await request(harness.app)
       .post(`/v1/events/${mainEventId}/headcounts`)
       .set(writeHeaders)
       .send({
         sessionDate: today,
         mode: 'mixed',
-        adultMale: 3,
-        adultFemale: 4,
-        childMale: 5,
-        childFemale: 6,
+        lines: [
+          { code: 'adult-male', count: 3 },
+          { code: 'adult-female', count: 4 },
+        ],
         asOf: new Date().toISOString(),
       });
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(422);
+
+    const [seeded] = await harness.db.query<{ id: string }>(
+      `insert into event_session_headcounts (
+         event_instance_id, session_date, as_of, mode, total, ended, recorded_by
+       )
+       values ($1,$2,$3,'mixed',18,false,'legacy')
+       returning id`,
+      [mainEventId, today, new Date().toISOString()],
+    );
+    await harness.db.query(
+      `insert into headcount_lines (headcount_id, mode_code, bucket_code, count)
+       values ($1,'mixed','adult-male',3), ($1,'mixed','adult-female',4),
+              ($1,'mixed','child-male',5), ($1,'mixed','child-female',6)`,
+      [seeded!.id],
+    );
+
+    const history = await request(harness.app)
+      .get(`/v1/events/${mainEventId}/headcounts`)
+      .query({ sessionDate: today })
+      .set(readHeaders);
+    expect(history.status).toBe(200);
+    expect(history.body.current.mixed.id).toBe(seeded!.id);
+    expect(history.body.current.mixed.total).toBe(18);
+    expect(history.body.current.adults).toBeNull();
 
     const phone = '0821 000 0021';
     const ip = '10.20.9.3';
@@ -850,11 +877,9 @@ describe('USSD attendance, codes and clocking', () => {
     await frame(sessionId, phone, '4', 3, ip);
     const screen = await frame(sessionId, phone, '2', 4, ip);
     expect(screen.body.state).toBe('attendance.headcount');
-    expect(screen.body.text).toContain('Mixed service');
-    expect(screen.body.text).toContain(
-      '3 Adult male, 4 Adult female, 5 Child male, 6 Child female',
-    );
-    expect(screen.body.text).toContain('Total 18');
+    // The screen reads the adults lane; the retired lane is not folded into it.
+    expect(screen.body.text).toContain('No headcount yet');
+    expect(screen.body.text).not.toContain('Mixed service');
 
     const mode = await frame(sessionId, phone, '1', 5, ip);
     expect(mode.body.state).toBe('attendance.headcount.mode');

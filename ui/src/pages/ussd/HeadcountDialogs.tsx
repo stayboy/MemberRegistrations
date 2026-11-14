@@ -15,10 +15,11 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import type { Headcount, HeadcountMode } from '../../api/ussd';
+import type { Headcount } from '../../api/ussd';
 import {
   HEADCOUNT_MODE_OPTIONS,
   headcountFields,
+  type HeadcountEntryMode,
   type HeadcountFieldKey,
   type HeadcountFormValues,
 } from '../../format/ussd';
@@ -60,12 +61,12 @@ export function HeadcountDialogFields({
   onAsOfChange,
 }: {
   correction: Headcount | null;
-  mode: HeadcountMode;
+  mode: HeadcountEntryMode;
   values: HeadcountFormValues;
   asOf: string;
   pending: boolean;
   formatInstant: (value: string) => string;
-  onModeChange: (mode: HeadcountMode) => void;
+  onModeChange: (mode: HeadcountEntryMode) => void;
   onValueChange: (key: HeadcountFieldKey, value: string) => void;
   onAsOfChange: (value: string) => void;
 }) {
@@ -92,7 +93,7 @@ export function HeadcountDialogFields({
         <RadioGroup
           value={mode}
           disabled={pending}
-          onChange={(_, data) => onModeChange(data.value as HeadcountMode)}
+          onChange={(_, data) => onModeChange(data.value as HeadcountEntryMode)}
         >
           {HEADCOUNT_MODE_OPTIONS.map((option) => (
             <Radio key={option.value} value={option.value} label={option.label} />
@@ -155,7 +156,7 @@ export function HeadcountDialog({
 }: {
   open: boolean;
   correction: Headcount | null;
-  mode: HeadcountMode;
+  mode: HeadcountEntryMode;
   values: HeadcountFormValues;
   asOf: string;
   total: number;
@@ -163,7 +164,7 @@ export function HeadcountDialog({
   validationError: string | null;
   pending: boolean;
   formatInstant: (value: string) => string;
-  onModeChange: (mode: HeadcountMode) => void;
+  onModeChange: (mode: HeadcountEntryMode) => void;
   onValueChange: (key: HeadcountFieldKey, value: string) => void;
   onAsOfChange: (value: string) => void;
   onSubmit: () => void;

@@ -194,7 +194,7 @@ describe('activity ordering and pages', () => {
 });
 
 describe('headcount entry', () => {
-  it('offers three numbers in Adult and Children service and four in Mixed', () => {
+  it('offers three numbers in Adult and Children service', () => {
     expect(headcountFields('adults').map((field) => field.key)).toEqual([
       'adultMale',
       'adultFemale',
@@ -205,29 +205,23 @@ describe('headcount entry', () => {
       'childFemale',
       'adultUnspecified',
     ]);
-    expect(headcountFields('mixed').map((field) => field.key)).toEqual([
-      'adultMale',
-      'adultFemale',
-      'childMale',
-      'childFemale',
-    ]);
   });
 
-  it('zeroes the buckets the selected mode does not use', () => {
+  it('sends only the buckets the selected mode declares, as lines', () => {
     const values = {
       ...emptyHeadcountForm(),
       adultMale: '10',
       adultFemale: '8',
       childUnspecified: '3',
+      childMale: '99',
     };
     expect(headcountPayload('adults', values)).toEqual({
       payload: {
-        adultMale: 10,
-        adultFemale: 8,
-        adultUnspecified: 0,
-        childMale: 0,
-        childFemale: 0,
-        childUnspecified: 3,
+        lines: [
+          { code: 'adult-male', count: 10 },
+          { code: 'adult-female', count: 8 },
+          { code: 'child-unspecified', count: 3 },
+        ],
       },
     });
   });
@@ -236,49 +230,39 @@ describe('headcount entry', () => {
     expect(headcountPayload('adults', { ...emptyHeadcountForm(), adultMale: 'ten' })).toEqual({
       error: 'Adult men must be a whole number.',
     });
-    expect(headcountPayload('mixed', { ...emptyHeadcountForm(), adultMale: '10001' })).toEqual({
-      error: 'Adult men must be 10,000 or fewer.',
+    expect(headcountPayload('children', { ...emptyHeadcountForm(), childMale: '10001' })).toEqual({
+      error: 'Boys must be 10,000 or fewer.',
     });
   });
 
-  it('allows an all-zero observation', () => {
+  it('allows an all-zero observation with no lines', () => {
     expect(headcountPayload('children', emptyHeadcountForm())).toEqual({
-      payload: {
-        adultMale: 0,
-        adultFemale: 0,
-        adultUnspecified: 0,
-        childMale: 0,
-        childFemale: 0,
-        childUnspecified: 0,
-      },
+      payload: { lines: [] },
     });
   });
 
-  it('summarises only the non-zero buckets in one line', () => {
+  it('summarises the lines the observation carries', () => {
     const row: Headcount = {
       id: 'headcount-1',
       eventId: 'event-1',
       sessionDate: '2026-11-08',
       asOf: '2026-11-08T10:42:00.000Z',
       mode: 'adults',
-      adultMale: 62,
-      adultFemale: 71,
-      adultUnspecified: 0,
-      childMale: 0,
-      childFemale: 0,
-      childUnspecified: 9,
       total: 142,
       ended: false,
       recordedBy: 'demo.officer',
       recordedAt: '2026-11-08T10:44:00.000Z',
       supersedesId: null,
       supersededBy: null,
+      lines: [
+        { code: 'adult-male', label: 'Adult men', count: 62 },
+        { code: 'adult-female', label: 'Adult women', count: 71 },
+        { code: 'child-unspecified', label: 'Children', count: 9 },
+      ],
     };
 
-    expect(headcountBucketSummary(row)).toBe('AM 62 · AF 71 · C? 9');
-    expect(
-      headcountBucketSummary({ ...row, adultMale: 0, adultFemale: 0, childUnspecified: 0 }),
-    ).toBe('All zero');
+    expect(headcountBucketSummary(row)).toBe('Adult men 62 · Adult women 71 · Children 9');
+    expect(headcountBucketSummary({ ...row, lines: [] })).toBe('All zero');
   });
 });
 

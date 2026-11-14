@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -392,6 +393,32 @@ export const eventInstances = pgTable('event_instances', {
   id: uuid('id').primaryKey().defaultRandom(),
 });
 
+/**
+ * Headcount modes are reference data from `0022_headcount_lanes`: adding one is
+ * an insert and retiring one is `retired = true`. `mixed` is seeded retired so
+ * a legacy observation keeps its label and its lines stay readable.
+ */
+export const headcountModes = pgTable('headcount_modes', {
+  code: text('code').primaryKey(),
+  label: text('label').notNull(),
+  entryLabel: text('entry_label').notNull(),
+  retired: boolean('retired').notNull().default(false),
+});
+
+/** A mode arrives with its buckets; the pair is the natural key a line points at. */
+export const headcountBuckets = pgTable(
+  'headcount_buckets',
+  {
+    modeCode: text('mode_code')
+      .notNull()
+      .references(() => headcountModes.code),
+    code: text('code').notNull(),
+    label: text('label').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.modeCode, table.code] })],
+);
+
 export const eventSessionHeadcounts = pgTable(
   'event_session_headcounts',
   {
@@ -401,24 +428,50 @@ export const eventSessionHeadcounts = pgTable(
       .references(() => eventInstances.id),
     sessionDate: date('session_date').notNull(),
     asOf: timestamp('as_of', { withTimezone: true }).notNull(),
-    mode: text('mode').notNull(),
-    adultMale: integer('adult_male').notNull().default(0),
-    adultFemale: integer('adult_female').notNull().default(0),
-    adultUnspecified: integer('adult_unspecified').notNull().default(0),
-    childMale: integer('child_male').notNull().default(0),
-    childFemale: integer('child_female').notNull().default(0),
-    childUnspecified: integer('child_unspecified').notNull().default(0),
+    mode: text('mode')
+      .notNull()
+      .references(() => headcountModes.code),
     total: integer('total').notNull(),
     ended: boolean('ended').notNull().default(false),
     recordedBy: text('recorded_by').notNull(),
     recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
-    supersedesId: uuid('supersedes_id'),
+    supersedesId: uuid('supersedes_id').references((): AnyPgColumn => eventSessionHeadcounts.id),
   },
   (table) => [
     uniqueIndex('event_session_headcounts_supersedes')
       .on(table.supersedesId)
       .where(sql`${table.supersedesId} is not null`),
     index('event_session_headcounts_session').on(table.eventInstanceId, table.sessionDate),
+    // No `where supersedes_id is null` unique index: a superseded root keeps
+    // that column null, so such an index would guard roots rather than tips.
+    // The write path resolves the tip in its transaction with the lane locked
+    // (HC-2), and legacy data may hold several tips until the next write (HC-27).
+    check('event_session_headcounts_total_check', sql`${table.total} between 0 and 30000`),
+  ],
+);
+
+/**
+ * One line per non-zero bucket of an observation. The bucket is unique only
+ * within its mode, so the line carries `mode_code` and the foreign key is the
+ * `(mode_code, code)` pair rather than the bare code.
+ */
+export const headcountLines = pgTable(
+  'headcount_lines',
+  {
+    headcountId: uuid('headcount_id')
+      .notNull()
+      .references(() => eventSessionHeadcounts.id, { onDelete: 'cascade' }),
+    modeCode: text('mode_code').notNull(),
+    bucketCode: text('bucket_code').notNull(),
+    count: integer('count').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.headcountId, table.bucketCode] }),
+    foreignKey({
+      columns: [table.modeCode, table.bucketCode],
+      foreignColumns: [headcountBuckets.modeCode, headcountBuckets.code],
+    }),
+    check('headcount_lines_count_check', sql`${table.count} between 0 and 10000`),
   ],
 );
 

@@ -102,7 +102,6 @@ export const GLOSSARY = {
   'attendance.no_data': { full: 'No attendance yet', short: 'No attendance' },
   'headcount.adult_service': { full: 'Adult service', short: 'Adult service' },
   'headcount.children_service': { full: 'Children service', short: 'Children service' },
-  'headcount.mixed_service': { full: 'Mixed service', short: 'Mixed service' },
   'status.regular': { full: 'Regular', short: 'Regular' },
   'status.non_regular': { full: 'Non-Regular', short: 'Non-reg' },
   'status.not_enough_data': { full: 'Not enough data', short: 'No data' },

@@ -12,18 +12,24 @@ import {
   Text,
 } from '@fluentui/react-components';
 import { EditRegular } from '@fluentui/react-icons';
-import type { Headcount } from '../../api/ussd';
-import { headcountBucketSummary, headcountModeLabel } from '../../format/ussd';
+import type { Headcount, HeadcountCurrent } from '../../api/ussd';
+import {
+  headcountBucketSummary,
+  headcountModeLabel,
+  type HeadcountEntryMode,
+} from '../../format/ussd';
 import { useUssdStyles } from './ussd-styles';
 
 /**
- * The loaded, read-first body: the current observation with its Correct action,
- * the register-derived Roster beside it, and the append-only history newest
- * first. No write form lives here; Record and Correct are dialogs the page owns.
- * A superseded row stays readable and is valid for its own `asOf`.
+ * The loaded, read-first body: the named lane's current observation with its
+ * Correct action, the register-derived Roster beside it, and the append-only
+ * history newest first. No write form lives here; Record and Correct are dialogs
+ * the page owns. A superseded row stays readable and is valid for its own `asOf`;
+ * a row is current only in its own lane.
  */
 export function HeadcountReadFirst({
   current,
+  lane,
   observations,
   roster,
   rosterPending,
@@ -32,7 +38,8 @@ export function HeadcountReadFirst({
   formatInstant,
   onCorrect,
 }: {
-  current: Headcount | null;
+  current: HeadcountCurrent;
+  lane: HeadcountEntryMode;
   observations: readonly Headcount[];
   roster: number | undefined;
   rosterPending: boolean;
@@ -42,6 +49,7 @@ export function HeadcountReadFirst({
   onCorrect: (observation: Headcount) => void;
 }) {
   const styles = useUssdStyles();
+  const laneCurrent = current[lane] ?? null;
 
   return (
     <>
@@ -49,25 +57,26 @@ export function HeadcountReadFirst({
         <Card className={styles.panel} style={{ flex: 1, minWidth: '260px' }}>
           <div className={styles.panelBody}>
             <Text size={200} className={styles.muted}>
-              Current headcount
+              Current headcount · {headcountModeLabel(lane)}
             </Text>
-            {current ? (
+            {laneCurrent ? (
               <>
-                <Text className={styles.code}>{current.total}</Text>
+                <Text className={styles.code}>{laneCurrent.total}</Text>
                 <div className={styles.badgeRow}>
                   <Badge appearance="tint" color="brand" size="small">
-                    {headcountModeLabel(current.mode)}
+                    {headcountModeLabel(laneCurrent.mode)}
                   </Badge>
-                  <Text size={200}>as of {formatInstant(current.asOf)}</Text>
+                  <Text size={200}>as of {formatInstant(laneCurrent.asOf)}</Text>
                 </div>
                 <Text size={200} className={styles.muted}>
-                  {headcountBucketSummary(current)} · recorded {formatInstant(current.recordedAt)}
+                  {headcountBucketSummary(laneCurrent)} · recorded{' '}
+                  {formatInstant(laneCurrent.recordedAt)}
                 </Text>
                 <div>
                   <Button
                     size="small"
                     icon={<EditRegular />}
-                    onClick={() => onCorrect(current)}
+                    onClick={() => onCorrect(laneCurrent)}
                     disabled={pending}
                   >
                     Correct
@@ -134,11 +143,13 @@ export function HeadcountReadFirst({
               </TableHeader>
               <TableBody>
                 {observations.map((row) => {
-                  // The API's `current` is the newest non-superseded observation. A
-                  // second uncorrected record leaves an older non-superseded row, so
-                  // identity with `current` — not `supersededBy` alone — decides which
-                  // row offers Correct and which is only valid for its own asOf.
-                  const isCurrent = row.id === current?.id;
+                  // Each lane has its own current observation, so identity is
+                  // resolved against that lane's tip — never against another
+                  // lane's. Only the adults and children lanes can be corrected
+                  // from this page this round.
+                  const isCurrent = (current[row.mode] ?? null)?.id === row.id;
+                  const canCorrect =
+                    isCurrent && (row.mode === 'adults' || row.mode === 'children');
                   return (
                     <TableRow key={row.id}>
                       <TableCell>{formatInstant(row.asOf)}</TableCell>
@@ -166,7 +177,7 @@ export function HeadcountReadFirst({
                         )}
                       </TableCell>
                       <TableCell>
-                        {isCurrent ? (
+                        {canCorrect ? (
                           <Button
                             size="small"
                             icon={<EditRegular />}

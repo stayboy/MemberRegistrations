@@ -39,11 +39,18 @@ its own lane, retires `mixed`, and adds two specialised lanes plus the vocabular
 - **HC-1** An observation records exactly one **mode**, one `asOf`, one line per bucket the mode declares,
   the recorder and the time it was recorded. It is append-only: a superseded observation is not invalid,
   it stays the record of the count at its `asOf`.
-- **HC-2** A session holds **one chain per mode**, enforced by a partial unique index on
-  `(event_instance_id, session_date, mode) where supersedes_id is null`. **Both** a plain new count and a
-  correction supersede the current observation of **that mode**; a correction additionally keeps the
-  superseded row's `asOf` (the moment counted) while a new count takes `asOf` now. Neither ever touches
-  another lane.
+- **HC-2** A session holds **one chain per mode**. The **current** observation of a lane is the row **no
+  other row supersedes**, which is not the same test as `supersedes_id is null`: a root keeps a null
+  `supersedes_id` after it is superseded, so an index on that column would guard one _root_ per lane rather
+  than one _current_. The write path therefore resolves the tip as
+  `not exists (select 1 from event_session_headcounts s where s.supersedes_id = h.id)`, inside the write
+  transaction, **under a lock that serialises the lane even when it is empty** - an advisory lock keyed on
+  `(event_instance_id, session_date, mode)`, because a lane's first count has no row to lock and a row lock
+  would let two first counts insert two tips. A mode-moving correction takes the same lock for both lanes
+  in a stable order, so two moves cannot deadlock; the database's own unique index on `supersedes_id` keeps
+  the chain a chain (one successor per row), and no index claims one tip. **Both** a plain new count and a
+  correction supersede that tip; a correction additionally keeps the superseded row's `asOf` (the moment
+  counted) while a new count takes `asOf` now. Neither ever touches another lane.
 - **HC-3** Several modes **MAY** be current in the same session at the same time. Reading the children's
   count uses the `children` lane; reading the adult count uses the `adults` lane.
 - **HC-4** `asOf` MUST fall within the session's calendar day in the event timezone. The window is
@@ -133,6 +140,11 @@ members present rather than as a headcount bucket (owner, 2026-11-14). The lane 
   has **no** current observation afterwards and reads **not recorded**. It MUST NOT fall back to the
   superseded adults row. This is what "no data migration for legacy chains" means: the reshape in HC-19
   is a column-to-line move, not a chain rewrite and not a lane backfill.
+- **HC-27** Legacy data MAY hold more than one current observation in a lane, because the old write path
+  did not supersede on a plain count. The reshape MUST NOT fail on that, MUST NOT rewrite it, and MUST NOT
+  delete a row: the lane simply has several current observations, and every read that needs "the" current
+  takes the newest of them by `asOf`, then `recordedAt`, then id. A later write supersedes the newest and
+  leaves the rest as the history they are.
 
 ## 7. Reports
 
@@ -144,8 +156,9 @@ members present rather than as a headcount bucket (owner, 2026-11-14). The lane 
   already records - but **only when the destination lane has no current observation**; otherwise it is
   refused with a validation error naming that lane. When it is accepted, the correction becomes the
   destination lane's current and the superseded observation's lane reads **not recorded**, under HC-21's
-  rule. The partial unique index is the invariant behind the refusal, but the operator gets the named
-  error, not a constraint violation.
+  rule. The invariant behind the refusal is the in-transaction check on the destination lane's tip, under
+  the lock HC-2 describes - not a database constraint - so the operator gets the named error, never a
+  constraint violation.
 
 ## Acceptance Criteria
 

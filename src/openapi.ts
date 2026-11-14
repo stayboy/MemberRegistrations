@@ -61,6 +61,7 @@ import {
   eventGenerationSchema,
   eventListSchema,
   eventSchema,
+  HEADCOUNT_READ_MODES,
   headcountInputSchema,
   headcountListSchema,
   headcountSchema,
@@ -2623,9 +2624,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       '/v1/events/{eventId}/headcounts': {
         parameters: [idParam('eventId')],
         get: {
-          summary: 'List one session’s headcount observations',
+          summary: 'List one session’s headcount lanes and observations',
           description:
-            'Returns the current non-superseded observation and the full history, newest first by asOf then recordedAt. A superseded observation stays valid for its own asOf. Operator-only and no-store; no member DTO returns a headcount.',
+            'Returns the current observation per lane as a map keyed by mode (each nullable) and the full history, newest first by asOf then recordedAt. The four live lanes are always present; the retired mixed lane appears only when the session has legacy rows. An optional mode filter limits the observations to one lane and returns that lane alone in current. A superseded observation stays valid for its own asOf. Operator-only and no-store; no member DTO returns a headcount.',
           parameters: [
             {
               name: 'sessionDate',
@@ -2633,9 +2634,18 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               required: true,
               schema: { type: 'string', format: 'date' },
             },
+            {
+              name: 'mode',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: [...HEADCOUNT_READ_MODES] },
+            },
           ],
           responses: {
-            200: json('The current observation, or null, and the observations.', 'HeadcountList'),
+            200: json(
+              'The per-lane current observations (each null when not recorded) and the observations.',
+              'HeadcountList',
+            ),
             401: unauthorized,
             404: notFound,
             422: validation,
@@ -2644,7 +2654,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Record a headcount observation or correct the current one',
           description:
-            'Without supersedesId this appends an observation with asOf (default now) inside the session day in the event timezone. With supersedesId it corrects the current non-superseded observation of the same session, keeps that observation’s asOf, may change the mode, and leaves the corrected row in history. Each bucket is 0-10000, the total is the sum and at most 30000, all-zero is allowed, and a mode-violating bucket is 422. A second supersede of the same row is 422.',
+            'Records one mode’s observation. Without supersedesId it supersedes that lane’s current observation and takes asOf (default now) inside the session day in the event timezone. With supersedesId it corrects the current observation of that row’s lane, keeps its asOf, and leaves the corrected row in history; it may move into another lane only when that lane has no current observation, otherwise it is 422 naming that lane. lines are a subset of the mode’s declared buckets with no duplicates, each 0-10000, the total is their sum and at most 30000; an all-zero set writes no lines. The retired mixed mode is refused. A second supersede of the same row is 422.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
