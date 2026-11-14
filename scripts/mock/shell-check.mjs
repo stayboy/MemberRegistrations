@@ -123,8 +123,27 @@ export function checkShell(html, options = {}) {
     }
   }
 
-  // 3. The section's submenu.
-  if (!has(html, /class="side-nav"/)) failures.push('sidebar nav: no `class="side-nav"`');
+  // 3. The section's submenu, with an icon per item (the shell draws one on every link).
+  const nav = /<nav class="side-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
+  if (!has(html, /class="side-nav"/)) {
+    failures.push('sidebar nav: no `class="side-nav"`');
+  } else if (nav === null) {
+    failures.push('sidebar nav: the `.side-nav` element is not a `<nav>` block the check can read');
+  } else {
+    const items = [...nav[1].matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)];
+    if (items.length === 0) failures.push('sidebar nav: no links');
+    items.forEach((item, index) => {
+      if (/<svg/.test(item[1])) return;
+      const label =
+        item[1]
+          .replace(/<[^>]*>/g, ' ')
+          .trim()
+          .split(/\s+/)
+          .slice(0, 3)
+          .join(' ') || `item ${index + 1}`;
+      failures.push(`sidebar nav: "${label}" has no icon`);
+    });
+  }
 
   // 4. Footer: Date and time (gear, label, chevron) above Appearance (field, switch, Dark).
   const foot = /<div class="side-foot">([\s\S]*?)\n\s*<\/aside>/.exec(html);
