@@ -73,7 +73,7 @@ its own lane, retires `mixed`, and adds two specialised lanes plus the vocabular
 | `adults`     | Adult service    | adult male, adult female, child unspecified (labelled "children" on entry) |
 | `children`   | Children service | child male, child female, adult unspecified (labelled "adults" on entry)   |
 | `visitors`   | Visitors         | visitor male, visitor female, visitor children                             |
-| `presbyters` | Presbyters       | elders, deaconess, deacons                                                 |
+| `presbyters` | Presbyters       | `elder`, `deaconess`, `deacon`                                             |
 
 - **HC-9** `mixed` is **retired**. No new observation may be recorded in it: the write path rejects the
   code, `HEADCOUNT_MODES`/`HeadcountMode` in the code stop accepting it, and the USSD surface stops
@@ -98,11 +98,11 @@ its own lane, retires `mixed`, and adds two specialised lanes plus the vocabular
 - **HC-13** The `presbyters` lane counts people by **office** in three buckets. The mapping is declared
   with the mode:
 
-| Bucket    | Title that fills it |
-| --------- | ------------------- |
-| elders    | Elder               |
-| deaconess | Deaconess           |
-| deacons   | Deacon              |
+| Bucket      | Title that fills it |
+| ----------- | ------------------- |
+| `elder`     | Elder               |
+| `deaconess` | Deaconess           |
+| `deacon`    | Deacon              |
 
 **Pastor and Apostle are not counted in this lane.** They are heads: their number is zero or one at most
 services, and only rarely more than one, so their attendance is recorded **against their membership** as

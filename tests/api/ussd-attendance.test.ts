@@ -256,6 +256,16 @@ beforeAll(async () => {
     lastName: 'Three',
     isPresbyter: true,
   });
+  await createMember('UA-HC4', '0830 000 0030', {
+    firstName: 'Count',
+    lastName: 'Four',
+    isPresbyter: true,
+  });
+  await createMember('UA-HC5', '0831 000 0031', {
+    firstName: 'Count',
+    lastName: 'Five',
+    isPresbyter: true,
+  });
 
   await assignShepherd('UA-SHEPHERD', 'UA-PROFILE');
   await assignShepherd('UA-SHEPHERD', 'UA-SHEEP');
@@ -826,6 +836,70 @@ describe('USSD attendance, codes and clocking', () => {
     expect(rows[1]!.total).toBe(18);
     expect(new Date(rows[1]!.as_of).toISOString()).toBe(new Date(rows[0]!.as_of).toISOString());
     expect(rows[1]!.recorded_by).not.toBe(rows[0]!.recorded_by);
+  });
+
+  it('records the visitors and presbyters lanes from their own entries', async () => {
+    async function openHeadcountMode(phone: string, ip: string) {
+      const started = await start(phone, ip);
+      const sessionId = started.body.sessionId as string;
+      await frame(sessionId, phone, '3', 2, ip);
+      await frame(sessionId, phone, '4', 3, ip);
+      await frame(sessionId, phone, '2', 4, ip);
+      const mode = await frame(sessionId, phone, '1', 5, ip);
+      expect(mode.body.state).toBe('attendance.headcount.mode');
+      return sessionId;
+    }
+
+    // Visitors is its own lane: male, female and children buckets.
+    const visitorPhone = '0830 000 0030';
+    const visitorIp = '10.20.9.4';
+    const visitorSession = await openHeadcountMode(visitorPhone, visitorIp);
+    const visitorEntry = await frame(visitorSession, visitorPhone, '3', 6, visitorIp);
+    expect(visitorEntry.body.state).toBe('attendance.headcount.entry');
+    expect(visitorEntry.body.text).toContain('Enter male,female,children');
+    const visitorConfirm = await frame(visitorSession, visitorPhone, '10 5 3', 7, visitorIp);
+    expect(visitorConfirm.body.state).toBe('attendance.headcount.confirm');
+    expect(visitorConfirm.body.text).toContain('10 Male, 5 Female, 3 Children');
+    expect(visitorConfirm.body.text).toContain('Total 18');
+    const visitorDone = await frame(visitorSession, visitorPhone, '1', 8, visitorIp);
+    expect(visitorDone.body.state).toBe('attendance.headcount.done');
+    expect(visitorDone.body.text).toContain('Total 18');
+
+    // Presbyters counts offices, never Pastor or Apostle.
+    const presbyterPhone = '0831 000 0031';
+    const presbyterIp = '10.20.9.5';
+    const presbyterSession = await openHeadcountMode(presbyterPhone, presbyterIp);
+    const presbyterEntry = await frame(presbyterSession, presbyterPhone, '4', 6, presbyterIp);
+    expect(presbyterEntry.body.state).toBe('attendance.headcount.entry');
+    expect(presbyterEntry.body.text).toContain('Enter elders,deaconess,deacons');
+    const presbyterConfirm = await frame(presbyterSession, presbyterPhone, '2 1 3', 7, presbyterIp);
+    expect(presbyterConfirm.body.state).toBe('attendance.headcount.confirm');
+    expect(presbyterConfirm.body.text).toContain('2 Elders, 1 Deaconess, 3 Deacons');
+    expect(presbyterConfirm.body.text).toContain('Total 6');
+    await frame(presbyterSession, presbyterPhone, '1', 8, presbyterIp);
+
+    const rows = await harness.db.query<{
+      mode: string;
+      total: number;
+      bucket_code: string;
+      count: number;
+    }>(
+      `select h.mode, h.total, l.bucket_code, l.count
+         from event_session_headcounts h
+         join headcount_lines l on l.headcount_id = h.id
+        where h.event_instance_id = $1 and h.session_date = $2
+          and h.mode in ('visitors','presbyters')
+        order by h.mode, l.bucket_code`,
+      [mainEventId, today],
+    );
+    expect(rows).toEqual([
+      { mode: 'presbyters', total: 6, bucket_code: 'deacon', count: 3 },
+      { mode: 'presbyters', total: 6, bucket_code: 'deaconess', count: 1 },
+      { mode: 'presbyters', total: 6, bucket_code: 'elder', count: 2 },
+      { mode: 'visitors', total: 18, bucket_code: 'visitor-children', count: 3 },
+      { mode: 'visitors', total: 18, bucket_code: 'visitor-female', count: 5 },
+      { mode: 'visitors', total: 18, bucket_code: 'visitor-male', count: 10 },
+    ]);
   });
 
   it('refuses a new mixed count and reads a legacy one without offering it', async () => {

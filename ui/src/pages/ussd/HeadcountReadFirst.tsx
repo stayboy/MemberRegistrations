@@ -14,22 +14,21 @@ import {
 import { EditRegular } from '@fluentui/react-icons';
 import type { Headcount, HeadcountCurrent } from '../../api/ussd';
 import {
+  HEADCOUNT_MODE_OPTIONS,
   headcountBucketSummary,
   headcountModeLabel,
-  type HeadcountEntryMode,
 } from '../../format/ussd';
 import { useUssdStyles } from './ussd-styles';
 
 /**
- * The loaded, read-first body: the named lane's current observation with its
- * Correct action, the register-derived Roster beside it, and the append-only
- * history newest first. No write form lives here; Record and Correct are dialogs
- * the page owns. A superseded row stays readable and is valid for its own `asOf`;
- * a row is current only in its own lane.
+ * The loaded, read-first body: one row per recorded lane with its own count,
+ * `asOf`, recorder and Correct action, the register-derived Roster beside it,
+ * and the append-only history newest first. No write form lives here; Record and
+ * Correct are dialogs the page owns. A superseded row stays readable and is
+ * valid for its own `asOf`; a row is current only in its own lane (HC-18).
  */
 export function HeadcountReadFirst({
   current,
-  lane,
   observations,
   roster,
   rosterPending,
@@ -39,7 +38,6 @@ export function HeadcountReadFirst({
   onCorrect,
 }: {
   current: HeadcountCurrent;
-  lane: HeadcountEntryMode;
   observations: readonly Headcount[];
   roster: number | undefined;
   rosterPending: boolean;
@@ -49,44 +47,72 @@ export function HeadcountReadFirst({
   onCorrect: (observation: Headcount) => void;
 }) {
   const styles = useUssdStyles();
-  const laneCurrent = current[lane] ?? null;
+  // One row per recorded live lane, in the menu's lane order. A lane without a
+  // current observation is not a row; a retired mixed lane stays in history.
+  const lanes = HEADCOUNT_MODE_OPTIONS.flatMap(({ value }) => {
+    const row = current[value] ?? null;
+    return row ? [row] : [];
+  });
 
   return (
     <>
       <div className={styles.fields}>
-        <Card className={styles.panel} style={{ flex: 1, minWidth: '260px' }}>
+        <Card className={styles.panel} style={{ flex: 2, minWidth: '320px' }}>
           <div className={styles.panelBody}>
-            <Text size={200} className={styles.muted}>
-              Current headcount · {headcountModeLabel(lane)}
-            </Text>
-            {laneCurrent ? (
-              <>
-                <Text className={styles.code}>{laneCurrent.total}</Text>
-                <div className={styles.badgeRow}>
-                  <Badge appearance="tint" color="brand" size="small">
-                    {headcountModeLabel(laneCurrent.mode)}
-                  </Badge>
-                  <Text size={200}>as of {formatInstant(laneCurrent.asOf)}</Text>
-                </div>
-                <Text size={200} className={styles.muted}>
-                  {headcountBucketSummary(laneCurrent)} · recorded{' '}
-                  {formatInstant(laneCurrent.recordedAt)}
-                </Text>
-                <div>
-                  <Button
-                    size="small"
-                    icon={<EditRegular />}
-                    onClick={() => onCorrect(laneCurrent)}
-                    disabled={pending}
-                  >
-                    Correct
-                  </Button>
-                </div>
-              </>
-            ) : (
+            <div className={styles.panelHeader}>
+              <h2 className={styles.panelTitle}>Current headcount</h2>
+              <Text size={200} className={styles.muted}>
+                One row per lane · each with its own asOf
+              </Text>
+            </div>
+            {lanes.length === 0 ? (
               <Text size={200} className={styles.muted}>
                 No headcount recorded for this session yet.
               </Text>
+            ) : (
+              <div className={styles.tableWrap}>
+                <Table
+                  className={styles.table}
+                  size="small"
+                  aria-label="Current headcounts"
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHeaderCell>Mode</TableHeaderCell>
+                      <TableHeaderCell>Count</TableHeaderCell>
+                      <TableHeaderCell>As of</TableHeaderCell>
+                      <TableHeaderCell>Recorded</TableHeaderCell>
+                      <TableHeaderCell>Action</TableHeaderCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lanes.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{headcountModeLabel(row.mode)}</TableCell>
+                        <TableCell>
+                          <Text className={styles.code}>{row.total}</Text>
+                        </TableCell>
+                        <TableCell>{formatInstant(row.asOf)}</TableCell>
+                        <TableCell>
+                          <Text size={200} className={styles.muted}>
+                            {row.recordedBy} · {formatInstant(row.recordedAt)}
+                          </Text>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="small"
+                            icon={<EditRegular />}
+                            onClick={() => onCorrect(row)}
+                            disabled={pending}
+                          >
+                            Correct
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </Card>
@@ -145,11 +171,9 @@ export function HeadcountReadFirst({
                 {observations.map((row) => {
                   // Each lane has its own current observation, so identity is
                   // resolved against that lane's tip — never against another
-                  // lane's. Only the adults and children lanes can be corrected
-                  // from this page this round.
+                  // lane's. A retired mixed observation is read-only history.
                   const isCurrent = (current[row.mode] ?? null)?.id === row.id;
-                  const canCorrect =
-                    isCurrent && (row.mode === 'adults' || row.mode === 'children');
+                  const canCorrect = isCurrent && row.mode !== 'mixed';
                   return (
                     <TableRow key={row.id}>
                       <TableCell>{formatInstant(row.asOf)}</TableCell>
