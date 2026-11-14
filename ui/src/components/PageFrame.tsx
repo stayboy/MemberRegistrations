@@ -10,7 +10,7 @@ import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { ConnectionBadge, connectionErrorDetail, useGatewayHealth } from '../shell/ConnectionBadge';
 import { SECTIONS, firstItemOf, type SectionId } from '../shell/navigation';
-import { PageActions, type PageAction } from './PageActions';
+import { PageActions, isVerb, type PageAction } from './PageActions';
 
 const useStyles = makeStyles({
   frame: {
@@ -21,8 +21,8 @@ const useStyles = makeStyles({
     maxWidth: '1440px',
     marginInline: 'auto',
   },
-  // FR-9a: the breadcrumb row spans the content width, so the `Actions` menu sits at its
-  // right edge and never covers the page's title.
+  // FR-9a: the breadcrumb row spans the content width, so the action row sits at its right
+  // edge and never covers the page's title.
   actionRow: {
     display: 'flex',
     alignItems: 'center',
@@ -88,8 +88,9 @@ const useStyles = makeStyles({
   controlsTrailing: {
     marginInlineStart: 'auto',
   },
-  // `marginInlineStart: auto` keeps the menu at the row's right edge; where the row wraps,
-  // the menu wraps below the breadcrumb and stays right-aligned (FR-9a).
+  // `marginInlineStart: auto` keeps the action row at the row's right edge; where the row
+  // wraps, the verbs and the trailing utilities wrap below the breadcrumb and stay
+  // right-aligned (FR-9a).
   actions: {
     display: 'flex',
     alignItems: 'center',
@@ -128,12 +129,12 @@ export function PageFrame({
   title: string;
   submenu?: string;
   description?: string;
-  /** The page's action-row verbs; they render as the `Actions` menu (FR-9a). */
+  /** The page's action row: verbs and `Refresh`-class utilities (FR-9a). */
   actions?: readonly PageAction[];
   /**
-   * Header controls that stay visible outside the menu: filters, date windows and view
+   * Header controls that stay visible outside the action row: filters, date windows and view
    * switches, plus a form's commit/cancel pair and a `Back` navigation control. They are
-   * laid out on the breadcrumb row, left of the menu (FR-9a).
+   * laid out on the breadcrumb row, left of the action row (FR-9a).
    */
   controls?: ReactNode;
   /** The landing drops the API-connected pill; the operator pages keep it. */
@@ -145,7 +146,11 @@ export function PageFrame({
   const health = useGatewayHealth();
   const { pathname } = useLocation();
   const showUssdNotice = showsUssdProductionNotice(sectionId, pathname);
-  const hasActions = (actions?.length ?? 0) > 0;
+  // FR-9a: verbs take part in the one-or-many rule; utilities never do.
+  const verbs = (actions ?? []).filter(isVerb);
+  const utilities = (actions ?? []).filter((action) => action.kind === 'utility');
+  const [soleVerb] = verbs;
+  const hasActions = verbs.length > 0 || utilities.length > 0;
 
   return (
     <div className={styles.frame}>
@@ -169,7 +174,28 @@ export function PageFrame({
           </div>
         ) : null}
         <div className={styles.actions}>
-          <PageActions actions={actions ?? []} />
+          {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
+          {verbs.length === 1 && soleVerb ? (
+            <Button
+              icon={soleVerb.icon}
+              disabled={soleVerb.disabled}
+              onClick={soleVerb.onSelect}
+            >
+              {soleVerb.label}
+            </Button>
+          ) : null}
+          {verbs.length >= 2 ? <PageActions actions={verbs} /> : null}
+          {/* FR-9a: a utility is a bare trailing icon button, named for assistive tech. */}
+          {utilities.map((utility) => (
+            <Button
+              key={utility.id}
+              appearance="subtle"
+              aria-label={utility.label}
+              icon={utility.icon}
+              disabled={utility.disabled}
+              onClick={utility.onSelect}
+            />
+          ))}
         </div>
       </div>
 

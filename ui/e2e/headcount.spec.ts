@@ -1,5 +1,5 @@
 import type { Page } from 'playwright/test';
-import { expect, open, openActions, seedSession, test } from './fixtures';
+import { expect, open, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -25,11 +25,11 @@ test('the headcount page is read-first and records and corrects through dialogs'
 
   await chooseFoundationService(page);
 
-  // Read-first: no inline write form; Record is a header action in the Actions menu.
+  // Read-first: no inline write form; Record is the page's one visible verb (FR-9a).
   await expect(page.getByRole('region', { name: 'Record a headcount' })).toHaveCount(0);
-  await openActions(page);
-  await expect(page.getByRole('menuitem', { name: 'Record headcount' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Record headcount' })).toBeVisible();
+  // One verb does not need the menu, so the page renders none.
+  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
 
   await expect(page.getByText('Current headcount')).toBeVisible();
   await expect(page.getByText('Roster', { exact: true })).toBeVisible();
@@ -51,8 +51,7 @@ test('the headcount page is read-first and records and corrects through dialogs'
   await expect(history.getByText('Valid for Jan 10, 2999, 09:02 AM')).toBeVisible();
 
   // Record through the dialog; the live total follows the numbers.
-  await openActions(page);
-  await page.getByRole('menuitem', { name: 'Record headcount' }).click();
+  await page.getByRole('button', { name: 'Record headcount' }).click();
   const recordDialog = page.getByRole('dialog');
   await expect(recordDialog.getByRole('heading', { name: 'Record a headcount' })).toBeVisible();
   await recordDialog.getByLabel('As of').fill('2999-01-10T10:15');

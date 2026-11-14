@@ -433,6 +433,7 @@ export function ShepherdingRosterPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

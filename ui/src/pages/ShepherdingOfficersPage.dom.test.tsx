@@ -1,5 +1,4 @@
 import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
@@ -8,10 +7,11 @@ import { renderWithProviders } from '../test/render';
 import { ShepherdingOfficersPage } from './ShepherdingOfficersPage';
 
 /**
- * FR-9a keeps each menu item's **disabling condition**, not the button that used to carry
- * it: the state must stay derivable from the query after the button is gone. This is the
- * mirroring case — the officers list is held in flight, and the `Refresh` menuitem must be
- * disabled for exactly that window and enabled once the query settles.
+ * FR-9a keeps each action's **disabling condition**, not the control that used to carry it:
+ * the state must stay derivable from the query. `ShepherdingOfficersPage` carries one
+ * `Refresh` utility and no verb, so this is the mirroring case — the page renders a bare
+ * trailing icon, no `Actions` menu, and the icon is disabled for exactly the window the
+ * officers query is in flight and enabled once it settles.
  */
 const officers = vi.hoisted(() => {
   let resolve!: (rows: never[]) => void;
@@ -40,9 +40,8 @@ vi.mock('../api/gateway', async (importOriginal) => {
   };
 });
 
-describe('ShepherdingOfficersPage action menu', () => {
+describe('ShepherdingOfficersPage action row', () => {
   it('disables Refresh while the roster query is in flight and enables it after', async () => {
-    const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter>
         <ThemeProvider>
@@ -53,13 +52,14 @@ describe('ShepherdingOfficersPage action menu', () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    // One utility and no verb: a named icon button, never a menu (FR-9a).
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
 
-    const refreshItem = await screen.findByRole('menuitem', { name: 'Refresh' });
-    expect(refreshItem).toHaveAttribute('aria-disabled', 'true');
+    const refresh = await screen.findByRole('button', { name: 'Refresh' });
+    expect(refresh).toBeDisabled();
 
     officers.resolve([]);
 
-    await waitFor(() => expect(refreshItem).not.toHaveAttribute('aria-disabled', 'true'));
+    await waitFor(() => expect(refresh).not.toBeDisabled());
   });
 });

@@ -16,6 +16,7 @@ import {
   shorthands,
   tokens,
 } from '@fluentui/react-components';
+import { ArrowClockwiseRegular } from '@fluentui/react-icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -575,7 +576,9 @@ export function ImportsAttendancePage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
+          icon: <ArrowClockwiseRegular />,
           onSelect: () => {
             void eventsQuery.refetch();
             void formatsQuery.refetch();

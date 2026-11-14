@@ -173,6 +173,7 @@ export function UssdSimulatorPage() {
       actions={[
         {
           id: 'new-session',
+          kind: 'verb',
           label: 'New session',
           icon: <ArrowClockwiseRegular />,
           onSelect: resetSession,

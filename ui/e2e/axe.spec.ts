@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from 'playwright/test';
 import type { AccentId, Scheme } from '../src/theme/brand';
-import { expect, open, openActions, seedSession, seedTheme, test } from './fixtures';
+import { expect, open, seedSession, seedTheme, test } from './fixtures';
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -119,8 +119,7 @@ test.describe('accessibility', () => {
       await audit(page, `offerings count (${scheme})`);
 
       // The record entry is a modal grid; audit it in the same seeded theme.
-      await openActions(page);
-      await page.getByRole('menuitem', { name: 'Record count' }).click();
+      await page.getByRole('button', { name: 'Record count' }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page.getByLabel('Pieces of GHS 200.00')).toBeVisible();
       await audit(page, `offerings count record dialog (${scheme})`);
@@ -143,8 +142,7 @@ test.describe('accessibility', () => {
       await expectSeededTheme(page, 'fluent', scheme);
       await audit(page, `headcount (${scheme})`);
 
-      await openActions(page);
-      await page.getByRole('menuitem', { name: 'Record headcount' }).click();
+      await page.getByRole('button', { name: 'Record headcount' }).click();
       await expect(
         page.getByRole('dialog').getByRole('heading', { name: 'Record a headcount' }),
       ).toBeVisible();

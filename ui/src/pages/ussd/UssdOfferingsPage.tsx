@@ -359,6 +359,7 @@ export function UssdOfferingsPage() {
       actions={[
         {
           id: 'record-count',
+          kind: 'verb',
           label: 'Record count',
           icon: <AddRegular />,
           disabled: !selection || !selectedOfferingId || recordMutation.isPending,
@@ -366,6 +367,7 @@ export function UssdOfferingsPage() {
         },
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           disabled: !selection || countsQuery.isFetching,

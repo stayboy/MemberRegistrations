@@ -152,6 +152,7 @@ export function UssdClockingPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           disabled: !selection || attendanceQuery.isFetching,

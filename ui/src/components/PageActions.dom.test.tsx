@@ -4,14 +4,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { PageActions, type PageAction } from './PageActions';
 
 /**
- * FR-9a: one `Actions` menu holds the page's action-row verbs. These cases pin the
- * contract the call sites rely on — the empty slot, the label that names the menu, the
- * closed state as well as the open one, the disabled state an item inherits from its
- * query, the separator before the trailing destructive group, FR-9a's item order with
- * `Refresh` last, and selection.
+ * FR-9a: one `Actions` menu holds a page's two-or-more verbs. These cases pin the contract
+ * the call sites rely on — the empty slot, the label that names the menu, the closed state
+ * as well as the open one, the disabled state an item inherits from its query, the
+ * separator before the trailing destructive group, the order create-side → edit-side →
+ * destructive, the absence of a divider when there is no destructive verb, that a
+ * `Refresh`-class utility is never an item, and selection.
  */
+function verb(onSelect = vi.fn(), label = 'Edit'): PageAction {
+  return { id: label.toLowerCase(), kind: 'verb', label, onSelect, disabled: false };
+}
+
 function refresh(onSelect = vi.fn()): PageAction {
-  return { id: 'refresh', label: 'Refresh', onSelect, disabled: false };
+  return { id: 'refresh', kind: 'utility', label: 'Refresh', onSelect, disabled: false };
 }
 
 /** Fluent's own `MenuDivider`; it renders with `role="presentation"`, so select it by its class. */
@@ -33,9 +38,16 @@ describe('PageActions', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
+  it('renders no trigger when the list holds only utilities', () => {
+    render(<PageActions actions={[refresh()]} />);
+
+    expect(screen.queryByRole('button', { name: /Actions/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
   it('names the trigger Actions and opens a menu', async () => {
     const user = userEvent.setup();
-    render(<PageActions actions={[refresh()]} />);
+    render(<PageActions actions={[verb()]} />);
 
     const trigger = screen.getByRole('button', { name: 'Actions' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
@@ -51,17 +63,17 @@ describe('PageActions', () => {
 
     expect(await screen.findByRole('menu')).toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('menuitem', { name: 'Refresh' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
   });
 
   it('keeps a disabled action visible and does not fire it', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    render(<PageActions actions={[{ ...refresh(onSelect), disabled: true }]} />);
+    render(<PageActions actions={[{ ...verb(onSelect), disabled: true }]} />);
 
     await user.click(screen.getByRole('button', { name: 'Actions' }));
 
-    const item = screen.getByRole('menuitem', { name: 'Refresh' });
+    const item = screen.getByRole('menuitem', { name: 'Edit' });
     expect(item).toHaveAttribute('aria-disabled', 'true');
 
     await user.click(item);
@@ -74,9 +86,9 @@ describe('PageActions', () => {
     render(
       <PageActions
         actions={[
-          { id: 'edit', label: 'Edit', onSelect: vi.fn() },
-          { id: 'archive', label: 'Archive', onSelect: vi.fn(), destructive: true },
-          { id: 'purge', label: 'Purge', onSelect: vi.fn(), destructive: true },
+          { id: 'edit', kind: 'verb', label: 'Edit', onSelect: vi.fn() },
+          { id: 'archive', kind: 'verb', label: 'Archive', onSelect: vi.fn(), destructive: true },
+          { id: 'purge', kind: 'verb', label: 'Purge', onSelect: vi.fn(), destructive: true },
         ]}
       />,
     );
@@ -91,13 +103,30 @@ describe('PageActions', () => {
     expect(items[2]).toHaveTextContent('Purge');
   });
 
-  it('keeps Refresh last, after the destructive group', async () => {
+  it('draws no divider when no verb is destructive', async () => {
     const user = userEvent.setup();
     render(
       <PageActions
         actions={[
-          { id: 'edit', label: 'Edit', onSelect: vi.fn() },
-          { id: 'archive', label: 'Archive', onSelect: vi.fn(), destructive: true },
+          { id: 'import-attendance', kind: 'verb', label: 'Import attendance', onSelect: vi.fn() },
+          { id: 'edit', kind: 'verb', label: 'Edit', onSelect: vi.fn() },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual(['Import attendance', 'Edit']);
+    expect(dividers()).toHaveLength(0);
+  });
+
+  it('never renders a Refresh-class utility as a menu item', async () => {
+    const user = userEvent.setup();
+    render(
+      <PageActions
+        actions={[
+          { id: 'import-attendance', kind: 'verb', label: 'Import attendance', onSelect: vi.fn() },
           refresh(),
         ]}
       />,
@@ -106,33 +135,25 @@ describe('PageActions', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
 
     const items = screen.getAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Edit', 'Archive', 'Refresh']);
-    expect(dividers()).toHaveLength(1);
-    expect(divider().nextElementSibling).toBe(items[1]);
-  });
-
-  it('separates the trailing group on a page without a destructive verb', async () => {
-    const user = userEvent.setup();
-    render(
-      <PageActions
-        actions={[{ id: 'add-member', label: 'Add member', onSelect: vi.fn() }, refresh()]}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Actions' }));
-
-    const items = screen.getAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Add member', 'Refresh']);
-    expect(divider().nextElementSibling).toBe(items[1]);
+    expect(items.map((item) => item.textContent)).toEqual(['Import attendance']);
+    expect(screen.queryByRole('menuitem', { name: 'Refresh' })).not.toBeInTheDocument();
+    expect(dividers()).toHaveLength(0);
   });
 
   it('calls the action it selected', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    render(<PageActions actions={[refresh(onSelect)]} />);
+    render(
+      <PageActions
+        actions={[
+          verb(onSelect),
+          { id: 'archive', kind: 'verb', label: 'Archive', onSelect: vi.fn() },
+        ]}
+      />,
+    );
 
     await user.click(screen.getByRole('button', { name: 'Actions' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Refresh' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
 
     expect(onSelect).toHaveBeenCalledTimes(1);
   });

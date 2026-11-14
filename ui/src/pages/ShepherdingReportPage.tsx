@@ -77,6 +77,7 @@ export function ShepherdingReportPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

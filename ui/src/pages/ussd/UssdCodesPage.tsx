@@ -164,6 +164,7 @@ export function UssdCodesPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           disabled: codesQuery.isFetching || !selection,

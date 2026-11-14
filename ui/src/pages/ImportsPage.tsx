@@ -6,6 +6,7 @@ import {
   Spinner,
   Text,
 } from '@fluentui/react-components';
+import { ArrowClockwiseRegular } from '@fluentui/react-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { isUnauthorized } from '../api/errors';
@@ -68,7 +69,9 @@ export function ImportsPage() {
       actions={[
         {
           id: 'refresh-columns',
+          kind: 'utility',
           label: 'Refresh columns',
+          icon: <ArrowClockwiseRegular />,
           onSelect: () => {
             void formatsQuery.refetch();
           },

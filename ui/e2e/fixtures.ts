@@ -74,8 +74,9 @@ export async function open(page: Page, route: `/${string}`): Promise<void> {
 }
 
 /**
- * FR-9a: a page's action-row verbs live in one `Actions` menu at the breadcrumb row's
- * right edge. Opens that menu; the caller reads the verb it clicks from the page
+ * FR-9a: a page with two or more action-row verbs renders them inside one `Actions` menu at
+ * the breadcrumb row's right edge; a page with exactly one renders that verb as a visible
+ * button and no menu. Opens the menu; the caller reads the verb it clicks from the page
  * (`page.getByRole('menuitem', { name: … })`), so this returns nothing.
  */
 export async function openActions(page: Page): Promise<void> {

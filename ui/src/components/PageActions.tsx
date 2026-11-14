@@ -17,27 +17,37 @@ export interface PageAction {
   onSelect: () => void;
   disabled?: boolean;
   /**
-   * A member of the trailing destructive group: the item is rendered after the divider that
-   * opens that group, and before any trailing `Refresh`.
+   * FR-9a classifies every action-row control, and the classification is explicit: a future
+   * refresh-like control added without `kind` is a type error rather than a silent menu item.
+   * A **verb** acts on the page or its collection — create, import, edit, archive/restore —
+   * and lives in the `Actions` menu when the page has two or more, or renders visibly when it
+   * has exactly one. A **`utility`** is a surface control that reads the page rather than
+   * changing it (today `Refresh` and `Refresh columns`): it is never a menu item and never
+   * counts towards the two-or-more rule.
    */
+  kind: 'verb' | 'utility';
+  /** A member of the trailing destructive group: the item is rendered after the separator. */
   destructive?: boolean;
 }
 
 /**
- * FR-9a's separator opens the trailing group: the destructive verbs, with `Refresh` last.
- * The group starts at the first destructive verb. A page with none (a create verb plus
- * `Refresh`) starts it at its final item, and a single-item menu has no divider at all.
- * Returns the index the divider is drawn before, or `-1` for none.
+ * FR-9a's separator opens the trailing destructive group: create-side verbs, edit-side
+ * verbs, separator, destructive verbs. The group starts at the first destructive verb; a
+ * menu with no destructive verb draws no divider at all. Returns the index the divider is
+ * drawn before, or `-1` for none.
  */
 function dividerIndex(actions: readonly PageAction[]): number {
   const firstDestructive = actions.findIndex((action) => action.destructive);
-  if (firstDestructive >= 0) return firstDestructive === 0 ? -1 : firstDestructive;
-  return actions.length > 1 ? actions.length - 1 : -1;
+  return firstDestructive >= 1 ? firstDestructive : -1;
 }
 
+/** FR-9a's one classification predicate: a verb owns the one-or-many rule, a utility never takes part. */
+export const isVerb = (action: PageAction) => action.kind === 'verb';
+
 /**
- * One page's **action row** verbs, as the single `Actions` menu at the right edge of the
- * breadcrumb row (UI spec D12, FR-9a).
+ * One page's **action-row** verbs, as the single `Actions` menu at the right edge of the
+ * breadcrumb row (UI spec D12, FR-9a). The `PageFrame` passes verbs only: a `utility` such
+ * as `Refresh` is a bare trailing icon, never an item, so it never reaches this menu.
  *
  * The repo rule is `AGENTS.md` §16: Fluent's component comes before a rewrite. So the menu
  * is composed from Fluent's own primitives — `Menu`, `MenuTrigger`, `MenuPopover`,
@@ -50,13 +60,18 @@ function dividerIndex(actions: readonly PageAction[]): number {
  * `shell/ThemeControl` and `components/DateTimeMenu`.
  */
 export function PageActions({ actions }: { actions: readonly PageAction[] }) {
-  // FR-9a: a page with no verb action renders no menu and leaves the slot empty.
-  if (actions.length === 0) return null;
+  // FR-9a: a utility is never a menu item; filtering here keeps the contract even if a call
+  // site passes the page's whole action list. `PageActions` is exported, so the guard stays
+  // meaningful now that `kind` is required: the type does not separate verb from utility.
+  const verbs = actions.filter(isVerb);
 
-  const dividerAt = dividerIndex(actions);
+  // FR-9a: a page with no verb action renders no menu and leaves the slot empty.
+  if (verbs.length === 0) return null;
+
+  const dividerAt = dividerIndex(verbs);
 
   const items: ReactNode[] = [];
-  actions.forEach((action, index) => {
+  verbs.forEach((action, index) => {
     if (index === dividerAt) items.push(<MenuDivider key={`${action.id}-divider`} />);
     items.push(
       <MenuItem

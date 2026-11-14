@@ -67,6 +67,7 @@ export function ShepherdingOfficersPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

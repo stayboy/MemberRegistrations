@@ -1,4 +1,4 @@
-import { expect, open, openActions, seedSession, test } from './fixtures';
+import { expect, open, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -66,8 +66,7 @@ test('a cancelled session shows its reason, and a legacy one says it is missing'
 test('the series-backed event entry seeds the import flow', async ({ page }) => {
   await open(page, '/events/event-1');
 
-  await openActions(page);
-  const entry = page.getByRole('menuitem', { name: 'Import attendance' });
+  const entry = page.getByRole('button', { name: 'Import attendance' });
   await expect(entry).toBeVisible();
   await entry.click();
 
@@ -80,10 +79,11 @@ test('a standalone event has no import entry', async ({ page }) => {
   await open(page, '/events/event-2');
 
   await expect(page.getByRole('heading', { level: 1, name: 'Leaders retreat' })).toBeVisible();
-  // The standalone event has no import verb, so the menu holds `Refresh` alone.
-  await openActions(page);
-  await expect(page.getByRole('menuitem', { name: 'Import attendance' })).toHaveCount(0);
-  await expect(page.getByRole('menuitem', { name: 'Refresh' })).toBeVisible();
+  // The standalone event has no import verb, so its only action-row control is the `Refresh`
+  // utility: a bare icon and no `Actions` menu at all (FR-9a).
+  await expect(page.getByRole('button', { name: 'Import attendance' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 });
 
 test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
