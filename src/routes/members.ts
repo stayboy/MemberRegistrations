@@ -8,6 +8,7 @@ import {
   createMemberSchema,
   listQuerySchema,
   memberAttendanceWindowQuerySchema,
+  ministryPositionInputSchema,
   purgeSchema,
   relationshipInputSchema,
   subscriptionInputSchema,
@@ -202,6 +203,18 @@ export function membersRouter(
     const { code } = z.object({ code: z.string().min(2).max(16) }).parse(req.body);
     const ministry = await repo.assignMinistry(memberNo(req), code, actorOf(req));
     res.status(201).json(ministry);
+  });
+
+  router.put('/:memberNo/ministries/:code', async (req, res) => {
+    const { positionCode } = ministryPositionInputSchema.parse(req.body);
+    const ministry = await repo.setMinistryPosition(
+      memberNo(req),
+      req.params.code,
+      positionCode,
+      actorOf(req),
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(ministry);
   });
 
   router.delete('/:memberNo/ministries/:code', async (req, res) => {
