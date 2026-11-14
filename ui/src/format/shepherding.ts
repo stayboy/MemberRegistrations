@@ -69,6 +69,25 @@ function parseUtcDate(value: string | null | undefined): Date | null {
 }
 
 /**
+ * Whole UTC days since `lastCalledOn`, or `null` when the row was never called
+ * (or the stored value is not a real UTC date). The one day difference behind
+ * `isFollowUp` (FR-60) and the roster's `Quiet {n}d` badge (FR-59a), so the
+ * badge and the filter cannot disagree.
+ */
+export function daysSinceLastCall(
+  entry: { readonly lastCalledOn: string | null },
+  today: string = utcToday(),
+): number | null {
+  if (!entry.lastCalledOn) return null;
+
+  const last = parseUtcDate(entry.lastCalledOn);
+  const now = parseUtcDate(today);
+  if (!last || !now) return null;
+
+  return Math.floor((now.getTime() - last.getTime()) / DAY_MS);
+}
+
+/**
  * Follow-up means never called, or last called more than 30 UTC days ago.
  * Exactly 30 days is not a follow-up; 31 is (FR-60).
  */
@@ -78,11 +97,26 @@ export function isFollowUp(
 ): boolean {
   if (!entry.lastCalledOn) return true;
 
-  const last = parseUtcDate(entry.lastCalledOn);
-  const now = parseUtcDate(today);
-  if (!last || !now) return true;
+  const days = daysSinceLastCall(entry, today);
+  return days === null ? true : days > FOLLOW_UP_DAYS;
+}
 
-  return Math.floor((now.getTime() - last.getTime()) / DAY_MS) > FOLLOW_UP_DAYS;
+/**
+ * The roster row's last-call badge (FR-59a): "Never called" when the row has no
+ * call, `Quiet {n}d` when FR-60's follow-up condition holds, and `null` when the
+ * plain date stands alone — including the exactly-30-days case. The API's date
+ * schema guarantees a real UTC date, so a stored value that cannot be parsed
+ * never reaches a badge (the filter still treats it as a follow-up).
+ */
+export function lastCallBadge(
+  entry: { readonly lastCalledOn: string | null },
+  today: string = utcToday(),
+): string | null {
+  if (!entry.lastCalledOn) return 'Never called';
+  if (!isFollowUp(entry, today)) return null;
+
+  const days = daysSinceLastCall(entry, today);
+  return days === null ? null : `Quiet ${days}d`;
 }
 
 export interface CallFormValues {

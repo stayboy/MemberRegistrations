@@ -1,12 +1,21 @@
 import {
+  Avatar,
   Badge,
   Button,
   Dropdown,
   Field,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
   Option,
+  SearchBox,
+  Skeleton,
+  SkeletonItem,
   Spinner,
   Tab,
   TabList,
@@ -17,8 +26,11 @@ import {
   TableHeaderCell,
   TableRow,
   Text,
+  makeStyles,
+  shorthands,
+  tokens,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular } from '@fluentui/react-icons';
+import { ArrowClockwiseRegular, MoreHorizontalRegular, SearchRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -36,13 +48,166 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog, type ContactsDialogMember } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
 import { contactLabel, memberLabelFromName } from '../format/member';
-import { isFollowUp, outcomeLabel, stillInChurchLabel } from '../format/shepherding';
+import { genderLabel } from '../format/member-form';
+import { isFollowUp, lastCallBadge, outcomeLabel, stillInChurchLabel } from '../format/shepherding';
 import { LogCallDialog } from './LogCallDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useShepherdingStyles } from './shepherding-styles';
 
 type RosterFilter = 'all' | 'never_called' | 'follow_up';
+
+/** The five count tiles above the roster table, in FR-59a's order. */
+const ROSTER_TILES = [
+  { id: 'assigned', label: 'Assigned', caption: 'Active assignments' },
+  { id: 'attempts', label: 'Attempts', caption: 'In this window' },
+  { id: 'conversations', label: 'Conversations', caption: 'Outcome reached' },
+  { id: 'never_called', label: 'Never called', caption: 'On this roster' },
+  { id: 'follow_ups', label: 'Follow-ups', caption: 'Never or quiet > 30 days' },
+] as const;
+
+type RosterTileId = (typeof ROSTER_TILES)[number]['id'];
+
+const useRosterStyles = makeStyles({
+  identityCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalL,
+    flexWrap: 'wrap',
+    padding: tokens.spacingVerticalL,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  identityBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    minWidth: 0,
+  },
+  identityNameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+  },
+  identityName: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase500,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  counts: {
+    color: tokens.colorNeutralForeground2,
+  },
+  allOfficers: {
+    marginInlineStart: 'auto',
+  },
+  tiles: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+    gap: tokens.spacingHorizontalM,
+  },
+  tile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    padding: tokens.spacingVerticalM,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  tileLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  tileValue: {
+    fontSize: tokens.fontSizeBase600,
+    fontWeight: tokens.fontWeightSemibold,
+    lineHeight: tokens.lineHeightBase600,
+  },
+  tileCaption: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase100,
+  },
+  search: {
+    minWidth: '260px',
+  },
+  rowBadges: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalXS,
+  },
+  footer: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL} ${tokens.spacingVerticalM}`,
+    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+});
+
+/** `5 assignments`, `1 conversation`: the count decides the noun (FR-59a's card). */
+function countPhrase(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+/** First and last initial of a composed name, for the officer card's avatar. */
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.charAt(0) ?? '') : '';
+  return `${first}${last}`.toUpperCase() || '?';
+}
+
+/**
+ * The five FR-59a counts, from the **full** roster read: the two call measures
+ * are sums over assignments, and Never called / Follow-ups count rows through
+ * `lastCalledOn === null` and `isFollowUp` so the tiles, the row badge and
+ * FR-60's filter share one predicate.
+ */
+function countTiles(entries: readonly RosterEntry[]): Record<RosterTileId, number> {
+  return {
+    assigned: entries.length,
+    attempts: entries.reduce((sum, entry) => sum + entry.attempts, 0),
+    conversations: entries.reduce((sum, entry) => sum + entry.conversations, 0),
+    never_called: entries.filter((entry) => entry.lastCalledOn === null).length,
+    follow_ups: entries.filter((entry) => isFollowUp(entry)).length,
+  };
+}
+
+/** The roster row's overflow (FR-59a): Contacts, Reassign and End. */
+function RowActionMenu({
+  label,
+  onContacts,
+  onReassign,
+  onEnd,
+}: {
+  label: string;
+  onContacts: () => void;
+  onReassign: () => void;
+  onEnd: () => void;
+}) {
+  return (
+    <Menu>
+      <MenuTrigger disableButtonEnhancement>
+        <Button
+          size="small"
+          appearance="subtle"
+          icon={<MoreHorizontalRegular aria-hidden="true" />}
+          aria-label={`More actions for ${label}`}
+        />
+      </MenuTrigger>
+      <MenuPopover>
+        <MenuList>
+          <MenuItem onClick={onContacts}>Contacts</MenuItem>
+          <MenuItem onClick={onReassign}>Reassign</MenuItem>
+          <MenuItem onClick={onEnd}>End</MenuItem>
+        </MenuList>
+      </MenuPopover>
+    </Menu>
+  );
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -128,6 +293,7 @@ function StillInChurchCell({ entry }: { entry: RosterEntry }) {
  */
 export function ShepherdingRosterPage() {
   const styles = useShepherdingStyles();
+  const rosterStyles = useRosterStyles();
   const { baseUrl, session, signOut } = useSession();
   const { formatDate } = useDateTimeFormat();
   const token = session?.token ?? '';
@@ -137,6 +303,7 @@ export function ShepherdingRosterPage() {
 
   const officerParam = searchParams.get('officer') ?? '';
   const [filter, setFilter] = useState<RosterFilter>('all');
+  const [searchText, setSearchText] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [contactsFor, setContactsFor] = useState<RosterEntry | null>(null);
   const [callFor, setCallFor] = useState<RosterEntry | null>(null);
@@ -205,11 +372,40 @@ export function ShepherdingRosterPage() {
   }
 
   const entries = rosterQuery.data?.items ?? [];
+  // The tiles read the full roster, never the filtered or searched view (FR-59a).
+  const tiles = countTiles(entries);
   const filtered = entries.filter((entry) => {
     if (filter === 'never_called') return entry.lastCalledOn === null;
     if (filter === 'follow_up') return isFollowUp(entry);
     return true;
   });
+
+  // The search matches member name and member number only, and ANDs with the
+  // active filter instead of resetting it (FR-59a). Contact values are never read.
+  const search = searchText.trim().toLowerCase();
+  const visible = search
+    ? filtered.filter(
+        (entry) =>
+          entry.name.toLowerCase().includes(search) ||
+          entry.memberNo.toLowerCase().includes(search),
+      )
+    : filtered;
+
+  const officerName = selectedOfficer
+    ? selectedOfficer.name || selectedOfficer.memberNo
+    : officerParam;
+  const officerAge = selectedOfficer?.age ?? null;
+  const officerMeta = selectedOfficer
+    ? `${selectedOfficer.memberNo} · ${genderLabel(selectedOfficer.gender)}${
+        officerAge === null ? '' : ` · ${officerAge}y`
+      }`
+    : '';
+  const officerCounts = rosterQuery.isSuccess
+    ? `${countPhrase(tiles.assigned, 'assignment')} · ${countPhrase(
+        tiles.conversations,
+        'conversation',
+      )}`
+    : null;
 
   const contactsMember: ContactsDialogMember | null = contactsFor
     ? {
@@ -322,22 +518,64 @@ export function ShepherdingRosterPage() {
 
         {rosterReady ? (
           <>
+            <section className={rosterStyles.identityCard} aria-label="Officer">
+              <Avatar
+                name={officerName}
+                initials={initialsOf(officerName)}
+                color="colorful"
+                size={56}
+                aria-hidden="true"
+              />
+              <div className={rosterStyles.identityBody}>
+                <div className={rosterStyles.identityNameRow}>
+                  <h2 className={rosterStyles.identityName}>{officerName}</h2>
+                  <Badge appearance="tint" color="informative" size="small">
+                    Presbyter
+                  </Badge>
+                </div>
+                {officerMeta ? (
+                  <Text size={200} className={styles.muted}>
+                    {officerMeta}
+                  </Text>
+                ) : null}
+                {officerCounts ? (
+                  <Text size={200} className={rosterStyles.counts}>
+                    {officerCounts}
+                  </Text>
+                ) : null}
+              </div>
+              <Link
+                className={`${styles.link} ${rosterStyles.allOfficers}`}
+                to={officersHref(window.from, window.to)}
+              >
+                All officers
+              </Link>
+            </section>
+
+            {rosterQuery.isError ? null : (
+              <div className={rosterStyles.tiles} role="group" aria-label="Roster counts">
+                {ROSTER_TILES.map((tile) => (
+                  <div
+                    key={tile.id}
+                    className={rosterStyles.tile}
+                    role="group"
+                    aria-label={tile.label}
+                  >
+                    <Text className={rosterStyles.tileLabel}>{tile.label}</Text>
+                    {rosterQuery.isPending ? (
+                      <Skeleton>
+                        <SkeletonItem size={28} />
+                      </Skeleton>
+                    ) : (
+                      <Text className={rosterStyles.tileValue}>{tiles[tile.id]}</Text>
+                    )}
+                    <Text className={rosterStyles.tileCaption}>{tile.caption}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className={styles.filterRow}>
-              <Text weight="semibold">
-                {selectedOfficer
-                  ? memberLabelFromName(
-                      selectedOfficer.name || selectedOfficer.memberNo,
-                      selectedOfficer.gender,
-                      selectedOfficer.age,
-                    )
-                  : officerParam}
-              </Text>
-              <Text size={200} className={styles.muted}>
-                {selectedOfficer?.memberNo} ·{' '}
-                <Link className={styles.link} to={officersHref(window.from, window.to)}>
-                  all officers
-                </Link>
-              </Text>
               <TabList
                 selectedValue={filter}
                 onTabSelect={(_, data) => setFilter(data.value as RosterFilter)}
@@ -347,6 +585,14 @@ export function ShepherdingRosterPage() {
                 <Tab value="never_called">Never called</Tab>
                 <Tab value="follow_up">Follow-up</Tab>
               </TabList>
+              <SearchBox
+                className={rosterStyles.search}
+                value={searchText}
+                placeholder="Search name or member no."
+                aria-label="Search the roster by name or member number"
+                contentBefore={<SearchRegular />}
+                onChange={(_, data) => setSearchText(data.value)}
+              />
             </div>
 
             {rosterQuery.isError ? (
@@ -373,137 +619,157 @@ export function ShepherdingRosterPage() {
                   <div className={styles.state}>
                     <Spinner label="Loading roster…" />
                   </div>
-                ) : filtered.length === 0 ? (
-                  <div className={styles.empty}>
-                    <Text className={styles.emptyTitle}>
-                      {entries.length === 0 ? 'No active assignments' : 'No members match'}
-                    </Text>
-                    <Text size={200} className={styles.muted}>
-                      {entries.length === 0
-                        ? 'This officer holds no active assignments in the selected view.'
-                        : 'Try All, or widen the date window.'}
-                    </Text>
-                  </div>
                 ) : (
-                  <div className={styles.tableWrap}>
-                    <Table className={styles.rosterTable} size="small" aria-label="Officer roster">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHeaderCell>Member</TableHeaderCell>
-                          <TableHeaderCell>Residence</TableHeaderCell>
-                          <TableHeaderCell>Contacts</TableHeaderCell>
-                          <TableHeaderCell>Attempts</TableHeaderCell>
-                          <TableHeaderCell>Conversations</TableHeaderCell>
-                          <TableHeaderCell>Last called</TableHeaderCell>
-                          <TableHeaderCell>Last outcome</TableHeaderCell>
-                          <TableHeaderCell>Still in church</TableHeaderCell>
-                          <TableHeaderCell>Latest feedback</TableHeaderCell>
-                          <TableHeaderCell>Latest issue</TableHeaderCell>
-                          <TableHeaderCell>Actions</TableHeaderCell>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filtered.map((entry) => {
-                          const label = memberLabelFromName(
-                            entry.name || entry.memberNo,
-                            entry.gender,
-                            entry.age,
-                          );
-                          return (
-                            <TableRow key={entry.assignmentId}>
-                              <TableCell>
-                                <div className={styles.identity}>
-                                  <Link
-                                    className={styles.link}
-                                    to={`/members/${encodeURIComponent(entry.memberNo)}`}
-                                  >
-                                    {label}
-                                  </Link>
-                                  <Text size={200} className={styles.muted}>
-                                    {entry.memberNo}
-                                  </Text>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {entry.placeOfResidence || <Text className={styles.muted}>—</Text>}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  size="small"
-                                  appearance="transparent"
-                                  aria-label={`${contactLabel(entry.contactCount)} for ${label}`}
-                                  onClick={() => setContactsFor(entry)}
-                                >
-                                  {contactLabel(entry.contactCount)}
-                                </Button>
-                              </TableCell>
-                              <TableCell>{entry.attempts}</TableCell>
-                              <TableCell>{entry.conversations}</TableCell>
-                              <TableCell>
-                                {entry.lastCalledOn ? (
-                                  formatDate(entry.lastCalledOn)
-                                ) : (
-                                  <Text className={styles.muted}>Never called</Text>
-                                )}
-                              </TableCell>
-                              <TableCell>{outcomeLabel(entry.lastOutcome)}</TableCell>
-                              <TableCell>
-                                <StillInChurchCell entry={entry} />
-                              </TableCell>
-                              <TableCell>
-                                {entry.latestFeedback ? (
-                                  <Text size={200}>{entry.latestFeedback}</Text>
-                                ) : (
-                                  <Text className={styles.muted}>—</Text>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {entry.latestIssue ? (
-                                  <Text size={200}>{entry.latestIssue}</Text>
-                                ) : (
-                                  <Text className={styles.muted}>—</Text>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <div className={styles.actions}>
-                                  <Button
-                                    size="small"
-                                    appearance="primary"
-                                    onClick={() => {
-                                      setActionError(null);
-                                      setCallFor(entry);
-                                    }}
-                                  >
-                                    Log call
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    appearance="secondary"
-                                    onClick={() => {
-                                      setActionError(null);
-                                      setAssignFor(entry);
-                                    }}
-                                  >
-                                    Reassign
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    appearance="subtle"
-                                    onClick={() => {
-                                      setActionError(null);
-                                      setEndFor(entry);
-                                    }}
-                                  >
-                                    End assignment
-                                  </Button>
-                                </div>
-                              </TableCell>
+                  <>
+                    {visible.length === 0 ? (
+                      <div className={styles.empty}>
+                        <Text className={styles.emptyTitle}>
+                          {entries.length === 0 ? 'No active assignments' : 'No members match'}
+                        </Text>
+                        <Text size={200} className={styles.muted}>
+                          {entries.length === 0
+                            ? 'This officer holds no active assignments in the selected view.'
+                            : search
+                              ? 'Try a different name or member number, or another filter.'
+                              : 'Try All, or widen the date window.'}
+                        </Text>
+                      </div>
+                    ) : (
+                      <div className={styles.tableWrap}>
+                        <Table
+                          className={styles.rosterTable}
+                          size="small"
+                          aria-label="Officer roster"
+                        >
+                          <TableHeader>
+                            <TableRow>
+                              <TableHeaderCell>Member</TableHeaderCell>
+                              <TableHeaderCell>Residence</TableHeaderCell>
+                              <TableHeaderCell>Contacts</TableHeaderCell>
+                              <TableHeaderCell>Attempts</TableHeaderCell>
+                              <TableHeaderCell>Conversations</TableHeaderCell>
+                              <TableHeaderCell>Last called</TableHeaderCell>
+                              <TableHeaderCell>Last outcome</TableHeaderCell>
+                              <TableHeaderCell>Still in church</TableHeaderCell>
+                              <TableHeaderCell>Latest feedback</TableHeaderCell>
+                              <TableHeaderCell>Latest issue</TableHeaderCell>
+                              <TableHeaderCell>Actions</TableHeaderCell>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                          </TableHeader>
+                          <TableBody>
+                            {visible.map((entry) => {
+                              const label = memberLabelFromName(
+                                entry.name || entry.memberNo,
+                                entry.gender,
+                                entry.age,
+                              );
+                              const badge = lastCallBadge(entry);
+                              return (
+                                <TableRow key={entry.assignmentId}>
+                                  <TableCell>
+                                    <div className={styles.identity}>
+                                      <Link
+                                        className={styles.link}
+                                        to={`/members/${encodeURIComponent(entry.memberNo)}`}
+                                      >
+                                        {label}
+                                      </Link>
+                                      <Text size={200} className={styles.muted}>
+                                        {entry.memberNo}
+                                      </Text>
+                                      {badge ? (
+                                        <div className={rosterStyles.rowBadges}>
+                                          <Badge appearance="tint" color="warning" size="small">
+                                            {badge}
+                                          </Badge>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.placeOfResidence || (
+                                      <Text className={styles.muted}>—</Text>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      size="small"
+                                      appearance="transparent"
+                                      aria-label={`${contactLabel(entry.contactCount)} for ${label}`}
+                                      onClick={() => setContactsFor(entry)}
+                                    >
+                                      {contactLabel(entry.contactCount)}
+                                    </Button>
+                                  </TableCell>
+                                  <TableCell>{entry.attempts}</TableCell>
+                                  <TableCell>{entry.conversations}</TableCell>
+                                  <TableCell>
+                                    {entry.lastCalledOn ? (
+                                      formatDate(entry.lastCalledOn)
+                                    ) : (
+                                      <Text className={styles.muted}>Never called</Text>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>{outcomeLabel(entry.lastOutcome)}</TableCell>
+                                  <TableCell>
+                                    <StillInChurchCell entry={entry} />
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.latestFeedback ? (
+                                      <Text size={200}>{entry.latestFeedback}</Text>
+                                    ) : (
+                                      <Text className={styles.muted}>—</Text>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.latestIssue ? (
+                                      <Text size={200}>{entry.latestIssue}</Text>
+                                    ) : (
+                                      <Text className={styles.muted}>—</Text>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className={styles.actions}>
+                                      <Button
+                                        size="small"
+                                        appearance="primary"
+                                        onClick={() => {
+                                          setActionError(null);
+                                          setCallFor(entry);
+                                        }}
+                                      >
+                                        Log call
+                                      </Button>
+                                      <RowActionMenu
+                                        label={label}
+                                        onContacts={() => {
+                                          setActionError(null);
+                                          setContactsFor(entry);
+                                        }}
+                                        onReassign={() => {
+                                          setActionError(null);
+                                          setAssignFor(entry);
+                                        }}
+                                        onEnd={() => {
+                                          setActionError(null);
+                                          setEndFor(entry);
+                                        }}
+                                      />
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                    <div className={rosterStyles.footer}>
+                      <Text size={200} className={styles.muted}>
+                        {countPhrase(visible.length, 'assignment')} in this view
+                      </Text>
+                    </div>
+                  </>
                 )}
               </section>
             )}
