@@ -18,29 +18,44 @@
     "live": {
       "mock": {
         "path": "mockups/headcount/10-capture-state.png",
-        "sha256": "632463051aa1cc8b11610aae03def16d543457658779c2d9fdbe539266ea39a1",
+        "sha256": "c58d01e70e6936e6f0d866931642627c5e6798a1fed5ea902ad190ca9c44f5ba",
         "source": "mockups/headcount/10-capture-state.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-14",
+        "sha256": "c58d01e70e6936e6f0d866931642627c5e6798a1fed5ea902ad190ca9c44f5ba"
+      }
     },
     "ended": {
       "mock": {
         "path": "mockups/headcount/13-headcount-ended.png",
-        "sha256": "02b4cd5060731b4a3bc8ea22cfba73a5d0794ffacffe9f9bc253fe799eabf143",
+        "sha256": "a139dc760cc3f8698fa597f5c717fd1279184f14be750b469895da8cdaf0c4af",
         "source": "mockups/headcount/13-headcount-ended.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-14",
+        "sha256": "a139dc760cc3f8698fa597f5c717fd1279184f14be750b469895da8cdaf0c4af"
+      }
     },
     "not-live": {
       "mock": {
         "path": "mockups/headcount/14-headcount-not-live.png",
-        "sha256": "aaaeae94ecfe230dd5d731dd3c90c6ee09d55dc6988e1cf33f1e3fddf7ee118c",
+        "sha256": "15b27e4f73c457d478d93eaf51333da1bc46cc779e8ac393d894307935659a00",
         "source": "mockups/headcount/14-headcount-not-live.html"
       },
       "baseline": "headcount-capture.png",
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-14",
+        "sha256": "15b27e4f73c457d478d93eaf51333da1bc46cc779e8ac393d894307935659a00"
+      }
     }
   },
   "inventory": [

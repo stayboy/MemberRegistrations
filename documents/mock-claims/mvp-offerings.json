@@ -18,7 +18,7 @@
     "offertory": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-offertory.png",
-        "sha256": "b422f3d9a96ff57681e0fef1befb75a52acadc0893142c62265534c41fe980b5",
+        "sha256": "9a216f8b2a383a24030feb7747f618643fd692e6f8fa0e66c90cc6b6067d98d1",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -27,7 +27,7 @@
     "pledge": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge.png",
-        "sha256": "78618315981316f38ec2e2e5ce20455709dfd5efa24499f1491e963d27c80eeb",
+        "sha256": "c5a126a0d6d2780eb367f278dbe22d1b899a34046ddaf3a65ee9e5dc8e210646",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -36,7 +36,7 @@
     "pledge-no-shepherd": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge-no-shepherd.png",
-        "sha256": "537fdb1a45c37620232972254567c7b8140c810960a1c2919ee3246bea465994",
+        "sha256": "c52deae91051ffa1f446ff71554628b8769a0724e983cb732c4d0e611f7229bd",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -45,7 +45,7 @@
     "pledge-shepherd-loading": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge-shepherd-loading.png",
-        "sha256": "adda8d9d21089cb2d9363d3bc5125449347aef53bb7084010ccd9853eb6afdb7",
+        "sha256": "d7662300a1b286c276bc1ffb3fa7490ac3c3ec06d9947fd1a0d1237bf5c79cda",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -54,7 +54,7 @@
     "pledge-shepherd-error": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge-shepherd-error.png",
-        "sha256": "b1d73582067c030c83518dbb5573db51139f27b057b5cda8212a9464faa68e4a",
+        "sha256": "3438f0ec5bc1bc09637cc929810ebe305a9189878547583f8db84204c9fd3d38",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -63,7 +63,7 @@
     "pledge-officer-reason": {
       "mock": {
         "path": "mockups/mvp-offerings/02-offerings-count-pledge-officer-reason.png",
-        "sha256": "9868e5e978ae9c38b07a2302496c037b620ff7acfd8bfd3b90d6556b05405b0f",
+        "sha256": "66bffc7872bdcf7ee4918a4deb707d46a7373252137b4b5d67b89fec37164515",
         "source": "mockups/mvp-offerings/02-offerings-count.html"
       },
       "baseline": null,
@@ -72,11 +72,16 @@
     "page-actions": {
       "mock": {
         "path": "mockups/mvp-offerings/03-page-actions.png",
-        "sha256": "8b27b520ffd883c6e684a4c06b05e1496802c2fa0485dc1806fcd73704151a64",
+        "sha256": "56ed50ccae71bc2b09a515693fad9b768877de14db09e6ad0e6b6eaaa09fd355",
         "source": "mockups/mvp-offerings/03-page-actions.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-14",
+        "sha256": "56ed50ccae71bc2b09a515693fad9b768877de14db09e6ad0e6b6eaaa09fd355"
+      }
     }
   },
   "inventory": [
@@ -260,5 +265,5 @@
       }
     }
   ],
-  "note": "The /ussd/offerings count entry is signed by documents/mock-claims/offering-grid.json (the single-pass grid, merged #93). These states draw the pre-grid page behind the same dialogs and stay as reference."
+  "note": "The /ussd/offerings count entry is signed by documents/mock-claims/offering-grid.json (the single-pass grid, merged #93). These reference states draw the pre-grid page behind the same dialogs; their hashes follow the 2026-11-14 shell sweep."
 }
