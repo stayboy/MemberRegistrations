@@ -38,7 +38,7 @@ const shell = ({
           <div class="side-title"><span>Section</span><b>Imports</b></div>
           ${head}
         </div>
-        <nav class="side-nav"><a href="#">Attendance</a></nav>
+        <nav class="side-nav"><a href="#"><svg class="i"></svg>Attendance</a></nav>
         <div class="side-foot">
           ${date}
           ${appearance}
@@ -96,6 +96,11 @@ describe('shell-check: missing regions are named', () => {
   it('fails a footer that puts Appearance above Date and time', () => {
     const swapped = shell({ date: appearanceControls(), appearance: dateControl() });
     expect(failureText(swapped)).toContain('Appearance is above Date and time');
+  });
+
+  it('fails a submenu item with no icon', () => {
+    const html = shell().replace('<svg class="i"></svg>', '');
+    expect(failureText(html)).toContain('sidebar nav: "Attendance" has no icon');
   });
 
   it('fails a page with no main element', () => {
