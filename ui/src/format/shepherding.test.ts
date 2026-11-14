@@ -5,8 +5,10 @@ import {
   STILL_IN_CHURCH_LABELS,
   createEmptyCallForm,
   currentAssignmentOf,
+  daysSinceLastCall,
   isFollowUp,
   isStaleAssignment,
+  lastCallBadge,
   outcomeLabel,
   stillInChurchLabel,
   validateCall,
@@ -47,6 +49,21 @@ describe('isFollowUp', () => {
 
   it('does not flag a call logged today', () => {
     expect(isFollowUp({ lastCalledOn: '2026-11-04' }, '2026-11-04')).toBe(false);
+  });
+});
+
+describe('daysSinceLastCall and lastCallBadge', () => {
+  it('counts whole UTC days and reports none for a never-called row', () => {
+    expect(daysSinceLastCall({ lastCalledOn: null }, '2026-11-04')).toBeNull();
+    expect(daysSinceLastCall({ lastCalledOn: '2026-10-04' }, '2026-11-04')).toBe(31);
+    expect(daysSinceLastCall({ lastCalledOn: '2026-11-04' }, '2026-11-04')).toBe(0);
+  });
+
+  it('badges never called and 31 quiet days, but not the 30-day boundary', () => {
+    expect(lastCallBadge({ lastCalledOn: null }, '2026-11-04')).toBe('Never called');
+    expect(lastCallBadge({ lastCalledOn: '2026-10-04' }, '2026-11-04')).toBe('Quiet 31d');
+    expect(lastCallBadge({ lastCalledOn: '2026-10-05' }, '2026-11-04')).toBeNull();
+    expect(lastCallBadge({ lastCalledOn: '2026-11-04' }, '2026-11-04')).toBeNull();
   });
 });
 

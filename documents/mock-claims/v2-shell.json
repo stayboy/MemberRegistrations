@@ -1,0 +1,48 @@
+{
+  "set": "v2-shell",
+  "specs": ["documents/specs/member-registrations-ui.md"],
+  "surfaces": [
+    {
+      "id": "shepherding-roster",
+      "route": "/shepherding/roster",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["five count tiles show the full-read figures"]
+    }
+  ],
+  "states": {
+    "roster": {
+      "mock": {
+        "path": "mockups/v2-shell/08-shepherding-roster.png",
+        "sha256": "2e9b09252c198aeef1173f6a0852816e102aaecc50dc63a56a3096951ae938df",
+        "source": "mockups/v2-shell/08-shepherding-roster.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-14",
+        "sha256": "2e9b09252c198aeef1173f6a0852816e102aaecc50dc63a56a3096951ae938df"
+      }
+    }
+  },
+  "inventory": [
+    {
+      "surface": "shepherding-roster",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-35a",
+          "disposition": "e2e-only",
+          "test": "ui/src/pages/ShepherdingRosterPage.dom.test.tsx::computes the tiles from the full read, not the filtered view"
+        }
+      ]
+    }
+  ],
+  "stories": [],
+  "entries": []
+}
