@@ -198,21 +198,25 @@ export async function rejectRegistrationRequest(
   return item;
 }
 
-export const HEADCOUNT_MODES = ['adults', 'children', 'mixed'] as const;
+export const HEADCOUNT_MODES = ['adults', 'children', 'visitors', 'presbyters'] as const;
+/** `mixed` is retired: readable history, never a write. */
+export const HEADCOUNT_READ_MODES = [...HEADCOUNT_MODES, 'mixed'] as const;
 export type HeadcountMode = (typeof HEADCOUNT_MODES)[number];
+export type HeadcountReadMode = (typeof HEADCOUNT_READ_MODES)[number];
+
+export interface HeadcountLine {
+  readonly code: string;
+  /** Joined from the mode's bucket reference row. */
+  readonly label: string;
+  readonly count: number;
+}
 
 export interface Headcount {
   readonly id: string;
   readonly eventId: string;
   readonly sessionDate: string;
   readonly asOf: string;
-  readonly mode: HeadcountMode;
-  readonly adultMale: number;
-  readonly adultFemale: number;
-  readonly adultUnspecified: number;
-  readonly childMale: number;
-  readonly childFemale: number;
-  readonly childUnspecified: number;
+  readonly mode: HeadcountReadMode;
   readonly total: number;
   /** True when this observation ended the session (the shared close). */
   readonly ended: boolean;
@@ -220,45 +224,57 @@ export interface Headcount {
   readonly recordedAt: string;
   readonly supersedesId: string | null;
   readonly supersededBy: string | null;
+  /** The non-zero buckets of this observation, in the mode's declared order. */
+  readonly lines: readonly HeadcountLine[];
 }
+
+/** The current observation per lane; `mixed` appears only with legacy rows. */
+export type HeadcountCurrent = Partial<Record<HeadcountReadMode, Headcount | null>>;
 
 export interface HeadcountPage {
   readonly sessionDate: string;
-  readonly current: Headcount | null;
+  readonly current: HeadcountCurrent;
   readonly observations: readonly Headcount[];
+}
+
+export interface HeadcountLineInput {
+  readonly code: string;
+  readonly count: number;
 }
 
 export interface HeadcountInput {
   readonly sessionDate: string;
   readonly mode: HeadcountMode;
-  readonly adultMale: number;
-  readonly adultFemale: number;
-  readonly adultUnspecified: number;
-  readonly childMale: number;
-  readonly childFemale: number;
-  readonly childUnspecified: number;
+  readonly lines: readonly HeadcountLineInput[];
   readonly asOf?: string;
   readonly supersedesId?: string;
   /** True closes the session; a headcount never ends automatically. */
   readonly ended?: boolean;
 }
 
-export function headcountsPath(eventId: string, sessionDate: string): string {
-  return `${eventDetailPath(eventId)}/headcounts?sessionDate=${encodeURIComponent(sessionDate)}`;
+export function headcountsPath(eventId: string, sessionDate: string, mode?: HeadcountReadMode): string {
+  const params = new URLSearchParams({ sessionDate });
+  if (mode) params.set('mode', mode);
+  return `${eventDetailPath(eventId)}/headcounts?${params.toString()}`;
 }
 
-/** `GET /v1/events/:eventId/headcounts?sessionDate`: current and observations. */
+/** `GET /v1/events/:eventId/headcounts?sessionDate[&mode]`: the lanes and observations. */
 export async function getHeadcounts(
   baseUrl: string,
   sessionToken: string,
   eventId: string,
   sessionDate: string,
   signal?: AbortSignal,
+  mode?: HeadcountReadMode,
 ): Promise<HeadcountPage> {
-  const page = await gatewayRequest<HeadcountPage>(baseUrl, headcountsPath(eventId, sessionDate), {
-    sessionToken,
-    signal,
-  });
+  const page = await gatewayRequest<HeadcountPage>(
+    baseUrl,
+    headcountsPath(eventId, sessionDate, mode),
+    {
+      sessionToken,
+      signal,
+    },
+  );
   if (!page) throw new ApiError(500, 'The headcount response was empty.');
   return page;
 }

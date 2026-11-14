@@ -470,29 +470,10 @@ describe('USSD display glossary', () => {
     expect(current.text).toContain('Total 90');
     expect(current.text).toContain('1 New count');
     expect(current.text).toContain('2 Correct');
+  });
 
-    const mixed = render(
-      'attendance.headcount',
-      {
-        ...contextFor('attendance.headcount'),
-        headcount: {
-          id: 'hc2',
-          mode: 'mixed',
-          asOf: '2026-12-12T23:59:00.000Z',
-          total: 30_000,
-          adultMale: 7_500,
-          adultFemale: 7_500,
-          adultUnspecified: 0,
-          childMale: 7_500,
-          childFemale: 7_500,
-          childUnspecified: 0,
-        },
-      },
-      memberSession,
-      services,
-    );
-    expect(mixed.text).toContain('Mixed service');
-    expect(mixed.text.length).toBeLessThanOrEqual(182);
+  it('retires the mixed service row the phone never offers', () => {
+    expect(GLOSSARY_KEYS).not.toContain('headcount.mixed_service');
   });
 
   it('pages activities at the channel-declared event size, not a hard-coded three', () => {

@@ -220,11 +220,9 @@ async function seedHeadcount(options: {
   const [row] = await harness.db.query<{ id: string }>(
     `insert into event_session_headcounts (
        event_instance_id, session_date, as_of, mode,
-       adult_male, adult_female, adult_unspecified,
-       child_male, child_female, child_unspecified,
        total, ended, recorded_by, recorded_at, supersedes_id
      )
-     values ($1,$2,$3,'adults',10,0,0,0,0,0,10,$4,'seed',$5,$6)
+     values ($1,$2,$3,'adults',10,$4,'seed',$5,$6)
      returning id`,
     [
       options.eventId,
@@ -234,6 +232,11 @@ async function seedHeadcount(options: {
       options.recordedAt,
       options.supersedesId ?? null,
     ],
+  );
+  await harness.db.query(
+    `insert into headcount_lines (headcount_id, mode_code, bucket_code, count)
+     values ($1,'adults','adult-male',10)`,
+    [row!.id],
   );
   return row!.id;
 }
@@ -355,8 +358,10 @@ describe('the session close', () => {
       sessionDate: day(0),
       asOf: `${day(0)}T09:00:00.000Z`,
       mode: 'adults',
-      adultMale: 12,
-      adultFemale: 8,
+      lines: [
+        { code: 'adult-male', count: 12 },
+        { code: 'adult-female', count: 8 },
+      ],
     });
     expect(afterHeadcount.status).toBe(409);
     expect(afterHeadcount.body.code).toBe('session_closed');
@@ -407,9 +412,11 @@ describe('the session close', () => {
       sessionDate: day(0),
       asOf: `${day(0)}T08:00:00.000Z`,
       mode: 'adults',
-      adultMale: 20,
-      adultFemale: 15,
-      childUnspecified: 5,
+      lines: [
+        { code: 'adult-male', count: 20 },
+        { code: 'adult-female', count: 15 },
+        { code: 'child-unspecified', count: 5 },
+      ],
       ended: true,
     });
     expect(ended.status).toBe(201);
@@ -428,8 +435,10 @@ describe('the session close', () => {
       sessionDate: day(0),
       asOf: `${day(0)}T09:00:00.000Z`,
       mode: 'adults',
-      adultMale: 1,
-      adultFemale: 1,
+      lines: [
+        { code: 'adult-male', count: 1 },
+        { code: 'adult-female', count: 1 },
+      ],
     });
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('session_closed');
@@ -508,8 +517,10 @@ describe('headcount captures', () => {
       sessionDate: day(0),
       asOf: `${day(-1)}T23:30:00.000Z`,
       mode: 'adults',
-      adultMale: 1,
-      adultFemale: 1,
+      lines: [
+        { code: 'adult-male', count: 1 },
+        { code: 'adult-female', count: 1 },
+      ],
     });
 
     expect(response.status).toBe(422);
@@ -529,20 +540,25 @@ describe('headcount captures', () => {
       sessionDate,
       asOf: `${sessionDate}T09:30:00.000Z`,
       mode: 'adults',
-      adultMale: 30,
-      adultFemale: 25,
+      lines: [
+        { code: 'adult-male', count: 30 },
+        { code: 'adult-female', count: 25 },
+      ],
     });
     expect(first.status).toBe(201);
     expect(first.body.ended).toBe(false);
 
-    // A second observation is accepted: the first did not close the session.
+    // A second observation in another lane is accepted: the first did not close
+    // the session and the adults lane is untouched.
     const second = await recordHeadcount(eventId, {
       sessionDate,
       asOf: `${sessionDate}T10:30:00.000Z`,
       mode: 'children',
-      childMale: 4,
-      childFemale: 6,
-      adultUnspecified: 3,
+      lines: [
+        { code: 'child-male', count: 4 },
+        { code: 'child-female', count: 6 },
+        { code: 'adult-unspecified', count: 3 },
+      ],
     });
     expect(second.status).toBe(201);
     expect(second.body.ended).toBe(false);

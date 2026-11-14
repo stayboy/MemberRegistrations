@@ -199,7 +199,8 @@ export interface UssdMemberContext {
 
 export interface UssdHeadcount {
   id: string;
-  mode: 'adults' | 'children' | 'mixed';
+  /** The phone offers and reads only the two live entry lanes (HC-9). */
+  mode: 'adults' | 'children';
   asOf: string;
   total: number;
   adultMale: number;
@@ -267,7 +268,11 @@ export interface UssdServices {
   activities(date: string, viewer: UssdActivityViewer): Promise<UssdActivities>;
   /** Every applicable session in the seven days from `date`, already ordered. */
   activitiesWeek(date: string, viewer: UssdActivityViewer): Promise<UssdActivity[]>;
-  currentHeadcount(eventId: string, sessionDate: string): Promise<UssdHeadcount | null>;
+  currentHeadcount(
+    eventId: string,
+    sessionDate: string,
+    mode: 'adults' | 'children',
+  ): Promise<UssdHeadcount | null>;
   recordHeadcount(input: {
     eventId: string;
     sessionDate: string;
@@ -457,15 +462,14 @@ function clockTime(iso: string | undefined): string {
   return date.toISOString().slice(11, 16);
 }
 
-function headcountModeLabel(mode: 'adults' | 'children' | 'mixed'): string {
+function headcountModeLabel(mode: 'adults' | 'children'): string {
   if (mode === 'children') return t('headcount.children_service');
-  if (mode === 'mixed') return t('headcount.mixed_service');
   return t('headcount.adult_service');
 }
 
 /** The three-number restatement; each handset mode maps its own buckets. */
 function headcountBucketLine(headcount: {
-  mode: 'adults' | 'children' | 'mixed';
+  mode: 'adults' | 'children';
   adultMale: number;
   adultFemale: number;
   adultUnspecified: number;
@@ -475,9 +479,6 @@ function headcountBucketLine(headcount: {
 }): string {
   if (headcount.mode === 'children') {
     return `${headcount.childMale} ${t('label.male')}, ${headcount.childFemale} ${t('label.female')}, ${headcount.adultUnspecified} ${t('label.adults')}`;
-  }
-  if (headcount.mode === 'mixed') {
-    return `${headcount.adultMale} ${t('label.adult_male')}, ${headcount.adultFemale} ${t('label.adult_female')}, ${headcount.childMale} ${t('label.child_male')}, ${headcount.childFemale} ${t('label.child_female')}`;
   }
   return `${headcount.adultMale} ${t('label.male')}, ${headcount.adultFemale} ${t('label.female')}, ${headcount.childUnspecified} ${t('label.children')}`;
 }
@@ -1786,7 +1787,10 @@ async function openAttendance(
 async function openHeadcount(context: UssdContext, services: UssdServices): Promise<AdvanceResult> {
   const event = context.event;
   if (!event) return noEvent(context, 'attendance.clocking');
-  const headcount = await services.currentHeadcount(event.id, event.sessionDate);
+  // The screen names one lane; this round that is the adults or children mode
+  // last chosen. The four-entry navigation is the next round.
+  const lane = context.headcountMode ?? 'adults';
+  const headcount = await services.currentHeadcount(event.id, event.sessionDate, lane);
   return {
     state: 'attendance.headcount',
     context: { ...context, headcount, notice: undefined },

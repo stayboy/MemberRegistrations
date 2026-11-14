@@ -10,6 +10,7 @@ import {
   eventGenerateQuerySchema,
   eventListQuerySchema,
   headcountInputSchema,
+  headcountListQuerySchema,
   sessionDateQuerySchema,
   updateEventSchema,
 } from '../schemas/events.js';
@@ -100,8 +101,8 @@ export function eventsRouter(
 
   router.get('/:id/headcounts', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
-    const { sessionDate } = sessionDateQuerySchema.parse(req.query);
-    const page = await headcounts.get(id, sessionDate);
+    const { sessionDate, mode } = headcountListQuerySchema.parse(req.query);
+    const page = await headcounts.get(id, sessionDate, mode);
     res.setHeader('Cache-Control', 'no-store');
     res.json(page);
   });

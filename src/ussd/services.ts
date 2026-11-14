@@ -4,7 +4,7 @@ import { todayIn } from '../domain/series.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventRepository } from '../repos/events.js';
-import type { HeadcountRepository } from '../repos/headcounts.js';
+import type { Headcount, HeadcountRepository } from '../repos/headcounts.js';
 import type { MemberRepository } from '../repos/members.js';
 import { eventOfferingsFor, type EventOfferingItem } from '../repos/offerings.js';
 import type { OfferingRepository } from '../repos/offerings.js';
@@ -235,10 +235,12 @@ async function activitiesBetween(
   }));
 
   if (enrichHeadcount) {
-    // At most one page of headcount reads, matching the screen's row count.
+    // At most one page of headcount reads, matching the screen's row count. The
+    // list names the adults lane: a single figure must name a mode (HC-22), and
+    // the four-entry lane navigation is the next round.
     for (const item of items.slice(0, Math.max(1, viewer.pageSize))) {
       if (item.tracksMembers) continue;
-      const current = await headcounts.current(item.id, item.sessionDate);
+      const current = await headcounts.current(item.id, item.sessionDate, 'adults');
       item.headcount = current?.total ?? 0;
     }
   }
@@ -319,6 +321,66 @@ function holderRelationship(storedType: string, declaredByHolder: boolean): stri
   if (storedType === 'parent') return 'child';
   if (storedType === 'child') return 'parent';
   return storedType;
+}
+
+/** The lane's bucket codes in the phone screen's existing six-bucket vocabulary. */
+const USSD_BUCKET_FIELDS = {
+  'adult-male': 'adultMale',
+  'adult-female': 'adultFemale',
+  'adult-unspecified': 'adultUnspecified',
+  'child-male': 'childMale',
+  'child-female': 'childFemale',
+  'child-unspecified': 'childUnspecified',
+} as const;
+
+type UssdBucketField = (typeof USSD_BUCKET_FIELDS)[keyof typeof USSD_BUCKET_FIELDS];
+
+/** The lines of one lane as the headcount screens still render them this round. */
+function toUssdHeadcount(headcount: Headcount): UssdHeadcount {
+  const buckets: Record<UssdBucketField, number> = {
+    adultMale: 0,
+    adultFemale: 0,
+    adultUnspecified: 0,
+    childMale: 0,
+    childFemale: 0,
+    childUnspecified: 0,
+  };
+  for (const line of headcount.lines) {
+    const field = USSD_BUCKET_FIELDS[line.code as keyof typeof USSD_BUCKET_FIELDS];
+    if (field) buckets[field] = line.count;
+  }
+  return {
+    id: headcount.id,
+    // The phone reads only the two live entry lanes; a legacy mixed observation
+    // is never requested here, and the retired lane stays readable over HTTP.
+    mode: headcount.mode === 'children' ? 'children' : 'adults',
+    asOf: headcount.asOf,
+    total: headcount.total,
+    ...buckets,
+  };
+}
+
+/** The three buckets the adults or children screen writes, in entry order. */
+function ussdLines(input: {
+  mode: 'adults' | 'children';
+  adultMale: number;
+  adultFemale: number;
+  adultUnspecified: number;
+  childMale: number;
+  childFemale: number;
+  childUnspecified: number;
+}): Array<{ code: string; count: number }> {
+  return input.mode === 'children'
+    ? [
+        { code: 'child-male', count: input.childMale },
+        { code: 'child-female', count: input.childFemale },
+        { code: 'adult-unspecified', count: input.adultUnspecified },
+      ]
+    : [
+        { code: 'adult-male', count: input.adultMale },
+        { code: 'adult-female', count: input.adultFemale },
+        { code: 'child-unspecified', count: input.childUnspecified },
+      ];
 }
 
 /**
@@ -588,45 +650,21 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
         {
           sessionDate: input.sessionDate,
           mode: input.mode,
-          adultMale: input.adultMale,
-          adultFemale: input.adultFemale,
-          adultUnspecified: input.adultUnspecified,
-          childMale: input.childMale,
-          childFemale: input.childFemale,
-          childUnspecified: input.childUnspecified,
+          lines: ussdLines(input),
           supersedesId: input.supersedesId,
         },
         `ussd:${input.phoneHash}`,
       );
-      return {
-        id: headcount.id,
-        mode: headcount.mode,
-        asOf: headcount.asOf,
-        total: headcount.total,
-        adultMale: headcount.adultMale,
-        adultFemale: headcount.adultFemale,
-        adultUnspecified: headcount.adultUnspecified,
-        childMale: headcount.childMale,
-        childFemale: headcount.childFemale,
-        childUnspecified: headcount.childUnspecified,
-      };
+      return toUssdHeadcount(headcount);
     },
 
-    async currentHeadcount(eventId: string, sessionDate: string): Promise<UssdHeadcount | null> {
-      const headcount = await deps.headcounts.current(eventId, sessionDate);
-      if (!headcount) return null;
-      return {
-        id: headcount.id,
-        mode: headcount.mode,
-        asOf: headcount.asOf,
-        total: headcount.total,
-        adultMale: headcount.adultMale,
-        adultFemale: headcount.adultFemale,
-        adultUnspecified: headcount.adultUnspecified,
-        childMale: headcount.childMale,
-        childFemale: headcount.childFemale,
-        childUnspecified: headcount.childUnspecified,
-      };
+    async currentHeadcount(
+      eventId: string,
+      sessionDate: string,
+      mode: 'adults' | 'children',
+    ): Promise<UssdHeadcount | null> {
+      const headcount = await deps.headcounts.current(eventId, sessionDate, mode);
+      return headcount ? toUssdHeadcount(headcount) : null;
     },
 
     async memberByNo(memberNo: string): Promise<{ memberNo: string; name: string }> {

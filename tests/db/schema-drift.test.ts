@@ -7,6 +7,9 @@ import {
   eventSessionHeadcounts,
   eventSessionOfferingCountLines,
   eventSessionOfferingCounts,
+  headcountBuckets,
+  headcountLines,
+  headcountModes,
   members,
   ministries,
   ministryPositions,
@@ -179,7 +182,10 @@ describe('ORM schema drift', () => {
     ['subscription_claims', subscriptionClaims],
     ['subscription_coverage', subscriptionCoverage],
     ['ussd_sessions', ussdSessions],
+    ['headcount_modes', headcountModes],
+    ['headcount_buckets', headcountBuckets],
     ['event_session_headcounts', eventSessionHeadcounts],
+    ['headcount_lines', headcountLines],
     ['event_session_offering_counts', eventSessionOfferingCounts],
     ['event_session_offering_count_lines', eventSessionOfferingCountLines],
   ];
@@ -234,6 +240,41 @@ describe('ORM schema drift', () => {
       foreignTable: 'ministry_positions',
       foreignColumn: 'code',
     });
+  });
+
+  it('matches the headcount lane tables and their constraints', async () => {
+    expect(await dbForeignKeys(db, 'event_session_headcounts')).toEqual(
+      schemaForeignKeys(eventSessionHeadcounts),
+    );
+    expect(await dbCheckNames(db, 'event_session_headcounts')).toEqual(
+      schemaCheckNames(eventSessionHeadcounts),
+    );
+    expect(await dbForeignKeys(db, 'headcount_buckets')).toEqual(
+      schemaForeignKeys(headcountBuckets),
+    );
+    expect(await dbCheckNames(db, 'headcount_lines')).toEqual(schemaCheckNames(headcountLines));
+
+    // The line's bucket FK is the (mode_code, code) pair; the shared helper joins
+    // by constraint name and would cross the two columns, so read the pairs
+    // positionally from pg_constraint instead.
+    const pairs = await db.query<{ column: string; foreignTable: string; foreignColumn: string }>(
+      `select a.attname as "column", ft.relname as "foreignTable", fa.attname as "foreignColumn"
+         from pg_constraint c
+         join pg_class t on t.oid = c.conrelid
+         join pg_class ft on ft.oid = c.confrelid
+         join lateral unnest(c.conkey, c.confkey) with ordinality as k(attnum, fattnum, ord) on true
+         join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
+         join pg_attribute fa on fa.attrelid = ft.oid and fa.attnum = k.fattnum
+        where c.contype = 'f' and t.relname = 'headcount_lines'
+        order by k.ord`,
+    );
+    expect(
+      pairs.map((pair) => ({ ...pair })).sort((a, b) => a.column.localeCompare(b.column)),
+    ).toEqual([
+      { column: 'bucket_code', foreignTable: 'headcount_buckets', foreignColumn: 'code' },
+      { column: 'headcount_id', foreignTable: 'event_session_headcounts', foreignColumn: 'id' },
+      { column: 'mode_code', foreignTable: 'headcount_buckets', foreignColumn: 'mode_code' },
+    ]);
   });
 
   it('fails on a deliberate column mismatch', async () => {

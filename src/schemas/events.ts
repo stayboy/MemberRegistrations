@@ -239,72 +239,91 @@ export const sessionDateQuerySchema = z.object({
   sessionDate: dateStringSchema,
 });
 
-export const HEADCOUNT_MODES = ['adults', 'children', 'mixed'] as const;
+export const HEADCOUNT_MODES = ['adults', 'children', 'visitors', 'presbyters'] as const;
+/** `mixed` is retired: readable history, never a write. */
+export const HEADCOUNT_READ_MODES = [...HEADCOUNT_MODES, 'mixed'] as const;
 export type HeadcountMode = (typeof HEADCOUNT_MODES)[number];
+export type HeadcountReadMode = (typeof HEADCOUNT_READ_MODES)[number];
 
 const headcountBucketSchema = z.number().int().min(0).max(10_000);
 
 /**
- * The client sends buckets; `total` is derived by the repository. Mode
- * consistency (which buckets must be zero) needs the mode and the six buckets
- * together, so the repository owns that rule and the database repeats it.
+ * A line names one of the mode's buckets. `total` is derived by the repository;
+ * which buckets a mode declares, duplicate codes and the sum are checked there
+ * against the reference data.
  */
+export const headcountLineInputSchema = z.object({
+  code: z.string().trim().min(1).max(64),
+  count: headcountBucketSchema,
+});
+
 export const headcountInputSchema = z
   .object({
     sessionDate: dateStringSchema,
     mode: z.enum(HEADCOUNT_MODES),
-    adultMale: headcountBucketSchema.default(0),
-    adultFemale: headcountBucketSchema.default(0),
-    adultUnspecified: headcountBucketSchema.default(0),
-    childMale: headcountBucketSchema.default(0),
-    childFemale: headcountBucketSchema.default(0),
-    childUnspecified: headcountBucketSchema.default(0),
+    /** A subset of the mode's buckets; an empty set is a real count of zero. */
+    lines: z.array(headcountLineInputSchema).max(16).default([]),
     asOf: z.string().datetime({ offset: true }).optional(),
     supersedesId: z.string().uuid().optional(),
     /** True closes the session; a headcount never ends automatically. */
     ended: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
-    const total =
-      value.adultMale +
-      value.adultFemale +
-      value.adultUnspecified +
-      value.childMale +
-      value.childFemale +
-      value.childUnspecified;
+    const codes = new Set<string>();
+    for (const [index, line] of value.lines.entries()) {
+      if (codes.has(line.code)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['lines', index, 'code'],
+          message: `the ${line.code} bucket appears more than once`,
+        });
+      }
+      codes.add(line.code);
+    }
+    const total = value.lines.reduce((sum, line) => sum + line.count, 0);
     if (total > 30_000) {
       ctx.addIssue({
         code: 'custom',
-        path: ['childUnspecified'],
-        message: 'the six buckets must not exceed 30000',
+        path: ['lines'],
+        message: 'the lines must not exceed 30000',
       });
     }
   });
+
+export const headcountLineSchema = z.object({
+  code: z.string(),
+  /** Joined from the mode's bucket reference row. */
+  label: z.string(),
+  count: z.number().int(),
+});
 
 export const headcountSchema = z.object({
   id: z.string(),
   eventId: z.string(),
   sessionDate: z.string(),
   asOf: z.string(),
-  mode: z.enum(HEADCOUNT_MODES),
-  adultMale: z.number().int(),
-  adultFemale: z.number().int(),
-  adultUnspecified: z.number().int(),
-  childMale: z.number().int(),
-  childFemale: z.number().int(),
-  childUnspecified: z.number().int(),
+  mode: z.enum(HEADCOUNT_READ_MODES),
   total: z.number().int(),
   ended: z.boolean(),
   recordedBy: z.string(),
   recordedAt: z.string(),
   supersedesId: z.string().nullable(),
   supersededBy: z.string().nullable(),
+  lines: z.array(headcountLineSchema),
 });
 
+/**
+ * The lane map: the four live modes always, `mixed` only when the session holds
+ * legacy rows; a `?mode=` read narrows it to that lane alone.
+ */
 export const headcountListSchema = z.object({
   sessionDate: z.string(),
-  current: headcountSchema.nullable(),
+  current: z.record(z.enum(HEADCOUNT_READ_MODES), headcountSchema.nullable()),
   observations: z.array(headcountSchema),
+});
+
+export const headcountListQuerySchema = sessionDateQuerySchema.extend({
+  mode: z.enum(HEADCOUNT_READ_MODES).optional(),
 });
 
 export type HeadcountInput = z.infer<typeof headcountInputSchema>;

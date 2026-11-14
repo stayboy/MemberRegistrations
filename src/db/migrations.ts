@@ -1096,4 +1096,114 @@ create index members_title on members (title_code) where title_code is not null;
 alter table member_ministries add column position_code text references ministry_positions(code);
 `,
   },
+  {
+    version: '0022_headcount_lanes',
+    sql: `
+-- Headcounts become one observation per mode: the six fixed bucket columns move
+-- to a lines table and the mode/bucket vocabularies become reference data. From
+-- here a new mode or bucket is an insert, never another migration.
+create table headcount_modes (
+  code text primary key,
+  label text not null,
+  entry_label text not null,
+  retired boolean not null default false
+);
+-- 'mixed' is retired: no new observation may be recorded in it, but its label
+-- stays so a legacy row keeps rendering (HC-9).
+insert into headcount_modes (code, label, entry_label, retired) values
+  ('adults',     'Adult service',    'Adult',     false),
+  ('children',   'Children service', 'Children',  false),
+  ('visitors',   'Visitors',         'Visitors',  false),
+  ('presbyters', 'Presbyters',       'Presbyters', false),
+  ('mixed',      'Mixed service',    'Mixed',     true);
+
+create table headcount_buckets (
+  mode_code text not null references headcount_modes(code),
+  code text not null,
+  label text not null,
+  sort_order integer not null,
+  primary key (mode_code, code)
+);
+-- The four legacy mixed buckets exist only so a migrated mixed row keeps its
+-- lines under a real foreign key; they are never offered for entry.
+insert into headcount_buckets (mode_code, code, label, sort_order) values
+  ('adults',     'adult-male',        'Adult men',        1),
+  ('adults',     'adult-female',      'Adult women',      2),
+  ('adults',     'child-unspecified', 'Children',         3),
+  ('children',   'child-male',        'Boys',             1),
+  ('children',   'child-female',      'Girls',            2),
+  ('children',   'adult-unspecified', 'Adults',           3),
+  ('visitors',   'visitor-male',      'Visitor men',      1),
+  ('visitors',   'visitor-female',    'Visitor women',    2),
+  ('visitors',   'visitor-children',  'Visitor children', 3),
+  ('presbyters', 'elder',             'Elders',           1),
+  ('presbyters', 'deaconess',         'Deaconess',        2),
+  ('presbyters', 'deacon',            'Deacons',          3),
+  ('mixed',      'adult-male',        'Adult men',        1),
+  ('mixed',      'adult-female',      'Adult women',      2),
+  ('mixed',      'child-male',        'Boys',             3),
+  ('mixed',      'child-female',      'Girls',            4);
+
+-- A bucket is unique only per mode, so the line carries its mode and the
+-- foreign key is the pair. That keeps referential integrity without a
+-- surrogate id on the reference row.
+create table headcount_lines (
+  headcount_id uuid not null references event_session_headcounts(id) on delete cascade,
+  mode_code text not null,
+  bucket_code text not null,
+  count integer not null constraint headcount_lines_count_check
+    check (count between 0 and 10000),
+  primary key (headcount_id, bucket_code),
+  foreign key (mode_code, bucket_code) references headcount_buckets (mode_code, code)
+);
+
+-- Mechanical reshape: one line per non-zero column. Adults rows carried
+-- adult male/female plus child-unspecified; children rows the mirror image; a
+-- mixed row carried both splits and no unspecified bucket.
+insert into headcount_lines (headcount_id, mode_code, bucket_code, count)
+select id, mode, 'adult-male', adult_male
+  from event_session_headcounts where adult_male <> 0
+union all
+select id, mode, 'adult-female', adult_female
+  from event_session_headcounts where adult_female <> 0
+union all
+select id, mode, 'child-unspecified', child_unspecified
+  from event_session_headcounts where child_unspecified <> 0
+union all
+select id, mode, 'child-male', child_male
+  from event_session_headcounts where child_male <> 0
+union all
+select id, mode, 'child-female', child_female
+  from event_session_headcounts where child_female <> 0
+union all
+select id, mode, 'adult-unspecified', adult_unspecified
+  from event_session_headcounts where adult_unspecified <> 0;
+
+-- The mode vocabulary outgrows the old check; the table constraints that named
+-- the six columns are dropped with them.
+alter table event_session_headcounts
+  drop constraint if exists event_session_headcounts_mode_check;
+
+alter table event_session_headcounts
+  drop column adult_male,
+  drop column adult_female,
+  drop column adult_unspecified,
+  drop column child_male,
+  drop column child_female,
+  drop column child_unspecified;
+
+alter table event_session_headcounts
+  add constraint event_session_headcounts_mode_fkey
+  foreign key (mode) references headcount_modes(code);
+
+-- No index claims one current row per lane. A superseded root keeps its
+-- supersedes_id null, so a partial unique index on that column would guard one
+-- root per lane rather than one tip; the write path resolves the tip with
+-- not exists (select 1 from event_session_headcounts s where s.supersedes_id = h.id)
+-- inside the write transaction under a per-lane advisory lock (a first count has no row to lock) (HC-2). The unique
+-- index on supersedes_id above still keeps the chain a chain - one successor
+-- per row. Legacy data may hold several current rows in one lane and the
+-- reshape neither rewrites nor deletes them; the newest wins on read (HC-27).
+`,
+  },
 ];

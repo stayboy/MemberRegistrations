@@ -284,14 +284,19 @@ async function runScenario() {
     body: JSON.stringify({
       sessionDate: TODAY,
       mode: 'adults',
-      adultMale: 20,
-      adultFemale: 30,
+      lines: [
+        { code: 'adult-male', count: 20 },
+        { code: 'adult-female', count: 30 },
+      ],
       asOf: `${TODAY}T08:00:00.000Z`,
     }),
   });
   check(
     'headcount appended',
-    headcount.status === 201 && headcount.body.total === 50 && headcount.body.supersedesId === null,
+    headcount.status === 201 &&
+      headcount.body.total === 50 &&
+      headcount.body.supersedesId === null &&
+      headcount.body.lines?.length === 2,
     JSON.stringify(headcount.body),
   );
 
@@ -301,8 +306,10 @@ async function runScenario() {
     body: JSON.stringify({
       sessionDate: TODAY,
       mode: 'adults',
-      adultMale: 21,
-      adultFemale: 30,
+      lines: [
+        { code: 'adult-male', count: 21 },
+        { code: 'adult-female', count: 30 },
+      ],
       supersedesId: headcount.body.id,
     }),
   });
@@ -323,10 +330,11 @@ async function runScenario() {
     (row) => row.id === headcount.body.id,
   );
   check(
-    'headcount list keeps current and the chain',
+    'headcount list keeps the adults lane current and the chain',
     headcountPage.status === 200 &&
-      headcountPage.body.current?.id === correctedHeadcount.body.id &&
-      headcountPage.body.current?.total === 51 &&
+      headcountPage.body.current?.adults?.id === correctedHeadcount.body.id &&
+      headcountPage.body.current?.adults?.total === 51 &&
+      headcountPage.body.current?.children === null &&
       supersededHeadcount?.supersededBy === correctedHeadcount.body.id,
     JSON.stringify(headcountPage.body),
   );
