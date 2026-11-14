@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createPgDb } from '../../src/db/pg.js';
 import { migrate } from '../../src/db/migrate.js';
 import type { Db } from '../../src/db/sql.js';
 import { ConflictError, NotFoundError } from '../../src/errors/domain-errors.js';
 import { MinistryRepository } from '../../src/repos/ministries.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { createScratchPgDb } from '../helpers/scratch-db.js';
 
 let harness: TestApp;
 let ministries: MinistryRepository;
@@ -97,7 +97,9 @@ describe('ministries through Drizzle', () => {
 
 /**
  * The same contract against the pooled `pg` driver. Set `TEST_DATABASE_URL` to a
- * scratch Neon branch (never production) to run it; skipped otherwise.
+ * scratch server (never production) that allows creating databases; the block
+ * migrates and uses a database of its own and drops it afterwards. Skipped
+ * otherwise.
  */
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -105,7 +107,7 @@ describe.skipIf(!testDatabaseUrl)('ministries through Drizzle on the pooled pg d
   let pooled: Db;
 
   beforeAll(async () => {
-    pooled = createPgDb(testDatabaseUrl!);
+    pooled = await createScratchPgDb(testDatabaseUrl!);
     await migrate(pooled);
   });
 

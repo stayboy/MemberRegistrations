@@ -112,5 +112,15 @@ Seat: consistent - the Implementer row matches the split the reviewer read.
   ordinary-mode memory.
 - **The phone's saved screen uses reference labels, the confirm line lay terms.** Deliberate: the confirm
   restates the typed numbers, the saved screen belongs to the register's vocabulary.
+- **The gate found a migration race, and it rides in this round.** CI failed with `relation "pledges" already
+exists`: four pooled suites call `migrate()` on one `TEST_DATABASE_URL` in parallel workers, so each
+  created the ledger, saw it empty and started from `0001`. `migrate()` now takes a transaction-scoped
+  advisory lock per version, re-reads the ledger inside the transaction and skips what another migrator
+  applied; the ledger creation is locked too, because two `create table if not exists` calls collide before
+  any per-version lock exists. With the race gone a second, older fault surfaced: the pooled suites were
+  never isolated, and `series-summary`'s seeded contribution landed inside `offerings-summary`'s window, so
+  each pooled suite now owns a scratch database. Two tests were added and both fail against the old
+  `migrate()`. Neither fault is the round's subject, but a red required check is fixed forward, not merged
+  around.
 - **The mock captures follow in the capture pass**, together with the deferred grid-header drift; this round
   changes the surface, so the pictures must be regenerated before they are signed again.
