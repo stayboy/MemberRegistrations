@@ -1,15 +1,16 @@
 # Round — ui-mock-parity
 
-|                     |                                                                                                    |
-| ------------------- | -------------------------------------------------------------------------------------------------- |
-| Status              | OPEN — planning and sign-off (no code)                                                             |
-| Tier                | 1 (planning, sign-off); each build follows as its own Tier 2 round                                 |
-| Mode                | attended (owner grill, 2026-11-10)                                                                 |
-| Base                | `f7bcb10`                                                                                          |
-| Review rounds       | 0                                                                                                  |
-| Gate runs in parent | 0                                                                                                  |
-| Spec                | `documents/specs/member-registrations-ui.md` §11.2; mock policy in `documents/rounds/mvp-mocks.md` |
-| Workers             | none in this round                                                                                 |
+|                     |                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Status              | OPEN — planning and sign-off (no code)                                                                     |
+| Tier                | 1 (planning, sign-off); each build follows as its own Tier 2 round                                         |
+| Mode                | attended (owner grill, 2026-11-10)                                                                         |
+| Base                | `f7bcb10`                                                                                                  |
+| Review rounds       | 0                                                                                                          |
+| Gate runs in parent | 0                                                                                                          |
+| Spec                | `documents/specs/member-registrations-ui.md` §11.2; mock policy in `documents/rounds/mvp-mocks.md`         |
+| Workers             | none in this round                                                                                         |
+| Implementer         | parent ollama-cloud/deepseek-v4.1-flash:1017 (planning, sign-off audit and the ledger correction, no code) |
 
 ### Decisions (grill, 2026-11-10)
 
@@ -32,9 +33,9 @@
 | `mockups/v2-imports/`              | 1      | **no**  | `imports-ui-shell.md:81` deferred                                                                                                           |
 | `mockups/v2-settings/`             | 3      | **no**  | referenced as chrome guidance only (`orchestrator-policy.md:92`)                                                                            |
 | `mockups/ussd/`                    | 41     | partial | the headcount and offerings subsets were signed; the rest predate the rule                                                                  |
-| `mockups/mvp-offerings/`           | 22     | **no**  | backlog row "MVP offering-capture mocks"                                                                                                    |
+| `mockups/mvp-offerings/`           | 22     | partial | `page-actions` signed; the count states are **reference** because the grid owns `/ussd/offerings`                                           |
 | `mockups/headcount/`               | 9      | **yes** | hashes in `mvp-headcount.md`                                                                                                                |
-| `mockups/offering-grid/`           | 12     | **yes** | hashes in `mvp-offering-grid.md`                                                                                                            |
+| `mockups/offering-grid/`           | 12     | **yes** | catalogue `documents/mock-claims/offering-grid.json`: `02`-`12` signed, `01-before-quick-pick` reference                                    |
 | `mockups/ui-fixed-gateway-origin/` | 4      | **yes** | hashes in that round                                                                                                                        |
 
 ## Screen index — mock set to implementation
@@ -50,8 +51,8 @@ to "what did we build from these mocks", and is what ticket 19 calls the mock in
 | `v2-imports` (1) + `old` (3)           | members import; attendance import; preview errors; placeholder                                                                                | `/imports/members`; `/imports/attendance`; `ImportPanel`                                                                       |
 | `v2-settings` (3)                      | date/time settings; sidebar menu; display menu                                                                                                | `SettingsPage`; `DateTimeMenu` in the shell                                                                                    |
 | `ussd` (41)                            | 8 USSD operator screens                                                                                                                       | `/ussd/*`                                                                                                                      |
-| `mvp-offerings` (22)                   | landing and its dialogs                                                                                                                       | `/events/offerings`                                                                                                            |
-| `offering-grid` (12) · `headcount` (9) | one page each                                                                                                                                 | `/ussd/offerings`; `/ussd/headcount`                                                                                           |
+| `mvp-offerings` (22)                   | landing and its dialogs; the count page it also drew is now the pre-grid reference                                                            | `/events/offerings`; `/ussd/offerings` dialogs                                                                                 |
+| `offering-grid` (12) · `headcount` (9) | one page each                                                                                                                                 | `/ussd/offerings` (the signed count-page target); `/ussd/headcount`                                                            |
 | `mvp-hardening` (7)                    | active-offerings panel; simulator hidden                                                                                                      | event detail; navigation gate                                                                                                  |
 | `ui-fixed-gateway-origin` (4)          | connect                                                                                                                                       | `/connect`                                                                                                                     |
 

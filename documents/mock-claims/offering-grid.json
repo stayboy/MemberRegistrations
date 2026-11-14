@@ -1,0 +1,142 @@
+{
+  "set": "offering-grid",
+  "specs": ["documents/specs/member-registrations-events-offerings.md"],
+  "surfaces": [
+    {
+      "id": "ussd-offerings-grid",
+      "route": "/ussd/offerings",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["current count"]
+    }
+  ],
+  "states": {
+    "01-before-quick-pick": {
+      "mock": {
+        "path": "mockups/offering-grid/01-before-quick-pick.png",
+        "sha256": "99c2dd0baca7643da4614da6a63b5e8df16366bf470e61cbb1a8da580e204a34",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "reference"
+    },
+    "02-grid-blank": {
+      "mock": {
+        "path": "mockups/offering-grid/02-grid-blank.png",
+        "sha256": "39bcc7d3bf8bec4ba093c4a0140e7d1446eabf86d6e0254959d5ffe35b650797",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "03-grid-filled": {
+      "mock": {
+        "path": "mockups/offering-grid/03-grid-filled.png",
+        "sha256": "16a6af179843a30443a41700a834f0c5b846c313e29bd82aca107784103dae51",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "04-grid-invalid": {
+      "mock": {
+        "path": "mockups/offering-grid/04-grid-invalid.png",
+        "sha256": "7031315de6f299bf2f6325e3f39930c47a67ac38981616a8a73d4a2a470bc228",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "05-grid-pending": {
+      "mock": {
+        "path": "mockups/offering-grid/05-grid-pending.png",
+        "sha256": "5bdf3b98dce90f356aef2dcfd0511258b11f22cfb1504b27efbb7ee6423de70d",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "06-grid-error": {
+      "mock": {
+        "path": "mockups/offering-grid/06-grid-error.png",
+        "sha256": "1219d5d8b7ad9922708a45a740e2c17745520acbd8a04b5ba49f00a5084fc38e",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "07-correction-oneoff": {
+      "mock": {
+        "path": "mockups/offering-grid/07-correction-oneoff.png",
+        "sha256": "b033b2514350c7d90a880311b80867e8b43c379283fb9674987d9c57ae19f0bf",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "08-custom-merge": {
+      "mock": {
+        "path": "mockups/offering-grid/08-custom-merge.png",
+        "sha256": "60ebd746167c68ee607fbc06351826da49b226b32d5a310e456b0d284edf7bc0",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "09-unconfigured": {
+      "mock": {
+        "path": "mockups/offering-grid/09-unconfigured.png",
+        "sha256": "b4c9bbc9cb75706f53bd582b7e802e06a6705b23741bb8f5681f4466d5dcb796",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "10-all-hidden": {
+      "mock": {
+        "path": "mockups/offering-grid/10-all-hidden.png",
+        "sha256": "b677559900f335a314eb7e689adcff66aa94d6b8323c86e087c8fe2490f38a60",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "11-history-hidden-line": {
+      "mock": {
+        "path": "mockups/offering-grid/11-history-hidden-line.png",
+        "sha256": "098ff63fe5d9f3b02eb56a3b1ddb62e3f01c6da38eaa06ad6a9321396f8f65f2",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    },
+    "12-narrow": {
+      "mock": {
+        "path": "mockups/offering-grid/12-narrow.png",
+        "sha256": "54330313777e8114bf7578b0275c423b55b68f240e265fb36973bdf90d03a6b7",
+        "source": "mockups/offering-grid/01-offering-grid.html"
+      },
+      "baseline": null,
+      "coverage": "signed"
+    }
+  },
+  "inventory": [
+    {
+      "surface": "ussd-offerings-grid",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-34",
+          "disposition": "e2e-only",
+          "test": "tests/api/event-offering-counts.test.ts::supersedes the current observation, keeps its asOf and replaces the lines"
+        }
+      ]
+    }
+  ],
+  "stories": [],
+  "entries": []
+}
