@@ -7,7 +7,7 @@
 | Mode                | unattended (auto-accept recommendations)                                                             |
 | Base                | `17641c7`                                                                                            |
 | Review rounds       | 0                                                                                                    |
-| Gate runs in parent | 3                                                                                                    |
+| Gate runs in parent | 5                                                                                                    |
 | Spec                | `AGENTS.md` section 14; `documents/rounds/ui-mock-parity.md`; `.opencode/skills/mock-build/SKILL.md` |
 | Workers             | `single`                                                                                             |
 | Implementer         | parent ollama-cloud/deepseek-v4.1-flash:1017 (sweep, catalogue, ledger, round doc)                   |
@@ -62,7 +62,7 @@ Acceptance criteria:
 | Recorder tests  | `npx vitest run tests/meta/mock-record.test.ts`   | 5 passed                                            |
 | Full gate       | `npm run verify`                                  | see the signature below                             |
 
-gate-run 2026-11-14T17:32:16.421Z profile=full steps=7/7 lines=7 bytes=854
+gate-run 2026-11-14T17:54:24.779Z profile=full steps=7/7 lines=7 bytes=1054
 
 ## Mock sign-off
 
@@ -104,3 +104,5 @@ n/a - the refresh was against the shell definition; the AC claim is an `e2e-only
   `documents/mock-claims/<set>.json`, so moving the grid into the other folder would break that resolution
   and lose the before/after pair.
 - Table headers stay uppercase in this set; the deferred grid drift.
+- **One worker crash on the way to the gate.** An attempt at 17:52:58 died with the known Windows Vitest worker failure: 53 of 54 files ran, 753 tests passed, zero failed assertions, and the re-run was green. Per section 8 it is recorded, not looped.
+- **Gate-blocking fix-forward.** CI failed on ests/api/payment-groups.test.ts:379: xpect(serialised).not.toContain('0801') runs over the whole JSON body, which carries generated UUIDs, and the fixture event id contained the digits by chance. It passes locally (20/20). The check now strips generated ids before the prefix match, which keeps the intent - the visitor phone never appears - and removes the flake. Not part of the mock work, but a red required check is fixed forward, never merged around.

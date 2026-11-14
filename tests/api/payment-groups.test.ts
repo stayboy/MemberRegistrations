@@ -376,7 +376,13 @@ describe('POST /v1/contributions/groups', () => {
     });
     const serialised = JSON.stringify(response.body);
     expect(serialised).not.toContain('8012345678');
-    expect(serialised).not.toContain('0801');
+    // The prefix check runs over the body minus generated ids: a UUID such as
+    // `b45d0801-…` contains the digits by chance and would fail a whole-body match.
+    const withoutIds = serialised.replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+      '',
+    );
+    expect(withoutIds).not.toContain('0801');
 
     const [row] = await harness.db.query<{ visitor_phone_hash: string; raw: string }>(
       `select visitor_phone_hash, row_to_json(contributions)::text as raw
