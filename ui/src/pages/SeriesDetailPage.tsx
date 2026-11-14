@@ -216,6 +216,7 @@ export function SeriesDetailPage() {
       actions={[
         {
           id: 'import-attendance',
+          kind: 'verb' as const,
           label: 'Import attendance',
           icon: <ArrowImportRegular />,
           onSelect: () => navigate(`/imports/attendance?series=${encodeURIComponent(id)}`),
@@ -225,6 +226,7 @@ export function SeriesDetailPage() {
           : [
               {
                 id: 'edit',
+                kind: 'verb' as const,
                 label: 'Edit',
                 icon: <EditRegular />,
                 onSelect: () => navigate(`/events/series/${encodeURIComponent(id)}/edit`),
@@ -233,6 +235,7 @@ export function SeriesDetailPage() {
         archived
           ? {
               id: 'restore',
+              kind: 'verb' as const,
               label: 'Restore',
               icon: <ArrowUndoRegular />,
               onSelect: () => {
@@ -243,6 +246,7 @@ export function SeriesDetailPage() {
             }
           : {
               id: 'archive',
+              kind: 'verb' as const,
               label: 'Archive',
               icon: <ArchiveRegular />,
               onSelect: () => {
@@ -253,6 +257,7 @@ export function SeriesDetailPage() {
             },
         {
           id: 'refresh',
+          kind: 'utility' as const,
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

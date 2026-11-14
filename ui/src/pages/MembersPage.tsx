@@ -456,6 +456,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
       actions={[
         {
           id: 'add-member',
+          kind: 'verb',
           label: 'Add member',
           icon: <AddRegular />,
           onSelect: () => {
@@ -464,6 +465,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
         },
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

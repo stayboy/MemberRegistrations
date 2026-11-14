@@ -185,6 +185,7 @@ export function OfferingsPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

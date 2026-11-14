@@ -177,6 +177,7 @@ export function UssdProductsPage() {
       actions={[
         {
           id: 'new-product',
+          kind: 'verb',
           label: 'New product',
           icon: <AddRegular />,
           onSelect: () => {
@@ -187,6 +188,7 @@ export function UssdProductsPage() {
         },
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

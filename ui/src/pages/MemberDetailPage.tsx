@@ -292,6 +292,7 @@ export function MemberDetailPage() {
   const actions: PageAction[] = [
     {
       id: 'edit',
+      kind: 'verb',
       label: 'Edit',
       icon: <EditRegular />,
       onSelect: () => {
@@ -300,6 +301,7 @@ export function MemberDetailPage() {
     },
     {
       id: 'contacts',
+      kind: 'verb',
       label: contactLabel(member.contactCount),
       icon: <ContactCardRegular />,
       onSelect: () => setContactsOpen(true),
@@ -307,6 +309,7 @@ export function MemberDetailPage() {
     isArchived
       ? {
           id: 'restore',
+          kind: 'verb',
           label: 'Restore',
           icon: <ArrowUndoRegular />,
           onSelect: confirmRestore,
@@ -315,6 +318,7 @@ export function MemberDetailPage() {
         }
       : {
           id: 'archive',
+          kind: 'verb',
           label: 'Archive',
           icon: <ArchiveRegular />,
           onSelect: () => setArchiveOpen(true),
@@ -323,6 +327,7 @@ export function MemberDetailPage() {
         },
     {
       id: 'purge',
+      kind: 'verb',
       label: 'Purge',
       icon: <DeleteRegular />,
       onSelect: () => setPurgeOpen(true),

@@ -1,5 +1,4 @@
 import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { MemberSummary } from '../api/members';
@@ -9,13 +8,11 @@ import { renderWithProviders } from '../test/render';
 import { MembersPage } from './MembersPage';
 
 /**
- * FR-9a: a page's menu order is the page's own array — create-side verbs, then edit-side verbs,
- * then the separator, then destructive verbs, with `Refresh` last. The shared component cannot
- * enforce that for a call site, so one converted page is rendered end to end and its real array
- * is read back through the menu. `MembersPage` is that page: it is the cheapest converted
- * page whose order can regress — the single-verb pages (`ShepherdingOfficersPage`,
- * `ImportsPage`) render one item and cannot discriminate ordering — and a revert to
- * `Refresh` first, the ordering this round replaced, must fail here.
+ * FR-9a / D12: `Members` carries exactly one verb (`Add member`) and one `Refresh` utility, so
+ * the verb renders as a visible button beside a bare trailing icon and the page renders no
+ * `Actions` menu at all. This is the page rendered end to end for that rule: the cheapest
+ * converted page that discriminates the single-verb shape from the menu shape — a revert to
+ * the menu must fail here.
  */
 const MEMBERS: readonly MemberSummary[] = [
   {
@@ -59,9 +56,8 @@ vi.mock('../api/gateway', async (importOriginal) => {
   };
 });
 
-describe('MembersPage action menu', () => {
-  it('renders its verbs in FR-9a order: create-side, separator, Refresh last', async () => {
-    const user = userEvent.setup();
+describe('MembersPage single-verb action row', () => {
+  it('shows Add member visibly with Refresh as a trailing utility and no Actions menu', async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/members']}>
         <ThemeProvider>
@@ -72,15 +68,18 @@ describe('MembersPage action menu', () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    // The one verb is a visible control, not a one-item menu (FR-9a).
+    const addMember = await screen.findByRole('button', { name: 'Add member' });
+    expect(addMember).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 
-    const items = await screen.findAllByRole('menuitem');
-    expect(items.map((item) => item.textContent)).toEqual(['Add member', 'Refresh']);
-
-    // The separator opens the trailing group, so `Refresh` is the group's only member here.
-    expect(document.querySelectorAll('.fui-MenuDivider')).toHaveLength(1);
-    expect(document.querySelector<HTMLElement>('.fui-MenuDivider')?.nextElementSibling).toBe(
-      items[1],
+    // The utility is a named icon button after the verb, not a menu item.
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    expect(refresh).toBeVisible();
+    expect(refresh.textContent).toBe('');
+    expect(addMember.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
 });

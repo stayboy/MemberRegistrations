@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright/test';
 import { NAV_STORAGE_KEY } from '../src/shell/nav-state';
 import type { AccentId, Scheme } from '../src/theme/brand';
-import { expect, open, openActions, seedSession, seedTheme, test } from './fixtures';
+import { expect, open, seedSession, seedTheme, test } from './fixtures';
 
 /**
  * Screenshot baseline for the live build. This file is deliberately excluded
@@ -245,10 +245,9 @@ test('headcount capture', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Event' }).click();
   await page.getByRole('option', { name: /Foundation service/ }).click();
   await expect(page.getByText('Current headcount')).toBeVisible();
-  // The verbs live in the Actions menu; leave it closed so the capture shows the page.
-  await openActions(page);
-  await expect(page.getByRole('menuitem', { name: 'Record headcount' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The Record verb is visible on the action row, so the capture shows the page as the
+  // operator sees it (FR-9a: one verb needs no menu).
+  await expect(page.getByRole('button', { name: 'Record headcount' })).toBeVisible();
   await capture(page, 'headcount-capture');
 });
 

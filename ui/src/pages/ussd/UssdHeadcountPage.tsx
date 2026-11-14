@@ -274,6 +274,7 @@ export function UssdHeadcountPage() {
       actions={[
         {
           id: 'record-headcount',
+          kind: 'verb',
           label: 'Record headcount',
           icon: <AddRegular />,
           disabled: !selection || recordMutation.isPending || closed,
@@ -281,6 +282,7 @@ export function UssdHeadcountPage() {
         },
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           disabled: !selection || headcountsQuery.isFetching,

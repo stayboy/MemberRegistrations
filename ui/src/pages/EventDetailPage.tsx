@@ -120,6 +120,7 @@ export function EventDetailPage() {
           ? [
               {
                 id: 'import-attendance',
+                kind: 'verb' as const,
                 label: 'Import attendance',
                 icon: <ArrowImportRegular />,
                 onSelect: () => {
@@ -134,6 +135,7 @@ export function EventDetailPage() {
           : []),
         {
           id: 'refresh',
+          kind: 'utility' as const,
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

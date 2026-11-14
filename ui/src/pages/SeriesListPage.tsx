@@ -118,12 +118,14 @@ export function SeriesListPage() {
       actions={[
         {
           id: 'new-series',
+          kind: 'verb',
           label: 'New series',
           icon: <AddRegular />,
           onSelect: () => navigate('/events/series/new'),
         },
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {

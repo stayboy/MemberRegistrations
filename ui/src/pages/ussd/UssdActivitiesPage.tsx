@@ -140,6 +140,7 @@ export function UssdActivitiesPage() {
       actions={[
         {
           id: 'refresh',
+          kind: 'utility',
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           disabled: eventsQuery.isFetching,
