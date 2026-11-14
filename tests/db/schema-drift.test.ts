@@ -9,6 +9,8 @@ import {
   eventSessionOfferingCounts,
   members,
   ministries,
+  ministryPositions,
+  presbyterTitles,
   seriesExceptions,
   seriesSchedules,
   subscriptionClaims,
@@ -166,6 +168,8 @@ describe('ORM schema drift', () => {
   const tables: Array<[string, PgTable]> = [
     ['ministries', ministries],
     ['members', members],
+    ['presbyter_titles', presbyterTitles],
+    ['ministry_positions', ministryPositions],
     ['event_series', eventSeries],
     ['series_schedules', seriesSchedules],
     ['series_exceptions', seriesExceptions],
@@ -220,6 +224,16 @@ describe('ORM schema drift', () => {
       expect(await dbForeignKeys(db, name)).toEqual(schemaForeignKeys(table));
       expect(await dbCheckNames(db, name)).toEqual(schemaCheckNames(table));
     }
+  });
+
+  it('matches the officer-title foreign keys and checks', async () => {
+    expect(await dbCheckNames(db, 'presbyter_titles')).toEqual(schemaCheckNames(presbyterTitles));
+    expect(await dbForeignKeys(db, 'members')).toEqual(schemaForeignKeys(members));
+    expect(await dbForeignKeys(db, 'member_ministries')).toContainEqual({
+      column: 'position_code',
+      foreignTable: 'ministry_positions',
+      foreignColumn: 'code',
+    });
   });
 
   it('fails on a deliberate column mismatch', async () => {

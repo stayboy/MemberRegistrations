@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   CardInUseError,
   ConflictError,
@@ -16,6 +16,8 @@ import {
   memberContactLinks,
   memberContacts,
   members,
+  ministryPositions,
+  presbyterTitles,
   subscriptionCoverage,
   subscriptions as subscriptionsTable,
 } from '../db/schema.js';
@@ -50,9 +52,23 @@ export {
   type SubscriptionKind,
 };
 
+export interface MinistryPositionDto {
+  code: string;
+  label: string;
+}
+
 export interface MinistryDto {
   code: string;
   name: string;
+  /** The duty the member carries in this ministry; null when none is recorded. */
+  position: MinistryPositionDto | null;
+}
+
+/** The office a member holds, with the label it had when the title was given. */
+export interface PresbyterTitleDto {
+  code: string;
+  label: string;
+  titledOn: string | null;
 }
 
 export interface RelationshipDto {
@@ -160,6 +176,8 @@ export interface MemberSummary {
   placeOfResidence: string | null;
   joinedOn: string | null;
   isPresbyter: boolean;
+  /** Null when the member holds no office; never a missing key. */
+  title: PresbyterTitleDto | null;
   archivedAt: string | null;
   /** Count only; the list never carries contact values. */
   contactCount: number;
@@ -222,7 +240,15 @@ export interface CreateMemberInput {
 
 export type UpdateMemberInput = Partial<
   Omit<CreateMemberInput, 'memberNo' | 'contacts' | 'ministries'>
->;
+> & {
+  /**
+   * The office, or null to clear it. Independent of `isPresbyter`: writing or clearing a title never
+   * changes the flag, and changing the flag never changes the title (O-4).
+   */
+  titleCode?: string | null;
+  /** UTC calendar date the office was taken; cleared with the title. */
+  titledOn?: string | null;
+};
 
 export const LIST_INCLUDES = ['attendance', 'subscriptions'] as const;
 export type ListInclude = (typeof LIST_INCLUDES)[number];
@@ -270,6 +296,8 @@ interface MemberRow extends Row {
   joined_on: string | null;
   is_presbyter: boolean;
   presbyter_rank: number | null;
+  title_code: string | null;
+  titled_on: string | null;
   membership_card_no: string | null;
   verified_at: Date | string | null;
   archived_at: Date | string | null;
@@ -297,6 +325,8 @@ const memberColumns = {
   joined_on: members.joinedOn,
   is_presbyter: members.isPresbyter,
   presbyter_rank: members.presbyterRank,
+  title_code: members.titleCode,
+  titled_on: members.titledOn,
   membership_card_no: members.membershipCardNo,
   verified_at: members.verifiedAt,
   archived_at: members.archivedAt,
@@ -382,6 +412,16 @@ function normalizeCardNo(value: string | null | undefined): string | null {
     throw new ValidationError('membershipCardNo must be 1-32 characters');
   }
   return trimmed;
+}
+
+/** A title's gender rule is enforced wherever the title is written, not in the form. */
+function assertTitleGender(
+  title: { label: string; genderRestriction: string | null },
+  gender: Gender,
+): void {
+  if (title.genderRestriction !== null && title.genderRestriction !== gender) {
+    throw new ValidationError(`${title.label} is restricted to ${title.genderRestriction} members`);
+  }
 }
 
 /** Bumps the optimistic-concurrency version after any change to the aggregate. */
@@ -930,6 +970,36 @@ export class MemberRepository {
       fields.presbyterRank = input.presbyterRank;
     }
 
+    // The title is independent of the flag (O-4): writing or clearing it never
+    // touches `isPresbyter`, and clearing it clears the date.
+    let effectiveTitle = row.title_code;
+    if (input.titleCode !== undefined) {
+      if (input.titleCode === null) {
+        fields.titleCode = null;
+        fields.titledOn = null;
+        effectiveTitle = null;
+      } else {
+        const title = await this.requireAssignableTitle(input.titleCode);
+        assertTitleGender(title, input.gender ?? row.gender);
+        fields.titleCode = title.code;
+        effectiveTitle = title.code;
+      }
+    }
+    if (input.titledOn !== undefined) {
+      if (effectiveTitle === null) {
+        throw new ValidationError('titledOn requires a title');
+      }
+      if (input.titledOn === null) {
+        fields.titledOn = null;
+      } else {
+        const titledOn = assertDate(input.titledOn, 'titledOn');
+        if (titledOn > todayIn('UTC')) {
+          throw new ValidationError('titledOn must not be in the future');
+        }
+        fields.titledOn = titledOn;
+      }
+    }
+
     if (Object.keys(fields).length === 0) throw new ValidationError('No fields to update');
 
     const set: MemberSet = {
@@ -1063,6 +1133,8 @@ export class MemberRepository {
           gender: 'undisclosed',
           isPresbyter: false,
           presbyterRank: null,
+          titleCode: null,
+          titledOn: null,
           membershipCardNo: null,
           verifiedAt: null,
           archivedAt: sql`now()`,
@@ -1286,6 +1358,47 @@ export class MemberRepository {
       if (deleted.length === 0) throw new NotFoundError(`Member does not serve in ${code}`);
       await touch(tx, row.id, actor);
     });
+  }
+
+  /**
+   * Sets, replaces or clears the duty a member carries in one ministry. The
+   * membership is the key, so a second position replaces the first rather than
+   * adding a row (O-2).
+   */
+  async setMinistryPosition(
+    memberNo: string,
+    ministryCode: string,
+    positionCode: string | null,
+    actor: string,
+  ): Promise<MinistryDto> {
+    const row = await this.requireRow(memberNo);
+    const [membership] = await this.db.query<{ ministry_id: string; code: string; name: string }>(
+      `select mm.ministry_id, mi.code, mi.name
+         from member_ministries mm
+         join ministries mi on mi.id = mm.ministry_id
+        where mm.member_id = $1 and lower(mi.code) = lower($2)`,
+      [row.id, ministryCode],
+    );
+    if (!membership) {
+      throw new NotFoundError(`Member ${memberNo} does not serve in ${ministryCode}`);
+    }
+
+    const position =
+      positionCode === null ? null : await this.requireAssignablePosition(positionCode);
+
+    await this.db.transaction(async (tx) => {
+      await tx.query(
+        'update member_ministries set position_code = $3 where member_id = $1 and ministry_id = $2',
+        [row.id, membership.ministry_id, position?.code ?? null],
+      );
+      await touch(tx, row.id, actor);
+    });
+
+    return {
+      code: membership.code,
+      name: membership.name,
+      position: position === null ? null : { code: position.code, label: position.label },
+    };
   }
 
   // -- relationships -------------------------------------------------------
@@ -1516,6 +1629,9 @@ export class MemberRepository {
     const ids = rows.map((row) => row.id);
     const contacts = await this.contactsForMany(ids);
     const ministries = await this.ministriesForMany(ids);
+    const labels = await this.titleLabels(
+      rows.map((row) => row.title_code).filter((code): code is string => code !== null),
+    );
 
     const attendance = options.includeAttendance
       ? await this.attendanceSummaries(rows, options.seriesId)
@@ -1529,6 +1645,7 @@ export class MemberRepository {
         row,
         (contacts.get(row.id) ?? []).length,
         ministries.get(row.id) ?? [],
+        this.titleFor(row, labels),
       );
       if (attendance) summary.attendance = attendance.get(row.id) ?? null;
       if (subscriptions) summary.subscriptions = subscriptions.get(row.id) ?? [];
@@ -1540,6 +1657,7 @@ export class MemberRepository {
     row: MemberRow,
     contactCount: number,
     ministries: MinistryDto[],
+    title: PresbyterTitleDto | null,
   ): MemberSummary {
     return {
       memberNo: row.member_no,
@@ -1552,6 +1670,7 @@ export class MemberRepository {
       placeOfResidence: row.place_of_residence,
       joinedOn: isoDate(row.joined_on),
       isPresbyter: row.is_presbyter,
+      title,
       archivedAt: isoTimestamp(row.archived_at),
       contactCount,
       ministries,
@@ -1559,16 +1678,18 @@ export class MemberRepository {
   }
 
   private async toDetail(row: MemberRow): Promise<MemberDetail> {
-    const [contacts, subscriptions, ministries, relationships, attendance] = await Promise.all([
-      this.contactsFor(row.id),
-      this.subscriptionsFor(row.id),
-      this.ministriesFor(row.id),
-      this.relationshipsFor(row.id),
-      this.attendanceFor(row),
-    ]);
+    const [contacts, subscriptions, ministries, relationships, attendance, labels] =
+      await Promise.all([
+        this.contactsFor(row.id),
+        this.subscriptionsFor(row.id),
+        this.ministriesFor(row.id),
+        this.relationshipsFor(row.id),
+        this.attendanceFor(row),
+        this.titleLabels(row.title_code === null ? [] : [row.title_code]),
+      ]);
 
     return {
-      ...this.toSummary(row, contacts.length, ministries),
+      ...this.toSummary(row, contacts.length, ministries, this.titleFor(row, labels)),
       id: row.id,
       presbyterRank: row.presbyter_rank,
       membershipCardNo: row.membership_card_no,
@@ -1760,10 +1881,14 @@ export class MemberRepository {
       member_id: string;
       code: string;
       name: string;
+      position_code: string | null;
+      position_label: string | null;
     }>(
-      `select mm.member_id, mi.code, mi.name
+      `select mm.member_id, mi.code, mi.name,
+              mp.code as position_code, mp.label as position_label
        from member_ministries mm
        join ministries mi on mi.id = mm.ministry_id
+       left join ministry_positions mp on mp.code = mm.position_code
        where mm.member_id = any($1::uuid[])
        order by mi.code`,
       [memberIds],
@@ -1772,7 +1897,14 @@ export class MemberRepository {
     const map = new Map<string, MinistryDto[]>();
     for (const row of rows) {
       const list = map.get(row.member_id) ?? [];
-      list.push({ code: row.code, name: row.name });
+      list.push({
+        code: row.code,
+        name: row.name,
+        position:
+          row.position_code === null
+            ? null
+            : { code: row.position_code, label: row.position_label ?? row.position_code },
+      });
       map.set(row.member_id, list);
     }
     return map;
@@ -1952,6 +2084,63 @@ export class MemberRepository {
       }
       throw error;
     }
+  }
+
+  /**
+   * An assignable title must exist and be active. A retired title keeps
+   * rendering on its holder but is never offered for a new assignment (O-6).
+   */
+  private async requireAssignableTitle(code: string): Promise<{
+    code: string;
+    label: string;
+    genderRestriction: string | null;
+  }> {
+    const [title] = await this.db.orm
+      .select({
+        code: presbyterTitles.code,
+        label: presbyterTitles.label,
+        genderRestriction: presbyterTitles.genderRestriction,
+        active: presbyterTitles.active,
+      })
+      .from(presbyterTitles)
+      .where(sql`lower(${presbyterTitles.code}) = lower(${code})`)
+      .limit(1);
+    if (!title?.active) throw new ValidationError(`Unknown title ${code}`);
+    return { code: title.code, label: title.label, genderRestriction: title.genderRestriction };
+  }
+
+  private async requireAssignablePosition(code: string): Promise<{ code: string; label: string }> {
+    const [position] = await this.db.orm
+      .select({
+        code: ministryPositions.code,
+        label: ministryPositions.label,
+        active: ministryPositions.active,
+      })
+      .from(ministryPositions)
+      .where(sql`lower(${ministryPositions.code}) = lower(${code})`)
+      .limit(1);
+    if (!position?.active) throw new ValidationError(`Unknown position ${code}`);
+    return { code: position.code, label: position.label };
+  }
+
+  /** Labels for the titles a page of members holds; one query, not one per row. */
+  private async titleLabels(codes: string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(codes)];
+    if (unique.length === 0) return new Map();
+    const rows = await this.db.orm
+      .select({ code: presbyterTitles.code, label: presbyterTitles.label })
+      .from(presbyterTitles)
+      .where(inArray(presbyterTitles.code, unique));
+    return new Map(rows.map((row) => [row.code, row.label]));
+  }
+
+  private titleFor(row: MemberRow, labels: Map<string, string>): PresbyterTitleDto | null {
+    if (row.title_code === null) return null;
+    return {
+      code: row.title_code,
+      label: labels.get(row.title_code) ?? row.title_code,
+      titledOn: isoDate(row.titled_on),
+    };
   }
 
   private async insertCoverage(

@@ -1053,4 +1053,47 @@ alter table import_batches add column ended boolean not null default false;
 alter table event_session_headcounts add column ended boolean not null default false;
 `,
   },
+  {
+    version: '0021_officer_titles',
+    sql: `
+-- Two vocabularies, both data rather than code: adding an entry is an insert
+-- and retiring one is active = false, so existing holders keep rendering their
+-- label and no schema change is needed to learn a new word.
+create table presbyter_titles (
+  code text primary key,
+  label text not null,
+  gender_restriction text check (gender_restriction in ('male','female')),
+  active boolean not null default true
+);
+insert into presbyter_titles (code, label, gender_restriction) values
+  ('pastor',    'Pastor',    null),
+  ('apostle',   'Apostle',   null),
+  ('elder',     'Elder',     'male'),
+  ('deaconess', 'Deaconess', 'female'),
+  ('deacon',    'Deacon',    'male');
+
+create table ministry_positions (
+  code text primary key,
+  label text not null,
+  active boolean not null default true
+);
+insert into ministry_positions (code, label) values
+  ('leader',               'Ministry Leader'),
+  ('assistant-leader',     'Asst. Leader'),
+  ('secretary',            'Secretary'),
+  ('organising-secretary', 'Organising Secretary'),
+  ('financial-secretary',  'Financial Secretary'),
+  ('executive-member',     'Executive Member');
+
+-- One title per member, and an optional UTC calendar date for when it was
+-- taken. A title and is_presbyter are independent: writing or clearing the
+-- title never changes that flag, and changing the flag never changes the title.
+alter table members add column title_code text references presbyter_titles(code);
+alter table members add column titled_on date;
+create index members_title on members (title_code) where title_code is not null;
+
+-- One position per membership, for free under the existing primary key.
+alter table member_ministries add column position_code text references ministry_positions(code);
+`,
+  },
 ];

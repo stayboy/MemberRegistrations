@@ -174,148 +174,122 @@ fits.
   completeness test covers every key the shipped screens use, and a key no shipped screen uses is
   allowed until its part lands. An admin-editable glossary is a backlog item, not V3.
 
-| Key                          | Full                         | Short           |
-| ---------------------------- | ---------------------------- | --------------- |
-| `menu.offerings`             | Offerings                    | Offerings       |
-| `menu.activities`            | Activities                   | Activities      |
-| `menu.attendance`            | Attendance                   | Attendance      |
-| `menu.welfare`               | Welfare & Services           | Welfare         |
-| `menu.profile`               | My Profile                   | Profile         |
-| `menu.register`              | Register                     | Register        |
-| `menu.exit`                  | Exit                         | Exit            |
-| `nav.back`                   | Back                         | Back            |
-| `nav.more`                   | More                         | More            |
-| `nav.main`                   | Main menu                    | Main            |
-| `action.give`                | Give                         | Give            |
-| `action.pledge`              | Pledge                       | Pledge          |
-| `action.my_pledges`          | My pledges                   | Pledges         |
-| `action.my_payments`         | My payments                  | Payments        |
-| `action.redeem`              | Redeem                       | Redeem          |
-| `action.accept`              | Accept                       | Accept          |
-| `action.change`              | Change                       | Change          |
-| `action.pay`                 | Pay                          | Pay             |
-| `prompt.amount`              | Enter amount                 | Amount          |
-| `prompt.offerings`           | Choose offering(s)           | Offering(s)     |
-| `prompt.split`               | Split amount                 | Split           |
-| `prompt.date`                | Enter date DDMMYYYY          | Date (DDMMYYYY) |
-| `prompt.expected_date`       | Expected date                | Due date        |
-| `prompt.phone`               | Enter phone number           | Phone           |
-| `prompt.code`                | Enter code                   | Code            |
-| `prompt.name`                | Enter name                   | Name            |
-| `label.total`                | Total                        | Total           |
-| `label.reference`            | Reference                    | Ref             |
-| `label.code`                 | Confirmation code            | Code            |
-| `label.event`                | Event                        | Event           |
-| `label.day`                  | Day                          | Day             |
-| `label.offering`             | Offering                     | Offering        |
-| `label.amount`               | Amount                       | Amount          |
-| `label.currency`             | Currency                     | Currency        |
-| `activities.today`           | Today                        | Today           |
-| `activities.this_week`       | This week                    | This week       |
-| `activities.a_date`          | A date                       | Date            |
-| `activities.summary`         | Attendance summary           | Attendance      |
-| `activities.give`            | Give to an offering          | Give            |
-| `attendance.day`             | A specific day               | Day             |
-| `attendance.period`          | Period summary               | Period          |
-| `attendance.present`         | I was present                | Present         |
-| `attendance.clocking`        | Clocking                     | Clock           |
-| `attendance.clock_in`        | Clock in                     | Clock in        |
-| `attendance.headcount`       | Headcount                    | Headcount       |
-| `attendance.delegate`        | Delegate                     | Delegate        |
-| `attendance.no_data`         | No attendance yet            | No attendance   |
-| `label.attended`             | Attended                     | Present         |
-| `label.roster`               | Roster                       | Roster          |
-| `label.male`                 | Male                         | Male            |
-| `label.female`               | Female                       | Female          |
-| `label.children`             | Children                     | Children        |
-| `label.window`               | Last 5                       | Last 5          |
-| `label.month`                | This month                   | Month           |
-| `prompt.reason`              | Enter reason                 | Reason          |
-| `status.registered`          | Registration sent            | Registered      |
-| `status.attendance_recorded` | Attendance recorded          | Recorded        |
-| `error.code_invalid`         | Invalid code                 | Bad code        |
-| `error.code_used`            | Code already used            | Code used       |
-| `error.session_closed`       | Session already closed       | Closed          |
-| `error.session_not_today`    | Attendance is only for today | Not today       |
-| `error.not_shepherd`         | Not your member              | Not yours       |
-| `error.not_senior`           | Not a senior presbyter       | Not senior      |
-| `error.delegate_required`    | Delegate first               | Delegate        |
-| `error.already_clocked`      | Already clocked in           | Clocked         |
-| `status.regular`             | Regular                      | Regular         |
-| `status.non_regular`         | Non-Regular                  | Non-reg         |
-| `status.not_enough_data`     | Not enough data              | No data         |
-| `welfare.my_services`        | My services                  | My plans        |
-| `welfare.subscribe`          | Subscribe                    | Join            |
-| `welfare.eligible`           | Eligible                     | Eligible        |
-| `welfare.not_eligible`       | Not eligible                 | Not eligible    |
-| `welfare.premium`            | Premium                      | Premium         |
-| `welfare.payer_member`       | You pay                      | You pay         |
-| `welfare.payer_church`       | Church pays                  | Church          |
-| `welfare.cover`              | Cover                        | Cover           |
-| `welfare.claimed`            | Total claimed                | Claimed         |
-| `welfare.expired`            | Expired                      | Expired         |
-| `welfare.until`              | Until                        | Until           |
-| `welfare.paid_by_church`     | Paid by the church           | Church          |
-| `welfare.cover_dependents`   | Cover dependents? 1 Yes 2 No | Dependents?     |
-| `welfare.no_dependents`      | No dependents                | None            |
-| `welfare.no_services`        | No services                  | None            |
-| `action.yes`                 | Yes                          | Yes             |
-| `action.no`                  | No                           | No              |
-| `label.spouse_husband`       | Husband                      | Husband         |
-| `label.spouse_wife`          | Wife                         | Wife            |
-| `profile.member_no`          | Member no.                   | Member no.      |
-| `profile.gender`             | Gender                       | Gender          |
-| `profile.age`                | Age                          | Age             |
-| `profile.dob`                | Date of birth                | DOB             |
-| `profile.ministries`         | Ministries                   | Ministries      |
-| `profile.shepherd`           | Shepherd                     | Shepherd        |
-| `profile.not_assigned`       | Not assigned                 | Not assigned    |
-| `error.session_expired`      | Session expired              | Session expired |
-| `error.too_many_tries`       | Too many attempts            | Too many tries  |
-| `error.invalid_amount`       | Invalid amount               | Bad amount      |
-| `error.invalid_date`         | Invalid date                 | Bad date        |
-| `error.invalid_choice`       | Invalid choice               | Invalid         |
-| `error.one_offering`         | Choose one offering          | One only        |
-| `error.no_event`             | No event today               | No event        |
-| `error.no_offering`          | No offerings today           | No offering     |
-| `error.officer_required`     | No follow-up officer         | No officer      |
-| `error.no_pledges`           | No pending pledges           | No pledges      |
-| `status.payment_pending`     | Payment pending              | Pending         |
-| `label.week`                 | This week                    | Week            |
-| `label.adults`               | Adults                       | Adults          |
-| `label.as_of`                | As of                        | As of           |
-| `headcount.adult_service`    | Adult service                | Adult           |
-| `headcount.children_service` | Children service             | Children        |
-| `headcount.mixed_service`    | Mixed service                | Mixed           |
-| `action.new_count`           | New count                    | New             |
-| `action.correct`             | Correct                      | Correct         |
-| `activities.zero_today`      | 0 events today               | None today      |
-| `activities.zero_week`       | 0 events this week           | None this week  |
-| `label.event`                | Event                        | Event           |
-| `label.events`               | Events                       | Events          |
-| `label.tomorrow`             | Tomorrow                     | Tomorrow        |
-| `label.in_days`              | in {n} days                  | {n} days        |
-| `label.no_upcoming`          | No upcoming events           | None upcoming   |
-| `action.view`                | View                         | View            |
-| `status.headcount_recorded`  | Headcount recorded           | Recorded        |
-| `label.quarter`              | This quarter                 | Quarter         |
-| `label.year`                 | This year                    | Year            |
-| `error.not_eligible`         | Not eligible                 | Not eligible    |
-| `error.already_paid`         | Already paid                 | Already paid    |
-| `error.try_again`            | Try again                    | Try again       |
+| Key                            | Full                                                                                        | Short           |
+| ------------------------------ | ------------------------------------------------------------------------------------------- | --------------- |
+| `menu.offerings`               | Offerings                                                                                   | Offerings       |
+| `menu.activities`              | Activities                                                                                  | Activities      |
+| `menu.attendance`              | Attendance                                                                                  | Attendance      |
+| `menu.welfare`                 | Welfare & Services                                                                          | Welfare         |
+| `menu.profile`                 | My Profile                                                                                  | Profile         |
+| `menu.register`                | Register                                                                                    | Register        |
+| `menu.exit`                    | Exit                                                                                        | Exit            |
+| `nav.back`                     | Back                                                                                        | Back            |
+| `nav.more`                     | More                                                                                        | More            |
+| `nav.main`                     | Main menu                                                                                   | Main            |
+| `action.give`                  | Give                                                                                        | Give            |
+| `action.pledge`                | Pledge                                                                                      | Pledge          |
+| `action.my_pledges`            | My pledges                                                                                  | Pledges         |
+| `action.my_payments`           | My payments                                                                                 | Payments        |
+| `action.redeem`                | Redeem                                                                                      | Redeem          |
+| `action.accept`                | Accept                                                                                      | Accept          |
+| `action.change`                | Change                                                                                      | Change          |
+| `action.pay`                   | Pay                                                                                         | Pay             |
+| `prompt.amount`                | Enter amount                                                                                | Amount          |
+| `prompt.offerings`             | Choose offering(s)                                                                          | Offering(s)     |
+| `prompt.split`                 | Split amount                                                                                | Split           |
+| `prompt.date`                  | Enter date DDMMYYYY                                                                         | Date (DDMMYYYY) |
+| `prompt.expected_date`         | Expected date                                                                               | Due date        |
+| `prompt.phone`                 | Enter phone number                                                                          | Phone           |
+| `prompt.code`                  | Enter code                                                                                  | Code            |
+| `prompt.name`                  | Enter name                                                                                  | Name            |
+| `label.total`                  | Total                                                                                       | Total           |
+| `label.reference`              | Reference                                                                                   | Ref             |
+| `label.code`                   | Confirmation code                                                                           | Code            |
+| `label.event`                  | Event                                                                                       | Event           |
+| `label.day`                    | Day                                                                                         | Day             |
+| `label.offering`               | Offering                                                                                    | Offering        |
+| `label.amount`                 | Amount                                                                                      | Amount          |
+| `label.currency`               | Currency                                                                                    | Currency        |
+| `activities.today`             | Today                                                                                       | Today           |
+| `activities.this_week`         | This week                                                                                   | This week       |
+| `activities.a_date`            | A date                                                                                      | Date            |
+| `activities.summary`           | Attendance summary                                                                          | Attendance      |
+| `activities.give`              | Give to an offering                                                                         | Give            |
+| `attendance.day`               | A specific day                                                                              | Day             |
+| `attendance.period`            | Period summary                                                                              | Period          |
+| `attendance.present`           | I was present                                                                               | Present         |
+| `attendance.clocking`          | Clocking                                                                                    | Clock           |
+| `attendance.clock_in`          | Clock in                                                                                    | Clock in        |
+| `attendance.headcount`         | Headcount                                                                                   | Headcount       |
+| `attendance.delegate`          | Delegate                                                                                    | Delegate        |
+| `attendance.no_data`           | No attendance yet                                                                           | No attendance   |
+| `label.attended`               | Attended                                                                                    | Present         |
+| `label.roster`                 | Roster                                                                                      | Roster          |
+| `label.male`                   | Male                                                                                        | Male            |
+| `label.female`                 | Female                                                                                      | Female          |
+| `label.children`               | Children                                                                                    | Children        |
+| `label.window`                 | Last 5                                                                                      | Last 5          |
+| `label.month`                  | This month                                                                                  | Month           |
+| `prompt.reason`                | Enter reason                                                                                | Reason          |
+| `status.registered`            | Registration sent                                                                           | Registered      |
+| `status.attendance_recorded`   | Attendance recorded                                                                         | Recorded        |
+| `error.code_invalid`           | Invalid code                                                                                | Bad code        |
+| `error.code_used`              | Code already used                                                                           | Code used       |
+| `error.session_closed`         | Session already closed                                                                      | Closed          |
+| `error.session_not_today`      | Attendance is only for today                                                                | Not today       |
+| `error.not_shepherd`           | Not your member                                                                             | Not yours       |
+| `error.not_senior`             | Not a senior presbyter                                                                      | Not senior      |
+| `error.delegate_required`      | Delegate first                                                                              | Delegate        |
+| `error.already_clocked`        | Already clocked in                                                                          | Clocked         |
+| `status.regular`               | Regular                                                                                     | Regular         |
+| `status.non_regular`           | Non-Regular                                                                                 | Non-reg         |
+| `status.not_enough_data`       | Not enough data                                                                             | No data         |
+| `welfare.my_services`          | My services                                                                                 | My plans        |
+| `welfare.subscribe`            | Subscribe                                                                                   | Join            |
+| `welfare.eligible`             | Eligible                                                                                    | Eligible        |
+| `welfare.not_eligible`         | Not eligible                                                                                | Not eligible    |
+| `welfare.premium`              | Premium                                                                                     | Premium         |
+| `welfare.payer_member`         | You pay                                                                                     | You pay         |
+| `welfare.payer_church`         | Church pays                                                                                 | Church          |
+| `welfare.cover`                | Cover                                                                                       | Cover           |
+| `welfare.claimed`              | Total claimed                                                                               | Claimed         |
+| `welfare.expired`              | Expired                                                                                     | Expired         |
+| `welfare.until`                | Until                                                                                       | Until           |
+| `welfare.paid_by_church`       | Paid by the church                                                                          | Church          |
+| `welfare.cover_dependents`     | Cover dependents? 1 Yes 2 No                                                                | Dependents?     |
+| `welfare.no_dependents`        | No dependents                                                                               | None            |
+| `welfare.no_services`          | No services                                                                                 | None            |
+| `action.yes`                   | Yes                                                                                         | Yes             |
+| `action.no`                    | No                                                                                          | No              |
+| `label.spouse_husband`         | Husband                                                                                     | Husband         |
+| `label.spouse_wife`            | Wife                                                                                        | Wife            |
+| `profile.member_no`            | Member no.                                                                                  | Member no.      |
+| `profile.gender`               | Gender                                                                                      | Gender          |
+| `profile.age`                  | Age                                                                                         | Age             |
+| `profile.dob`                  | Date of birth                                                                               | DOB             |
+| `profile.ministries`           | Ministries                                                                                  | Ministries      |
+| `profile.shepherd`             | Shepherd                                                                                    | Shepherd        |
+| `profile.not_assigned`         | Not assigned                                                                                | Not assigned    |
+| `error.session_expired`        | Session expired                                                                             | Session expired |
+| `error.too_many_tries`         | Too many attempts                                                                           | Too many tries  |
+| `error.invalid_amount`         | Invalid amount                                                                              | Bad amount      |
+| `error.invalid_date`           | Invalid date                                                                                | Bad date        |
+| `error.invalid_choice`         | Invalid choice                                                                              | Invalid         |
+| `error.one_offering`           | Choose one offering                                                                         | One only        |
+| `error.no_event`               | No event today                                                                              | No event        |
+| `error.no_offering`            | No offerings today                                                                          | No offering     |
+| `error.officer_required`       | No follow-up officer                                                                        | No officer      |
+| `error.no_pledges`             | No pending pledges                                                                          | No pledges      |
+| `status.payment_pending`       | Payment pending                                                                             | Pending         |
+| `label.week`                   | This week                                                                                   | Week            |
+| `label.adults`                 | Adults                                                                                      | Adults          |
+| `label.as_of`                  | As of                                                                                       | As of           |
+| `headcount.adult_service`      | Adult service                                                                               | Adult           |
+| `headcount.children_service`   | Children service                                                                            | Children        |
+| `headcount.visitors_service`   | Visitors                                                                                    | Visitors        |
+| `headcount.presbyters_service` | Presbyters                                                                                  | Presbyters      |
+| `headcount.mixed_service`      | Mixed service headcounts are retired: neither the handset nor the portal records a new one. |
 
-### Giving: events, offerings, splits
-
-- "Valid events for the day" are events the caller may attend: general events, ministry events only when
-  the member holds an active assignment to that ministry (the assignment-date floor), and presbyter-only
-  events only for presbyters; an anonymous caller sees general events only. They are ordered by date
-  (today first, then ascending), then **priority tier** — the member's ministry events, and a presbyter's
-  own presbyter-only events, before general events — then start time, then event number. At most three
-  are shown plus `0 More` for the week. An assignment to a deactivated ministry does not count;
-  deactivating a ministry drops its events from scope like removing the membership. Paged lists render
-  the channel's declared `pageSize.events`: three for the 182 reference, two for Nalo's 120, so a declared page
-  never drops an action; message truncation stays a fallback, not the pagination rule. Mixed service
-  headcounts are portal-only.
 - **Zero events today.** When the selected day has no applicable event, the screen says `0 events today`
   and names the next applicable day within a **14-day** horizon: day 1 renders `1 event tomorrow`/`2
 events tomorrow`, days 2–14 render `in N days` (`2 events in 2 days` ... `2 events in 14 days`), and
@@ -400,17 +374,24 @@ events tomorrow`, days 2–14 render `in N days` (`2 events in 2 days` ... `2 ev
   that session to another presbyter; the delegation is recorded with the grantor, delegate, session and
   reason, and expires with the session. The delegate may then clock in members for that session only.
 - **Headcounts.** A presbyter or admin records a headcount for one session, shown as a labelled service
-  mode: **Adult service** (`male,female,children`), **Children service** (`male,female,adults`) or
-  **Mixed service** (portal-only four numbers: `adult male,adult female,child male,child female`). The
-  current observation screen names the mode, the `asOf` time and the count. USSD offers `1 New count` and
+  mode: **Adult service** (`male,female,children`) or **Children service** (`male,female,adults`), with the
+  session's last mode preselected. Two **specialised modes** are their own entries in the headcount menu
+  rather than options inside those prompts, because they are counted at different moments and by different
+  people: **Visitors** (`male,female,children`) and **Presbyters** (`elders,deaconess,deacons`). **Mixed
+  service** is retired: no new count may be recorded in it, and an existing one stays readable and labelled
+  **Mixed (retired)**. A session may hold one current count per mode, so an adults count and a children
+  count coexist; the observation model, the reference data and the lane rules are
+  `member-registrations-headcount.md`. The current observation screen names the mode, its `asOf` time and
+  its count. USSD offers `1 New count` and
   `2 Correct`: a new count appends an observation with `asOf` now; a correction supersedes the current
-  observation and keeps its original `asOf` (the moment counted), recording who corrected it and when.
-  The session remembers the last mode for that event/session and preselects it on the mode prompt. The
-  entry is one labelled three-number line, accepting comma, slash or space separators, with a re-prompt
+  observation of that mode and keeps its original `asOf` (the moment counted), recording who corrected it
+  and when.
+  The entry is one labelled three-number line, accepting comma, slash or space separators, with a re-prompt
   on a malformed or out-of-range value and a lay restatement before save. Each bucket is 0–10,000 and the
   total at most 30,000; an all-zero observation is allowed. The model is append-only: a superseded
   observation is **not invalid** — it stays the valid record of the count at its `asOf` — and only the
-  newest non-superseded row is "current". The register-derived `expected` stays separate and is labelled
+  newest non-superseded row of a mode is "current" for that mode. The register-derived `expected` stays
+  separate and is labelled
   **Roster**. A headcount is never derived from or fed into per-member attendance or regularity, and it
   is operator-only: a member never sees the aggregate headcount.
 - Attendance summaries are read through one member-scoped aggregate for a window and a day, with the
@@ -427,11 +408,12 @@ event offers `1 Give` (the 24a giving flow with that event) and `2 Attendance`. 
 status; `1` a day, `2` a period (`1 Month`, `2 Quarter`,
 `3 Year`), `3` I was present (six-digit code) and, for presbyters, `4` Clocking. Clocking offers `1`
 Clock in (member number), `2` Headcount and `3` Delegate (member number then
-reason). Headcount shows the current observation as `Adult service` / `Children service` /
-`Mixed service` with its `asOf` time, then offers `1 New count` and `2 Correct`; the mode prompt labels
-the two handset modes clearly and preselects the session's last mode, then one labelled three-number
-prompt follows. A new count appends with `asOf` now; a correction keeps the corrected observation's
-`asOf` and supersedes it. Mixed service is portal-only. My Profile renders the
+reason). Headcount shows the current count per mode - `Adult service`, `Children service`, `Visitors` and
+`Presbyters`, each with its own `asOf` time - then offers `1 New count` and `2 Correct`; the menu names the
+four entries, the two ordinary modes preselect the session's last mode, and one labelled three-number
+prompt follows for whichever entry was chosen. A new count appends with `asOf` now and supersedes that
+mode's current; a correction keeps the corrected observation's `asOf` and supersedes it. `Mixed service` is
+retired: no new count is recorded in it, and an existing one stays readable. My Profile renders the
 shared identity label, member number, up to three ministries, the
 attendance line and the shepherd. The anonymous Register entry prompts code, first name, last name and
 returns the request reference. Registration approval and code issuance are portal actions (24d), not

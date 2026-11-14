@@ -19,8 +19,10 @@ import {
   memberContributionsSummarySchema,
   memberDetailSchema,
   memberListSchema,
+  memberMinistrySchema,
   memberProfileSchema,
   memberSummarySchema,
+  ministryPositionInputSchema,
   purgeSchema,
   relationshipInputSchema,
   relationshipResponseSchema,
@@ -284,6 +286,8 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         AttendanceInput: toSchema(attendanceInputSchema, 'input'),
         AttendanceList: toSchema(attendanceListSchema, 'output'),
         Ministry: toSchema(ministrySchema, 'output'),
+        MemberMinistry: toSchema(memberMinistrySchema, 'output'),
+        MinistryPositionInput: toSchema(ministryPositionInputSchema, 'input'),
         MinistryInput: toSchema(ministryInputSchema, 'input'),
         MinistryUpdate: toSchema(ministryUpdateSchema, 'input'),
         Series: toSchema(seriesSchema, 'output'),
@@ -1165,7 +1169,31 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
 
       '/v1/members/{memberNo}/ministries/{code}': {
-        parameters: [memberNoParam, idParam('code')],
+        parameters: [
+          memberNoParam,
+          {
+            name: 'code',
+            in: 'path',
+            required: true,
+            description:
+              'The ministry code, matched case-insensitively; the wire carries no ministry id.',
+            schema: { type: 'string' },
+          },
+        ],
+        put: {
+          summary: 'Set, replace or clear the position held in one ministry',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('MinistryPositionInput') } },
+          },
+          responses: {
+            200: json('The membership with its position; null when cleared.', 'MemberMinistry'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
         delete: {
           summary: 'Remove a ministry assignment',
           parameters: [actorHeader],

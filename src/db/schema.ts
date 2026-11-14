@@ -35,6 +35,34 @@ export const ministries = pgTable(
   (table) => [uniqueIndex('ministries_code_ci').on(sql`lower(${table.code})`)],
 );
 
+/**
+ * The office a presbyter holds. Reference data in `0021_officer_titles`:
+ * adding a title is an insert and retiring one is `active = false`, so an
+ * existing holder keeps rendering the label it was given.
+ */
+export const presbyterTitles = pgTable(
+  'presbyter_titles',
+  {
+    code: text('code').primaryKey(),
+    label: text('label').notNull(),
+    genderRestriction: text('gender_restriction'),
+    active: boolean('active').notNull().default(true),
+  },
+  (table) => [
+    check(
+      'presbyter_titles_gender_restriction_check',
+      sql`${table.genderRestriction} in ('male','female')`,
+    ),
+  ],
+);
+
+/** The duty a member carries inside one ministry; the same data-not-code rules apply. */
+export const ministryPositions = pgTable('ministry_positions', {
+  code: text('code').primaryKey(),
+  label: text('label').notNull(),
+  active: boolean('active').notNull().default(true),
+});
+
 export const members = pgTable(
   'members',
   {
@@ -52,6 +80,10 @@ export const members = pgTable(
     joinedOn: date('joined_on'),
     isPresbyter: boolean('is_presbyter').notNull().default(false),
     presbyterRank: integer('presbyter_rank'),
+    /** The member's office; nullable and independent of `isPresbyter` (O-4). */
+    titleCode: text('title_code').references(() => presbyterTitles.code),
+    /** UTC calendar date the office was taken; cleared with the title. */
+    titledOn: date('titled_on'),
     membershipCardNo: text('membership_card_no'),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -67,6 +99,9 @@ export const members = pgTable(
     uniqueIndex('members_membership_card_no_ci')
       .on(sql`lower(${table.membershipCardNo})`)
       .where(sql`${table.membershipCardNo} is not null`),
+    index('members_title')
+      .on(table.titleCode)
+      .where(sql`${table.titleCode} is not null`),
   ],
 );
 

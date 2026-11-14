@@ -49,8 +49,15 @@ export const updateMemberSchema = z.object({
   joinedOn: dateStringSchema.nullable().optional(),
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
+  titleCode: z.string().min(2).max(32).nullable().optional(),
+  titledOn: dateStringSchema.nullable().optional(),
   membershipCardNo: z.string().trim().max(32).nullable().optional(),
   verified: z.boolean().optional(),
+});
+
+/** Sets, replaces or clears the duty a member carries in one ministry. */
+export const ministryPositionInputSchema = z.object({
+  positionCode: z.string().min(2).max(32).nullable(),
 });
 
 export const relationshipInputSchema = z.object({
@@ -140,9 +147,21 @@ const contactSchema = z.object({
   linked: z.boolean(),
 });
 
-const ministrySchema = z.object({
+const ministryPositionSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+});
+
+export const memberMinistrySchema = z.object({
   code: z.string(),
   name: z.string(),
+  position: ministryPositionSchema.nullable(),
+});
+
+const presbyterTitleSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  titledOn: z.string().nullable(),
 });
 
 const subscriptionSchema = z.object({
@@ -217,9 +236,10 @@ export const memberSummarySchema = z.object({
   placeOfResidence: z.string().nullable(),
   joinedOn: z.string().nullable(),
   isPresbyter: z.boolean(),
+  title: presbyterTitleSchema.nullable(),
   archivedAt: z.string().nullable(),
   contactCount: z.number().int(),
-  ministries: z.array(ministrySchema),
+  ministries: z.array(memberMinistrySchema),
   attendance: memberAttendanceSummarySchema.nullable().optional(),
   subscriptions: z.array(memberSubscriptionSummarySchema).optional(),
 });
