@@ -208,9 +208,9 @@ export function SeriesDetailPage() {
         <Button
           icon={<ArrowLeftRegular />}
           appearance="secondary"
-          onClick={() => navigate('/events/series')}
+          onClick={() => navigate('/events')}
         >
-          Back to series
+          Back to events
         </Button>
       }
       actions={[

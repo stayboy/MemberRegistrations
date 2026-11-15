@@ -48,7 +48,6 @@ describe('USSD section render', () => {
       'Codes',
       'Registrations',
       'Clocking',
-      'Headcount',
       'Activities',
       'Products',
       'Claims',
@@ -56,7 +55,7 @@ describe('USSD section render', () => {
     ]) {
       expect(markup).toContain(`>${label}<`);
     }
-    expect(markup).toContain('href="/ussd/headcount"');
+    expect(markup).not.toContain('href="/ussd/headcount"');
     expect(markup).toContain('href="/ussd/simulator"');
     expect(markup).toContain('aria-label="USSD navigation"');
   });
@@ -76,7 +75,6 @@ describe('USSD section render', () => {
       'Codes',
       'Registrations',
       'Clocking',
-      'Headcount',
       'Offerings count',
       'Activities',
       'Products',

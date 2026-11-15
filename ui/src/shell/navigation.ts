@@ -1,9 +1,7 @@
 import {
   ArchiveRegular,
-  ArrowUploadRegular,
   BookContactsRegular,
   CalendarLtrRegular,
-  CalendarMonthRegular,
   ClockRegular,
   DocumentRegular,
   DocumentTableRegular,
@@ -81,12 +79,6 @@ export const SECTIONS: readonly NavSection[] = [
         description: 'Events and their meeting dates.',
       },
       {
-        label: 'Series',
-        path: '/events/series',
-        icon: CalendarMonthRegular,
-        description: 'Series, schedule versions and exceptions.',
-      },
-      {
         label: 'Offerings',
         path: '/events/offerings',
         icon: MoneyRegular,
@@ -104,12 +96,6 @@ export const SECTIONS: readonly NavSection[] = [
         path: '/imports/members',
         icon: DocumentTableRegular,
         description: 'Import the member database from a CSV or the Excel template.',
-      },
-      {
-        label: 'Attendance registry',
-        path: '/imports/attendance',
-        icon: ArrowUploadRegular,
-        description: 'Import attendance for an event session chosen on this screen.',
       },
       {
         label: 'Batch lookup',
@@ -166,12 +152,6 @@ export const SECTIONS: readonly NavSection[] = [
         path: '/ussd/clocking',
         icon: ClockRegular,
         description: 'Session attendance, clock-ins and presbyter delegations.',
-      },
-      {
-        label: 'Headcount',
-        path: '/ussd/headcount',
-        icon: PeopleRegular,
-        description: 'Record and correct the counted attendance for a session.',
       },
       {
         label: 'Offerings count',

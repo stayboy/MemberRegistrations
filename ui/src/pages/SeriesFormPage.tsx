@@ -188,7 +188,7 @@ function SeriesFormView({
       createMutation.mutate(undefined, {
         onSuccess: (created) => {
           void queryClient.invalidateQueries({ queryKey: ['series', baseUrl] });
-          navigate(`/events/series/${encodeURIComponent(created.id)}`);
+          navigate(`/events/${encodeURIComponent(created.id)}?kind=series`);
         },
         onError: (error: unknown) => {
           if (isUnauthorized(error)) {
@@ -209,7 +209,7 @@ function SeriesFormView({
     updateMutation.mutate(undefined, {
       onSuccess: (updated) => {
         void queryClient.invalidateQueries({ queryKey: ['series', baseUrl] });
-        navigate(`/events/series/${encodeURIComponent(updated.id)}`);
+        navigate(`/events/${encodeURIComponent(updated.id)}?kind=series`);
       },
       onError: (error: unknown) => {
         if (isUnauthorized(error)) {
@@ -227,8 +227,8 @@ function SeriesFormView({
   }
 
   function cancel(): void {
-    if (isEdit && series) navigate(`/events/series/${encodeURIComponent(series.id)}`);
-    else navigate('/events/series');
+    if (isEdit && series) navigate(`/events/${encodeURIComponent(series.id)}?kind=series`);
+    else navigate('/events');
   }
 
   const title = isEdit ? 'Edit series' : 'New series';
@@ -535,7 +535,7 @@ export function SeriesFormPage() {
             </Button>
           </MessageBarBody>
         </MessageBar>
-        <Button appearance="secondary" onClick={() => navigate('/events/series')}>
+        <Button appearance="secondary" onClick={() => navigate('/events')}>
           Back to series
         </Button>
       </PageFrame>

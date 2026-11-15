@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { createHashRouter, Navigate } from 'react-router-dom';
+import { createHashRouter, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../shell/AppShell';
 import { SECTIONS, type SectionId } from '../shell/navigation';
 import { RequireSession } from '../auth/RequireSession';
@@ -53,9 +53,6 @@ const EventsListPage = lazy(() =>
 );
 const EventDetailPage = lazy(() =>
   import('../pages/EventDetailPage').then(({ EventDetailPage: page }) => ({ default: page })),
-);
-const SeriesListPage = lazy(() =>
-  import('../pages/SeriesListPage').then(({ SeriesListPage: page }) => ({ default: page })),
 );
 const SeriesDetailPage = lazy(() =>
   import('../pages/SeriesDetailPage').then(({ SeriesDetailPage: page }) => ({ default: page })),
@@ -129,6 +126,22 @@ function placeholder(sectionId: SectionId, path: string, title?: string) {
  * Hash routing keeps GitHub Pages deep links working on a hard refresh: no
  * 404.html copy of index.html and no server rewrite are needed (AC-25).
  */
+/**
+ * The retired series detail lands on the activity detail with its kind, so a bookmark still resolves
+ * (AC-51). The API keeps the two reads apart, which is why the kind travels in the route rather than
+ * being guessed from the id's shape.
+ */
+function SeriesRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/events/${encodeURIComponent(id ?? '')}?kind=series`} replace />;
+}
+
+/** One activity detail serves a standalone event and a series (owner, 2026-11-15). */
+function ActivityPage() {
+  const [params] = useSearchParams();
+  return params.get('kind') === 'series' ? <SeriesDetailPage /> : <EventDetailPage />;
+}
+
 export const router = createHashRouter([
   {
     path: '/',
@@ -145,12 +158,12 @@ export const router = createHashRouter([
           { path: 'members/:memberNo', element: <MemberDetailPage /> },
           { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
           { path: 'events', element: <EventsListPage /> },
-          { path: 'events/series', element: <SeriesListPage /> },
+          { path: 'events/series', element: <Navigate to="/events" replace /> },
           { path: 'events/series/new', element: <SeriesFormPage /> },
-          { path: 'events/series/:id', element: <SeriesDetailPage /> },
+          { path: 'events/series/:id', element: <SeriesRedirect /> },
           { path: 'events/series/:id/edit', element: <SeriesFormPage /> },
           { path: 'events/offerings', element: <OfferingsPage /> },
-          { path: 'events/:id', element: <EventDetailPage /> },
+          { path: 'events/:id', element: <ActivityPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: <ImportsAttendancePage /> },
           { path: 'imports/batches', element: <ImportBatchesPage /> },
