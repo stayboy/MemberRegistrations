@@ -65,17 +65,17 @@ Mock coverage: claimed 0 · e2e-only 2 · deferred 0 · prose 1
 | `headcount/live`                       | `6f507845362cf25da3fa3a879c39c4f2e778c0f3f86244b14b4a2413a0687a5d` |
 | `headcount/ended`                      | `7e4bda32a6c3335e6894add7a846d7162c787b57560714fa3bafd7faa44fb8dd` |
 | `headcount/not-live`                   | `b3adef7f109ec41a3e5f4d3397ffb23f2ec9bfab4a37e743d6e8d76e4548ca51` |
-| `mvp-offerings/page-actions`           | `435e1b3325bdd4b85bedf3cbae211072130d3ce2d615b7ac2739453bbd0fd686` |
-| `offering-grid/02-grid-blank`          | `de30c861d2dc5c3f3150cee5552c628610fbd8c61c5a763592a12095bfd4b053` |
-| `offering-grid/03-grid-filled`         | `8a19cd5e30c03efeffdb0e65ba0b18b60c791fe95ae6b76b0c311b25a7542841` |
-| `offering-grid/04-grid-invalid`        | `4aafeb1e1f0849f6b622be6fb3a39a92c6e0da6d49ccf4eb6d6a52e3f7ac9433` |
-| `offering-grid/05-grid-pending`        | `4299c13d21bf84cc42431b3ec056e2a6b2a9fbf4a20edd49fdb3ccd1c6c2cb4e` |
-| `offering-grid/06-grid-error`          | `8460e9d2ad3ed16c5d5571b2acd0f86aff644703120f5fc5c324f99c8e707c33` |
-| `offering-grid/07-correction-oneoff`   | `a135d3d0bf1cc2334a4e28645cdfb4fe0d8e8f2cec566fef04f749c7db285999` |
-| `offering-grid/08-custom-merge`        | `a229e5d6504b2613548c314ddb81130afeacdd631988d99f13e737b8b8b1f697` |
-| `offering-grid/09-unconfigured`        | `5d00a2f400d4f4983f3c536fa1b35be795011c1f306046c1a4ace2d66099d9a9` |
-| `offering-grid/10-all-hidden`          | `daa02a734e93e64665dee5f0b663e720994e0f6101de71d4b1b0d34ff92706ce` |
-| `offering-grid/11-history-hidden-line` | `1ca3b6799a42632af660aefe7d58fee941da0f50b6febeea1335c01a2eb86331` |
+| `mvp-offerings/page-actions`           | `01c1301ac9e640ab71ec6eee6ebffdcc563951862fb78cdcef7413286491236b` |
+| `offering-grid/02-grid-blank`          | `dce2bfe1800c623253efb97e4792b666d55b4dd7313118157bbe1b1d3736a81d` |
+| `offering-grid/03-grid-filled`         | `e9b520d19c494a063f3e180dd17cfc48b18a029c42fa97547b7aff5de6ed1fc3` |
+| `offering-grid/04-grid-invalid`        | `bee2cab57dd043a493ae3220d7d60741ffe5619dd3a92d4001f4b526b2c0a16a` |
+| `offering-grid/05-grid-pending`        | `b727e6b2ed8c4309208f3e3d983ad1454b567506bc3560c63ea8474725826fdf` |
+| `offering-grid/06-grid-error`          | `813c82d3db832d1512a4e568e439dd57b547f28f2fe490e3efe2c980b0593646` |
+| `offering-grid/07-correction-oneoff`   | `e0976b9b5fdc3a76aacde4126544a535f53c3b3f4c897a28d4301ad6c1cda9aa` |
+| `offering-grid/08-custom-merge`        | `c3a6cd8591bb5ab8d72b2a8997338374082ca19bb740b88f03ab3513e0979f58` |
+| `offering-grid/09-unconfigured`        | `6ec4a2dbb8c77f4382eea1d6a6d62e109c54c743c34c1628dcd118575d5229d8` |
+| `offering-grid/10-all-hidden`          | `eefbb5628004e9d060f46b681766449f1e6da50a270f7de718b39078a6be3832` |
+| `offering-grid/11-history-hidden-line` | `a0f5e144ec132c04710ee749749a02bcf12f77e5d169c4f72c556f0959084813` |
 
 Unchanged and still matching: `v2-shell/roster` (`2e9b0925...`) and `offering-grid/12-narrow`
 (`54330313...`). Six `mvp-offerings` **reference** states also moved; they carry no signature.
@@ -133,10 +133,17 @@ kinds.
 - **No catalogue was edited.** A refreshed image must not inherit a signature, so the fourteen signed
   states above are a request, not a record. Until they are signed the catalogues describe the bytes that
   were signed and the files differ.
-- **Three sets still draw the pre-FR-9a action row**: `v2-events/08-event-detail-series`,
-  `09-event-detail-cancelled` and `08-series-detail-entry`, plus the refresh-after-verb order in
-  `headcount/01-headcount.html` and `offering-grid/01-offering-grid.html`. They are mock-only follow-ups,
-  recorded here so the next capture pass picks them up.
+- **The last five mock states now match FR-9a.** `v2-events/08-event-detail-series` and
+  `09-event-detail-cancelled` put the refresh icon before their one verb; `08-series-detail-entry` became a
+  real series detail with one `Actions` menu (Import attendance, Edit, separator, Archive) and `Back to
+series` as navigation; the refresh icon moved before the verb in `headcount/01-headcount.html` and
+  `offering-grid/01-offering-grid.html`.
+
+- **The owner's 2026-11-15 signature was taken too early.** The utility-order correction re-cut eleven
+  `offering-grid` states after the signature was recorded, so those hashes are stale again. That is a
+  sequencing fault, not a mock fault: a signature should follow the last visual change, never a
+  checkpoint in the middle of one. The catalogue keeps the signed hashes and the table below is the
+  refreshed request.
 - **`03-record-mixed` was renamed** to `03-record-presbyters`, with its archive and `history.json` state
   key following. The old mixed picture survives as `12-mixed-service`, in history where the build puts it.
 - **The roster came back byte-identical** after the `th` change, which proves its own override still wins

@@ -88,14 +88,26 @@ const useStyles = makeStyles({
   controlsTrailing: {
     marginInlineStart: 'auto',
   },
-  // `marginInlineStart: auto` keeps the action row at the row's right edge; where the row
-  // wraps, the utilities and the verb or menu wrap below the breadcrumb and stay right-aligned
-  // (FR-9a).
+  // FR-9a: the `Refresh`-class utilities lead the button run - before `Back`, before the verb,
+  // before the menu - so an icon never sits between two buttons. The group carries the row's
+  // trailing offset, so the whole run stays at the right edge and the icon still keeps the row
+  // gap from the control it precedes; where the row wraps, the run wraps below the breadcrumb
+  // and stays right-aligned.
+  utilities: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+    marginInlineStart: 'auto',
+  },
   actions: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
     flexWrap: 'wrap',
+  },
+  // With no utility to lead the run, the verb or menu holds the trailing edge itself.
+  actionsTrailing: {
     marginInlineStart: 'auto',
   },
   body: {
@@ -134,7 +146,7 @@ export function PageFrame({
   /**
    * Header controls that stay visible outside the action row: filters, date windows and view
    * switches, plus a form's commit/cancel pair and a `Back` navigation control. They are
-   * laid out on the breadcrumb row, left of the action row (FR-9a).
+   * laid out on the breadcrumb row, after the utilities and left of the verb or menu (FR-9a).
    */
   controls?: ReactNode;
   /** The landing drops the API-connected pill; the operator pages keep it. */
@@ -150,7 +162,8 @@ export function PageFrame({
   const verbs = (actions ?? []).filter(isVerb);
   const utilities = (actions ?? []).filter((action) => action.kind === 'utility');
   const [soleVerb] = verbs;
-  const hasActions = verbs.length > 0 || utilities.length > 0;
+  const hasUtilities = utilities.length > 0;
+  const hasActions = verbs.length > 0 || hasUtilities;
 
   return (
     <div className={styles.frame}>
@@ -164,6 +177,23 @@ export function PageFrame({
             {submenu ?? title}
           </span>
         </nav>
+        {/* FR-9a: the utilities group first in the row, named for assistive tech; the verb or
+            menu holds the trailing edge. An icon therefore leads the run of controls and never
+            interrupts it (owner, 2026-11-15). */}
+        {hasUtilities ? (
+          <div className={styles.utilities}>
+            {utilities.map((utility) => (
+              <Button
+                key={utility.id}
+                appearance="subtle"
+                aria-label={utility.label}
+                icon={utility.icon}
+                disabled={utility.disabled}
+                onClick={utility.onSelect}
+              />
+            ))}
+          </div>
+        ) : null}
         {controls ? (
           <div
             className={
@@ -173,32 +203,25 @@ export function PageFrame({
             {controls}
           </div>
         ) : null}
-        <div className={styles.actions}>
-          {/* FR-9a: a utility is a bare icon button immediately before the verb or menu, named
-              for assistive tech; the verb or menu holds the trailing edge, so a utility never
-              sits to its right. */}
-          {utilities.map((utility) => (
-            <Button
-              key={utility.id}
-              appearance="subtle"
-              aria-label={utility.label}
-              icon={utility.icon}
-              disabled={utility.disabled}
-              onClick={utility.onSelect}
-            />
-          ))}
-          {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
-          {verbs.length === 1 && soleVerb ? (
-            <Button
-              icon={soleVerb.icon}
-              disabled={soleVerb.disabled}
-              onClick={soleVerb.onSelect}
-            >
-              {soleVerb.label}
-            </Button>
-          ) : null}
-          {verbs.length >= 2 ? <PageActions actions={verbs} /> : null}
-        </div>
+        {verbs.length > 0 ? (
+          <div
+            className={
+              hasUtilities ? styles.actions : `${styles.actions} ${styles.actionsTrailing}`
+            }
+          >
+            {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
+            {verbs.length === 1 && soleVerb ? (
+              <Button
+                icon={soleVerb.icon}
+                disabled={soleVerb.disabled}
+                onClick={soleVerb.onSelect}
+              >
+                {soleVerb.label}
+              </Button>
+            ) : null}
+            {verbs.length >= 2 ? <PageActions actions={verbs} /> : null}
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.headingBlock}>

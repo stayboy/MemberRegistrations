@@ -28,8 +28,16 @@ function markdownUnder(directory: string): string[] {
   });
 }
 
+/** Every markdown file under `.opencode/skills/`, relative to the repo root. */
+function skillFiles(): string[] {
+  const dir = join(repoRoot, '.opencode', 'skills');
+  return existsSync(dir)
+    ? markdownUnder(dir).map((file) => relative(repoRoot, file).replaceAll('\\', '/'))
+    : [];
+}
+
 function protectedPaths(): string[] {
-  const paths = [...REPO_PROTECTED];
+  const paths = [...REPO_PROTECTED, ...skillFiles()];
   if (canonicalPresent) {
     for (const file of markdownUnder(canonicalDir)) {
       paths.push(`canonical/${relative(canonicalDir, file).replaceAll('\\', '/')}`);
