@@ -98,12 +98,34 @@ full-width preview, or the mock is re-cut to the radios. The mock is the signed 
 the side that is behind - but the _card layout_ in the build is arguably better, which is exactly the
 owner's call rather than mine.
 
+## 8–12. Shell states — light and collapsed read
+
+The **light** state is the members list in the shell: the same screen as row 1, and it matches.
+
+The **collapsed** state drifts, and against **both** artefacts:
+
+| #   | What             | Spec 4.2 rule 5 and the mock                                         | Build                                           |
+| --- | ---------------- | -------------------------------------------------------------------- | ----------------------------------------------- |
+| 8a  | Collapsed footer | **two** 34 px icon buttons, stacked (the accent and the dark toggle) | **three**: a gear, a headphones icon and a moon |
+
+The headphones control is in neither the signed mock nor the shell contract, which says the footer is
+"two 34 px icon buttons". Either the spec and mock gain it, or it leaves the rail. That is a product
+question — it may be a support link worth keeping — so it is recorded, not deleted on my judgement.
+
+Dark, mobile and meadow were not read in this pass; they are the same page in other chrome.
+
+## 16–17. Imports — outside parity
+
+"imports-members" pairs with `v2-imports/01-members-import.png`, one of the nine **legacy prototype
+captures** with no live source: DoD item 5 names it outside parity. "imports-batches" has no mock at all.
+Both can be reviewed for consistency with the design language, never claimed as parity.
+
 ## What the pack found
 
 1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
 2. **One retired item never applied** (raw RRULE in the series schedule cell).
 3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **Ten rows still owed** — shell ×5, shepherding ×3 and imports ×2. Rows 6 and 7 are read above.
+4. **Six rows still owed** — shell dark, mobile and meadow; shepherding officers, roster and report. Imports are outside parity by the DoD, and settings is open for a routing decision.
 5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
    dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
 
