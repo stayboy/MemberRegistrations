@@ -249,7 +249,9 @@ function checkMockSignOff(label, text, readText, listCatalogues, fail) {
       continue;
     }
     const [stateName, state] = hit;
-    if (state.coverage !== 'signed') {
+    // `auto-signed` satisfies R6 in unattended mode: the state names its basis and is listed for the
+    // reviewer's second look (AGENTS.md section 17); `signed` stays owner-only.
+    if (state.coverage !== 'signed' && state.coverage !== 'auto-signed') {
       fail(
         `${label}: state "${stateName}" in ${catalogueFile} is coverage "${state.coverage}", not "signed" (R6)`,
       );

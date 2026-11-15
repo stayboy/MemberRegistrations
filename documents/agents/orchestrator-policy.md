@@ -106,7 +106,7 @@ why (the catalog conflates the 1M context window with the output cap).
   sha256, signer, date and verdict. For a catalogued surface the row must name a set+state the catalogue
   marks `coverage: "signed"` and the round must carry a `Mock coverage: claimed … · e2e-only … ·
 deferred … · prose …` line. Because `mockups/` is git-ignored, the sha pin is a tripwire over an
-  untracked artefact, not proof. Only the owner signs a product surface; the orchestrator records it.
+  untracked artefact, not proof. Only the owner signs a product surface as `signed`; the orchestrator records it.
 - **The screen stays advisory; the guard blocks.** The coverage guard is deterministic: the denominator
   is the spec's AC headings matched by the surface's recorded `acsMatch`, the subject is the tracked
   catalogue plus its per-surface inventory, and every matched AC is `claimed | e2e-only | deferred` —
@@ -144,6 +144,19 @@ deferred … · prose …` line. Because `mockups/` is git-ignored, the sha pin 
 - Each round verifies only its own track; the cross-track integration is a post-merge pass on `main`.
 - Full rules: `~/.agents/skills/orchestrator/references/parallel-workers.md`.
 - Incident evidence (once the owner accepts it): `documents/lessons.md`.
+
+## Pre-flight for unattended rounds
+
+Four conditions must hold before a worker starts a round that changes a surface (owner, 2026-11-15): the
+spec is approved, the spec has been reviewed by the second seat, the surface's mocks are signed or
+auto-signed, and no catalogue state's file hash differs from its recorded hash - `node
+scripts/mock/sign-unattended.mjs --list <set>` reports zero would-be-signed and zero signed-but-stale, and
+exits zero. Each of this repository's REWORK rounds was missing one of them.
+
+When a round changes a surface with a signed mock, the reviewer's brief names that mock and asks it to
+compare the built surface against it - the code review alone passed a header whose utility sat on the
+wrong side. Auto-signed mocks are listed for that second look when the unattended work ends (AGENTS.md
+section 17); `signed` stays owner-only, so an auto-signed state never claims the owner signed it.
 
 ## Protected documents
 
