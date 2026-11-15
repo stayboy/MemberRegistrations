@@ -64,7 +64,7 @@ Mock coverage: claimed 0 · e2e-only 2 · deferred 0 · prose 1
 | `headcount/live`                       | `6f507845362cf25da3fa3a879c39c4f2e778c0f3f86244b14b4a2413a0687a5d` |
 | `headcount/ended`                      | `7e4bda32a6c3335e6894add7a846d7162c787b57560714fa3bafd7faa44fb8dd` |
 | `headcount/not-live`                   | `b3adef7f109ec41a3e5f4d3397ffb23f2ec9bfab4a37e743d6e8d76e4548ca51` |
-| `mvp-offerings/page-actions`           | `ce575055d06dbb2698e3deda1828d2f1ed25eae9442fcb63281fcf886fd44f7e` |
+| `mvp-offerings/page-actions`           | `435e1b3325bdd4b85bedf3cbae211072130d3ce2d615b7ac2739453bbd0fd686` |
 | `offering-grid/02-grid-blank`          | `de30c861d2dc5c3f3150cee5552c628610fbd8c61c5a763592a12095bfd4b053` |
 | `offering-grid/03-grid-filled`         | `8a19cd5e30c03efeffdb0e65ba0b18b60c791fe95ae6b76b0c311b25a7542841` |
 | `offering-grid/04-grid-invalid`        | `4aafeb1e1f0849f6b622be6fb3a39a92c6e0da6d49ccf4eb6d6a52e3f7ac9433` |
@@ -109,11 +109,33 @@ the mode's reference data, and an all-zero lane shows `0` with none.
   indices were re-cut, because the new cell inherited `nowrap` from the five-column layout and clipped the
   Recorded column.
 
+## Correction: the utility order, and an invented verb
+
+The owner caught two things in the rebuilt page-actions state.
+
+**The utility renders before the action, not after.** FR-9a had said "at the trailing edge ... beside the
+menu", which put the refresh icon to the right of the page's own action. The rule now says the utility
+renders **immediately before** the verb or menu, because the action holds the trailing edge and a utility
+never sits to its right (owner, 2026-11-15). FR-9a, D12 and AC-50 all carry the order, `PageFrame` renders
+utilities first, and the DOM tests assert the order rather than only the presence - which is why the wrong
+order had passed them.
+
+**`Import attendance` does not belong on the Members page.** `MembersPage` has exactly `add-member` and
+`refresh`; `import-attendance` exists only on the event and series detail pages. The state had invented it to
+give the menu two verbs. It is now the **series detail**, where `Import attendance`, `Edit` and
+`Archive`/`Restore` are real, with `Back to series` as navigation. The sweep also found the phrase used as
+a chip on the imports page's file panel, where the build has no such control; it now names the accepted file
+kinds.
+
 ## Deviations
 
 - **No catalogue was edited.** A refreshed image must not inherit a signature, so the fourteen signed
   states above are a request, not a record. Until they are signed the catalogues describe the bytes that
   were signed and the files differ.
+- **Three sets still draw the pre-FR-9a action row**: `v2-events/08-event-detail-series`,
+  `09-event-detail-cancelled` and `08-series-detail-entry`, plus the refresh-after-verb order in
+  `headcount/01-headcount.html` and `offering-grid/01-offering-grid.html`. They are mock-only follow-ups,
+  recorded here so the next capture pass picks them up.
 - **`03-record-mixed` was renamed** to `03-record-presbyters`, with its archive and `history.json` state
   key following. The old mixed picture survives as `12-mixed-service`, in history where the build puts it.
 - **The roster came back byte-identical** after the `th` change, which proves its own override still wins
