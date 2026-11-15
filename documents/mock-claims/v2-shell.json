@@ -12,21 +12,115 @@
         }
       ],
       "acsMatch": ["five count tiles show the full-read figures"]
+    },
+    {
+      "id": "shell",
+      "route": "/members",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": [
+        "inside one header/sidebar/content shell",
+        "top-level menus are a right-aligned cluster",
+        "is 56 px",
+        "changes the accent and toggles dark mode",
+        "the top navigation collapses to `Sections`",
+        "one page verb"
+      ]
     }
   ],
   "states": {
     "roster": {
       "mock": {
         "path": "mockups/v2-shell/08-shepherding-roster.png",
-        "sha256": "2e9b09252c198aeef1173f6a0852816e102aaecc50dc63a56a3096951ae938df",
+        "sha256": "b5cc237e98942743bb856a1f3945c5d9a5b894eb59e379bbf6c9511fe8c23e99",
         "source": "mockups/v2-shell/08-shepherding-roster.html"
       },
       "baseline": null,
-      "coverage": "signed",
+      "coverage": "auto-signed",
       "signed": {
-        "by": "owner",
-        "at": "2026-11-14",
-        "sha256": "2e9b09252c198aeef1173f6a0852816e102aaecc50dc63a56a3096951ae938df"
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "b5cc237e98942743bb856a1f3945c5d9a5b894eb59e379bbf6c9511fe8c23e99",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "01-shell-expanded-light": {
+      "mock": {
+        "path": "mockups/v2-shell/01-shell-expanded-light.png",
+        "sha256": "c2d1e0113ba13b8fed84fbf76995d613d13747360ded47b572d30524eee1da61",
+        "source": "mockups/v2-shell/01-shell-expanded-light.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "c2d1e0113ba13b8fed84fbf76995d613d13747360ded47b572d30524eee1da61",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "02-shell-collapsed-light": {
+      "mock": {
+        "path": "mockups/v2-shell/02-shell-collapsed-light.png",
+        "sha256": "d3940ebb4d23f2c792083ceb62d30e1b38592fa7a4cdf99a32109d863d5c0392",
+        "source": "mockups/v2-shell/01-shell-expanded-light.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "d3940ebb4d23f2c792083ceb62d30e1b38592fa7a4cdf99a32109d863d5c0392",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "03-shell-expanded-dark": {
+      "mock": {
+        "path": "mockups/v2-shell/03-shell-expanded-dark.png",
+        "sha256": "d4da12b2e4be617fb4eabd0c32f937d91db8dd9186ceda153b5599c8a7f1547d",
+        "source": "mockups/v2-shell/01-shell-expanded-light.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "d4da12b2e4be617fb4eabd0c32f937d91db8dd9186ceda153b5599c8a7f1547d",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "05-meadow-accent": {
+      "mock": {
+        "path": "mockups/v2-shell/05-meadow-accent.png",
+        "sha256": "35eb77f092f6bd054f82b558a0c437587f4b011a877b13e10cfc92a6f683d60a",
+        "source": "mockups/v2-shell/01-shell-expanded-light.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "35eb77f092f6bd054f82b558a0c437587f4b011a877b13e10cfc92a6f683d60a",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "06-mobile": {
+      "mock": {
+        "path": "mockups/v2-shell/06-mobile.png",
+        "sha256": "456e7f73e27973e687dd3f77bd1d279c0582a39c109314577b899edcad74332e",
+        "source": "mockups/v2-shell/01-shell-expanded-light.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "456e7f73e27973e687dd3f77bd1d279c0582a39c109314577b899edcad74332e",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     }
   },
@@ -41,8 +135,198 @@
           "test": "ui/src/pages/ShepherdingRosterPage.dom.test.tsx::computes the tiles from the full read, not the filtered view"
         }
       ]
+    },
+    {
+      "surface": "shell",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "SH-VERB-LIGHT"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-1",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/shell.spec.ts::renders the brand, the top navigation and the section sidebar"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-2",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/shell.spec.ts::navigates Members → Events → Imports → Shepherding → USSD → Admin"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-4",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-5",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/capture.spec.ts::shell dark"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-23",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/responsive.spec.ts::the mobile navigation is usable at 360 px"
+        }
+      ]
     }
   ],
-  "stories": [],
-  "entries": []
+  "stories": [
+    {
+      "id": "SH-CHROME",
+      "as": "operator",
+      "iWant": "the shell to look the same in every chrome state",
+      "soThat": "theme, collapse and width never change where a control sits",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "SH-VERB-LIGHT",
+      "story": "SH-CHROME",
+      "state": "01-shell-expanded-light",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-NO-MENU",
+      "story": "SH-CHROME",
+      "state": "01-shell-expanded-light",
+      "claim": "A one-item Actions menu is drawn beside the verb.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "no Actions menu is rendered"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-NO-MENUITEM",
+      "story": "SH-CHROME",
+      "state": "01-shell-expanded-light",
+      "claim": "The Refresh control is drawn inside a menu.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "it is never a menu item"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-REFRESH-AFTER",
+      "story": "SH-CHROME",
+      "state": "01-shell-expanded-light",
+      "claim": "The Refresh control is drawn after the verb.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "before every control in the row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-VERB-RAIL",
+      "story": "SH-CHROME",
+      "state": "02-shell-collapsed-light",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-VERB-DARK",
+      "story": "SH-CHROME",
+      "state": "03-shell-expanded-dark",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-VERB-MEADOW",
+      "story": "SH-CHROME",
+      "state": "05-meadow-accent",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SH-VERB-MOBILE",
+      "story": "SH-CHROME",
+      "state": "06-mobile",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    }
+  ]
 }
