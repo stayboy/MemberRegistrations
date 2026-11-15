@@ -160,6 +160,28 @@ describe('SessionHeadcount', () => {
     expect(await screen.findByRole('button', { name: 'End of session' })).toBeDisabled();
   });
 
+  it('offers the import only when the caller does, and calls it', async () => {
+    current = { adults: headcount('adults', 120) };
+    const onImport = vi.fn();
+    const { unmount } = renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" onImport={onImport} />
+      </DateTimeProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }));
+    expect(onImport).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // A standalone event passes no callback, and the row offers no import (FR-8).
+    renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" />
+      </DateTimeProvider>,
+    );
+    await screen.findByText('Adult service');
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
+  });
+
   it('corrects a lane by superseding the observation it corrects', async () => {
     const adults = headcount('adults', 120, [{ code: 'adult_male', label: 'Male', count: 58 }]);
     current = { adults };

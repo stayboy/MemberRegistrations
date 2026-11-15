@@ -19,6 +19,32 @@ test('the members list renders the fixture rows', async ({ page }) => {
   await expect(page.getByText('+233 20 000 0001')).toHaveCount(0);
 });
 
+test('the toolbar carries the adopted switch and the pager, and a row opens its own menu', async ({
+  page,
+}) => {
+  await open(page, '/members');
+
+  // The switch replaces the status dropdown (triage: adopt), and the route still says which view it is.
+  const includeArchived = page.getByRole('switch', { name: 'Archived' });
+  await expect(includeArchived).toBeVisible();
+  await expect(includeArchived).not.toBeChecked();
+
+  // Paging is Prev/Next over the cursor, not a "load more".
+  await expect(page.getByRole('button', { name: 'Prev' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Next' })).toBeVisible();
+
+  // The row action is one overflow menu, holding the row’s own actions.
+  await page.getByRole('button', { name: 'More actions for Ama Mensah (Female) (M-1002)' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Open member' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Contacts' })).toBeVisible();
+});
+
+test('the Include archived switch moves to the archived view', async ({ page }) => {
+  await open(page, '/members');
+  await page.getByRole('switch', { name: 'Archived' }).click();
+  await expect(page).toHaveURL(/\/members\/archived/);
+});
+
 test('the Contacts action opens the grouped contacts dialog', async ({ page }) => {
   await open(page, '/members');
   // A table-row control, not a page action: FR-9a scopes the menu to the action row.

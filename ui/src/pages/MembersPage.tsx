@@ -10,7 +10,13 @@ import {
   Popover,
   PopoverSurface,
   PopoverTrigger,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   SearchBox,
+  Switch,
   Spinner,
   Table,
   TableBody,
@@ -28,6 +34,7 @@ import {
   AddRegular,
   ArrowClockwiseRegular,
   DismissRegular,
+  MoreHorizontalRegular,
   OpenRegular,
   SearchRegular,
 } from '@fluentui/react-icons';
@@ -428,7 +435,16 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
     }
   }, [membersQuery.error, seriesQuery.error, signOut]);
 
-  const members = membersQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  // The API pages forward by cursor, so the register keeps a page index over the pages it has already
+  // fetched: Prev walks back through them, and Next fetches one more only when it must.
+  const pageKey = [status, searchText, seriesId, unassigned ? 'unassigned' : ''].join('|');
+  const [pageState, setPageState] = useState({ key: pageKey, index: 0 });
+  const pageIndex = pageState.key === pageKey ? pageState.index : 0;
+  const setPageIndex = (update: (index: number) => number) =>
+    setPageState({ key: pageKey, index: update(pageIndex) });
+  const pages = membersQuery.data?.pages ?? [];
+  const currentPage = pages[Math.min(pageIndex, Math.max(pages.length - 1, 0))];
+  const members = currentPage?.items ?? [];
   const seriesOptions = seriesQuery.data ?? [];
   const selectedSeries = seriesOptions.find((series) => series.id === seriesId);
 
@@ -486,13 +502,14 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
             onChange={(_, data) => setSearchText(data.value)}
           />
 
-          <Dropdown
+          <Switch
             className={styles.statusFilter}
-            aria-label="Member status"
-            value={status === 'archived' ? 'Archived' : 'Active'}
-            selectedOptions={[status]}
-            onOptionSelect={(_, data) => {
-              const next: MemberStatus = data.optionValue === 'archived' ? 'archived' : 'active';
+            label="Archived"
+            checked={status === 'archived'}
+            onChange={(_, data) => {
+              // The register has two views, not a third "all" one: the switch is the clearer control
+              // for the same binary state, and the route keeps saying which view this is.
+              const next: MemberStatus = data.checked ? 'archived' : 'active';
               const nextParams = new URLSearchParams(searchParams);
               nextParams.set('status', next);
               navigate({
@@ -500,10 +517,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                 search: nextParams.toString(),
               });
             }}
-          >
-            <Option value="active">Active</Option>
-            <Option value="archived">Archived</Option>
-          </Dropdown>
+          />
 
           <Dropdown
             className={styles.seriesFilter}
@@ -694,15 +708,29 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                               <StatusCell member={member} />
                             </TableCell>
                             <TableCell>
-                              <Button
-                                size="small"
-                                appearance="subtle"
-                                icon={<OpenRegular />}
-                                aria-label={`Open ${label} (${member.memberNo})`}
-                                onClick={() => {
-                                  navigate(`/members/${encodeURIComponent(member.memberNo)}`);
-                                }}
-                              />
+                              <Menu>
+                                <MenuTrigger disableButtonEnhancement>
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    icon={<MoreHorizontalRegular />}
+                                    aria-label={`More actions for ${label} (${member.memberNo})`}
+                                  />
+                                </MenuTrigger>
+                                <MenuPopover>
+                                  <MenuList>
+                                    <MenuItem
+                                      icon={<OpenRegular />}
+                                      onClick={() => {
+                                        navigate(`/members/${encodeURIComponent(member.memberNo)}`);
+                                      }}
+                                    >
+                                      Open member
+                                    </MenuItem>
+                                    <MenuItem onClick={() => setContactsFor(member)}>Contacts</MenuItem>
+                                  </MenuList>
+                                </MenuPopover>
+                              </Menu>
                             </TableCell>
                           </TableRow>
                         );
@@ -713,21 +741,37 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                 <div className={styles.footer}>
                   <Text size={200} className={styles.muted}>
                     {members.length} {unassigned ? 'unassigned' : status}{' '}
-                    {members.length === 1 ? 'member' : 'members'} shown · cursor pagination
+                    {members.length === 1 ? 'member' : 'members'} on this page · cursor pagination
                   </Text>
                   <div className={styles.footerActions}>
                     {membersQuery.isFetchingNextPage ? <Spinner size="tiny" /> : null}
-                    {membersQuery.hasNextPage ? (
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          void membersQuery.fetchNextPage();
-                        }}
-                        disabled={membersQuery.isFetchingNextPage}
-                      >
-                        Load more
-                      </Button>
-                    ) : null}
+                    <Button
+                      size="small"
+                      disabled={pageIndex === 0}
+                      onClick={() => {
+                        setPageIndex((index) => Math.max(index - 1, 0));
+                      }}
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={
+                        membersQuery.isFetchingNextPage ||
+                        (pageIndex >= pages.length - 1 && !membersQuery.hasNextPage)
+                      }
+                      onClick={() => {
+                        if (pageIndex < pages.length - 1) {
+                          setPageIndex((index) => index + 1);
+                          return;
+                        }
+                        void membersQuery.fetchNextPage().then(() => {
+                          setPageIndex((index) => index + 1);
+                        });
+                      }}
+                    >
+                      Next
+                    </Button>
                   </div>
                 </div>
               </>
