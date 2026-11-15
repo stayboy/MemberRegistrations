@@ -49,7 +49,7 @@ Acceptance criteria:
 | DOM lane  | `npm run ui:test:dom` | 10 files, 68 passed |
 | Full gate | `npm run verify`      | see the signature   |
 
-gate-run 2026-11-15T15:48:40.278Z profile=full steps=7/7 lines=7 bytes=854
+gate-run 2026-11-15T15:59:27.720Z profile=full steps=7/7 lines=7 bytes=1053
 
 ## Mock sign-off
 

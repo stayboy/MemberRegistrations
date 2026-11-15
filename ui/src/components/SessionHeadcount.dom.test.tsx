@@ -126,7 +126,7 @@ describe('SessionHeadcount', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save correction' }));
     // A correction supersedes the row it corrects; it does not post a fresh asOf.
-    const payload = vi.mocked(api.recordHeadcount).mock.calls[0]?.[3] as Record<string, unknown>;
+    const payload = vi.mocked(api.recordHeadcount).mock.calls[0]?.[3] as unknown as Record<string, unknown>;
     expect(payload).toMatchObject({ sessionDate: '2026-11-08', supersedesId: adults.id });
     // HC-3: a correction keeps the observation's own asOf, so it posts none.
     expect(payload).not.toHaveProperty('asOf');
