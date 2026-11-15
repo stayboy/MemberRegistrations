@@ -47,7 +47,8 @@ export const isVerb = (action: PageAction) => action.kind === 'verb';
 /**
  * One page's **action-row** verbs, as the single `Actions` menu at the right edge of the
  * breadcrumb row (UI spec D12, FR-9a). The `PageFrame` passes verbs only: a `utility` such
- * as `Refresh` is a bare trailing icon, never an item, so it never reaches this menu.
+ * as `Refresh` is a bare icon button immediately before this menu, never an item, so it
+ * never reaches it.
  *
  * The repo rule is `AGENTS.md` §16: Fluent's component comes before a rewrite. So the menu
  * is composed from Fluent's own primitives — `Menu`, `MenuTrigger`, `MenuPopover`,

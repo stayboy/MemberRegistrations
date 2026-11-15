@@ -89,8 +89,8 @@ const useStyles = makeStyles({
     marginInlineStart: 'auto',
   },
   // `marginInlineStart: auto` keeps the action row at the row's right edge; where the row
-  // wraps, the verbs and the trailing utilities wrap below the breadcrumb and stay
-  // right-aligned (FR-9a).
+  // wraps, the utilities and the verb or menu wrap below the breadcrumb and stay right-aligned
+  // (FR-9a).
   actions: {
     display: 'flex',
     alignItems: 'center',
@@ -174,6 +174,19 @@ export function PageFrame({
           </div>
         ) : null}
         <div className={styles.actions}>
+          {/* FR-9a: a utility is a bare icon button immediately before the verb or menu, named
+              for assistive tech; the verb or menu holds the trailing edge, so a utility never
+              sits to its right. */}
+          {utilities.map((utility) => (
+            <Button
+              key={utility.id}
+              appearance="subtle"
+              aria-label={utility.label}
+              icon={utility.icon}
+              disabled={utility.disabled}
+              onClick={utility.onSelect}
+            />
+          ))}
           {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
           {verbs.length === 1 && soleVerb ? (
             <Button
@@ -185,17 +198,6 @@ export function PageFrame({
             </Button>
           ) : null}
           {verbs.length >= 2 ? <PageActions actions={verbs} /> : null}
-          {/* FR-9a: a utility is a bare trailing icon button, named for assistive tech. */}
-          {utilities.map((utility) => (
-            <Button
-              key={utility.id}
-              appearance="subtle"
-              aria-label={utility.label}
-              icon={utility.icon}
-              disabled={utility.disabled}
-              onClick={utility.onSelect}
-            />
-          ))}
         </div>
       </div>
 

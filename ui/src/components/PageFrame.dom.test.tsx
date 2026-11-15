@@ -13,9 +13,10 @@ import type { PageAction } from './PageActions';
  *
  * - one verb renders as a visible Fluent `Button` (icon + label) and no `Actions` menu;
  * - two or more verbs render in one `Actions` menu and no standalone verb button;
- * - a `Refresh`-class utility is a bare trailing icon button with an accessible name, is
- *   never a menu item, and is never counted towards the two-or-more rule — so a page whose
- *   only control is a utility shows the icon and renders no menu;
+ * - a `Refresh`-class utility is a bare icon button with an accessible name, rendered
+ *   immediately before the verb or menu, is never a menu item, and is never counted towards the
+ *   two-or-more rule — so a page whose only control is a utility shows the icon and renders no
+ *   menu;
  * - verbs keep their disabling condition in either shape.
  */
 
@@ -70,6 +71,11 @@ function importAttendance(): PageAction {
   };
 }
 
+/** True when `first` precedes `second` in document order (FR-9a's render order). */
+function precedes(first: HTMLElement, second: HTMLElement): boolean {
+  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 describe('PageFrame action row (FR-9a)', () => {
   it('renders exactly one verb as a visible button and no Actions menu', () => {
     renderFrame([addMember()]);
@@ -115,19 +121,26 @@ describe('PageFrame action row (FR-9a)', () => {
     expect(screen.getByRole('button', { name: 'Refresh' }).textContent).toBe('');
   });
 
-  it('puts the utility after the sole verb and still renders no menu', () => {
+  it('puts the utility immediately before the sole verb and still renders no menu', () => {
     renderFrame([addMember(), refresh()]);
 
     const buttons = screen.getAllByRole('button');
     expect(buttons.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
-      'Add member',
       'Refresh',
+      'Add member',
     ]);
+    // FR-9a: the verb holds the trailing edge, so the utility sits before it, never after.
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Refresh' }),
+        screen.getByRole('button', { name: 'Add member' }),
+      ),
+    ).toBe(true);
     expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('keeps the utility outside a two-verb menu', async () => {
+  it('keeps the utility outside a two-verb menu and immediately before it', async () => {
     const user = userEvent.setup();
     renderFrame([importAttendance(), addMember(), refresh()]);
 
@@ -137,6 +150,13 @@ describe('PageFrame action row (FR-9a)', () => {
     expect(items.map((item) => item.textContent)).toEqual(['Import attendance', 'Add member']);
     expect(screen.queryByRole('menuitem', { name: 'Refresh' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    // FR-9a: the menu holds the trailing edge, so the utility sits before it, never after.
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Refresh' }),
+        screen.getByRole('button', { name: 'Actions' }),
+      ),
+    ).toBe(true);
   });
 
   it('carries a disabled sole verb through to its visible button', () => {
