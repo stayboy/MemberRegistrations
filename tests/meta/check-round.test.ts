@@ -3,7 +3,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- the guard is plain ESM outside the type-checked src/ tree, so it has no types.
-import { checkDocuments, parseNameOnly, stagedChangedPaths } from '../../scripts/check-round.mjs';
+import * as guard from '../../scripts/check-round.mjs';
+
+const { checkDocuments, isRoundDoc, parseNameOnly, stagedChangedPaths } = guard;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -138,6 +140,19 @@ function checkSurface(
   );
 }
 
+describe('check-round: what counts as a round doc', () => {
+  it('does not treat the programme doc as a round doc, so the definition of done stays correctable', () => {
+    // A programme doc has no signature, tier or seat; requiring them made the release's own
+    // definition uncorrectable while the product moved under it (owner, 2026-11-15).
+    expect(isRoundDoc('documents/rounds/mvp-local.md')).toBe(false);
+    expect(isRoundDoc('documents/rounds/README.md')).toBe(false);
+    expect(isRoundDoc('documents/rounds/review-brief.md')).toBe(false);
+  });
+
+  it('still counts a real round doc, so its gates keep applying', () => {
+    expect(isRoundDoc('documents/rounds/r2-session-headcount.md')).toBe(true);
+  });
+});
 describe('check-round: the Implementer row (R1)', () => {
   it('accepts a Tier 2 doc with a worker segment', () => {
     const text = roundDoc({
