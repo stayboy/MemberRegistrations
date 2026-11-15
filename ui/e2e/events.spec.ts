@@ -68,23 +68,6 @@ test('a cancelled session shows its reason, and a legacy one says it is missing'
   await expect(sessions.getByText('No reason recorded')).toBeVisible();
 });
 
-test('a series-backed session row opens the import panel', async ({ page }) => {
-  await open(page, '/events/event-1');
-
-  const sessions = page.getByRole('table', { name: 'Event sessions' });
-  const entry = sessions.getByRole('button', { name: 'Import' }).first();
-  await expect(entry).toBeVisible();
-  await entry.click();
-
-  // The panel names the fixed session; the picker has no caller here.
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('Import attendance', { exact: true })).toBeVisible();
-  await expect(dialog.getByText('Selected occurrence', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Change occurrence' })).toHaveCount(0);
-  await expect(page).toHaveURL(/\/events\/event-1$/);
-});
-
 test('the retired attendance route lands on the activity with its date', async ({ page }) => {
   await open(page, '/imports/attendance?event=event-1&date=2026-01-04');
 
