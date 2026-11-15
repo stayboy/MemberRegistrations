@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, MessageBar, MessageBarBody, Text, makeStyles, tokens } from '@fluentui/react-components';
 import { getHeadcounts, recordHeadcount, type Headcount, type HeadcountPage } from '../api/ussd';
+import { postAttendanceImport } from '../api/imports';
 import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
@@ -24,6 +25,11 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
     alignItems: 'flex-start',
+  },
+  actions: {
+    display: 'flex',
+    gap: '4px',
+    flexWrap: 'wrap',
   },
   lane: {
     display: 'flex',
@@ -70,6 +76,7 @@ function bucketLine(row: Headcount): string {
  * detail page issues one bounded read for each session it renders.
  */
 export function SessionHeadcount({
+  endAction = 'hidden',
   eventId,
   sessionDate,
   disabled = false,
@@ -77,6 +84,11 @@ export function SessionHeadcount({
   eventId: string;
   sessionDate: string;
   disabled?: boolean;
+  /**
+   * The End of session control's state (FR-6f/AC-7a): offered only while live, shown disabled once
+   * closed, and absent for a session that has not started or whose window has passed.
+   */
+  endAction?: 'enabled' | 'disabled' | 'hidden';
 }) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
@@ -101,6 +113,7 @@ export function SessionHeadcount({
   const [asOf, setAsOf] = useState(() => toDateTimeLocal(new Date()));
   const [error, setError] = useState<string | null>(null);
   const [correction, setCorrection] = useState<Headcount | null>(null);
+  const [endError, setEndError] = useState<string | null>(null);
 
   /**
    * Open the dialog for a new count, or for a correction of one lane's observation. A correction keeps
@@ -160,6 +173,27 @@ export function SessionHeadcount({
     },
   });
 
+  /**
+   * The shared close: one capture per event and session, sent as an end-only import (rows: []). It is
+   * the same request the retired operator page made, so the API sees no difference.
+   */
+  const endMutation = useMutation({
+    mutationFn: () =>
+      postAttendanceImport(baseUrl, token, { eventId, sessionDate, rows: [], ended: true }),
+    onSuccess: () => {
+      setEndError(null);
+      void queryClient.invalidateQueries({ queryKey: ['headcounts', baseUrl, eventId, sessionDate] });
+      void queryClient.invalidateQueries({ queryKey: ['events', baseUrl, 'detail', eventId] });
+    },
+    onError: (failure: unknown) => {
+      if (isUnauthorized(failure)) {
+        signOut();
+        return;
+      }
+      setEndError(failure instanceof Error ? failure.message : 'The session could not be ended.');
+    },
+  });
+
   const rows = laneRows(query.data);
   const liveTotal = Object.values(values).reduce(
     (sum, value) => sum + (Number.parseInt(value, 10) || 0),
@@ -210,14 +244,34 @@ export function SessionHeadcount({
         ))
       )}
 
-      <Button
-        size="small"
-        appearance="transparent"
-        disabled={disabled}
-        onClick={() => openFor(null)}
-      >
-        Record headcount
-      </Button>
+      <div className={styles.actions}>
+        <Button
+          size="small"
+          appearance="transparent"
+          disabled={disabled}
+          onClick={() => openFor(null)}
+        >
+          Record headcount
+        </Button>
+        {endAction !== 'hidden' ? (
+          <Button
+            size="small"
+            appearance="transparent"
+            disabled={disabled || endAction === 'disabled' || endMutation.isPending}
+            onClick={() => {
+              setEndError(null);
+              endMutation.mutate();
+            }}
+          >
+            End of session
+          </Button>
+        ) : null}
+      </div>
+      {endError !== null ? (
+        <Text size={200} role="alert" className={styles.muted}>
+          The session could not be ended: {endError}
+        </Text>
+      ) : null}
 
       <HeadcountDialog
         open={open}
