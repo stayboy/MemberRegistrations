@@ -15,10 +15,10 @@ import {
   TableRow,
   Text,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular, ArrowImportRegular, ArrowLeftRegular } from '@fluentui/react-icons';
-import { useQuery } from '@tanstack/react-query';
+import { ArrowClockwiseRegular, ArrowLeftRegular } from '@fluentui/react-icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   getEvent,
@@ -28,6 +28,8 @@ import {
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
 import { SessionHeadcount } from '../components/SessionHeadcount';
+import { SessionImportPanel } from '../components/SessionImportPanel';
+import { occurrenceFrom, type Occurrence } from '../features/attendance-import/AttendanceWorkspace';
 import { PageFrame } from '../components/PageFrame';
 import { TermsDialog } from '../components/TermsDialog';
 import {
@@ -100,7 +102,21 @@ export function EventDetailPage() {
     if (isUnauthorized(eventQuery.error)) void signOut();
   }, [eventQuery.error, signOut]);
 
+  const [importFor, setImportFor] = useState<Occurrence | null>(null);
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const event = eventQuery.data?.event;
+
+  // FR-8a: a retired route forwards here with `import=<date>`. The occurrence is derived, never stored
+  // from an effect, so closing the panel and dropping the parameter are the same act.
+  const linkedDate = searchParams.get('import');
+  const linkedSession =
+    linkedDate && event ? event.sessions.find((candidate) => candidate.date === linkedDate) : undefined;
+  const panelOccurrence: Occurrence | null =
+    importFor ?? (event && linkedSession ? occurrenceFrom(event, linkedSession) : null);
+
+
+
   const sessions = event?.sessions ?? [];
 
   return (
@@ -119,23 +135,6 @@ export function EventDetailPage() {
         </Button>
       }
       actions={[
-        ...(event && event.seriesId
-          ? [
-              {
-                id: 'import-attendance',
-                kind: 'verb' as const,
-                label: 'Import attendance',
-                icon: <ArrowImportRegular />,
-                onSelect: () => {
-                  const params = new URLSearchParams({
-                    event: event.id,
-                    date: event.startDate,
-                  });
-                  navigate(`/imports/attendance?${params.toString()}`);
-                },
-              },
-            ]
-          : []),
         {
           id: 'refresh',
           kind: 'utility' as const,
@@ -382,6 +381,11 @@ export function EventDetailPage() {
                               disabled={
                                 item.status === 'cancelled' || Boolean(item.capture?.ended)
                               }
+                              onImport={
+                                event.seriesId
+                                  ? () => setImportFor(occurrenceFrom(event, item))
+                                  : undefined
+                              }
                               endAction={endActionState(
                                 captureState({
                                   date: item.date,
@@ -424,6 +428,33 @@ export function EventDetailPage() {
       />
 
       <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />
+      {panelOccurrence ? (
+        <SessionImportPanel
+          open
+          occurrence={panelOccurrence}
+          onClose={() => {
+            setImportFor(null);
+            if (linkedDate) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('import');
+              setSearchParams(next, { replace: true });
+            }
+          }}
+          onImported={() => {
+            setImportFor(null);
+            // FR-8/AC-7: a successful batch invalidates the events, series and imports queries, and the
+            // member reads whose attendance lines it changed - the same set the retired page invalidated.
+            for (const root of ['events', 'series', 'imports', 'member', 'members']) {
+              void queryClient.invalidateQueries({ queryKey: [root, baseUrl] });
+            }
+            if (linkedDate) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('import');
+              setSearchParams(next, { replace: true });
+            }
+          }}
+        />
+      ) : null}
     </PageFrame>
   );
 }

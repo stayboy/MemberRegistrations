@@ -220,18 +220,6 @@ test('imports members', async ({ page }) => {
   await capture(page, 'imports-members');
 });
 
-test('imports attendance', async ({ page }) => {
-  // The deep link centres the date window on the fixture session, so the
-  // occurrence resolves without touching the browser clock.
-  await openScreen(page, '/imports/attendance?event=event-1&date=2026-01-04', {
-    width: 1440,
-    height: 1150,
-  });
-  await expect(page.getByRole('heading', { level: 1, name: 'Attendance registry' })).toBeVisible();
-  await expect(page.getByText('Choose a CSV or the Excel template')).toBeVisible();
-  await capture(page, 'imports-attendance');
-});
-
 test('headcount capture', async ({ page }) => {
   await openScreen(page, '/ussd/headcount', { width: 1440, height: 900 });
   await expect(page.getByRole('heading', { level: 1, name: 'USSD headcount' })).toBeVisible();
