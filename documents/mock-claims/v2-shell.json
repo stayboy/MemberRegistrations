@@ -52,7 +52,7 @@
     "roster": {
       "mock": {
         "path": "mockups/v2-shell/08-shepherding-roster.png",
-        "sha256": "b5cc237e98942743bb856a1f3945c5d9a5b894eb59e379bbf6c9511fe8c23e99",
+        "sha256": "098a2999ccf4e380b17228e6ce9b984d19887b08cf39e49b013722770b8a0647",
         "source": "mockups/v2-shell/08-shepherding-roster.html"
       },
       "baseline": null,
@@ -60,7 +60,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "b5cc237e98942743bb856a1f3945c5d9a5b894eb59e379bbf6c9511fe8c23e99",
+        "sha256": "098a2999ccf4e380b17228e6ce9b984d19887b08cf39e49b013722770b8a0647",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
