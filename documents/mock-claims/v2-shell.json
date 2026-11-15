@@ -30,6 +30,22 @@
         "the top navigation collapses to `Sections`",
         "one page verb"
       ]
+    },
+    {
+      "id": "members-list",
+      "route": "/members",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": [
+        "known gender and date of birth",
+        "each presbyter shows a text",
+        "no contact value appears",
+        "one page verb"
+      ]
     }
   ],
   "states": {
@@ -51,7 +67,7 @@
     "01-shell-expanded-light": {
       "mock": {
         "path": "mockups/v2-shell/01-shell-expanded-light.png",
-        "sha256": "c2d1e0113ba13b8fed84fbf76995d613d13747360ded47b572d30524eee1da61",
+        "sha256": "4bfb188864b316e6df431bf786618896d03783a07f4e082055f1d6851cff3cae",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -59,14 +75,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "c2d1e0113ba13b8fed84fbf76995d613d13747360ded47b572d30524eee1da61",
+        "sha256": "4bfb188864b316e6df431bf786618896d03783a07f4e082055f1d6851cff3cae",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
     "02-shell-collapsed-light": {
       "mock": {
         "path": "mockups/v2-shell/02-shell-collapsed-light.png",
-        "sha256": "d3940ebb4d23f2c792083ceb62d30e1b38592fa7a4cdf99a32109d863d5c0392",
+        "sha256": "bebed85e8f90cc3d333701cff3e30764ed216c89600b3ecea0a66cb59ddeaf24",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -74,14 +90,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "d3940ebb4d23f2c792083ceb62d30e1b38592fa7a4cdf99a32109d863d5c0392",
+        "sha256": "bebed85e8f90cc3d333701cff3e30764ed216c89600b3ecea0a66cb59ddeaf24",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
     "03-shell-expanded-dark": {
       "mock": {
         "path": "mockups/v2-shell/03-shell-expanded-dark.png",
-        "sha256": "d4da12b2e4be617fb4eabd0c32f937d91db8dd9186ceda153b5599c8a7f1547d",
+        "sha256": "cf5c356b463cd86dd3385c5620015743cedb187d8a9c907ad2258a71e18e3f05",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -89,14 +105,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "d4da12b2e4be617fb4eabd0c32f937d91db8dd9186ceda153b5599c8a7f1547d",
+        "sha256": "cf5c356b463cd86dd3385c5620015743cedb187d8a9c907ad2258a71e18e3f05",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
     "05-meadow-accent": {
       "mock": {
         "path": "mockups/v2-shell/05-meadow-accent.png",
-        "sha256": "35eb77f092f6bd054f82b558a0c437587f4b011a877b13e10cfc92a6f683d60a",
+        "sha256": "3ca688ee3a6698c0c23a89433f1df8782c8fb0a86b7804017888a8581161cb16",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -104,14 +120,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "35eb77f092f6bd054f82b558a0c437587f4b011a877b13e10cfc92a6f683d60a",
+        "sha256": "3ca688ee3a6698c0c23a89433f1df8782c8fb0a86b7804017888a8581161cb16",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
     "06-mobile": {
       "mock": {
         "path": "mockups/v2-shell/06-mobile.png",
-        "sha256": "456e7f73e27973e687dd3f77bd1d279c0582a39c109314577b899edcad74332e",
+        "sha256": "6e51a14153eb55e5befe961375610d174e87dc48f745fc7fd819de5794252190",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -119,7 +135,133 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "456e7f73e27973e687dd3f77bd1d279c0582a39c109314577b899edcad74332e",
+        "sha256": "6e51a14153eb55e5befe961375610d174e87dc48f745fc7fd819de5794252190",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "07-shepherding-officers": {
+      "mock": {
+        "path": "mockups/v2-shell/07-shepherding-officers.png",
+        "sha256": "f231f0f6e680dba590dcc1a32a798513f3e29c4087d94cf9147e2333a6da9af3"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "f231f0f6e680dba590dcc1a32a798513f3e29c4087d94cf9147e2333a6da9af3",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "09-shepherding-report": {
+      "mock": {
+        "path": "mockups/v2-shell/09-shepherding-report.png",
+        "sha256": "16f543b0f958eb230041f7ebbc035ffeb2b5c123a62e74dafb8bdb34d40be0b3"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "16f543b0f958eb230041f7ebbc035ffeb2b5c123a62e74dafb8bdb34d40be0b3",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "10-members-refined": {
+      "mock": {
+        "path": "mockups/v2-shell/10-members-refined.png",
+        "sha256": "0df0992cdbd8073de7e01ed629c06be5a3ce01cf78a3f214feb17999a9d3cea9"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "0df0992cdbd8073de7e01ed629c06be5a3ce01cf78a3f214feb17999a9d3cea9",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "11-add-member": {
+      "mock": {
+        "path": "mockups/v2-shell/11-add-member.png",
+        "sha256": "f5bfc451462f0e0dceb99d73584c994a2b41a76ad64a8ab89dc0da9d0cdadd7e"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "f5bfc451462f0e0dceb99d73584c994a2b41a76ad64a8ab89dc0da9d0cdadd7e",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "12-subscriptions": {
+      "mock": {
+        "path": "mockups/v2-shell/12-subscriptions.png",
+        "sha256": "8438b69d25f87e7048c2fb6b62e2b5dbe294a97e0c76356a514a6b653543e215"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "8438b69d25f87e7048c2fb6b62e2b5dbe294a97e0c76356a514a6b653543e215",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "13-add-subscription": {
+      "mock": {
+        "path": "mockups/v2-shell/13-add-subscription.png",
+        "sha256": "85b58e377e69b40f409d43d0d882ee52383a905bb56ae902fd66dec645e18097"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "85b58e377e69b40f409d43d0d882ee52383a905bb56ae902fd66dec645e18097",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "14-add-coverage": {
+      "mock": {
+        "path": "mockups/v2-shell/14-add-coverage.png",
+        "sha256": "f1e0dca08ccb0782a0dd8607907a518f74ced23d63497432847675f39a0d07af"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "f1e0dca08ccb0782a0dd8607907a518f74ced23d63497432847675f39a0d07af",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "16-contacts": {
+      "mock": {
+        "path": "mockups/v2-shell/16-contacts.png",
+        "sha256": "c398bbf37d6092cb404b00856d82dd495ef9971acf237556b03a0daec0f8b1ea"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "c398bbf37d6092cb404b00856d82dd495ef9971acf237556b03a0daec0f8b1ea",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "17-find-contact": {
+      "mock": {
+        "path": "mockups/v2-shell/17-find-contact.png",
+        "sha256": "01a101922ccf495cdf2d86917bc32d52d74818803e6f8af8b0290f5fb3ca9f0f"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "01a101922ccf495cdf2d86917bc32d52d74818803e6f8af8b0290f5fb3ca9f0f",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     }
@@ -176,6 +318,35 @@
           "test": "ui/e2e/responsive.spec.ts::the mobile navigation is usable at 360 px"
         }
       ]
+    },
+    {
+      "surface": "members-list",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-11a",
+          "disposition": "claimed",
+          "entry": "ML-IDENTITY"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-41",
+          "disposition": "claimed",
+          "entry": "ML-BADGE"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-47",
+          "disposition": "claimed",
+          "entry": "ML-NO-CONTACT"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "ML-VERB"
+        }
+      ]
     }
   ],
   "stories": [
@@ -188,6 +359,17 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-50",
         "quote": "that verb is a visible control in the action row"
+      }
+    },
+    {
+      "id": "ML-COLUMNS",
+      "as": "operator",
+      "iWant": "each row to identify the member without exposing their contacts",
+      "soThat": "I can find the right person and still act on the record",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-11a",
+        "quote": "it reads `FullName (Gender, Ny)`"
       }
     }
   ],
@@ -327,6 +509,110 @@
         "quote": "that verb is a visible control in the action row"
       },
       "control": "spec"
+    },
+    {
+      "id": "ML-IDENTITY",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "Each row reads FullName followed by the gender and age, e.g. \"Ama Mensah (F, 34y)\".",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-11a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-11a",
+        "quote": "it reads `FullName (Gender, Ny)`"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "ML-BADGE",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "A presbyter row carries a text Presbyter badge beside the name.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-41"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-41",
+        "quote": "each presbyter shows a text `Presbyter` badge"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "ML-NO-CONTACT",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "A phone number, email address or WhatsApp value is printed in the grid.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-47"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-47",
+        "quote": "no contact value appears"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "ML-VERB",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "Add member is the page’s one visible verb, with Refresh leading the action row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "ML-ARCHIVED-SWITCH",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "The toolbar offers an Include archived switch.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "ML-MINISTRIES-FILTER",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "The toolbar offers a ministries filter.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "ML-PAGING",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "The footer offers Prev and Next paging controls.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "ML-ROW-MENU",
+      "story": "ML-COLUMNS",
+      "state": "01-shell-expanded-light",
+      "claim": "Each row ends in an overflow menu rather than a bare open icon.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
     }
   ]
 }

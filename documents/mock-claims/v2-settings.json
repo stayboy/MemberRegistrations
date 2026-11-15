@@ -29,6 +29,34 @@
         "sha256": "a438472b5a9954f2ed1b0ba0bf0874ba9f82276c367ad24c5e1bd69f8816d0b3",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
+    },
+    "02-date-time-sidebar": {
+      "mock": {
+        "path": "mockups/v2-settings/02-date-time-sidebar.png",
+        "sha256": "e2d7cb056baaf8cab1f61eeb9bebb54d545eade65b6617f62b5b18ac343f2bc1"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "e2d7cb056baaf8cab1f61eeb9bebb54d545eade65b6617f62b5b18ac343f2bc1",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "02b-display-menu": {
+      "mock": {
+        "path": "mockups/v2-settings/02b-display-menu.png",
+        "sha256": "071da92a6e430a93f151d696c5fbf75c545e4b5c9412dc4dc64b9597070a2be6"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "071da92a6e430a93f151d696c5fbf75c545e4b5c9412dc4dc64b9597070a2be6",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
     }
   },
   "inventory": [

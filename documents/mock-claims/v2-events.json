@@ -92,6 +92,90 @@
         "sha256": "070bbe649d0d19a04d9ba3b439f3b1514442e19ce16bc9c37321ed678a72a40c",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
+    },
+    "01-events-list": {
+      "mock": {
+        "path": "mockups/v2-events/01-events-list.png",
+        "sha256": "cf05ebe6ba88704912873aad65be843681dd8ea1c97269966aac5e7cdf27c4d2"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "cf05ebe6ba88704912873aad65be843681dd8ea1c97269966aac5e7cdf27c4d2",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "02-event-detail": {
+      "mock": {
+        "path": "mockups/v2-events/02-event-detail.png",
+        "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "03-series-list": {
+      "mock": {
+        "path": "mockups/v2-events/03-series-list.png",
+        "sha256": "f8610d24937f6dbd1d4bb0fcf54293fac9c6e2e82cbf9f4f0cae2afb41f6567b"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "f8610d24937f6dbd1d4bb0fcf54293fac9c6e2e82cbf9f4f0cae2afb41f6567b",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "05-offerings-landing": {
+      "mock": {
+        "path": "mockups/v2-events/05-offerings-landing.png",
+        "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "06-attendance-rows": {
+      "mock": {
+        "path": "mockups/v2-events/06-attendance-rows.png",
+        "sha256": "6f656e956eac0ccefe9e314f5b192c8d3891650bd2353f53ea3d30b6cb329dba"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "6f656e956eac0ccefe9e314f5b192c8d3891650bd2353f53ea3d30b6cb329dba",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "07-offering-terms": {
+      "mock": {
+        "path": "mockups/v2-events/07-offering-terms.png",
+        "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
     }
   },
   "inventory": [
