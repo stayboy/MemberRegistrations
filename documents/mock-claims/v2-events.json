@@ -155,6 +155,36 @@
         "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
+    },
+    "06-record-headcount-dialog": {
+      "mock": {
+        "path": "mockups/v2-events/06-record-headcount-dialog.png",
+        "sha256": "dc28201836c80331dd392357ba3f39c2fd4b8fca9e58a3c0579ae17b054fbc4c",
+        "source": "mockups/v2-events/03-activity-detail.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "dc28201836c80331dd392357ba3f39c2fd4b8fca9e58a3c0579ae17b054fbc4c",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "07-import-attendance-panel": {
+      "mock": {
+        "path": "mockups/v2-events/07-import-attendance-panel.png",
+        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f",
+        "source": "mockups/v2-events/03-activity-detail.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
     }
   },
   "inventory": [
@@ -315,6 +345,24 @@
       "story": "AD-SESSIONS",
       "state": "05-activity-detail-cancelled",
       "claim": "The cancelled session row states its reason and keeps the other sessions visible.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-HC-DIALOG",
+      "story": "AD-SESSIONS",
+      "state": "06-record-headcount-dialog",
+      "claim": "The count dialog offers one field per lane - visitors (male, female, children) and presbyters (elder, deaconess, deacon) - with the total derived from them.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-IMPORT-PANEL",
+      "story": "AD-SESSIONS",
+      "state": "07-import-attendance-panel",
+      "claim": "The import panel states the session’s capture state and lists the parsed rows, with nothing written before commit.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
