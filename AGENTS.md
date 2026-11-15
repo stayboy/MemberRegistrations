@@ -141,7 +141,8 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 ## 10a. Governing documents are review-gated
 
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
-`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and every markdown
+`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, every markdown file
+under `.opencode/skills/`, and every markdown
 file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
 lands only after the reviewer seat has reviewed the exact text — `deepseek-v4-pro` build `0813` outside
 the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider answers)
@@ -196,6 +197,9 @@ reintroduce them silently.
 
 - Visual mockups live in `mockups/` at the repository root, and that folder is **git-ignored**. A mock is
   a local review artifact, not source: never commit it and never cite a versioned path for it.
+- To build or refresh one, follow `.opencode/skills/mock-build/SKILL.md`: one live image per state, the
+  complete shell, numbers that describe the rows, a 1:1 comparison against the archived previous version,
+  and a signed catalogue entry.
 - The durable record is the spec and the round doc. Regenerate a mock locally when a screen changes;
   `documents/` must not hold mock images.
 - Do not put real member data, contact values, bearer tokens or session credentials into a mock or its

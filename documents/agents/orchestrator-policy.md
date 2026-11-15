@@ -148,7 +148,8 @@ deferred … · prose …` line. Because `mockups/` is git-ignored, the sha pin 
 ## Protected documents
 
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
-`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, and the canonical
+`documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, every markdown file
+under `.opencode/skills/`, and the canonical
 orchestrator skill's markdown
 are review-gated: a change lands only after the reviewer seat reviews the exact text — `deepseek-v4-pro`
 `0813` outside the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider
@@ -156,8 +157,11 @@ answers) between 12:00 and 18:00 local, or when no provider answers with `0813` 
 `fallbackReason`. A document joins this set when it **owns a non-negotiable or a repo delta of the canonical
 skill** — not because it lives under `documents/agents/`: a runbook or a research note under `documents/` is not
 governing either, and the seat files under `.opencode/agents/` are operational, not governing (owner,
-2026-11-13). The parent proposes a new member and the owner confirms it; the seat reviews the text, not the
-membership decision. Adding one is a review-gated step, and the three lists that name the set — this section,
+2026-11-13). **Every editable skill file is protected** (owner, 2026-11-15): a repo skill owns a
+procedure an agent follows, which is a delta of the canonical skill, so it joins the set as a whole
+directory rather than file by file - a new skill is covered the day it lands. For a named file outside a covered directory, the parent proposes the member and the owner confirms it; a
+directory in the list is covered as a whole, so its files need no separate proposal. The seat reviews the
+text, not the membership decision. Adding one is a review-gated step, and the three lists that name the set — this section,
 `AGENTS.md` §10a and the guard — move together in that step. The record is `documents/agents/protected-doc-reviews.json`; the
 guard is `tests/meta/protected-doc-review.test.ts`. The amended document, its record entry and any
 guard change land in one commit; the canonical checks skip in CI (the skill is not installed there),

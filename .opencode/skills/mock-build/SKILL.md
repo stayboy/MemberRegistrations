@@ -67,41 +67,47 @@ different shell from the built one.
    version whose image was not kept is recorded with `discarded: true` - never imply a file that is gone.
 9. **Prune deliberately.** `node mockups/prune.mjs` reports orphans and archived images and deletes nothing;
    `--archive` and `--orphans` delete. It never removes a PNG a state names.
-10. **Hand off to the catalogue.** Write `mock.path`, `mock.sha256` and `mock.source` into
+10. **Never invent a control.** A mock depicts what the build does or what the signed target says. If a
+    layout rule needs another button, change the **page** you draw, not the page's vocabulary.
+11. **Hand off to the catalogue.** Write `mock.path`, `mock.sha256` and `mock.source` into
     `documents/mock-claims/<set>.json` with `coverage: "target"`. The owner's sign-off flips it to `signed`
     with `{ by, at, sha256 }`; the round doc then carries a `## Mock sign-off` row naming the same
     `mockups/<set>/<state>.png` and a `Mock coverage:` line (`check-round` R6).
 
 ## Drift checklist
 
-| Check                  | Reference value (`v2-shell` roster, 1440 x 900)                |
-| ---------------------- | -------------------------------------------------------------- |
-| Top bar height         | 56 px                                                          |
-| Sidebar width          | 260 px                                                         |
-| Sidebar nav icons      | one per item, 16 viewBox at 1.2 stroke - a bare label is drift |
-| Page frame             | 1440 x 900, `main` padding 20/26                               |
-| KPI tile               | 98-100 px, label 12.5 muted, value 28 px, caption 11 muted     |
-| Attention value colour | `#c43501`, not `--bad` and not ink                             |
-| Table header           | sentence case 12 px, ink-2 - not `mock.css`'s uppercase 11 px  |
-| Table row              | 45 px, member number and flag on one line                      |
-| Filter chips           | 26 px; selected `#ebebeb` fill, unselected white + 1 px border |
-| Icon buttons           | bare glyph, muted, no border                                   |
-| Shell switch           | 40 x 20 (not `mock.css`'s 32 x 16)                             |
-| Shell format field     | 128 px                                                         |
-| Dropdown chevrons      | drawn glyphs, not a text character                             |
+| Check                  | Reference value (`v2-shell` roster, 1440 x 900)                                        |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| Top bar height         | 56 px                                                                                  |
+| Sidebar width          | 260 px                                                                                 |
+| Sidebar nav icons      | one per item, 16 viewBox at 1.2 stroke - a bare label is drift                         |
+| Page frame             | 1440 x 900, `main` padding 20/26                                                       |
+| KPI tile               | 98-100 px, label 12.5 muted, value 28 px, caption 11 muted                             |
+| Attention value colour | `#c43501`, not `--bad` and not ink                                                     |
+| Table header           | sentence case 12 px, ink-2 - not `mock.css`'s uppercase 11 px                          |
+| Table row              | 45 px, member number and flag on one line                                              |
+| Filter chips           | 26 px; selected `#ebebeb` fill, unselected white + 1 px border                         |
+| Icon buttons           | bare glyph, muted, no border                                                           |
+| Shell switch           | 40 x 20 (not `mock.css`'s 32 x 16)                                                     |
+| Shell format field     | 128 px                                                                                 |
+| Dropdown chevrons      | drawn glyphs, not a text character                                                     |
+| Utility order          | `Refresh` immediately **before** the verb or menu - the action holds the trailing edge |
+| Lane tables            | each lane shows its buckets, not only its total                                        |
 
 ## Pitfalls this skill exists to prevent
 
-| Pitfall                                      | Symptom                                                                       |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| A wrapper class the stylesheet owns          | page inset, text centred, muted colours, 233 px rows                          |
-| Overriding instead of composing              | each override fixes one thing and breaks the shared rhythm                    |
-| Numbers that do not describe the rows        | 28 assigned over 7 rows, or a chip count that disagrees with its tile         |
-| A second image for one state                 | two "targets" and no way to say which was signed                              |
-| Refreshing without the archive in view       | uppercase headers, bordered icon buttons, blue chips - all "plausible" alone  |
-| Reconstructing Fluent by hand                | chevrons as text characters, wrong switch size, wrong chip radius             |
-| A guard that names the box, not its contents | `side-nav` present but every item icon-less, so two sets shipped without them |
-| Trusting the guard instead of the picture    | a check can only catch what its rules name; the owner's eye caught the icons  |
+| Pitfall                                      | Symptom                                                                          |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
+| A wrapper class the stylesheet owns          | page inset, text centred, muted colours, 233 px rows                             |
+| Overriding instead of composing              | each override fixes one thing and breaks the shared rhythm                       |
+| Numbers that do not describe the rows        | 28 assigned over 7 rows, or a chip count that disagrees with its tile            |
+| A second image for one state                 | two "targets" and no way to say which was signed                                 |
+| Refreshing without the archive in view       | uppercase headers, bordered icon buttons, blue chips - all "plausible" alone     |
+| Reconstructing Fluent by hand                | chevrons as text characters, wrong switch size, wrong chip radius                |
+| A guard that names the box, not its contents | `side-nav` present but every item icon-less, so two sets shipped without them    |
+| A control the page does not have             | a second verb invented to satisfy a rule, so the mock stops describing the build |
+| An arrangement pinned by presence            | the icon rendered on the wrong side and the test still passed                    |
+| Trusting the guard instead of the picture    | a check can only catch what its rules name; the owner's eye caught the icons     |
 
 ## Done means
 

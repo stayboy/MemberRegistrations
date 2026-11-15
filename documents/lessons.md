@@ -21,7 +21,57 @@ review returned KEEP for the fixture rule and MERGE-INTO the existing worker-cra
 control-switch entry was accepted in the `mvp-local-ussd-payments` close, in a reply after the round's "all as
 recommended" (2026-11-13, "accept"). The 2026-11-13 grep-the-claim entry was accepted in the `mvp-page-actions`
 close after a grill on whether it was worth its bytes (2026-11-13, "all as recommended": one entry, the guard's
-limit as its evidence, seventeen lines).
+limit as its evidence, seventeen lines). The three 2026-11-15 entries were accepted in the `mock-and-lessons`
+close (2026-11-15, "all as recommended" on the grill, plus the owner's ruling that every editable skill file
+joins the protected set).
+
+## 2026-11-15 - A mock may not invent a control
+
+**Rule.** A mock depicts what the build does or what the signed target says it will do. When a layout rule
+needs more controls than the page has, the mock changes the **page** it draws, never the page's
+vocabulary: a plausible-looking verb that no route implements turns the mock from a target into a wish,
+and the next reader has no way to tell the difference.
+
+**Evidence.** The page-actions state had to show an `Actions` menu holding two or more verbs, so
+`Import attendance` was added to the Members menu - where it does not exist: the verb id appears in exactly
+two pages, the event detail and the series detail (`grep "id: 'import-attendance'" ui/src/pages`). The owner
+caught it; the state now
+depicts the series detail, where the verb is real. The same sweep found the phrase used as a chip on the
+imports file panel, which the build does not draw either.
+
+**Trigger.** Any mock that needs a second verb, a badge or a button "so the rule works": check the page
+that implements it before drawing it, and move the state rather than the vocabulary.
+
+---
+
+## 2026-11-15 - A rule about arrangement is pinned by position, not presence
+
+**Rule.** When a spec says **where** a control goes - before or after, first or last, at the trailing
+edge - the test must compare document order. An existence assertion passes while the arrangement is
+wrong, so the rule silently stops being enforced the moment the render order changes.
+
+**Evidence.** FR-9a said the refresh utility sat "at the trailing edge, alone or beside the menu", which
+put it to the right of the page's own action. The DOM tests asserted the button existed and passed at
+once; the owner saw the order in one look. The rule now says the utility renders immediately **before** the
+verb or menu, and the tests compare positions with `compareDocumentPosition`.
+
+**Trigger.** Writing or reviewing a test for an ordering clause - before/after, grouped, trailing, first.
+
+---
+
+## 2026-11-15 - A signature follows the last visual change, never a checkpoint
+
+**Rule.** Sign a mock set when the visuals are finished. A signature taken mid-change is void as soon as
+the next re-cut lands, and re-recording it is not a formality: it is the second time the owner is asked to
+attest bytes they have already seen change under them.
+
+**Evidence.** The capture pass was signed on 2026-11-15 and the utility-order correction re-cut eleven
+`offering-grid` states minutes later, so the signed hashes pointed at bytes that no longer existed. The
+work was right; the sequence was wrong. The catalogue kept the signed hashes and the round doc had to ask
+again.
+
+**Trigger.** Any round that will touch mock content and is about to record a signature: finish the visual
+work, capture once, compare, and only then sign.
 
 ---
 
