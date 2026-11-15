@@ -26,6 +26,19 @@ export const useShepherdingStyles = makeStyles({
   },
   rosterTable: {
     minWidth: '1560px',
+    // Eleven columns do not fit the design's 1440 px, so the table scrolls. The actions column is the
+    // one a reader needs without looking for it, so it is pinned to the trailing edge (owner, 2026-11-15).
+    '& th:last-child': {
+      position: 'sticky',
+      right: 0,
+      zIndex: 2,
+      backgroundColor: tokens.colorNeutralBackground1,
+    },
+    '& td:last-child': {
+      position: 'sticky',
+      right: 0,
+      backgroundColor: tokens.colorNeutralBackground1,
+    },
   },
   state: {
     display: 'flex',
