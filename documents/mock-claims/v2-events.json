@@ -24,6 +24,21 @@
         "the import panel opens on that",
         "a series activity"
       ]
+    },
+    {
+      "id": "events-list",
+      "route": "/events",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["one page verb", "a date window", "each series activity shows"]
     }
   ],
   "states": {
@@ -75,14 +90,15 @@
     "01-events-list": {
       "mock": {
         "path": "mockups/v2-events/01-events-list.png",
-        "sha256": "cf05ebe6ba88704912873aad65be843681dd8ea1c97269966aac5e7cdf27c4d2"
+        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699",
+        "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
       "coverage": "auto-signed",
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "cf05ebe6ba88704912873aad65be843681dd8ea1c97269966aac5e7cdf27c4d2",
+        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
@@ -100,20 +116,6 @@
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
-    "03-series-list": {
-      "mock": {
-        "path": "mockups/v2-events/03-series-list.png",
-        "sha256": "f8610d24937f6dbd1d4bb0fcf54293fac9c6e2e82cbf9f4f0cae2afb41f6567b"
-      },
-      "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "f8610d24937f6dbd1d4bb0fcf54293fac9c6e2e82cbf9f4f0cae2afb41f6567b",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
-    },
     "05-offerings-landing": {
       "mock": {
         "path": "mockups/v2-events/05-offerings-landing.png",
@@ -125,20 +127,6 @@
         "by": "unattended",
         "at": "2026-11-15",
         "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
-    },
-    "06-attendance-rows": {
-      "mock": {
-        "path": "mockups/v2-events/06-attendance-rows.png",
-        "sha256": "6f656e956eac0ccefe9e314f5b192c8d3891650bd2353f53ea3d30b6cb329dba"
-      },
-      "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "6f656e956eac0ccefe9e314f5b192c8d3891650bd2353f53ea3d30b6cb329dba",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
@@ -220,6 +208,29 @@
           "id": "AC-6",
           "disposition": "deferred",
           "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        }
+      ]
+    },
+    {
+      "surface": "events-list",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "EVA-ACTIONS"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-2",
+          "disposition": "claimed",
+          "entry": "EVA-ROWS"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-4",
+          "disposition": "claimed",
+          "entry": "EVA-SERIES"
         }
       ]
     }
@@ -366,6 +377,57 @@
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
+    },
+    {
+      "id": "EVA-ACTIONS",
+      "story": "AD-SESSIONS",
+      "state": "01-events-list",
+      "claim": "The page’s two verbs sit in one Actions menu, with Refresh leading the row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "one Actions menu holds them"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVA-ROWS",
+      "story": "AD-SESSIONS",
+      "state": "01-events-list",
+      "claim": "Each row names its activity, its place and its attendance and offering summaries, so a date window reads at a glance.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-2"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "AC-2",
+        "quote": "series, ministry, attendance and offering summaries"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVA-SERIES",
+      "story": "AD-SESSIONS",
+      "state": "01-events-list",
+      "claim": "A series is a row like any event, showing its schedule and its next occurrence rather than living on a list of its own.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-4"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "AC-4",
+        "quote": "each series activity shows a human-readable schedule"
+      },
+      "control": "spec"
     }
   ]
 }
