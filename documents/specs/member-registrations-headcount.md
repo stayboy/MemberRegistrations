@@ -125,6 +125,10 @@ members present rather than as a headcount bucket (owner, 2026-11-14). The lane 
   mode.
 - **HC-18** Every lane a page shows carries its own `asOf` and recorder, so an older lane cannot be read
   as the session's total.
+- **HC-28** A page that lists the current lanes MUST show, for each lane, **its buckets** as labelled from
+  the mode's reference data - for example `Men 62 · Women 71 · Children 9` - not only the total, because a
+  total alone cannot be checked against what the operator counted. A lane whose buckets are all zero shows
+  `0` for the total and no bucket rows, per HC-5 and AC-H13.
 - **HC-24** A consumer that needs the session's **capture time** uses the latest observation across all
   lanes - a timestamp, not a figure - and `capture.asOf` in the events surface follows this rule. A
   consumer that needs a **count** names a mode (HC-22).

@@ -21,11 +21,13 @@ import {
 import { useUssdStyles } from './ussd-styles';
 
 /**
- * The loaded, read-first body: one row per recorded lane with its own count,
- * `asOf`, recorder and Correct action, the register-derived Roster beside it,
- * and the append-only history newest first. No write form lives here; Record and
- * Correct are dialogs the page owns. A superseded row stays readable and is
- * valid for its own `asOf`; a row is current only in its own lane (HC-18).
+ * The loaded, read-first body: one row per recorded lane with its own buckets,
+ * count, `asOf`, recorder and Correct action, the register-derived Roster beside
+ * it, and the append-only history newest first. No write form lives here; Record
+ * and Correct are dialogs the page owns. A superseded row stays readable and is
+ * valid for its own `asOf`; a row is current only in its own lane (HC-18), and
+ * every lane shows its buckets so the total can be checked against the count
+ * (HC-28).
  */
 export function HeadcountReadFirst({
   current,
@@ -79,6 +81,7 @@ export function HeadcountReadFirst({
                   <TableHeader>
                     <TableRow>
                       <TableHeaderCell>Mode</TableHeaderCell>
+                      <TableHeaderCell>Buckets</TableHeaderCell>
                       <TableHeaderCell>Count</TableHeaderCell>
                       <TableHeaderCell>As of</TableHeaderCell>
                       <TableHeaderCell>Recorded</TableHeaderCell>
@@ -89,6 +92,15 @@ export function HeadcountReadFirst({
                     {lanes.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell>{headcountModeLabel(row.mode)}</TableCell>
+                        <TableCell>
+                          {row.lines.length === 0 ? (
+                            <Text size={200} className={styles.muted}>
+                              —
+                            </Text>
+                          ) : (
+                            headcountBucketSummary(row)
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Text className={styles.code}>{row.total}</Text>
                         </TableCell>
