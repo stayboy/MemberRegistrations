@@ -24,6 +24,8 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `member-add.png`              | Add member form                                  | 1440 × 1200 | `v2-shell/11-add-member.png`            |
 | `events-list.png`             | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`          |
 | `event-detail.png`            | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`         |
+| `event-headcount-dialog.png` | Event detail, the headcount capture dialog         | 1440 x 900  | `v2-events/06-record-headcount-dialog.png` |
+| `event-import-panel.png`      | Event detail, the attendance import panel          | 1440 x 900  | `v2-events/07-import-attendance-panel.png`  |
 | `event-attendance-dialog.png` | Attendance dialog for the first session          | 1440 × 900  | `v2-events/06-attendance-rows.png`      |
 | `series-detail.png`           | Series detail, versions, exceptions, occurrences | 1440 × 1000 | `v2-events/04-series-detail.png`        |
 | `shepherding-officers.png`    | Shepherding officers, coverage and officer table | 1440 × 900  | `v2-shell/07-shepherding-officers.png`  |
@@ -31,8 +33,6 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `shepherding-report.png`      | Church report and status distribution            | 1440 × 900  | `v2-shell/09-shepherding-report.png`    |
 | `contacts-dialog.png`         | Contacts dialog for the first fixture member     | 1440 × 900  | `v2-shell/16-contacts.png`              |
 | `imports-members.png`         | Member database import, format and drop zone     | 1440 × 1150 | `v2-imports/01-members-import.png`      |
-| `imports-attendance.png`      | Attendance registry import, session selected     | 1440 × 1150 | `v2-imports/04-attendance-past-open.png` |
-| `headcount-capture.png` | USSD headcount page, not live: state line, no End action                     | 1440 × 900  | `headcount/14-headcount-not-live.png`   |
 | `imports-batches.png`         | Batch lookup, empty tab history                  | 1440 × 900  | none (no mock)                          |
 | `settings.png`                | Settings, appearance / date-time / session       | 1440 × 1150 | `v2-settings/01-date-time-settings.png` |
 

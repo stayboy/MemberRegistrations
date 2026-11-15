@@ -49,7 +49,7 @@
         "sha256": "b3adef7f109ec41a3e5f4d3397ffb23f2ec9bfab4a37e743d6e8d76e4548ca51",
         "source": "mockups/headcount/14-headcount-not-live.html"
       },
-      "baseline": "headcount-capture.png",
+      "baseline": null,
       "coverage": "signed",
       "signed": {
         "by": "owner",

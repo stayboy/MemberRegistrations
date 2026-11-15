@@ -55,6 +55,23 @@ officer's writes. Re-running `add` for an existing e-mail reactivates it instead
 4. Open that URL in the **same browser** (the exchange binds the session to it) and continue to
    `/gateway/v1/members`.
 
+## Where the screens are
+
+The register consolidated in the 2026-11-15 rounds: a series is an **activity**, and three operator
+pages retired. Their routes redirect, so an old bookmark still lands somewhere useful.
+
+| You want                                               | Open                                          |
+| ------------------------------------------------------ | --------------------------------------------- |
+| Every activity — standalone events and series          | `#/events`                                    |
+| One event or one series                                | `#/events/<id>` (`?kind=series` for a series) |
+| Record a headcount, close a capture, import attendance | the activity detail's **session row**         |
+| Import the member database, look up a batch            | `#/imports/members`, `#/imports/batches`      |
+
+Retired, and where each goes: `#/events/series` → `#/events`; `#/events/series/:id` →
+`#/events/:id?kind=series`; `#/ussd/headcount` → the activity detail (or `#/events` when the link
+names none); `#/imports/attendance` → `#/imports/members`, or the activity detail with
+`import=<date>` when the link named an event and a date. None of them 404s (AC-51).
+
 ## Verify without a browser
 
 ```powershell

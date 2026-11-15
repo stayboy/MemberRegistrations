@@ -171,6 +171,26 @@ test('attendance dialog', async ({ page }) => {
   await capture(page, 'event-attendance-dialog');
 });
 
+test('headcount dialog', async ({ page }) => {
+  await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'Record headcount' }).first().click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Record a headcount', { exact: false })).toBeVisible();
+  await capture(page, 'event-headcount-dialog');
+});
+
+test('import panel', async ({ page }) => {
+  await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'Import' }).first().click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Selected occurrence', { exact: true })).toBeVisible();
+  await capture(page, 'event-import-panel');
+});
+
 test('series detail', async ({ page }) => {
   await openScreen(page, '/events/series-1?kind=series', { width: 1440, height: 1000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
@@ -218,19 +238,6 @@ test('imports members', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Member database' })).toBeVisible();
   await expect(page.getByText('Choose a CSV or the Excel template')).toBeVisible();
   await capture(page, 'imports-members');
-});
-
-test('headcount capture', async ({ page }) => {
-  await openScreen(page, '/ussd/headcount', { width: 1440, height: 900 });
-  await expect(page.getByRole('heading', { level: 1, name: 'USSD headcount' })).toBeVisible();
-  // The USSD page selects an event and a session before it reads a capture.
-  await page.getByRole('combobox', { name: 'Event' }).click();
-  await page.getByRole('option', { name: /Foundation service/ }).click();
-  await expect(page.getByText('Current headcount')).toBeVisible();
-  // The Record verb is visible on the action row, so the capture shows the page as the
-  // operator sees it (FR-9a: one verb needs no menu).
-  await expect(page.getByRole('button', { name: 'Record headcount' })).toBeVisible();
-  await capture(page, 'headcount-capture');
 });
 
 test('imports batch lookup', async ({ page }) => {
