@@ -171,7 +171,12 @@
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "54330313777e8114bf7578b0275c423b55b68f240e265fb36973bdf90d03a6b7"
+      }
     }
   },
   "inventory": [

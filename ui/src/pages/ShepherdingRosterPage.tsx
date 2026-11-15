@@ -30,7 +30,12 @@ import {
   shorthands,
   tokens,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular, MoreHorizontalRegular, SearchRegular } from '@fluentui/react-icons';
+import {
+  ArrowClockwiseRegular,
+  MoreHorizontalRegular,
+  PersonAddRegular,
+  SearchRegular,
+} from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -309,6 +314,8 @@ export function ShepherdingRosterPage() {
   const [callFor, setCallFor] = useState<RosterEntry | null>(null);
   const [assignFor, setAssignFor] = useState<RosterEntry | null>(null);
   const [endFor, setEndFor] = useState<RosterEntry | null>(null);
+  // The page action assigns a member to this roster's officer; the row action reassigns a row.
+  const [assignMemberOpen, setAssignMemberOpen] = useState(false);
 
   const officersQuery = useQuery({
     queryKey: ['shepherding', baseUrl, 'officers', window.from, window.to],
@@ -441,6 +448,21 @@ export function ShepherdingRosterPage() {
             void officersQuery.refetch();
           },
           disabled: rosterQuery.isFetching || officersQuery.isFetching,
+        },
+        // FR-9a: the roster's one page verb renders visibly, after the refresh icon and at the
+        // row's trailing edge, rather than as a one-item `Actions` menu (the signed mock's
+        // `Assign member`). It assigns a chosen member to this officer; a row's Reassign stays
+        // the row's own action.
+        {
+          id: 'assign-member',
+          kind: 'verb',
+          label: 'Assign member',
+          icon: <PersonAddRegular />,
+          onSelect: () => {
+            setActionError(null);
+            setAssignMemberOpen(true);
+          },
+          disabled: !officerKnown || rosterQuery.isFetching,
         },
       ]}
     >
@@ -821,6 +843,19 @@ export function ShepherdingRosterPage() {
             assignedOn: assignFor.assignedOn,
           }}
           onClose={() => setAssignFor(null)}
+          onAssigned={invalidate}
+        />
+      ) : null}
+
+      {assignMemberOpen && selectedOfficer ? (
+        <AssignShepherdDialog
+          fixedOfficer={{
+            memberNo: selectedOfficer.memberNo,
+            memberName: selectedOfficer.name
+              ? memberLabelFromName(selectedOfficer.name, selectedOfficer.gender, selectedOfficer.age)
+              : undefined,
+          }}
+          onClose={() => setAssignMemberOpen(false)}
           onAssigned={invalidate}
         />
       ) : null}
