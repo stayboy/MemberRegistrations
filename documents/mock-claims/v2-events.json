@@ -20,9 +20,9 @@
       ],
       "acsMatch": [
         "one page verb",
-        "Active offerings panel",
+        "the detail shows series/standalone",
         "whether it ended the session",
-        "seeded with that event",
+        "attendance is imported",
         "archived series or cancelled event"
       ]
     },
@@ -41,9 +41,9 @@
       ],
       "acsMatch": [
         "one page verb",
-        "the four summary tiles are visible",
+        "a series activity",
         "adds a schedule version or exception",
-        "the import flow opens at"
+        "the import panel opens on that"
       ]
     }
   ],
