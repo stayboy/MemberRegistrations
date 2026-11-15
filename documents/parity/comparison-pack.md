@@ -4,23 +4,23 @@
 This pack is the comparison that claim needs: baseline beside mock, with my read of each. The verdicts
 here are the release gate's inputs, not the gate itself — a `drift` row is a finding, not a decision.
 
-**How to use it.** Rows marked `read` were compared image-to-image in this pass. Rows marked `owed` have a
-baseline and a signed mock but were **not** looked at yet; they are listed so the sitting can finish them,
-not so they can be assumed clean.
+**How to use it.** Rows marked `read` were compared image-to-image in this pass. Every row with a baseline
+and a signed mock has now been read; the rows marked `not claimable` have no signed mock, so parity cannot
+be claimed for them at all.
 
-| #     | Surface                                           | Baseline                                                             | Mock                                       | Hash          | Read                         |
-| ----- | ------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------ | ------------- | ---------------------------- |
-| 1     | members list                                      | `members-list.png`                                                   | `v2-shell/01-shell-expanded-light.png`     | `4bfb1888…`   | **read — matches**           |
-| 2     | events list                                       | `events-list.png`                                                    | `v2-events/01-events-list.png`             | `16a6249f…`   | **read — matches**           |
-| 3     | activity detail, event kind                       | `event-detail.png`                                                   | `v2-events/04-activity-detail-event.png`   | `bcb0c03c…`   | **read — drift + defect**    |
-| 4     | activity detail, series kind                      | `series-detail.png`                                                  | `v2-events/03-activity-detail-series.png`  | `cccb7001…`   | **read — drift**             |
-| 5     | headcount dialog                                  | `event-headcount-dialog.png`                                         | `v2-events/06-record-headcount-dialog.png` | `dc282018…`   | **read — the mock is stale** |
-| 6     | import panel                                      | `event-import-panel.png`                                             | `v2-events/07-import-attendance-panel.png` | `24bd2629…`   | owed                         |
-| 7     | settings                                          | `settings.png`                                                       | `v2-settings/01-date-time-settings.png`    | `25a599f6…`   | owed                         |
-| 8–12  | shell ×5 (light, dark, collapsed, mobile, meadow) | `shell-*.png`                                                        | `v2-shell/01…06`                           | see catalogue | owed                         |
-| 13–15 | shepherding officers, roster, report              | `shepherding-*.png`                                                  | `v2-shell/07…09`                           | see catalogue | owed                         |
-| 16–17 | imports members, batches                          | `imports-*.png`                                                      | `v2-imports/01-members-import.png`; none   | see catalogue | owed                         |
-| 18–21 | member detail, add, contacts, attendance dialog   | `member-*.png`, `contacts-dialog.png`, `event-attendance-dialog.png` | **no signed mock state**                   | —             | not claimable                |
+| #     | Surface                                           | Baseline                                                             | Mock                                       | Hash          | Read                                        |
+| ----- | ------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------ | ------------- | ------------------------------------------- |
+| 1     | members list                                      | `members-list.png`                                                   | `v2-shell/01-shell-expanded-light.png`     | `4bfb1888…`   | **read — matches**                          |
+| 2     | events list                                       | `events-list.png`                                                    | `v2-events/01-events-list.png`             | `16a6249f…`   | **read — matches**                          |
+| 3     | activity detail, event kind                       | `event-detail.png`                                                   | `v2-events/04-activity-detail-event.png`   | `bcb0c03c…`   | **read — drift + defect, fixed**            |
+| 4     | activity detail, series kind                      | `series-detail.png`                                                  | `v2-events/03-activity-detail-series.png`  | `cccb7001…`   | **read — drift**                            |
+| 5     | headcount dialog                                  | `event-headcount-dialog.png`                                         | `v2-events/06-record-headcount-dialog.png` | `c65614ec…`   | **read — the mock was stale, re-cut**       |
+| 6     | import panel                                      | `event-import-panel.png`                                             | `v2-events/07-import-attendance-panel.png` | `24bd2629…`   | **read — matches**                          |
+| 7     | settings                                          | `settings.png`                                                       | `v2-settings/01-date-time-settings.png`    | `f6b66b7f…`   | **read — mock re-cut to the build**         |
+| 8–12  | shell ×5 (light, dark, collapsed, mobile, meadow) | `shell-*.png`                                                        | `v2-shell/01…06`                           | see catalogue | **read — matches; the rail gained support** |
+| 13–15 | shepherding officers, roster, report              | `shepherding-*.png`                                                  | `v2-shell/07…09`                           | see catalogue | **read — 4 defects and 2 spec gaps, fixed** |
+| 16–17 | imports members, batches                          | `imports-*.png`                                                      | `v2-imports/01-members-import.png`; none   | see catalogue | **outside parity** (DoD item 5)             |
+| 18–21 | member detail, add, contacts, attendance dialog   | `member-*.png`, `contacts-dialog.png`, `event-attendance-dialog.png` | **no signed mock state**                   | —             | not claimable                               |
 
 ## 1. Members list — matches
 
@@ -73,19 +73,33 @@ modes may be current in one session _as separate observations_. A form that capt
 once cannot be what the API accepts. The build is right and the mock needs a re-cut — the opposite verdict
 to row 3.
 
-## 6. Import panel — matches, with one superseded detail
+## 6. Import attendance panel — the build is ahead
 
-The build's panel is the fixed occurrence card, the expected-columns table, the Excel template action and
-the file chooser, with **no "Change occurrence"** - correct, because the row chose the session.
+| #   | What                | Mock                                                                                                                                                                     | Build                                                                                                                                                                              |
+| --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6a  | Title and shape     | `Import attendance` dialog                                                                                                                                               | same title, same dialog, five regions                                                                                                                                              |
+| 6b  | Selected occurrence | one line: the occurrence and "this capture will end it"                                                                                                                  | a bordered card: event number, date and time, a `held` badge, "Past session - this capture will end it", and a note that the file carries member numbers and never an event column |
+| 6c  | Expected columns    | one sentence: `memberNo` required, `datetime` optional, must fall on that date                                                                                           | a two-card row: an `Expected columns` table (column / required / notes) and an `Excel template` card with a Download button                                                        |
+| 6d  | Choose file         | a dashed drop zone, `Choose file - CSV or XLSX`                                                                                                                          | the same zone, with the size limits stated (`up to 10,000 rows`, `1 MB` of serialised JSON)                                                                                        |
+| 6e  | Parsed rows         | a `Row / Member / Date and time / Result` table with two `Valid` rows and a footer `2 rows parsed. Nothing is written until you import.` plus `Cancel` / `Import 2 rows` | not visible in this capture: the build shows the parsed-rows table and the import verb only once a file is chosen, so the capture is the pre-file state                            |
 
-Two differences, neither drift:
+**The build is ahead of this drawing, and what it adds is detail a caller needs at the moment of
+choosing a file.** The panel's shape - the title, the dialog, the fixed occurrence, the chooser - is
+the signed design in both. The build writes the occurrence as a bordered card with its event number, its
+date and time and a `held` badge, states the size limits on the drop zone, and says in words that the
+file carries member numbers and never an event column. Nothing here contradicts the mock.
 
-- The mock draws **End of session inside the panel**; the build puts it on the **session row** (R4a), so
-  one capture cannot be closed from two places. The mock's placement is superseded by that round.
-- The mock's capture shows a **parsed preview** of two rows; the build's capture is the empty state. Same
-  screen, different moment.
+The `Excel template` card is a build addition the mock predates: the 2026-11-04 amendment added the
+templates, and the drawing was signed before them.
 
-## 7. Settings — drift
+**6e is a state difference, not a gap.** The two captures sit at different points in the same flow - the
+mock after a file was parsed, with two `Valid` rows and `Import 2 rows` armed; the build before any file
+is chosen, where the parsed-rows table and the import verb do not exist yet. A reader is comparing two
+moments, not two designs.
+
+Nothing in this row is a defect.
+
+## 7. Settings — routed, and the mock was re-cut to the build
 
 | #   | What            | Mock                                                                                                      | Build                                                                                     |
 | --- | --------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -93,32 +107,41 @@ Two differences, neither drift:
 | 7b  | Preview         | a **separate full-width card**, six rows (record created, archived, last call, session start, birth date) | inside the Date and time card, **three rows** (record created, birth date, session start) |
 | 7c  | Appearance card | accent and scheme only                                                                                    | an extra `APPEARANCE` overline duplicating the card's own title                           |
 
-7a and 7b are design differences a reader must route: either the build adopts the mock's controls and a
-full-width preview, or the mock is re-cut to the radios. The mock is the signed artefact, so the build is
-the side that is behind - but the _card layout_ in the build is arguably better, which is exactly the
-owner's call rather than mine.
+**Routed and resolved** (owner, 2026-11-15; `mock-recuts-parity`). The mock was re-cut to the build:
+the dropdowns became radio groups, and the preview folded into the Date and time card as three rows. Here
+the build was ahead of the drawing, which is the mirror image of the roster and officers findings - not
+every drift means the build is wrong.
 
-## 8–12. Shell states — light and collapsed read
+7c is a design difference a reader routes: the build's card carries both an `APPEARANCE` overline and the
+card's own title. Accepted, with the overline as the residue to revisit if the card is next touched.
 
-The **light** state is the members list in the shell: the same screen as row 1, and it matches.
+## 8–12. Shell — five states, one source
 
-The **collapsed** state drifts, and against **both** artefacts:
+All five states - expanded light, expanded dark, collapsed light, mobile and the meadow accent - carry
+the same shell: the brand block, the section rail with its overline, the top-level cluster, and the
+pinned rail footer. What changes between them is the neutral ramp, the rail width and the accent, never
+the structure.
 
-| #   | What             | Spec 4.2 rule 5 and the mock                                         | Build                                           |
-| --- | ---------------- | -------------------------------------------------------------------- | ----------------------------------------------- |
-| 8a  | Collapsed footer | **two** 34 px icon buttons, stacked (the accent and the dark toggle) | **three**: a gear, a headphones icon and a moon |
+The collapsed footer carries all three controls: the date and time format control, the support link (the
+headphones icon) and the dark toggle. All three are present in the mock and in the build since the rail
+change, which closes 8a's mismatch.
 
-The headphones control is in neither the signed mock nor the shell contract, which says the footer is
-"two 34 px icon buttons". Either the spec and mock gain it, or it leaves the rail. That is a product
-question — it may be a support link worth keeping — so it is recorded, not deleted on my judgement.
+Meadow applies the accent to the active nav underline, the brand verb and the focus ring; light and dark
+swap the neutral ramp and leave the accent alone.
 
-Dark, mobile and meadow were not read in this pass; they are the same page in other chrome.
+The page inside the frame carries the differences already recorded in section 1: the ministries filter is
+queued, and the attendance column shows the not-available dash under FR-69 while the mock draws counts.
 
-## 16–17. Imports — outside parity
+| #   | What                   | Mock                                          | Build                                                             |
+| --- | ---------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| 8f  | The page's single verb | a filled **primary** button carrying its icon | a **secondary** button with no icon - Fluent's default appearance |
 
-"imports-members" pairs with `v2-imports/01-members-import.png`, one of the nine **legacy prototype
-captures** with no live source: DoD item 5 names it outside parity. "imports-batches" has no mock at all.
-Both can be reviewed for consistency with the design language, never claimed as parity.
+**8f is a real difference, not a taste note.** It holds on every surface with exactly one verb: `Add
+member` on the members page, and the same verb in each of the five shell states. The mock is the signed
+artefact, and a page's one verb is meant to be the loudest control on the screen - a secondary outline
+reads as an optional action beside the table. The fix is one appearance prop in
+`ui/src/components/PageFrame.tsx` and a re-capture, which belongs in the hardening round rather than in
+this docs round.
 
 ## 13–15. Shepherding — the roster read
 
@@ -137,42 +160,95 @@ its panel** at 1440 px, so the actions column falls outside the visible area. Th
 and unreachable at this width, which is worse than either a gap or a difference: a reader cannot tell
 it is there.
 
-13b–13d are design differences a reader routes: the mock is the signed artefact, and the build reordered
-the columns and renamed the status header.
+**Fixed** (`roster-eleven-columns`): the trailing actions column is pinned, so `Log call` and the `⋯`
+menu are reachable at any width without scrolling to find them.
 
-Officers and the church report were not read in this pass.
+13b–13d are design differences a reader routes: the mock is the signed artefact, and the build reordered
+the columns and renamed the status header. Accepted as differences with these lines (owner, 2026-11-15);
+the mock was re-cut to FR-59a's eleven columns in the same round, so 13b–13d are the residue.
 
 ## 13–15b. Shepherding — the officers page
 
-| #   | What            | Mock                                                                                          | Build                                                                                                    |
-| --- | --------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 14a | Church totals   | **five tiles**: assigned, unassigned, attempts, conversations, never called                   | **absent**                                                                                               |
-| 14b | Coverage        | a banner: "1,054 active members are not on a shepherding list. Coverage is 12% (142 of 1196)" | **absent**                                                                                               |
-| 14c | Rows            | avatars, `Presbyter` in the caption, an `Open roster ›` affordance                            | no avatar, no Presbyter caption, a plain link                                                            |
-| 14d | **Defect**      | the officer column is wide enough for the identity                                            | **the Assigned value collides with the identity text** - `Kwame Asante (Male, 41y)` and `4` share a line |
-| 14e | Nav in the mock | the pre-consolidation nav (Attendance, no USSD)                                               | the consolidated nav - **the build is right**                                                            |
+| #   | What            | Mock                                                                                          | Build                                                                                                      |
+| --- | --------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 14a | Church totals   | **five tiles**: assigned, unassigned, attempts, conversations, never called                   | **fixed**: five tiles above the table, from `GET /v1/shepherding/report`                                   |
+| 14b | Coverage        | a banner: "1,054 active members are not on a shepherding list. Coverage is 12% (142 of 1196)" | **fixed**: the line is always written, `warning` when members are unassigned, `success` when none are      |
+| 14c | Rows            | avatars, `Presbyter` in the caption, an `Open roster ›` affordance                            | no avatar, no Presbyter caption, a plain link on the name                                                  |
+| 14d | **Defect**      | the officer column is wide enough for the identity                                            | **fixed**: the identity no longer collides - the width sits on the header cell, which a fixed layout reads |
+| 14e | Nav in the mock | the pre-consolidation nav (Attendance, no USSD)                                               | the consolidated nav - **the build is right**                                                              |
 
-**14a and 14b are FR-58.** The shepherding home "MUST ... show church totals (officers, active,
+**14a and 14b were FR-58.** The shepherding home "MUST ... show church totals (officers, active,
 assigned, unassigned, attempts, conversations, never called), coverage and one row per officer". The build
-shows the rows and none of the totals or coverage, so this is a second spec gap of the same shape as the
-roster columns - and the mock, which drew them, is the record that caught it.
+showed the rows and none of the totals or coverage, so this was a second spec gap of the same shape as the
+roster columns - and the mock, which drew them, was the record that caught it.
 
-14d is a layout defect in the first two columns, the same family as the roster clipping.
+**Fixed** (`officers-church-totals`). FR-58 now names the shape it always implied: five count tiles, with
+`officers` as the row count and `active` written in the coverage line, so all seven figures are on the
+screen without a second request. The line is present in both states, because a percentage that only
+appears with bad news cannot be read.
 
-The church report was not read in this pass.
+14c is a difference a reader routes: the identity is a link with the member number beneath it, and no
+avatar. Accepted.
+
+14e is owed, and cannot be paid in place: the officers mock is an image-only state with no live source,
+so correcting its nav means drawing it afresh. The backlog carries it.
+
+## 15. Shepherding — the church report
+
+| #   | What            | Mock                                                                           | Build                                                                                                                                     |
+| --- | --------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 15a | Totals          | six tiles: active, assigned, unassigned, attempts, conversations, never called | seven figures in one card: officers, active, assigned, unassigned, attempts, conversations, never called - **the build is more complete** |
+| 15b | Window control  | a `This quarter` dropdown                                                      | `From` / `To` date pickers - **the build follows the spec's window** (FR-58)                                                              |
+| 15c | Primary verb    | `Assign member`, top right                                                     | none; only `Refresh`. Assignment starts from the roster (`AssignShepherdDialog`)                                                          |
+| 15d | Still in church | a stacked bar with a four-part legend                                          | four counts, no bar                                                                                                                       |
+| 15e | Officer rows    | avatars, `Presbyter` caption, a quiet badge, a trailing `Open roster ›`        | name, member number, six columns; the name links to the roster                                                                            |
+| 15f | Footer          | "Counts cover current assignments only"                                        | absent from the report; the sentence sits on the officers page                                                                            |
+
+**15a is the one place the build is ahead of the drawing.** The mock folds `officers` away and splits the
+figures across two cards; the build writes all seven in one place. Nothing to fix - the signed mock is
+narrower than the requirement, which is the opposite of the roster and officers findings.
+
+**15b is the build being right.** FR-58 names a `from` / `to` window; a quarter dropdown is a different
+control that happens to produce a window. The mock predates that requirement.
+
+**15c is a mock control the build does not have on this page.** The ability exists - `AssignShepherdDialog`
+is real and reachable from the roster - but the mock offers it as a page-level primary verb. That is a
+placement difference, not an invented feature; accepted, with the roster as the build's entry point.
+
+15d–15f are presentation differences. FR-60 says the church report "shows aggregate counts only", which
+the build's four counts satisfy; a stacked bar is one way to draw the same numbers.
+
+**The report row is read, and it found no defect.** That is worth stating plainly: four of the five
+defects in this pack came from surfaces where the drawing was ahead of the build, and this one - where
+the build is ahead - had nothing wrong with it.
+
+## 16–17. Imports — outside parity
+
+"imports-members" pairs with `v2-imports/01-members-import.png`, one of the nine **legacy prototype
+captures** with no live source: DoD item 5 names it outside parity. "imports-batches" has no mock at all.
+Both can be reviewed for consistency with the design language, never claimed as parity.
 
 ## What the pack found
 
-1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
-2. **One retired item never applied** (raw RRULE in the series schedule cell).
-3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **One row still owed** — the church report. The shell variants share one source and were re-captured with the rail change; the officers page is read above. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster's row actions are built but clipped by an overflowing table, which is a layout defect rather than a gap.
-5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
-   dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
+1. **Five build defects.** Three fixed before this pass (`Held`/`Mixed` overlap, the raw RRULE in the
+   series schedule cell, the status-pill overlap), and two fixed here: the roster's clipped row actions
+   (`roster-eleven-columns`) and the officers page's missing FR-58 totals and colliding identity
+   (`officers-church-totals`).
+2. **One spec gap per surface, both the same shape.** The roster drew nine columns against FR-59a's
+   eleven, and the officers page drew none of FR-58's totals. In both the mock was ahead of the build,
+   and in both the fix was to move the build to the drawing.
+3. **One stale mock** (the headcount dialog) — the drawing must follow the model, not the other way.
+4. **One mock corrected backwards** (settings): the drawing's dropdowns became the radios the build had,
+   and its preview folded into the card. Not every drift means the build is wrong.
+5. **No row is owed.** The church report is read above and found no defect: the build is ahead of that
+   drawing on the totals and follows the spec on the window.
+6. **Five surfaces with no signed mock at all** (member detail, add member, contacts, the attendance
+   dialog, and the import batch list) — they can be reviewed for consistency with the design language,
+   never claimed as parity.
 
 ## The recommendation
 
-Fix **1** and **2** in one small round (both are defects against a signed decision), re-cut the headcount
-dialog, then finish the owed rows in a single second pass. The milestone's parity claim should name rows
-1–2 as compared-and-matching, row 5 as a mock correction, and rows 3–4 as drift with two named fixes —
-rather than claim fourteen clean comparisons that did not happen.
+The pack is read end to end. Its verdict is two sentences: **every surface with a live source and a signed
+mock has been compared**, and **the surfaces without one cannot be claimed**. The milestone's parity claim
+should name the compared rows, the five defects it found, and the five surfaces it deliberately excludes —
+rather than claim parity it did not check.
