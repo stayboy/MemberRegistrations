@@ -73,12 +73,37 @@ modes may be current in one session _as separate observations_. A form that capt
 once cannot be what the API accepts. The build is right and the mock needs a re-cut — the opposite verdict
 to row 3.
 
+## 6. Import panel — matches, with one superseded detail
+
+The build's panel is the fixed occurrence card, the expected-columns table, the Excel template action and
+the file chooser, with **no "Change occurrence"** - correct, because the row chose the session.
+
+Two differences, neither drift:
+
+- The mock draws **End of session inside the panel**; the build puts it on the **session row** (R4a), so
+  one capture cannot be closed from two places. The mock's placement is superseded by that round.
+- The mock's capture shows a **parsed preview** of two rows; the build's capture is the empty state. Same
+  screen, different moment.
+
+## 7. Settings — drift
+
+| #   | What            | Mock                                                                                                      | Build                                                                                     |
+| --- | --------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 7a  | Format controls | two **dropdowns** (date format, time format)                                                              | two **radio groups** with the same options                                                |
+| 7b  | Preview         | a **separate full-width card**, six rows (record created, archived, last call, session start, birth date) | inside the Date and time card, **three rows** (record created, birth date, session start) |
+| 7c  | Appearance card | accent and scheme only                                                                                    | an extra `APPEARANCE` overline duplicating the card's own title                           |
+
+7a and 7b are design differences a reader must route: either the build adopts the mock's controls and a
+full-width preview, or the mock is re-cut to the radios. The mock is the signed artefact, so the build is
+the side that is behind - but the _card layout_ in the build is arguably better, which is exactly the
+owner's call rather than mine.
+
 ## What the pack found
 
 1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
 2. **One retired item never applied** (raw RRULE in the series schedule cell).
 3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **Fourteen rows still owed** — the sitting's remaining work, listed above rather than implied.
+4. **Ten rows still owed** — shell ×5, shepherding ×3 and imports ×2. Rows 6 and 7 are read above.
 5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
    dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
 
