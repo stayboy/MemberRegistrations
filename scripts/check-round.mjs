@@ -105,9 +105,16 @@ function stripOneCodeSpan(value) {
 }
 
 // README.md documents the shape and review-brief.md is the process brief; neither is a round doc.
-function isRoundDoc(path) {
+// A **programme doc** is also not a round doc: `mvp-local.md` states the release's definition of done,
+// it outlives the rounds that work against it, and it carries no signature, tier or seat. Treating it as
+// a round doc made the definition uncorrectable while the product moved under it - which is exactly how
+// a release can pass against a stale definition (owner, 2026-11-15).
+const PROGRAMME_DOCS = [`${ROUND_DIR}mvp-local.md`];
+
+export function isRoundDoc(path) {
   if (!path.startsWith(ROUND_DIR)) return false;
   if (path === `${ROUND_DIR}README.md` || path === `${ROUND_DIR}review-brief.md`) return false;
+  if (PROGRAMME_DOCS.includes(path)) return false;
   return /^[^/]+\.md$/.test(path.slice(ROUND_DIR.length));
 }
 

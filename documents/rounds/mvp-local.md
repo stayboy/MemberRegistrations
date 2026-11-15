@@ -29,30 +29,36 @@
 2. `/health` answers `200`, an officer is seeded by CLI, and sign-in completes through the console
    mailer on `http://localhost:8080`.
 3. Compose sets `USSD_ENABLED=true` and `PAYMENTS_ENABLED=true` for the local stack, so the USSD
-   screens, the simulator and the payment callback are all exercisable. Without them the USSD entries
-   answer `503 ussd_disabled` and the callback `404`.
+   **channel**, the simulator and the payment callback are all exercisable. The operator headcount
+   page is retired (owner, 2026-11-15): a count is recorded from the activity detail’s session row,
+   and the phone flow is unchanged.
 4. Both spec-required parity gaps are closed: the series-detail attendance/offering summary (FR-6,
    AC-5) and the contextual Import-attendance entry on event and series detail (FR-8, AC-7).
-5. The adopted mock-parity items are built for the roster, then shell, events, members and imports,
-   with e2e assertions per adopted element and a capture refresh per surface.
+5. The adopted mock-parity items are built for every surface the consolidation keeps, each with an
+   assertion per adopted element and a capture refresh: **activity list, activity detail (both
+   kinds), its two dialogs, members list, roster, reports, imports and settings**, plus the five
+   shell states. Parity is claimed for the surfaces that have a **live source and a signed mock**;
+   the nine screens that exist only as prototype captures are outside it and are named in
+   `documents/backlog.md` (owner, 2026-11-15).
 6. `npm run verify`, `npm run smoke`, `npm run ui:test` and `npm run ui:e2e` are green.
-7. `documents/runbooks/local-docker.md` matches what the stack actually does.
+7. `documents/runbooks/local-docker.md` matches what the stack actually does, including the retired
+   routes and their redirects (AC-51).
 
 Out of scope: Vercel, GitHub Pages, production secrets, the release tag, PITR and alerting.
 
 ## Current state
 
-| Item                    | State                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| Clean boot              | works — migrations run in the `migrate` service, app waits for it                                 |
-| Health                  | `200`                                                                                             |
-| Sign-in                 | works locally; the link is printed by `ConsoleMailer`                                             |
-| CORS                    | `/health`, `/auth`, `/gateway` all answer the allowlist                                           |
-| USSD screens            | exercisable — compose sets `USSD_ENABLED=true`; `/ussd/session` answers `401` without a signature |
-| Payments callback       | mounted — `PAYMENTS_ENABLED=true`; the callback answers `401` without a signature                 |
-| Series detail summary   | missing (FR-6, AC-5)                                                                              |
-| Contextual import entry | missing (FR-8, AC-7)                                                                              |
-| Mock parity builds      | not started; triage complete in `ui-mock-parity.md`                                               |
+| Item                    | State                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clean boot              | works — migrations run in the `migrate` service, app waits for it                                                                                                               |
+| Health                  | `200`                                                                                                                                                                           |
+| Sign-in                 | works locally; the link is printed by `ConsoleMailer`                                                                                                                           |
+| CORS                    | `/health`, `/auth`, `/gateway` all answer the allowlist                                                                                                                         |
+| USSD screens            | exercisable — compose sets `USSD_ENABLED=true`; `/ussd/session` answers `401` without a signature                                                                               |
+| Payments callback       | mounted — `PAYMENTS_ENABLED=true`; the callback answers `401` without a signature                                                                                               |
+| Series detail summary   | built — the activity detail reads `GET /v1/series/:id/summary` for its four tiles                                                                                               |
+| Contextual import entry | built — the activity detail imports attendance for a chosen session                                                                                                             |
+| Mock parity builds      | in progress — shell, roster, activity list, activity detail and its dialogs, events rows and settings are signed; the series occurrences row and the three members atoms remain |
 
 ## Plan
 
