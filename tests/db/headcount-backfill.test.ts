@@ -32,6 +32,8 @@ async function insertLegacyHeadcount(
     mode: 'adults' | 'children' | 'mixed';
     sessionDate?: string;
     asOf?: string;
+    /** Pins the insert clock, so an ordering key never falls back to `now()`. */
+    recordedAt?: string;
     adultMale?: number;
     adultFemale?: number;
     adultUnspecified?: number;
@@ -55,10 +57,11 @@ async function insertLegacyHeadcount(
        event_instance_id, session_date, as_of, mode,
        adult_male, adult_female, adult_unspecified,
        child_male, child_female, child_unspecified,
-       total, ended, recorded_by, supersedes_id
+       total, ended, recorded_by, supersedes_id, recorded_at
      )
      values ($1, coalesce($11::date, current_date), coalesce($12::timestamptz, now()), $2,
-             $3, $4, $5, $6, $7, $8, $9, false, 'legacy', $10)
+             $3, $4, $5, $6, $7, $8, $9, false, 'legacy', $10,
+             coalesce($13::timestamptz, now()))
      returning id`,
     [
       eventId,
@@ -73,6 +76,7 @@ async function insertLegacyHeadcount(
       options.supersedesId ?? null,
       options.sessionDate ?? null,
       options.asOf ?? null,
+      options.recordedAt ?? null,
     ],
   );
   return row!.id;
@@ -225,17 +229,21 @@ describe('0022 headcount lanes backfill', () => {
       const today = new Date().toISOString().slice(0, 10);
       const eventId = await seededEvent(db, 'LEGACY-3', today);
       // The old write path did not supersede on a plain count, so one lane can
-      // hold two current observations (HC-27).
+      // hold two current observations (HC-27). Both ordering keys are pinned:
+      // a seed that leaned on `now()` would order by id whenever the suite ran
+      // before the seeded time of day.
       const older = await insertLegacyHeadcount(db, eventId, {
         mode: 'adults',
         sessionDate: today,
         asOf: `${today}T08:00:00.000Z`,
+        recordedAt: `${today}T08:00:00.000Z`,
         adultMale: 10,
       });
       const newer = await insertLegacyHeadcount(db, eventId, {
         mode: 'adults',
         sessionDate: today,
         asOf: `${today}T10:00:00.000Z`,
+        recordedAt: `${today}T10:00:00.000Z`,
         adultMale: 20,
       });
 
@@ -269,10 +277,16 @@ describe('0022 headcount lanes backfill', () => {
       expect(page.observations.map((row) => row.id)).toEqual([newer, older]);
 
       // A later write supersedes the newest tip and leaves the older one as the
-      // history it is.
+      // history it is. Its own `asOf` is pinned later than both tips, so the new
+      // row is the newest whatever the wall clock says.
       const written = await repository.record(
         eventId,
-        { sessionDate: today, mode: 'adults', lines: [{ code: 'adult-male', count: 30 }] },
+        {
+          sessionDate: today,
+          mode: 'adults',
+          asOf: `${today}T11:00:00.000Z`,
+          lines: [{ code: 'adult-male', count: 30 }],
+        },
         'headcount-writer',
       );
       expect(written.supersedesId).toBe(newer);
