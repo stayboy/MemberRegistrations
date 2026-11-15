@@ -10,6 +10,7 @@ import {
   HEADCOUNT_MODE_OPTIONS,
   emptyHeadcountForm,
   fromDateTimeLocal,
+  headcountFormFrom,
   headcountPayload,
   toDateTimeLocal,
   type HeadcountEntryMode,
@@ -96,6 +97,25 @@ export function SessionHeadcount({
   const [values, setValues] = useState<HeadcountFormValues>(emptyHeadcountForm);
   const [asOf, setAsOf] = useState(() => toDateTimeLocal(new Date()));
   const [error, setError] = useState<string | null>(null);
+  const [correction, setCorrection] = useState<Headcount | null>(null);
+
+  /**
+   * Open the dialog for a new count, or for a correction of one lane's observation. A correction keeps
+   * the observation's own asOf - the moment counted - and supersedes it without deleting it (HC-3).
+   */
+  const openFor = (row: Headcount | null) => {
+    setError(null);
+    if (row) {
+      setCorrection(row);
+      setMode(row.mode === 'mixed' ? 'adults' : (row.mode as HeadcountEntryMode));
+      setValues(headcountFormFrom(row));
+      setAsOf(toDateTimeLocal(new Date(row.asOf)));
+    } else {
+      setCorrection(null);
+      resetForm();
+    }
+    setOpen(true);
+  };
 
   const resetForm = () => {
     setValues(emptyHeadcountForm());
@@ -111,8 +131,12 @@ export function SessionHeadcount({
         sessionDate,
         mode,
         ...parsed.payload,
-        // The API takes an offset-bearing instant; the control holds a local wall clock.
-        asOf: fromDateTimeLocal(asOf),
+        // A correction supersedes the observation it corrects and keeps that observation's asOf; a new
+        // count takes the instant the control holds, converted from the local wall clock to the
+        // offset-bearing form the API requires.
+        ...(correction
+          ? { supersedesId: correction.id }
+          : { asOf: fromDateTimeLocal(asOf) }),
       } as Parameters<typeof recordHeadcount>[3]);
     },
     onSuccess: () => {
@@ -121,6 +145,7 @@ export function SessionHeadcount({
       });
       setOpen(false);
       setError(null);
+      setCorrection(null);
       resetForm();
     },
     onError: (failure: unknown) => {
@@ -162,6 +187,9 @@ export function SessionHeadcount({
             <Text size={100} className={styles.muted}>
               {bucketLine(lane.row)}
             </Text>
+            <Button size="small" appearance="transparent" disabled={disabled} onClick={() => openFor(lane.row)}>
+              Correct
+            </Button>
           </div>
         ))
       )}
@@ -170,18 +198,14 @@ export function SessionHeadcount({
         size="small"
         appearance="transparent"
         disabled={disabled}
-        onClick={() => {
-          setError(null);
-          resetForm();
-          setOpen(true);
-        }}
+        onClick={() => openFor(null)}
       >
         Record headcount
       </Button>
 
       <HeadcountDialog
         open={open}
-        correction={null}
+        correction={correction}
         mode={mode}
         values={values}
         asOf={asOf}
@@ -202,6 +226,7 @@ export function SessionHeadcount({
         onClose={() => {
           setOpen(false);
           setError(null);
+          setCorrection(null);
           resetForm();
         }}
       />

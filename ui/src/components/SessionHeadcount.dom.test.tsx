@@ -1,6 +1,6 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
 import { renderWithProviders } from '../test/render';
 import type { Headcount, HeadcountPage } from '../api/ussd';
@@ -27,16 +27,29 @@ const page = (current: HeadcountPage['current']): HeadcountPage => ({
   observations: Object.values(current).filter((row): row is Headcount => Boolean(row)),
 });
 
+// A stateful mock rather than a `once` queue: a double mount (Strict Mode) or a refetch would otherwise
+// consume the queued value and leave the next render with the default, which reads as a flaky test.
+let current: HeadcountPage['current'] = {};
+let readError: Error | null = null;
+
 vi.mock('../api/ussd', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/ussd')>();
   return {
     ...actual,
-    getHeadcounts: vi.fn(async () => page({ adults: null, children: null, visitors: null })),
+    getHeadcounts: vi.fn(async () => {
+      if (readError) throw readError;
+      return page(current);
+    }),
     recordHeadcount: vi.fn(async () => headcount('adults', 120)),
   };
 });
 
 const api = await import('../api/ussd');
+
+beforeEach(() => {
+  current = {};
+  readError = null;
+});
 
 function renderCell() {
   return renderWithProviders(
@@ -48,28 +61,24 @@ function renderCell() {
 
 describe('SessionHeadcount', () => {
   it('says a session is not counted when no lane has an observation', async () => {
-    vi.mocked(api.getHeadcounts).mockResolvedValueOnce(
-      page({ adults: null, children: null, visitors: null }),
-    );
+    current = { adults: null, children: null, visitors: null };
     renderCell();
     expect(await screen.findByText('Not counted')).toBeVisible();
   });
 
   it('shows each lane with its own buckets, never one summed figure', async () => {
-    vi.mocked(api.getHeadcounts).mockResolvedValueOnce(
-      page({
-        adults: headcount('adults', 120, [
-          { code: 'adult_male', label: 'Male', count: 58 },
-          { code: 'adult_female', label: 'Female', count: 62 },
-        ]),
-        visitors: headcount('visitors', 22, [
-          { code: 'visitor_male', label: 'Male', count: 12 },
-          { code: 'visitor_female', label: 'Female', count: 8 },
-          { code: 'visitor_child', label: 'Children', count: 2 },
-        ]),
-        children: null,
-      }),
-    );
+    current = {
+      adults: headcount('adults', 120, [
+        { code: 'adult_male', label: 'Male', count: 58 },
+        { code: 'adult_female', label: 'Female', count: 62 },
+      ]),
+      visitors: headcount('visitors', 22, [
+        { code: 'visitor_male', label: 'Male', count: 12 },
+        { code: 'visitor_female', label: 'Female', count: 8 },
+        { code: 'visitor_child', label: 'Children', count: 2 },
+      ]),
+      children: null,
+    };
     renderCell();
     // HC-22: no read sums lanes, so there is no "142" on the page.
     expect(await screen.findByText('Adult service')).toBeVisible();
@@ -80,13 +89,13 @@ describe('SessionHeadcount', () => {
   });
 
   it('names a legacy mixed observation as retired', async () => {
-    vi.mocked(api.getHeadcounts).mockResolvedValueOnce(page({ mixed: headcount('mixed', 300) }));
+    current = { mixed: headcount('mixed', 300) };
     renderCell();
     expect(await screen.findByText('Mixed (retired)')).toBeVisible();
   });
 
   it('offers a retry when the count cannot be read, rather than claiming it is uncounted', async () => {
-    vi.mocked(api.getHeadcounts).mockRejectedValueOnce(new Error('offline'));
+    readError = new Error('offline');
     renderCell();
     expect(await screen.findByText('The count could not be read.')).toBeVisible();
     expect(screen.queryByText('Not counted')).toBeNull();
@@ -94,10 +103,34 @@ describe('SessionHeadcount', () => {
   });
 
   it('opens the capture dialog from the row', async () => {
-    vi.mocked(api.getHeadcounts).mockResolvedValueOnce(page({ adults: null }));
+    current = { adults: null };
     renderCell();
     await userEvent.click(await screen.findByRole('button', { name: 'Record headcount' }));
-    expect(await screen.findByRole('dialog')).toBeVisible();
-    expect(screen.getByText('Record a headcount', { exact: false })).toBeVisible();
+    const dialogs = await screen.findAllByRole('dialog');
+    const dialog = dialogs[dialogs.length - 1];
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByText('Record a headcount', { exact: false })).toBeVisible();
+  });
+
+  it('corrects a lane by superseding the observation it corrects', async () => {
+    const adults = headcount('adults', 120, [{ code: 'adult_male', label: 'Male', count: 58 }]);
+    current = { adults };
+    renderCell();
+    vi.mocked(api.recordHeadcount).mockClear();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Correct' }));
+    const dialogs = await screen.findAllByRole('dialog');
+    const dialog = dialogs[dialogs.length - 1];
+    expect(within(dialog).getByText('Correct the current observation')).toBeVisible();
+    expect(within(dialog).getByText(/Keeping asOf/)).toBeVisible();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save correction' }));
+    // A correction supersedes the row it corrects; it does not post a fresh asOf.
+    expect(api.recordHeadcount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'event-1',
+      expect.objectContaining({ sessionDate: '2026-11-08', supersedesId: adults.id }),
+    );
   });
 });
