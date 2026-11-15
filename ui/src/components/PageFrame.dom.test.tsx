@@ -1,6 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AddRegular, ArrowClockwiseRegular, ArrowImportRegular } from '@fluentui/react-icons';
+import { Button } from '@fluentui/react-components';
+import { AddRegular, ArrowClockwiseRegular, ArrowImportRegular, ArrowLeftRegular } from '@fluentui/react-icons';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -13,10 +15,10 @@ import type { PageAction } from './PageActions';
  *
  * - one verb renders as a visible Fluent `Button` (icon + label) and no `Actions` menu;
  * - two or more verbs render in one `Actions` menu and no standalone verb button;
- * - a `Refresh`-class utility is a bare icon button with an accessible name, rendered
- *   immediately before the verb or menu, is never a menu item, and is never counted towards the
- *   two-or-more rule — so a page whose only control is a utility shows the icon and renders no
- *   menu;
+ * - a `Refresh`-class utility is a bare icon button with an accessible name, rendered first in
+ *   the row — before `Back`, before the verb, before the menu — so it never interrupts a run of
+ *   buttons, is never a menu item, and is never counted towards the two-or-more rule — so a page
+ *   whose only control is a utility shows the icon and renders no menu;
  * - verbs keep their disabling condition in either shape.
  */
 
@@ -34,11 +36,18 @@ vi.mock('../api/gateway', async (importOriginal) => {
   };
 });
 
-function renderFrame(actions: readonly PageAction[]) {
+function renderFrame(actions: readonly PageAction[], controls?: ReactNode) {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/members']}>
       <ThemeProvider>
-        <PageFrame sectionId="members" title="Members" submenu="All members" actions={actions} hideBadge>
+        <PageFrame
+          sectionId="members"
+          title="Members"
+          submenu="All members"
+          actions={actions}
+          controls={controls}
+          hideBadge
+        >
           <div>body</div>
         </PageFrame>
       </ThemeProvider>
@@ -71,9 +80,21 @@ function importAttendance(): PageAction {
   };
 }
 
+/** A page's `Back` navigation control, as the series and event detail pages pass it. */
+function backToSeries(): ReactNode {
+  return <Button icon={<ArrowLeftRegular />}>Back to series</Button>;
+}
+
 /** True when `first` precedes `second` in document order (FR-9a's render order). */
 function precedes(first: HTMLElement, second: HTMLElement): boolean {
   return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+/** The row's controls in document order, by accessible name (FR-9a's render order). */
+function rowOrder(): string[] {
+  return screen
+    .getAllByRole('button')
+    .map((button) => button.getAttribute('aria-label') ?? button.textContent ?? '');
 }
 
 describe('PageFrame action row (FR-9a)', () => {
@@ -157,6 +178,59 @@ describe('PageFrame action row (FR-9a)', () => {
         screen.getByRole('button', { name: 'Actions' }),
       ),
     ).toBe(true);
+  });
+
+  it('renders the utility first in the row, before a Back control and before the sole verb', () => {
+    renderFrame([addMember(), refresh()], backToSeries());
+
+    // FR-9a / AC-50: the utility leads the run, so it is never between two buttons - the row
+    // reads Refresh, Back, then the verb, which holds the trailing edge.
+    expect(rowOrder()).toEqual(['Refresh', 'Back to series', 'Add member']);
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Refresh' }),
+        screen.getByRole('button', { name: 'Back to series' }),
+      ),
+    ).toBe(true);
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Back to series' }),
+        screen.getByRole('button', { name: 'Add member' }),
+      ),
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+  });
+
+  it('renders the utility before a Back control and before the two-verb Actions menu', () => {
+    renderFrame([importAttendance(), addMember(), refresh()], backToSeries());
+
+    expect(rowOrder()).toEqual(['Refresh', 'Back to series', 'Actions']);
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Refresh' }),
+        screen.getByRole('button', { name: 'Back to series' }),
+      ),
+    ).toBe(true);
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Back to series' }),
+        screen.getByRole('button', { name: 'Actions' }),
+      ),
+    ).toBe(true);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('keeps the utility ahead of a Back control on a page with no verb', () => {
+    renderFrame([refresh()], backToSeries());
+
+    expect(rowOrder()).toEqual(['Refresh', 'Back to series']);
+    expect(
+      precedes(
+        screen.getByRole('button', { name: 'Refresh' }),
+        screen.getByRole('button', { name: 'Back to series' }),
+      ),
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
   });
 
   it('carries a disabled sole verb through to its visible button', () => {
