@@ -18,43 +18,43 @@
     "live": {
       "mock": {
         "path": "mockups/headcount/10-capture-state.png",
-        "sha256": "c58d01e70e6936e6f0d866931642627c5e6798a1fed5ea902ad190ca9c44f5ba",
+        "sha256": "6f507845362cf25da3fa3a879c39c4f2e778c0f3f86244b14b4a2413a0687a5d",
         "source": "mockups/headcount/10-capture-state.html"
       },
       "baseline": null,
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-14",
-        "sha256": "c58d01e70e6936e6f0d866931642627c5e6798a1fed5ea902ad190ca9c44f5ba"
+        "at": "2026-11-15",
+        "sha256": "6f507845362cf25da3fa3a879c39c4f2e778c0f3f86244b14b4a2413a0687a5d"
       }
     },
     "ended": {
       "mock": {
         "path": "mockups/headcount/13-headcount-ended.png",
-        "sha256": "a139dc760cc3f8698fa597f5c717fd1279184f14be750b469895da8cdaf0c4af",
+        "sha256": "7e4bda32a6c3335e6894add7a846d7162c787b57560714fa3bafd7faa44fb8dd",
         "source": "mockups/headcount/13-headcount-ended.html"
       },
       "baseline": null,
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-14",
-        "sha256": "a139dc760cc3f8698fa597f5c717fd1279184f14be750b469895da8cdaf0c4af"
+        "at": "2026-11-15",
+        "sha256": "7e4bda32a6c3335e6894add7a846d7162c787b57560714fa3bafd7faa44fb8dd"
       }
     },
     "not-live": {
       "mock": {
         "path": "mockups/headcount/14-headcount-not-live.png",
-        "sha256": "15b27e4f73c457d478d93eaf51333da1bc46cc779e8ac393d894307935659a00",
+        "sha256": "b3adef7f109ec41a3e5f4d3397ffb23f2ec9bfab4a37e743d6e8d76e4548ca51",
         "source": "mockups/headcount/14-headcount-not-live.html"
       },
       "baseline": "headcount-capture.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-14",
-        "sha256": "15b27e4f73c457d478d93eaf51333da1bc46cc779e8ac393d894307935659a00"
+        "at": "2026-11-15",
+        "sha256": "b3adef7f109ec41a3e5f4d3397ffb23f2ec9bfab4a37e743d6e8d76e4548ca51"
       }
     }
   },
