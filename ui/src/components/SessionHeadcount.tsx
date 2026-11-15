@@ -43,13 +43,16 @@ const LANE_LABELS = new Map(HEADCOUNT_MODE_OPTIONS.map((option) => [option.value
  * figure here; HC-28: a lane shows its buckets, not only its total). A legacy `mixed` observation is
  * named as retired rather than read as a live lane (HC-9).
  */
-function laneRows(page: HeadcountPage | undefined): readonly { mode: string; label: string; row: Headcount }[] {
+function laneRows(
+  page: HeadcountPage | undefined,
+): readonly { mode: string; label: string; row: Headcount; correctable: boolean }[] {
   const current = page?.current ?? {};
-  const rows: { mode: string; label: string; row: Headcount }[] = [];
+  const rows: { mode: string; label: string; row: Headcount; correctable: boolean }[] = [];
   for (const [mode, row] of Object.entries(current)) {
     if (!row) continue;
     const label = mode === 'mixed' ? 'Mixed (retired)' : (LANE_LABELS.get(mode as HeadcountEntryMode) ?? mode);
-    rows.push({ mode, label, row });
+    // A legacy `mixed` observation is history: it is shown, never superseded (HC-9).
+    rows.push({ mode, label, row, correctable: mode !== 'mixed' });
   }
   return rows;
 }
@@ -136,7 +139,7 @@ export function SessionHeadcount({
         // offset-bearing form the API requires.
         ...(correction
           ? { supersedesId: correction.id }
-          : { asOf: fromDateTimeLocal(asOf) }),
+          : { asOf: fromDateTimeLocal(asOf) || undefined }),
       } as Parameters<typeof recordHeadcount>[3]);
     },
     onSuccess: () => {
@@ -158,6 +161,12 @@ export function SessionHeadcount({
   });
 
   const rows = laneRows(query.data);
+  const liveTotal = Object.values(values).reduce(
+    (sum, value) => sum + (Number.parseInt(value, 10) || 0),
+    0,
+  );
+  const parsedPayload = headcountPayload(mode, values);
+  const validationError = 'error' in parsedPayload ? parsedPayload.error : null;
 
   return (
     <div className={styles.cell}>
@@ -187,9 +196,16 @@ export function SessionHeadcount({
             <Text size={100} className={styles.muted}>
               {bucketLine(lane.row)}
             </Text>
-            <Button size="small" appearance="transparent" disabled={disabled} onClick={() => openFor(lane.row)}>
-              Correct
-            </Button>
+            {lane.correctable ? (
+              <Button
+                size="small"
+                appearance="transparent"
+                disabled={disabled}
+                onClick={() => openFor(lane.row)}
+              >
+                Correct
+              </Button>
+            ) : null}
           </div>
         ))
       )}
@@ -209,9 +225,9 @@ export function SessionHeadcount({
         mode={mode}
         values={values}
         asOf={asOf}
-        total={0}
+        total={liveTotal}
         submitError={error}
-        validationError={null}
+        validationError={validationError}
         pending={mutation.isPending}
         formatInstant={formatInstant}
         onModeChange={(next) => {

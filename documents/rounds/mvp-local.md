@@ -37,7 +37,10 @@
 5. The adopted mock-parity items are built for every surface the consolidation keeps, each with an
    assertion per adopted element and a capture refresh: **activity list, activity detail (both
    kinds), its two dialogs, members list, roster, reports, imports and settings**, plus the five
-   shell states. Parity is claimed for the surfaces that have a **live source and a signed mock**;
+   shell states. **One exception is named rather than implied:** the series activity’s occurrence row
+   carries no headcount until `GET /v1/series/:id/occurrences` returns event ids, so that one row is
+   outside parity and is parked in the backlog. Parity is claimed for the surfaces that have a **live
+   source and a signed mock**;
    the nine screens that exist only as prototype captures are outside it and are named in
    `documents/backlog.md` (owner, 2026-11-15).
 6. `npm run verify`, `npm run smoke`, `npm run ui:test` and `npm run ui:e2e` are green.
