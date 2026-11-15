@@ -40,6 +40,8 @@ import {
   sessionStatusLabel,
   venueLabel,
 } from '../format/events';
+import { captureState, endActionState } from '../format/capture';
+
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { EventAttendanceDialog } from './EventAttendanceDialog';
 import { useEventStyles } from './events-styles';
@@ -380,6 +382,16 @@ export function EventDetailPage() {
                               disabled={
                                 item.status === 'cancelled' || Boolean(item.capture?.ended)
                               }
+                              endAction={endActionState(
+                                captureState({
+                                  date: item.date,
+                                  startTime: item.startTime,
+                                  endTime: item.endTime,
+                                  timezone: event.timezone,
+                                  status: item.status,
+                                  capture: item.capture ?? null,
+                                }, new Date()),
+                              )}
                             />
                           </TableCell>
                           <TableCell>{formatPresentExpected(item)}</TableCell>

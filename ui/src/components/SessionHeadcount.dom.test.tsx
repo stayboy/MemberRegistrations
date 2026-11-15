@@ -32,6 +32,17 @@ const page = (current: HeadcountPage['current']): HeadcountPage => ({
 let current: HeadcountPage['current'] = {};
 let readError: Error | null = null;
 
+const { closeCapture } = vi.hoisted(() => ({
+  closeCapture: vi.fn(async () => ({ id: 'batch-1' })),
+}));
+
+vi.mock('../api/imports', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/imports')>();
+  return { ...actual, postAttendanceImport: closeCapture };
+});
+
+const importsApi = await import('../api/imports');
+
 vi.mock('../api/ussd', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/ussd')>();
   return {
@@ -110,6 +121,43 @@ describe('SessionHeadcount', () => {
     const dialog = dialogs[dialogs.length - 1];
     expect(dialog).toBeVisible();
     expect(within(dialog).getByText('Record a headcount', { exact: false })).toBeVisible();
+  });
+
+  it('closes a live capture from the row with the end-only import', async () => {
+    current = { adults: headcount('adults', 120) };
+    renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" endAction="enabled" />
+      </DateTimeProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'End of session' }));
+    // One shared close per event and session: no rows, ended true - the request the page made.
+    expect(importsApi.postAttendanceImport).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ eventId: 'event-1', sessionDate: '2026-11-08', rows: [], ended: true }),
+    );
+  });
+
+  it('offers no close for a session that is not live, and a disabled one once closed', async () => {
+    current = { adults: headcount('adults', 120) };
+    const { unmount } = renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" endAction="hidden" />
+      </DateTimeProvider>,
+    );
+    // FR-6f: a past or not-started open session reads "this capture will end it" and offers no close.
+    await screen.findByText('Adult service');
+    expect(screen.queryByRole('button', { name: 'End of session' })).toBeNull();
+    unmount();
+
+    renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" endAction="disabled" />
+      </DateTimeProvider>,
+    );
+    // Once closed the action is shown disabled, not removed.
+    expect(await screen.findByRole('button', { name: 'End of session' })).toBeDisabled();
   });
 
   it('corrects a lane by superseding the observation it corrects', async () => {
