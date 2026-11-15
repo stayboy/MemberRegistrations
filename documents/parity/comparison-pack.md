@@ -1,0 +1,90 @@
+# Parity comparison pack
+
+**2026-11-15.** The release's DoD item 5 claims parity for surfaces with a live source and a signed mock.
+This pack is the comparison that claim needs: baseline beside mock, with my read of each. The verdicts
+here are the release gate's inputs, not the gate itself — a `drift` row is a finding, not a decision.
+
+**How to use it.** Rows marked `read` were compared image-to-image in this pass. Rows marked `owed` have a
+baseline and a signed mock but were **not** looked at yet; they are listed so the sitting can finish them,
+not so they can be assumed clean.
+
+| #     | Surface                                           | Baseline                                                             | Mock                                       | Hash          | Read                         |
+| ----- | ------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------ | ------------- | ---------------------------- |
+| 1     | members list                                      | `members-list.png`                                                   | `v2-shell/01-shell-expanded-light.png`     | `4bfb1888…`   | **read — matches**           |
+| 2     | events list                                       | `events-list.png`                                                    | `v2-events/01-events-list.png`             | `16a6249f…`   | **read — matches**           |
+| 3     | activity detail, event kind                       | `event-detail.png`                                                   | `v2-events/04-activity-detail-event.png`   | `bcb0c03c…`   | **read — drift + defect**    |
+| 4     | activity detail, series kind                      | `series-detail.png`                                                  | `v2-events/03-activity-detail-series.png`  | `cccb7001…`   | **read — drift**             |
+| 5     | headcount dialog                                  | `event-headcount-dialog.png`                                         | `v2-events/06-record-headcount-dialog.png` | `dc282018…`   | **read — the mock is stale** |
+| 6     | import panel                                      | `event-import-panel.png`                                             | `v2-events/07-import-attendance-panel.png` | `24bd2629…`   | owed                         |
+| 7     | settings                                          | `settings.png`                                                       | `v2-settings/01-date-time-settings.png`    | `25a599f6…`   | owed                         |
+| 8–12  | shell ×5 (light, dark, collapsed, mobile, meadow) | `shell-*.png`                                                        | `v2-shell/01…06`                           | see catalogue | owed                         |
+| 13–15 | shepherding officers, roster, report              | `shepherding-*.png`                                                  | `v2-shell/07…09`                           | see catalogue | owed                         |
+| 16–17 | imports members, batches                          | `imports-*.png`                                                      | `v2-imports/01-members-import.png`; none   | see catalogue | owed                         |
+| 18–21 | member detail, add, contacts, attendance dialog   | `member-*.png`, `contacts-dialog.png`, `event-attendance-dialog.png` | **no signed mock state**                   | —             | not claimable                |
+
+## 1. Members list — matches
+
+The build draws the signed design: the **Archived** switch where the dropdown was, the ministries/status
+filters, the row identity `FullName (Gender, Ny)`, `Contacts · n`, the `⋯` row menu, and Prev/Next in the
+footer. Differences the mock draws and the build does not: the **ministries filter** (queued — needs a
+read), and seven rows rather than the fixture's two. Both are recorded, neither is drift.
+
+## 2. Events list — matches
+
+Series rows lead the table: schedule text with `next <date>`, the `Series` subtitle, the ministry in the
+same `CODE - name` shape as an event row, and an Active badge. Events follow with ranges, venue, counts
+and status. The mock's "New event"/"New series" menu is not built (no create flow in this MVP), which the
+triage already queued.
+
+## 3. Activity detail, event kind — drift, and one real defect
+
+| #   | What         | Mock                                                     | Build                                                                                                                  |
+| --- | ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 3a  | Row controls | one right-aligned run: `View rows · Record headcount`    | three controls distributed across cells: `Record headcount` and `Import` under Headcount, `View rows` under Attendance |
+| 3b  | Columns      | Date · Start · Attendance · Headcount · Source · Session | Date · Start · End · Status · Source · Present/expected · Headcount · Attendance                                       |
+| 3c  | Panels       | the occurrences panel only                               | a definition card and the Active offerings panel as well                                                               |
+| 3d  | **Defect**   | a single status pill per row                             | **the `Held` pill and the `Mixed` source label overlap** in the session row, reading as one clipped chip               |
+
+**3d is a rendering bug, not a design difference.** The session row's status cell and its source cell
+collide at this width. It is the kind of thing a capture cannot assert and only a reader sees, which is
+why it survived three rounds of code review.
+
+## 4. Activity detail, series kind — drift
+
+| #   | What          | Mock                                              | Build                                                                                                                                              |
+| --- | ------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4a  | Schedule cell | `Weekly on Sunday`                                | `Weekly on Sunday` **plus `FREQ=WEEKLY;BYDAY=SU`** — the raw RRULE the triage marked **retire** ("developer-facing text; keep the human schedule") |
+| 4b  | Occurrences   | session rows with `Record headcount` and `Import` | dates only (Date · Exception · Events), because `OccurrenceListDto` carries no event ids — the parked R2b                                          |
+| 4c  | Panels        | tiles and schedule only                           | a definition card (Ministry/Timezone/Status/Archived/Description) as well                                                                          |
+
+4a is a triage item that was never applied: the retire verdict exists in `ui-mock-parity.md` and the code
+still renders the RRULE.
+
+## 5. Headcount dialog — the mock is the stale artefact
+
+| #   | What     | Mock                                                                                                 | Build                                                                                                         |
+| --- | -------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 5a  | The form | **two lane groups at once**: VISITORS (Male/Female/Children) and PRESBYTERS (Elder/Deaconess/Deacon) | a **mode** choice (Adult service · Children service · Visitors · Presbyters) and the fields for that one mode |
+| 5b  | Labels   | Male / Female / Children                                                                             | Adult men / Adult women / Children (for the adults mode)                                                      |
+| 5c  | As-of    | a static note                                                                                        | a real `As of` field, because a record takes its own instant                                                  |
+
+**The mock contradicts the model.** HC-1 says an observation records exactly one mode; HC-3 says several
+modes may be current in one session _as separate observations_. A form that captures two lane groups at
+once cannot be what the API accepts. The build is right and the mock needs a re-cut — the opposite verdict
+to row 3.
+
+## What the pack found
+
+1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
+2. **One retired item never applied** (raw RRULE in the series schedule cell).
+3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
+4. **Fourteen rows still owed** — the sitting's remaining work, listed above rather than implied.
+5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
+   dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
+
+## The recommendation
+
+Fix **1** and **2** in one small round (both are defects against a signed decision), re-cut the headcount
+dialog, then finish the owed rows in a single second pass. The milestone's parity claim should name rows
+1–2 as compared-and-matching, row 5 as a mock correction, and rows 3–4 as drift with two named fixes —
+rather than claim fourteen clean comparisons that did not happen.
