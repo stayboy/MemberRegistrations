@@ -57,7 +57,8 @@ contracts they will use.
 
 ### V2 — Events and series screens (existing API)
 
-- A new top-level **Events** section with **Events**, **Series** and **Offerings** (upcoming) views.
+- A new top-level **Events** section with **Events** and **Offerings** (upcoming) views. A series is an
+  activity in the events list, not a second list.
 - **Events** are first-class dated instances, not series occurrences. `EventSeries` remains the
   recurring template; a series occurrence generates an event, and a standalone conference is an event
   with no `series_id`.
@@ -69,14 +70,15 @@ contracts they will use.
   offerings summary and status. Selecting a row opens the event detail.
 - **Event detail**: series/standalone, date range, 17:30 start, venue, per-date present/expected,
   imported-row source, the read-only Active offerings panel and a link to the attendance import.
-- **Series**: list and detail with schedule versions, exceptions, generated events, attendance summary
+- **Series**: an activity in the events list, whose detail is the activity detail, with schedule
+  versions, exceptions, generated events, attendance summary
   and attached offerings. The detail summary is one aggregate read, `GET /v1/series/{id}/summary`, and
   renders as four tiles above the schedule versions: next occurrence, occurrences in the window,
   attendance over held member-tracking sessions, and the window's offering totals. Adding a schedule
   version and adding/removing an exception use the existing endpoints; archiving is a soft end.
-- **Attendance import** remains in `Imports`; it is scoped to one event session (`eventId` +
-  `sessionDate`), and its rows are `memberNo` plus an optional `datetime` checked against that session.
-  The event/series screen links to the import with the occurrence preselected.
+- **Attendance import** is launched from a session row on the activity detail; it is scoped to one event
+  session (`eventId` + `sessionDate`), and its rows are `memberNo` plus an optional `datetime` checked
+  against that session. There is no standalone attendance import page (owner, 2026-11-15).
 - **Event stats** require the event aggregate:
   `GET /v1/events?from&to` and `GET /v1/events/{eventId}/attendance?date=`. Until it ships, the event
   screen shows imported-row counts and a clear “attendance report not available” state, never a
@@ -415,26 +417,24 @@ The owner accepted this amendment from the grill round. Decisions, with the reje
 
 ### Navigation
 
-| Top-level | Submenu         | Route                    | API                                          | Slice |
-| --------- | --------------- | ------------------------ | -------------------------------------------- | ----- |
-| Events    | Events          | `#/events`               | `GET /v1/events` (proposed)                  | E1    |
-| Events    | Series          | `#/events/series`        | `GET /v1/series`                             | E2    |
-| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (ticket 23)      | O4    |
-| Events    | Event detail    | `#/events/:eventId`      | `GET /v1/events/:eventId` (proposed)         | E1    |
-| Events    | Series detail   | `#/events/series/:id`    | `GET /v1/series/:id` + summary + occurrences | E2    |
-| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)           | O1    |
+| Top-level | Submenu         | Route                    | API                                           | Slice |
+| --------- | --------------- | ------------------------ | --------------------------------------------- | ----- |
+| Events    | Events          | `#/events`               | `GET /v1/events`                              | E1    |
+| Events    | Offerings       | `#/events/offerings`     | `GET /v1/offerings/summary` (ticket 23)       | O4    |
+| Events    | Activity detail | `#/events/:id?kind=`     | `GET /v1/events/:id`, or `GET /v1/series/:id` | E1/E2 |
+| Events    | Offering detail | `#/events/offerings/:id` | `GET /v1/offerings/:id` (proposed)            | O1    |
 
 The current **Attendance** top-level is replaced by **Events**; attendance recording is an action on
-an event/series detail, and attendance imports stay under **Imports**. If the owner prefers to keep a
+an activity detail, and attendance is imported from a session row there (FR-8). If the owner prefers to keep a
 separate Attendance section, that is Q1.
 
 ## Users and Jobs
 
 | User              | Job                                                               | Surface                  |
 | ----------------- | ----------------------------------------------------------------- | ------------------------ |
-| Administrator     | See which series met, what was imported and who attended          | Events, Series           |
-| Administrator     | Add a schedule version, cancel or add a date, archive a series    | Series detail            |
-| Administrator     | Import an attendance registry and confirm the batch               | Imports -> event/series  |
+| Administrator     | See which series met, what was imported and who attended          | Events                   |
+| Administrator     | Add a schedule version, cancel or add a date, archive a series    | Activity detail          |
+| Administrator     | Import an attendance registry and confirm the batch               | Activity detail (import) |
 | Ministry leader   | Review event attendance and offering totals                       | Event detail             |
 | Member            | Give to one or more offerings, or pledge with an expected date    | USSD (future)            |
 | Presbyter         | Follow up pledges assigned to them and report the outcome         | Offerings / pledges      |
@@ -447,17 +447,22 @@ separate Attendance section, that is Q1.
 
 ### Events and series
 
-- FR-1: The shell MUST add an **Events** top-level section with Events, Series and Offerings
-  (upcoming) submenus; the current Attendance screen MUST become an event/series action rather than a
-  duplicate calendar.
+- FR-1: The shell MUST add an **Events** top-level section with Events and Offerings (upcoming)
+  submenus. A **series is an activity** in the events list, so it has no list of its own (owner,
+  2026-11-15: "series-detail and event-series-detail are the same - merge them"); the current
+  Attendance screen MUST become an event/series action rather than a duplicate calendar.
 - FR-2: The events list MUST request a date window and show event name, date range, series/standalone,
   ministry, venue type/name, status (`held`, `upcoming`, `cancelled`), per-date attendance summary and
   offering summary.
 - FR-3: Event status MUST be derived by the API; the UI MUST NOT classify an event by comparing dates
   locally.
-- FR-4: Selecting an event MUST open `#/events/:eventId` with the event detail: name, date range,
-  start time, venue, series/standalone, status, per-date attendance, imported-row source and the
-  read-only Active offerings panel (FR-39).
+- FR-4: Selecting an activity MUST open `#/events/:id?kind=`, serving a standalone event (`kind=event`,
+  the default, read with `GET /v1/events/:id`) or a series (`kind=series`, read with `GET /v1/series/:id`):
+  name,
+  date range, start time, venue, series/standalone, status, per-date attendance, the recorded
+  headcount, imported-row source and the read-only Active offerings panel (FR-39). Each session row
+  carries the row controls - **View rows**, **Record headcount** and the attendance import - and a
+  recorded count shows its total with its lane buckets, never a bare number (owner, 2026-11-15).
 - FR-4a: An event session written with `status = 'cancelled'` MUST carry a non-empty reason in
   `sessions[].note`; the API rejects one without it with `422 reason_required`. A legacy row without a
   reason is displayed as "No reason recorded".
@@ -474,9 +479,11 @@ separate Attendance section, that is Q1.
   cancelled session never shows "Live"; one that is not ended shows "Cancelled · 10:42 GMT" with its
   capture time. The UI MUST NOT read a stored live flag or ask the operator to
   declare "live".
-- FR-5: The series list MUST use `GET /v1/series` and show name, ministry, a human-readable schedule,
-  next occurrence and archived state.
-- FR-6: The series detail MUST show each schedule version (`effectiveFrom`, `rrule`, `endsOn`),
+- FR-5: A series MUST appear in the events list as an activity, showing name, ministry, a
+  human-readable schedule, next occurrence and archived state from `GET /v1/series`. There is no
+  separate series list (owner, 2026-11-15).
+- FR-6: The activity detail for a series MUST show each schedule version (`effectiveFrom`, `rrule`,
+  `endsOn`),
   exceptions (`cancelled` / `extra`), a date-window occurrence list and the attendance/offering
   summary for the series.
 - FR-6a: The summary MUST come from **one** request, `GET /v1/series/{id}/summary?from&to`. `from` and
@@ -524,11 +531,11 @@ separate Attendance section, that is Q1.
   documented series endpoints. A `cancelled` exception MUST carry a non-empty reason in `note`; the API
   rejects one without it with `422 reason_required`. Archive MUST confirm; the API preserves history
   and does not hard delete.
-- FR-8: “Import attendance” MUST appear on the series detail and on a series-backed event's detail,
-  and MUST link to the existing import flow. A standalone event MUST NOT offer it. The link carries
-  `event=<id>` from an event and `series=<id>` from a series; `date` stays optional. After a successful
-  batch the events, series and imports queries MUST be invalidated (AC-7). The API refuses an import
-  for a standalone event with `422 series_required` (API spec).
+- FR-8: Each session row on an activity detail MUST offer the attendance import and open the import
+  panel with that event and date carried in. The event MUST belong to a series: a standalone event's
+  session row offers no import entry, and the API answers `422 series_required` if one is attempted
+  (API spec). After a successful batch the events, series and imports queries MUST be invalidated
+  (AC-7). There is no standalone attendance import page (owner, 2026-11-15).
 - FR-9: An event MUST show all offerings attached to it (two or more) in the read-only Active
   offerings panel. This data MUST come from the event aggregate or the offerings API; the UI MUST NOT
   aggregate contributions client-side from partial pages.
@@ -699,27 +706,41 @@ headcount_only` (a closed event or session still answers its own `409`/`422` fir
 
 ## Acceptance Criteria
 
-### AC-1: **Given** the Events top-level, **When** it loads, **Then** Events, Series and Offerings (upcoming) are the submenus, and the old Attendance calendar is not duplicated. (FR-1)
+### AC-1: **Given** the Events top-level, **When** it loads, **Then** Events and Offerings (upcoming) are the submenus, a series being an activity in the events list rather than a submenu, and the old Attendance calendar is not duplicated. (FR-1)
 
 ### AC-2: **Given** a date window, **When** the events list loads, **Then** it shows held/upcoming/cancelled/extra occurrences with series, ministry, attendance and offering summaries from the API. (FR-2, FR-3)
 
-### AC-3: **Given** an event row, **When** it opens, **Then** the detail shows series, date, status, present/expected, imported-row source and the read-only Active offerings panel (name, kind, currency, effective available-until, status, terms version from the aggregate, View terms reusing the terms route; expired marked). (FR-4, FR-9, FR-39)
+### AC-3: **Given** an activity row, **When** it opens, **Then** the detail shows series/standalone, date,
 
-### AC-4: **Given** the series list, **When** it loads, **Then** each series shows a human-readable schedule, next occurrence and archived state. (FR-5)
+status, present/expected, imported-row source and the read-only Active offerings panel (name, kind,
+currency, effective available-until, status, terms version from the aggregate, View terms reusing the
+terms route; expired marked); each session row offers **Record headcount** and, once counted, shows the
+total with its lane buckets. (FR-4, FR-9, FR-39)
 
-### AC-5: **Given** a series detail, **When** it opens, **Then** schedule versions, exceptions, occurrences and the four summary tiles are visible; the three window figures come from one `GET /v1/series/{id}/summary` request and the Occurrences tile counts the same occurrence list the table renders. (FR-6, FR-6a, FR-6b, FR-6e)
+### AC-4: **Given** the events list, **When** it loads, **Then** each series activity shows a human-readable schedule, next occurrence and archived state. (FR-5)
+
+### AC-5: **Given** a series activity, **When** its detail opens, **Then** schedule versions,
+
+exceptions, occurrences and the four summary tiles are visible on the same activity detail a standalone
+event uses for its dates; the three window figures come from one `GET /v1/series/{id}/summary`
+request and the Occurrences tile counts the same occurrence list the table renders. (FR-6, FR-6a,
+FR-6b, FR-6e)
 
 ### AC-5a: **Given** a window containing held, cancelled, upcoming and headcount-only sessions, **When** the summary is read, **Then** the ratio counts held member-tracking sessions only, the cancelled/upcoming counts are reported separately, headcount-only sessions never enter the ratio, and the ratio is null when expected is 0. (FR-6c)
 
 ### AC-5b: **Given** a window whose events carry paid, pledged, counted and visitor money, **When** the summary is read, **Then** the offering figures follow the church-summary rules scoped to the series (largest paid currency, counted beside gifts, pledges as at the report date, visitors separate); an empty window returns zeros and a null `lastHeld`, and `nextOccurrence` is null when the schedule has no date in the next 90 days. (FR-6d, FR-6e)
 
-### AC-6: **Given** a series detail, **When** the operator adds a schedule version or exception, **Then** the documented endpoint is called and the occurrence list refreshes. (FR-7)
+### AC-6: **Given** a series activity's detail, **When** the operator adds a schedule version or exception, **Then** the documented endpoint is called and the occurrence list refreshes. (FR-7)
 
 ### AC-6a: **Given** a cancelled series exception or an event session written as cancelled, **When** it is submitted without a reason, **Then** the API answers `422 reason_required` and nothing is written; a legacy row without a reason is shown as "No reason recorded". (FR-4a, FR-7)
 
-### AC-4a: **Given** a session with captures, **When** the event detail opens, **Then** its row shows the latest capture's time and whether it ended the session, the time and ended-ness taken from the session's `capture` field (latest of either channel) and the live/not-started/past split computed from the session window in the event timezone, never from a stored live flag; **Given** an open session whose window has passed, **Then** the row reads "Past session · …"; **Given** no capture, **Then** the row reads "No capture yet"; **Given** an open session on or after today whose window has not begun, **Then** the row reads "Not started · …"; **Given** a cancelled session, **Then** the row never reads "Live" and, when the session is not ended, reads "Cancelled · …". (FR-4b)
+### AC-4a: **Given** a session with captures, **When** the activity detail opens, **Then** its row shows the latest capture's time and whether it ended the session, the time and ended-ness taken from the session's `capture` field (latest of either channel) and the live/not-started/past split computed from the session window in the event timezone, never from a stored live flag; **Given** an open session whose window has passed, **Then** the row reads "Past session · …"; **Given** no capture, **Then** the row reads "No capture yet"; **Given** an open session on or after today whose window has not begun, **Then** the row reads "Not started · …"; **Given** a cancelled session, **Then** the row never reads "Live" and, when the session is not ended, reads "Cancelled · …". (FR-4b)
 
-### AC-7: **Given** a series-backed event or a series, **When** “Import attendance” is chosen, **Then** the import flow opens at `/imports/attendance?event=<id>` seeded with that event, or at `?series=<id>` with the picker filtered to that series (`date` optional), a successful batch invalidates the events, series and imports queries, and a standalone event shows no entry. (FR-8)
+### AC-7: **Given** an activity, **When** attendance is imported, **Then** the import panel opens on that
+
+activity with the session row’s event and date carried in, a successful batch invalidates the events,
+series and imports queries, and a standalone event shows no entry. There is no
+standalone attendance import page. (FR-8)
 
 ### AC-7a: **Given** a live session, **When** an import is captured without ending it, **Then** the page shows "Live" with the capture time and one **End of session** action, and another capture may replace it; **Given** a past open session, **Then** the page reads "Past session — this capture will end it"; **Given** an import captured outside the live window with no prior close, **Then** it is accepted as the end capture and the session closes; **Given** an ended session, **Then** the page shows "End of session" with the action disabled and a further capture is refused; **Given** a not-yet-started open session, **Then** the page reads "Not started — this capture will end it"; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled session, **Then** the page offers no capture. (FR-6f)
 
@@ -1382,6 +1403,13 @@ recommended"). Ids are `S-Qn`.
   spec.
 
 ## Change log
+
+- 2026-11-15: the screens consolidate (owner: "series-detail and event-series-detail are the same -
+  merge them... to reduce number of pages deployed"). One **activity detail**, `#/events/:id?kind=`, serves
+  a standalone event and a series; FR-1/4/5/6, AC-3/4/5/6/7 and the navigation table say so. Each session
+  row offers **Record headcount** (with its lane buckets) and the attendance import, so the standalone
+  attendance page retires; a standalone event still offers no import (`422 series_required`). The
+  Solution overview, the Users and Jobs surfaces and AC-4's retired "series list" are corrected with it.
 
 - 2026-11-13: FR-26a settled two questions its own review raised (owner: "all as recommended"). "Current at
   submit" now means the **latest completed read** of the follow-up evidence — not the request sequence, which the

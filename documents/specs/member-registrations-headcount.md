@@ -10,6 +10,8 @@ mode**. Today a session has one chain of observations and a count in any mode su
 the operator therefore cannot hold an adults count and a children count at once. This spec makes each mode
 its own lane, retires `mixed`, and adds two specialised lanes plus the vocabularies they need.
 
+The operator records a headcount from the **activity detail** (`#/events/:id`), on the session row it belongs to (owner, 2026-11-15): a count is for one session of one event or series, and the detail is where those are known. This moves the entry point only - the USSD headcount page retires, the USSD phone flow and every model rule below are unchanged.
+
 ## User Stories
 
 1. As an operator, I want to count adults and children in the same session without one wiping the other,
