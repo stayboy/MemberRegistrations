@@ -37,7 +37,32 @@ recommended" (2026-11-13, "accept"). The 2026-11-13 grep-the-claim entry was acc
 close after a grill on whether it was worth its bytes (2026-11-13, "all as recommended": one entry, the guard's
 limit as its evidence, seventeen lines). The three 2026-11-15 entries were accepted in the `mock-and-lessons`
 close (2026-11-15, "all as recommended" on the grill, plus the owner's ruling that every editable skill file
-joins the protected set).
+joins the protected set). The 2026-11-15 claim-scope entry was accepted at the end of the
+`capture-in-round` grill (2026-11-15, "all as recommended"), which also ruled the five-defect proposal that
+prompted it a **note**: a claim-scope rule was admitted, the incident was not.
+
+## 2026-11-15 — A claim names its scope
+
+**Rule.** A claim that something is covered, matched or verified names **what was compared and what was
+not**, in the sentence that makes the claim and in the acceptance row that carries it. "Parity", "the routes
+are tested" and "the surfaces match" are claims about a set, and every set has an edge; an unstated scope is
+read as "all of it", which is the one reading the evidence never supports. This is a rule about **claims**,
+not about gates: the 2026-11-04 entry governs which workspace a command reached, this one governs what a
+sentence asserts. A claim that cannot name its edge is a claim to withdraw.
+
+**Evidence.** The MVP parity pack could say "every row with a live source and a signed mock was compared"
+only because it also listed the **five surfaces with no signed mock** that cannot be claimed at all, and
+because its closing line told the milestone to "name the compared rows, the five defects it found, and the
+five surfaces it deliberately excludes". Nothing required that sentence; the pack's author wrote it because
+without it the same evidence would have read as clean parity across eighteen rows. Until that close the
+pack carried **five `owed` rows** and nothing failed.
+
+**Trigger.** Writing "matches", "covered", "verified", "parity" or an AC verdict: name the compared set and
+its edge in the same breath, then check that the acceptance row repeats it. For the release claim the check
+is mechanical - `tests/meta/parity-claim.test.ts` fails when the pack leaves a row `owed` or loses its
+"not claimable" list (written in the `capture-in-round` close, 2026-11-15). For any other claim the
+reviewer's acceptance is the check, so an accepted unscoped claim is a review finding, not bad luck. If the
+edge is long, the claim shrinks.
 
 ## 2026-11-15 - A mock may not invent a control
 
