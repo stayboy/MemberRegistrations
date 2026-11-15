@@ -18,7 +18,7 @@
     "date-time-settings": {
       "mock": {
         "path": "mockups/v2-settings/01-date-time-settings.png",
-        "sha256": "25a599f600d6a4e8c6d50af24cd7a46cfae76aa04db1a5707d77aebfa39e9e3a",
+        "sha256": "f6b66b7f834175cb372c5f4f90105f99fc4560b994f432f3ca1187b687a971be",
         "source": "mockups/v2-settings/01-date-time-settings.html"
       },
       "baseline": null,
@@ -26,7 +26,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "25a599f600d6a4e8c6d50af24cd7a46cfae76aa04db1a5707d77aebfa39e9e3a",
+        "sha256": "f6b66b7f834175cb372c5f4f90105f99fc4560b994f432f3ca1187b687a971be",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },

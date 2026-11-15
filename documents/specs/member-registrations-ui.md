@@ -201,7 +201,9 @@ that signing in as a different officer changes what that officer can see or do (
 4. The sidebar toggle sits in the sidebar header. Collapsing keeps focus on the toggle, sets
    `aria-expanded="false"`, and exposes every icon with an accessible name and a tooltip.
 5. The sidebar footer is pinned to the bottom. Expanded: accent dropdown and dark switch on one row,
-   under an `APPEARANCE` overline. Collapsed: two 34 px icon buttons, stacked, with tooltips.
+   under an `APPEARANCE` overline. Collapsed: 34 px icon buttons, stacked, with tooltips - the date and
+   time format, the dark toggle, and the **support** link (owner, 2026-11-15: the rule described the
+   appearance pair, not a prohibition on a help control).
 6. At ≤ 860 px the top-level cluster is replaced by a `Sections` menu button and the sidebar is a
    56 px rail. At ≤ 620 px summary cards stack. The page itself never scrolls horizontally; the table
    card may scroll internally.

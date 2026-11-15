@@ -82,7 +82,7 @@
     "02-shell-collapsed-light": {
       "mock": {
         "path": "mockups/v2-shell/02-shell-collapsed-light.png",
-        "sha256": "bebed85e8f90cc3d333701cff3e30764ed216c89600b3ecea0a66cb59ddeaf24",
+        "sha256": "e7b28c8f3d063fc2d2eda8a92378c615303544c68ae5060ed8186dfb4a39a302",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -90,7 +90,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "bebed85e8f90cc3d333701cff3e30764ed216c89600b3ecea0a66cb59ddeaf24",
+        "sha256": "e7b28c8f3d063fc2d2eda8a92378c615303544c68ae5060ed8186dfb4a39a302",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
@@ -127,7 +127,7 @@
     "06-mobile": {
       "mock": {
         "path": "mockups/v2-shell/06-mobile.png",
-        "sha256": "6e51a14153eb55e5befe961375610d174e87dc48f745fc7fd819de5794252190",
+        "sha256": "8ab3098bb056183115d731cc466d7b0dcdafecf004939c8ae905848d3eda79fc",
         "source": "mockups/v2-shell/01-shell-expanded-light.html"
       },
       "baseline": null,
@@ -135,7 +135,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "6e51a14153eb55e5befe961375610d174e87dc48f745fc7fd819de5794252190",
+        "sha256": "8ab3098bb056183115d731cc466d7b0dcdafecf004939c8ae905848d3eda79fc",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
