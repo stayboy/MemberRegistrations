@@ -57,7 +57,9 @@ export const DISPOSITIONS = ['claimed', 'e2e-only', 'deferred'];
 export const ABSENCE_WORDS = ['disabled', 'no action', 'not shown', 'nothing is written'];
 export const ANCHOR_KINDS = ['ac', 'prose'];
 
-const COVERAGE = ['signed', 'reference', 'target'];
+// `auto-signed` is the unattended value: it names the basis and waits for the reviewer's second look,
+// so `signed` keeps its owner-only meaning (AGENTS.md section 17).
+const COVERAGE = ['signed', 'auto-signed', 'reference', 'target'];
 const CLASSES = ['spec-required', 'mock-only'];
 const ASSERTS = ['image', 'dom', 'e2e', 'api'];
 const TEST_NAME_SHAPE =

@@ -105,8 +105,10 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 
 - Every behavioural change gets a test that fails before it and passes after it.
 - A test command that runs zero tests is a failure, never a pass.
-- When a suite is flaky: read the total, isolate the failing test, then re-run once. Record the
-  outcome in the round doc; do not loop.
+- When a suite is flaky: read the total, isolate the failing test, then re-run it. **Two automatic re-runs
+  per round in total; a third failure parks the round** (owner, 2026-11-15): the round doc records the two
+  attempts, the failing test and the totals, and the round does not continue until the owner or the next
+  round resolves it. A third attempt is evidence the failure is not flake.
 - Tests assert external behaviour — responses, persisted rows, computed counts — not internals.
 
 ## 9. Commit, push, PR merge
@@ -114,7 +116,8 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 - Spec approval does **not** authorise a commit. Each of commit, push, PR and merge needs its own
   explicit owner instruction — except that "merge" invoked while the work is uncommitted authorises
   the whole chain (commit → push → PR → wait for the checks → squash merge → pull), and "go
-  unattended" pre-authorises those four for that round (§17). Every action outside the round still
+  unattended" pre-authorises those four for that round, or for every round up to the milestone it names
+  (§17). Every action outside the round still
   needs its own instruction. Verb definitions: `.github/merge-policy.md` (Verb glossary).
 - The **git-executor** seat (`.opencode/agents/git-executor.md`, ranked `opencode/beam-free` then
   `ollama-cloud/mimo-v2.6-flash`) may execute the command on a brief that quotes the owner's verb;
@@ -253,6 +256,25 @@ reintroduce them silently.
 
 ## 17. Unattended rounds (owner, 2026-11-04)
 
+- **Standing unattended to a milestone (owner, 2026-11-15).** "Go unattended" authorises every round that
+  follows until the milestone the instruction names - each round's grill, its worker, and its
+  commit/push/PR/merge - with the recommendations auto-accepted. This **supersedes "for that round only"** in
+  section 9 and in the merge policy's Verb glossary; both name the milestone in the same change. A hard gate
+  still parks unless the instruction names **that round and that gate**: a migration, a wire-contract change,
+  auth, security, tenant isolation, or deleting a public route.
+- **Auto-signed mocks (owner, 2026-11-15).** In unattended mode a refreshed mock may carry an
+  **`auto-signed`** coverage so the round can close. It is a third value beside `signed` and `target`: it
+  records `by: "unattended"` with the basis, and `signed` keeps its owner-only meaning, which is what the
+  policy and the mock-build skill define. The catalogue states it, R6 accepts it, and the round doc lists
+  every auto-signed state with its hash. When the unattended work ends the reviewer inspects that list; a
+  state it rejects drops to `target` and is re-cut, and the milestone is not called done until the list is
+  reviewed. It applies **only to a `target`**, is **never the status quo** - the resting state is `signed`
+  by the owner - and it **never rewrites a state the owner signed**: a refresh voids that signature through
+  `target` first, and only the owner restores it. When the unattended work ends every auto-signed state
+  becomes `signed` or drops to `target`.
+- **The completion report says what a reader would notice** (owner, 2026-11-15): the `git show --stat`
+  required below, plus one line per file group in product terms - "the roster header gained a verb", "the
+  baseline images changed" - because a stat line cannot show that a mock lost its bucket breakdown.
 - **Standing instruction.** The go-forward `grill-me` round runs when the owner accepts that the next
   round may begin, not automatically at the closing bell; when it runs, its recommendations are accepted
   automatically, so the next round starts without a second wait. The owner may still run a round
