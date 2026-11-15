@@ -130,6 +130,42 @@ export const useShepherdingStyles = makeStyles({
     fontSize: tokens.fontSizeBase400,
     fontWeight: tokens.fontWeightSemibold,
   },
+  // The church totals above the officers table (FR-58), the same five-tile shape the roster uses.
+  // `Table` lays out fixed, so the width has to sit on the header cell as well as the body cell.
+  officerCell: {
+    width: '340px',
+    whiteSpace: 'nowrap',
+  },
+  officerHeader: {
+    width: '340px',
+  },
+  tiles: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+    gap: tokens.spacingHorizontalM,
+  },
+  tile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: tokens.spacingVerticalM,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  tileLabel: {
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground3,
+  },
+  tileValue: {
+    fontSize: tokens.fontSizeHero700,
+    lineHeight: tokens.lineHeightHero700,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  tileCaption: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorNeutralForeground3,
+  },
   coverage: {
     display: 'flex',
     flexDirection: 'column',
