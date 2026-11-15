@@ -1,165 +1,29 @@
-import type { Page } from 'playwright/test';
 import { expect, open, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
 });
 
-async function chooseFoundationService(page: Page): Promise<void> {
-  await page.getByRole('combobox', { name: 'Event' }).click();
-  await page.getByRole('option', { name: /Foundation service/ }).click();
-}
+// The operator headcount page retired (owner, 2026-11-15): a count is recorded from the activity
+// detail's session row, because it needs the event it is counted against. These are the assertions
+// that used to live on that page, restated where the behaviour now is.
+test('a session row carries the headcount and the action that records it', async ({ page }) => {
+  await open(page, '/events/event-1');
 
-/** Chooses an event by its option label; the picker auto-selects its default session. */
-async function chooseEvent(page: Page, name: RegExp): Promise<void> {
-  await page.getByRole('combobox', { name: 'Event' }).click();
-  await page.getByRole('option', { name }).click();
-}
+  const sessions = page.getByRole('table', { name: 'Event sessions' });
+  await expect(sessions.getByRole('columnheader', { name: 'Headcount' })).toBeVisible();
+  await expect(sessions.getByRole('button', { name: 'Record headcount' }).first()).toBeVisible();
+  // The count is a per-lane reading, never one summed figure (HC-22).
+  await expect(sessions.getByText('Not counted').first()).toBeVisible();
+});
 
-test('the headcount page is read-first and records and corrects through dialogs', async ({
+test('the retired headcount route lands on its activity, or on the list when it names none', async ({
   page,
 }) => {
+  await open(page, '/ussd/headcount?event=event-1');
+  await expect(page).toHaveURL(/\/events\/event-1\?kind=event/);
+
   await open(page, '/ussd/headcount');
-  await expect(page.getByRole('heading', { level: 1, name: 'USSD headcount' })).toBeVisible();
-  await expect(page.getByText('USSD is not live in this production build.')).toBeVisible();
-
-  await chooseFoundationService(page);
-
-  // Read-first: no inline write form; Record is the page's one visible verb (FR-9a).
-  await expect(page.getByRole('region', { name: 'Record a headcount' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Record headcount' })).toBeVisible();
-  // One verb does not need the menu, so the page renders none.
-  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
-
-  await expect(page.getByText('Current headcount')).toBeVisible();
-  await expect(page.getByText('Roster', { exact: true })).toBeVisible();
-  await expect(
-    page.getByText('Register-derived attendance. Never merged with the headcount.'),
-  ).toBeVisible();
-  // The fixture session is dated 2999: not live, so End of session is not offered.
-  await expect(page.getByRole('button', { name: 'End of session' })).toHaveCount(0);
-  // HC-ACTION-02/03/04: the not-started state line, and neither of the other two labels. The
-  // "starts with Live" pattern covers the label only — the hint below it is prose, not a label.
-  await expect(page.getByText(/^Not started [·—] this capture will end it$/)).toBeVisible();
-  await expect(page.getByText(/^Live(?: · recorded .*)?$/)).toHaveCount(0);
-  await expect(page.getByText(/^Past session(?: · .*)?$/)).toHaveCount(0);
-  await expect(page.getByText('142', { exact: true }).first()).toBeVisible();
-
-  const history = page.getByRole('table', { name: 'Headcount observations' });
-  await expect(history.getByText('Current')).toBeVisible();
-  await expect(history.getByText('Superseded')).toBeVisible();
-  await expect(history.getByText('Valid for Jan 10, 2999, 09:02 AM')).toBeVisible();
-
-  // Record through the dialog; the live total follows the numbers.
-  await page.getByRole('button', { name: 'Record headcount' }).click();
-  const recordDialog = page.getByRole('dialog');
-  await expect(recordDialog.getByRole('heading', { name: 'Record a headcount' })).toBeVisible();
-  await recordDialog.getByLabel('As of').fill('2999-01-10T10:15');
-  await recordDialog.getByLabel('Adult men').fill('20');
-  await recordDialog.getByLabel('Adult women').fill('10');
-  await recordDialog.getByLabel('Children', { exact: true }).fill('5');
-  await expect(recordDialog.getByText('Total 35')).toBeVisible();
-  await recordDialog.getByRole('button', { name: 'Record headcount' }).click();
-
-  await expect(page.getByText('Headcount recorded.')).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('35', { exact: true }).first()).toBeVisible();
-
-  // Correct the current observation; the asOf is kept and cannot be edited.
-  await page.getByRole('button', { name: 'Correct' }).first().click();
-  const correctDialog = page.getByRole('dialog');
-  await expect(
-    correctDialog.getByRole('heading', { name: 'Correct the current observation' }),
-  ).toBeVisible();
-  await expect(correctDialog.getByText('Keeping asOf Jan 10, 2999, 10:15 AM')).toBeVisible();
-  await expect(correctDialog.getByLabel('As of')).toHaveCount(0);
-  await correctDialog.getByLabel('Adult men').fill('21');
-  await expect(correctDialog.getByText('Total 36')).toBeVisible();
-  await correctDialog.getByRole('button', { name: 'Save correction' }).click();
-
-  await expect(
-    page.getByText('Correction saved. The earlier observation stays readable', { exact: false }),
-  ).toBeVisible();
-  await expect(history.getByText('Valid for Jan 10, 2999, 10:15 AM')).toBeVisible();
-  await expect(history.getByText('36', { exact: true })).toBeVisible();
-
-  // The current history row is the second Correct entry point.
-  await history.getByRole('button', { name: 'Correct' }).click();
-  const rowDialog = page.getByRole('dialog');
-  await expect(
-    rowDialog.getByRole('heading', { name: 'Correct the current observation' }),
-  ).toBeVisible();
-  await expect(rowDialog.getByText('Keeping asOf Jan 10, 2999, 10:15 AM')).toBeVisible();
-  await rowDialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-});
-
-test('shows every recorded lane and corrects the second without moving the first asOf', async ({
-  page,
-}) => {
-  await open(page, '/ussd/headcount');
-  await chooseFoundationService(page);
-
-  const current = page.getByRole('table', { name: 'Current headcounts' });
-  const adultsRow = current.getByRole('row', { name: /Adult service/ });
-  await expect(adultsRow).toContainText('142');
-  await expect(adultsRow).toContainText('Jan 10, 2999, 09:08 AM');
-
-  // Record a second lane through the portal; both lanes stay current (HC-3).
-  await page.getByRole('button', { name: 'Record headcount' }).click();
-  const recordDialog = page.getByRole('dialog');
-  await recordDialog.getByRole('radio', { name: 'Children service' }).check();
-  await recordDialog.getByLabel('As of').fill('2999-01-10T11:00');
-  await recordDialog.getByLabel('Boys').fill('5');
-  await recordDialog.getByLabel('Girls').fill('6');
-  await recordDialog.getByLabel('Adults', { exact: true }).fill('7');
-  await expect(recordDialog.getByText('Total 18')).toBeVisible();
-  await recordDialog.getByRole('button', { name: 'Record headcount' }).click();
-
-  await expect(page.getByText('Headcount recorded.')).toBeVisible();
-  const childrenRow = current.getByRole('row', { name: /Children service/ });
-  await expect(childrenRow).toContainText('18');
-  await expect(childrenRow).toContainText('Jan 10, 2999, 11:00 AM');
-
-  // Correct the children lane only; the adults lane keeps its own asOf.
-  await childrenRow.getByRole('button', { name: 'Correct' }).click();
-  const correctDialog = page.getByRole('dialog');
-  await expect(correctDialog.getByText('Keeping asOf Jan 10, 2999, 11:00 AM')).toBeVisible();
-  await expect(correctDialog.getByLabel('As of')).toHaveCount(0);
-  await correctDialog.getByLabel('Boys').fill('6');
-  await expect(correctDialog.getByText('Total 19')).toBeVisible();
-  await correctDialog.getByRole('button', { name: 'Save correction' }).click();
-
-  await expect(
-    page.getByText('Correction saved. The earlier observation stays readable', { exact: false }),
-  ).toBeVisible();
-  await expect(adultsRow).toContainText('Jan 10, 2999, 09:08 AM');
-  await expect(adultsRow).toContainText('142');
-  await expect(childrenRow).toContainText('Jan 10, 2999, 11:00 AM');
-  await expect(childrenRow).toContainText('19');
-});
-
-test('a live session offers an enabled End of session action', async ({ page, gateway }) => {
-  gateway.includeActionStates = true;
-  await open(page, '/ussd/headcount');
-  await chooseEvent(page, /Live service/);
-
-  // Live is computed, never stored: the session is dated today in the event zone with the clock
-  // inside its window, so the action is offered and enabled.
-  await expect(page.getByText('Live', { exact: true })).toBeVisible();
-  const endAction = page.getByRole('button', { name: 'End of session' });
-  await expect(endAction).toBeVisible();
-  await expect(endAction).toBeEnabled();
-});
-
-test('an ended session shows End of session disabled, not absent', async ({ page, gateway }) => {
-  gateway.includeActionStates = true;
-  await open(page, '/ussd/headcount');
-  await chooseEvent(page, /Ended service/);
-
-  // An ended capture wins over the window: the action stays visible and is disabled.
-  await expect(page.getByText(/^End of session .*recorded 10:00$/)).toBeVisible();
-  const endAction = page.getByRole('button', { name: 'End of session' });
-  await expect(endAction).toBeVisible();
-  await expect(endAction).toBeDisabled();
+  await expect(page).toHaveURL(/\/events$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Events' })).toBeVisible();
 });

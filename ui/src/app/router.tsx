@@ -78,11 +78,6 @@ const UssdClockingPage = lazy(() =>
     default: page,
   })),
 );
-const UssdHeadcountPage = lazy(() =>
-  import('../pages/ussd/UssdHeadcountPage').then(({ UssdHeadcountPage: page }) => ({
-    default: page,
-  })),
-);
 const UssdOfferingsPage = lazy(() =>
   import('../pages/ussd/UssdOfferingsPage').then(({ UssdOfferingsPage: page }) => ({
     default: page,
@@ -142,6 +137,17 @@ function ActivityPage() {
   return params.get('kind') === 'series' ? <SeriesDetailPage /> : <EventDetailPage />;
 }
 
+/**
+ * The retired operator headcount page lands on the activity detail, because a count needs the event
+ * it is recorded against (AC-51, owner 2026-11-15). A bare link carries no activity, so it goes to the
+ * list.
+ */
+function HeadcountRedirect() {
+  const [params] = useSearchParams();
+  const eventId = params.get('event');
+  return <Navigate to={eventId ? `/events/${encodeURIComponent(eventId)}?kind=event` : '/events'} replace />;
+}
+
 export const router = createHashRouter([
   {
     path: '/',
@@ -183,7 +189,7 @@ export const router = createHashRouter([
           { path: 'ussd/codes', element: <UssdCodesPage /> },
           { path: 'ussd/registrations', element: <UssdRegistrationsPage /> },
           { path: 'ussd/clocking', element: <UssdClockingPage /> },
-          { path: 'ussd/headcount', element: <UssdHeadcountPage /> },
+          { path: 'ussd/headcount', element: <HeadcountRedirect /> },
           { path: 'ussd/offerings', element: <UssdOfferingsPage /> },
           { path: 'ussd/activities', element: <UssdActivitiesPage /> },
           { path: 'ussd/products', element: <UssdProductsPage /> },

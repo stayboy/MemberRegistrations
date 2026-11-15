@@ -5,7 +5,7 @@ import { getHeadcounts, recordHeadcount, type Headcount, type HeadcountPage } fr
 import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
-import { HeadcountDialog } from '../pages/ussd/HeadcountDialogs';
+import { HeadcountDialog } from './HeadcountDialog';
 import {
   HEADCOUNT_MODE_OPTIONS,
   emptyHeadcountForm,

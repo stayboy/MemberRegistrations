@@ -15,15 +15,15 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import type { Headcount } from '../../api/ussd';
+import type { Headcount } from '../api/ussd';
 import {
   HEADCOUNT_MODE_OPTIONS,
   headcountFields,
   type HeadcountEntryMode,
   type HeadcountFieldKey,
   type HeadcountFormValues,
-} from '../../format/ussd';
-import { useUssdStyles } from './ussd-styles';
+} from '../format/ussd';
+import { useUssdStyles } from '../pages/ussd/ussd-styles';
 
 const useStyles = makeStyles({
   body: {
