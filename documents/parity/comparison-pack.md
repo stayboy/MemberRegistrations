@@ -142,12 +142,31 @@ the columns and renamed the status header.
 
 Officers and the church report were not read in this pass.
 
+## 13–15b. Shepherding — the officers page
+
+| #   | What            | Mock                                                                                          | Build                                                                                                    |
+| --- | --------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 14a | Church totals   | **five tiles**: assigned, unassigned, attempts, conversations, never called                   | **absent**                                                                                               |
+| 14b | Coverage        | a banner: "1,054 active members are not on a shepherding list. Coverage is 12% (142 of 1196)" | **absent**                                                                                               |
+| 14c | Rows            | avatars, `Presbyter` in the caption, an `Open roster ›` affordance                            | no avatar, no Presbyter caption, a plain link                                                            |
+| 14d | **Defect**      | the officer column is wide enough for the identity                                            | **the Assigned value collides with the identity text** - `Kwame Asante (Male, 41y)` and `4` share a line |
+| 14e | Nav in the mock | the pre-consolidation nav (Attendance, no USSD)                                               | the consolidated nav - **the build is right**                                                            |
+
+**14a and 14b are FR-58.** The shepherding home "MUST ... show church totals (officers, active,
+assigned, unassigned, attempts, conversations, never called), coverage and one row per officer". The build
+shows the rows and none of the totals or coverage, so this is a second spec gap of the same shape as the
+roster columns - and the mock, which drew them, is the record that caught it.
+
+14d is a layout defect in the first two columns, the same family as the roster clipping.
+
+The church report was not read in this pass.
+
 ## What the pack found
 
 1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
 2. **One retired item never applied** (raw RRULE in the series schedule cell).
 3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **Four rows still owed** — shell dark, mobile and meadow; shepherding officers and the church report. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster's row actions are built but clipped by an overflowing table, which is a layout defect rather than a gap.
+4. **One row still owed** — the church report. The shell variants share one source and were re-captured with the rail change; the officers page is read above. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster's row actions are built but clipped by an overflowing table, which is a layout defect rather than a gap.
 5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
    dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
 
