@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
-import { listOfficers } from '../api/shepherding';
+import { getReport, listOfficers } from '../api/shepherding';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
@@ -52,9 +52,22 @@ export function ShepherdingOfficersPage() {
     enabled: Boolean(token),
   });
 
+  // FR-58: the church totals and coverage come from the report read, not from summing the rows.
+  const reportQuery = useQuery({
+    queryKey: ['shepherding', baseUrl, 'report', window.from, window.to],
+    queryFn: ({ signal }) => getReport(baseUrl, token, window, signal),
+    enabled: Boolean(token),
+  });
+
   useEffect(() => {
-    if (isUnauthorized(officersQuery.error)) void signOut();
-  }, [officersQuery.error, signOut]);
+    if (isUnauthorized(officersQuery.error) || isUnauthorized(reportQuery.error)) void signOut();
+  }, [officersQuery.error, reportQuery.error, signOut]);
+
+  const totals = reportQuery.data?.totals;
+  const coveragePercent =
+    totals && totals.activeMembers > 0
+      ? Math.round((totals.assignedMembers / totals.activeMembers) * 100)
+      : null;
 
   const officers = officersQuery.data ?? [];
 
@@ -103,6 +116,50 @@ export function ShepherdingOfficersPage() {
           </MessageBar>
         ) : null}
 
+        {totals ? (
+          <>
+            <div className={styles.tiles} aria-label="Church totals">
+              <div className={styles.tile}>
+                <span className={styles.tileLabel}>Assigned</span>
+                <span className={styles.tileValue}>{totals.assignedMembers}</span>
+                <span className={styles.tileCaption}>Active assignments</span>
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.tileLabel}>Unassigned</span>
+                <span className={styles.tileValue}>{totals.unassignedMembers}</span>
+                <span className={styles.tileCaption}>No active assignment</span>
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.tileLabel}>Attempts</span>
+                <span className={styles.tileValue}>{totals.attempts}</span>
+                <span className={styles.tileCaption}>Calls in this window</span>
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.tileLabel}>Conversations</span>
+                <span className={styles.tileValue}>{totals.conversations}</span>
+                <span className={styles.tileCaption}>Outcome reached</span>
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.tileLabel}>Never called</span>
+                <span className={styles.tileValue}>{totals.membersNeverCalled}</span>
+                <span className={styles.tileCaption}>Assigned, no attempt</span>
+              </div>
+            </div>
+
+            {/* FR-58 asks for coverage, so it is always written - not only when it is bad news. */}
+            <MessageBar intent={totals.unassignedMembers > 0 ? 'warning' : 'success'}>
+              <MessageBarBody>
+                {totals.unassignedMembers > 0
+                  ? `${totals.unassignedMembers} active members are not on a shepherding list.`
+                  : 'Every active member is on a shepherding list.'}
+                {coveragePercent === null
+                  ? ''
+                  : ` Coverage is ${coveragePercent}% (${totals.assignedMembers} of ${totals.activeMembers}).`}
+              </MessageBarBody>
+            </MessageBar>
+          </>
+        ) : null}
+
         {officersQuery.isError ? null : (
           <section className={styles.panel} aria-label="Shepherding officers">
             {officersQuery.isPending ? (
@@ -121,7 +178,7 @@ export function ShepherdingOfficersPage() {
                 <Table className={styles.table} size="small" aria-label="Shepherding officers">
                   <TableHeader>
                     <TableRow>
-                      <TableHeaderCell>Officer</TableHeaderCell>
+                      <TableHeaderCell className={styles.officerHeader}>Officer</TableHeaderCell>
                       <TableHeaderCell>Assigned</TableHeaderCell>
                       <TableHeaderCell>Attempts</TableHeaderCell>
                       <TableHeaderCell>Conversations</TableHeaderCell>
@@ -139,7 +196,7 @@ export function ShepherdingOfficersPage() {
                       );
                       return (
                         <TableRow key={officer.memberNo}>
-                          <TableCell>
+                          <TableCell className={styles.officerCell}>
                             <div className={styles.identity}>
                               <Link
                                 className={styles.link}
