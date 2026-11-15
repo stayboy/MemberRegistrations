@@ -140,6 +140,37 @@ function checkSurface(
   );
 }
 
+describe('check-round: the grill (R7)', () => {
+  const withMode = (mode: string) =>
+    roundDoc().replace('| Base | abc1234 |', `| Base | abc1234 |\n| Mode | ${mode} |`);
+  const unattended = (body: string) =>
+    `${withMode('unattended (auto-accept recommendations)')}\n${body}`;
+
+  it('fails an unattended round with no grill section', () => {
+    const failures = checkSurface(unattended('## Plan\n\nDo the thing.\n'), {}, null);
+    expect(failures.join('\n')).toContain('"## Grill" section');
+    expect(failures.join('\n')).toContain('R7');
+  });
+
+  it('fails a question that names no recommendation or no cost', () => {
+    const failures = checkSurface(
+      unattended('## Grill\n\n1. **Which shape?** Just do it.\n'),
+      {},
+      null,
+    );
+    expect(failures.join('\n')).toContain('names no recommendation');
+    expect(failures.join('\n')).toContain('names no cost');
+  });
+
+  it('passes a question that names both, and does not apply to an attended round', () => {
+    const good = unattended(
+      '## Grill\n\n1. **Which shape?** Recommendation: the smallest. Cost: one more merge.\n',
+    );
+    expect(checkSurface(good, {}, null)).toEqual([]);
+    expect(checkSurface(withMode('attended'), {}, null)).toEqual([]);
+  });
+});
+
 describe('check-round: what counts as a round doc', () => {
   it('does not treat the programme doc as a round doc, so the definition of done stays correctable', () => {
     // A programme doc has no signature, tier or seat; requiring them made the release's own

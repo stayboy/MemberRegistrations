@@ -21,6 +21,14 @@ the durable record.
 | Workers             | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)`           |
 | Implementer         | `parent <provider>/<model> (<scope>); worker <provider>/<model> (<scope>)` |
 
+## Grill
+
+The numbered frontier, each question naming its **recommendation** and its **cost** (AGENTS.md section 2).
+An unattended round must carry this section (R7); a Tier 0 record lives only in the commit body and has
+none. **The gate proves a grill opened** - at least one numbered question naming both parts - and nothing
+more: whether the frontier was whole, and whether the answers are worth anything, is the reviewer's
+control, exactly as it is for the Implementer row.
+
 ## Plan
 
 Goal, scope, expected files, acceptance criteria (numbered).
@@ -77,6 +85,9 @@ Rules:
 - Tier 2 records the reviewer's Standards and Spec verdicts under `## Review`.
 - Tier 0 records only in the commit body.
 - Never put a round doc in `documents/specs/`.
+- An **unattended** round carries `## Grill` (R7): at least one numbered question, each naming a
+  recommendation and a cost. The gate proves a grill opened; whether the frontier was whole is the
+  reviewer's control, because no regex can tell a whole frontier from a satisfied one.
 - Every round doc carries `## Mock sign-off` (or `n/a — no user-visible surface`) and `## Mock parity`
   (or `n/a — no mock`).
 - A round with no mock records "no mock"; it never skips silently.
