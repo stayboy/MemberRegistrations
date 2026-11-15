@@ -132,7 +132,7 @@ function sessionLabel(
 }
 
 /** The chosen occurrence is a snapshot so it survives a date-window refetch. */
-interface Occurrence {
+export interface Occurrence {
   readonly eventId: string;
   readonly eventNo: string | null;
   readonly eventName: string;
@@ -144,7 +144,7 @@ interface Occurrence {
   readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
 }
 
-function occurrenceFrom(event: EventListItem, session: EventSessionSummary): Occurrence {
+export function occurrenceFrom(event: EventListItem, session: EventSessionSummary): Occurrence {
   return {
     eventId: event.id,
     eventNo: event.eventNo,
@@ -174,6 +174,11 @@ export interface AttendanceWorkspaceProps {
   readonly onCommitted: (batch: ImportBatch) => void;
   /** The end-only capture: one shared close per event and session. */
   readonly endSession: (occurrence: OccurrenceRef) => Promise<ImportBatch>;
+  /**
+   * The occurrence this workspace is for. When set, the picker, the date window and the URL state have
+   * no caller: the session was chosen by whatever opened the workspace (owner, 2026-11-15).
+   */
+  readonly fixedOccurrence?: Occurrence | null;
 }
 
 /**
@@ -200,6 +205,7 @@ export function AttendanceWorkspace({
   commitRows,
   onCommitted,
   endSession,
+  fixedOccurrence = null,
 }: AttendanceWorkspaceProps) {
   const styles = useStyles();
   const { formatDate, formatTime } = useDateTimeFormat();
@@ -210,6 +216,7 @@ export function AttendanceWorkspace({
   // Seed once. A later `events` refetch cannot unmount the panel because the
   // occurrence is state, not a value re-derived from the current event list.
   const [occurrence, setOccurrence] = useState<Occurrence | null>(() => {
+    if (fixedOccurrence) return fixedOccurrence;
     const resolved = resolveOccurrence(searchParams, events);
     if (!resolved) return null;
     const event = events.find((candidate) => candidate.id === resolved.eventId);
@@ -319,9 +326,11 @@ export function AttendanceWorkspace({
                   End of session
                 </Button>
               ) : null}
-              <Button appearance="secondary" onClick={clearOccurrence}>
-                Change occurrence
-              </Button>
+              {fixedOccurrence ? null : (
+                <Button appearance="secondary" onClick={clearOccurrence}>
+                  Change occurrence
+                </Button>
+              )}
             </div>
           </div>
           {endError ? (
@@ -337,7 +346,7 @@ export function AttendanceWorkspace({
             Changing the occurrence clears any chosen file.
           </Text>
         </Card>
-      ) : (
+      ) : fixedOccurrence ? null : (
         <Card className={styles.picker}>
           <h2 className={styles.sectionTitle}>Choose the event session</h2>
 

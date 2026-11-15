@@ -1,4 +1,4 @@
-import { expect, open, openActions, seedSession, test } from './fixtures';
+import { expect, open, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -55,18 +55,3 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(summary.getByText('paid this window')).toBeVisible();
 });
 
-test('the series entry opens the import flow filtered to the series', async ({ page }) => {
-  await open(page, '/events/series-1?kind=series');
-
-  await openActions(page);
-  const entry = page.getByRole('menuitem', { name: 'Import attendance' });
-  await expect(entry).toBeVisible();
-  await entry.click();
-
-  await expect(page).toHaveURL(/\/imports\/attendance\?series=series-1/);
-
-  // The picker lists only series-backed events, so the standalone retreat is absent.
-  await page.getByRole('combobox', { name: 'Event' }).click();
-  await expect(page.getByRole('option', { name: /Sunday Service/ })).toBeVisible();
-  await expect(page.getByRole('option', { name: /Leaders retreat/ })).toHaveCount(0);
-});

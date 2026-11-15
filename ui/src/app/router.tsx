@@ -28,11 +28,6 @@ const ImportsPage = lazy(() =>
 const ImportBatchesPage = lazy(() =>
   import('../pages/ImportBatchesPage').then(({ ImportBatchesPage: page }) => ({ default: page })),
 );
-const ImportsAttendancePage = lazy(() =>
-  import('../pages/ImportsAttendancePage').then(({ ImportsAttendancePage: page }) => ({
-    default: page,
-  })),
-);
 const ShepherdingOfficersPage = lazy(() =>
   import('../pages/ShepherdingOfficersPage').then(({ ShepherdingOfficersPage: page }) => ({
     default: page,
@@ -148,6 +143,20 @@ function HeadcountRedirect() {
   return <Navigate to={eventId ? `/events/${encodeURIComponent(eventId)}?kind=event` : '/events'} replace />;
 }
 
+/**
+ * The retired attendance import page lands on the activity detail, which opens the panel for the date
+ * the link named (AC-51, FR-8a). A link with no event goes to the member import, where the operator can
+ * start from the activity instead.
+ */
+function AttendanceImportRedirect() {
+  const [params] = useSearchParams();
+  const eventId = params.get('event');
+  if (!eventId) return <Navigate to="/imports/members" replace />;
+  const date = params.get('date');
+  const query = date ? `?kind=event&import=${encodeURIComponent(date)}` : '?kind=event';
+  return <Navigate to={`/events/${encodeURIComponent(eventId)}${query}`} replace />;
+}
+
 export const router = createHashRouter([
   {
     path: '/',
@@ -171,7 +180,7 @@ export const router = createHashRouter([
           { path: 'events/offerings', element: <OfferingsPage /> },
           { path: 'events/:id', element: <ActivityPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
-          { path: 'imports/attendance', element: <ImportsAttendancePage /> },
+          { path: 'imports/attendance', element: <AttendanceImportRedirect /> },
           { path: 'imports/batches', element: <ImportBatchesPage /> },
           {
             path: 'shepherding/officers',

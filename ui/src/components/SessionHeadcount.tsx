@@ -77,6 +77,7 @@ function bucketLine(row: Headcount): string {
  */
 export function SessionHeadcount({
   endAction = 'hidden',
+  onImport,
   eventId,
   sessionDate,
   disabled = false,
@@ -89,6 +90,8 @@ export function SessionHeadcount({
    * closed, and absent for a session that has not started or whose window has passed.
    */
   endAction?: 'enabled' | 'disabled' | 'hidden';
+  /** Opens the attendance import for this session; absent when the event offers none (FR-8). */
+  onImport?: () => void;
 }) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
@@ -253,6 +256,11 @@ export function SessionHeadcount({
         >
           Record headcount
         </Button>
+        {onImport ? (
+          <Button size="small" appearance="transparent" disabled={disabled} onClick={onImport}>
+            Import
+          </Button>
+        ) : null}
         {endAction !== 'hidden' ? (
           <Button
             size="small"

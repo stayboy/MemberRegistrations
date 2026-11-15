@@ -19,7 +19,6 @@ import {
   AddRegular,
   ArchiveRegular,
   ArrowClockwiseRegular,
-  ArrowImportRegular,
   ArrowLeftRegular,
   ArrowUndoRegular,
   DeleteRegular,
@@ -214,13 +213,7 @@ export function SeriesDetailPage() {
         </Button>
       }
       actions={[
-        {
-          id: 'import-attendance',
-          kind: 'verb' as const,
-          label: 'Import attendance',
-          icon: <ArrowImportRegular />,
-          onSelect: () => navigate(`/imports/attendance?series=${encodeURIComponent(id)}`),
-        },
+
         ...(archived
           ? []
           : [

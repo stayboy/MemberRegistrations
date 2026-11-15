@@ -63,16 +63,33 @@ test('a cancelled session shows its reason, and a legacy one says it is missing'
   await expect(sessions.getByText('No reason recorded')).toBeVisible();
 });
 
-test('the series-backed event entry seeds the import flow', async ({ page }) => {
+test('a series-backed session row opens the import panel', async ({ page }) => {
   await open(page, '/events/event-1');
 
-  const entry = page.getByRole('button', { name: 'Import attendance' });
+  const sessions = page.getByRole('table', { name: 'Event sessions' });
+  const entry = sessions.getByRole('button', { name: 'Import' }).first();
   await expect(entry).toBeVisible();
   await entry.click();
 
-  await expect(page).toHaveURL(/\/imports\/attendance\?event=event-1/);
-  // The event and its start-date session are resolved from the deep link.
-  await expect(page.getByRole('button', { name: 'Change occurrence' })).toBeVisible();
+  // The panel names the fixed session; the picker has no caller here.
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Import attendance', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('Selected occurrence', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Change occurrence' })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/events\/event-1$/);
+});
+
+test('the retired attendance route lands on the activity with its date', async ({ page }) => {
+  await open(page, '/imports/attendance?event=event-1&date=2026-01-04');
+
+  await expect(page).toHaveURL(/\/events\/event-1\?kind=event&import=2026-01-04/);
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('a bare retired attendance route lands on the member import', async ({ page }) => {
+  await open(page, '/imports/attendance');
+  await expect(page).toHaveURL(/\/imports\/members$/);
 });
 
 test('a standalone event has no import entry', async ({ page }) => {
@@ -81,7 +98,7 @@ test('a standalone event has no import entry', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Leaders retreat' })).toBeVisible();
   // The standalone event has no import verb, so its only action-row control is the `Refresh`
   // utility: a bare icon and no `Actions` menu at all (FR-9a).
-  await expect(page.getByRole('button', { name: 'Import attendance' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Import' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 });
