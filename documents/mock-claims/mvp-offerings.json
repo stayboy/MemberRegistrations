@@ -72,7 +72,7 @@
     "page-actions": {
       "mock": {
         "path": "mockups/mvp-offerings/03-page-actions.png",
-        "sha256": "435e1b3325bdd4b85bedf3cbae211072130d3ce2d615b7ac2739453bbd0fd686",
+        "sha256": "01c1301ac9e640ab71ec6eee6ebffdcc563951862fb78cdcef7413286491236b",
         "source": "mockups/mvp-offerings/03-page-actions.html"
       },
       "baseline": null,
@@ -80,7 +80,7 @@
       "signed": {
         "by": "owner",
         "at": "2026-11-15",
-        "sha256": "435e1b3325bdd4b85bedf3cbae211072130d3ce2d615b7ac2739453bbd0fd686"
+        "sha256": "01c1301ac9e640ab71ec6eee6ebffdcc563951862fb78cdcef7413286491236b"
       }
     }
   },
