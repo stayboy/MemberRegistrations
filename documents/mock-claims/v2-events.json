@@ -147,7 +147,7 @@
     "06-record-headcount-dialog": {
       "mock": {
         "path": "mockups/v2-events/06-record-headcount-dialog.png",
-        "sha256": "dc28201836c80331dd392357ba3f39c2fd4b8fca9e58a3c0579ae17b054fbc4c",
+        "sha256": "c65614ecf3bba3482d6cced3208ac971d92a942266d8662c947adb9c0f89e641",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -155,7 +155,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-15",
-        "sha256": "dc28201836c80331dd392357ba3f39c2fd4b8fca9e58a3c0579ae17b054fbc4c",
+        "sha256": "c65614ecf3bba3482d6cced3208ac971d92a942266d8662c947adb9c0f89e641",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
     },
