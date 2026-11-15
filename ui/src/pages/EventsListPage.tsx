@@ -30,6 +30,7 @@ import { listSeries } from '../api/series';
 import { useSession } from '../auth/SessionProvider';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
+import { SeriesActivityRow } from '../components/SeriesActivityRow';
 import { seedEventsListQuery } from '../format/events-list';
 import {
   eventStatusLabel,
@@ -210,7 +211,7 @@ export function EventsListPage() {
             <div className={styles.state}>
               <Spinner label="Loading events…" />
             </div>
-          ) : loadedCount === 0 ? (
+          ) : loadedCount === 0 && (seriesQuery.data ?? []).length === 0 ? (
             eventsQuery.isError ? null : (
               <div className={styles.empty}>
                 <Text className={styles.emptyTitle}>
@@ -242,6 +243,9 @@ export function EventsListPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {(seriesQuery.data ?? []).map((series) => (
+                      <SeriesActivityRow key={series.id} series={series} />
+                    ))}
                     {events.map((event) => (
                       <TableRow key={event.id}>
                         <TableCell>{formatRange(event.startDate, event.endDate)}</TableCell>

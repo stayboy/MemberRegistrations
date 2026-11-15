@@ -9,7 +9,13 @@ test('the events list shows the fixture rows', async ({ page }) => {
 
   const table = page.getByRole('table', { name: 'Events' });
   await expect(table).toBeVisible();
-  await expect(table.getByRole('link', { name: 'Sunday Service' })).toBeVisible();
+  // A series is an activity in this list (FR-5), so its row carries the schedule and next occurrence
+  // the retired series list used to show.
+  await expect(table.locator('a[href="#/events/series-1?kind=series"]')).toBeVisible();
+  await expect(table.getByText('Series', { exact: true }).first()).toBeVisible();
+  await expect(table.getByText('Weekly on Sunday', { exact: true }).first()).toBeVisible();
+  await expect(table.getByText(/^next /).first()).toBeVisible();
+  await expect(table.locator('a[href="#/events/event-1"]')).toBeVisible();
   await expect(table.getByRole('link', { name: 'Leaders retreat' })).toBeVisible();
   await expect(table.getByText('EVT-2026-001', { exact: true })).toBeVisible();
   // The date-window list shows the API's per-session counts, never a total.
@@ -17,8 +23,7 @@ test('the events list shows the fixture rows', async ({ page }) => {
 });
 
 test('the event detail opens the session attendance dialog with the API rows', async ({ page }) => {
-  await open(page, '/events');
-  await page.getByRole('link', { name: 'Sunday Service' }).click();
+  await open(page, '/events/event-1');
 
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
   await expect(page.getByText('EVT-2026-001', { exact: true })).toBeVisible();
@@ -104,8 +109,7 @@ test('a standalone event has no import entry', async ({ page }) => {
 });
 
 test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
-  await open(page, '/events');
-  await page.getByRole('link', { name: 'Sunday Service' }).click();
+  await open(page, '/events/event-1');
 
   const panel = page.getByRole('region', { name: 'Active offerings' });
   await expect(panel).toBeVisible();
