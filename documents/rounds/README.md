@@ -45,8 +45,8 @@ The section ends with the gate-run signature line, pasted verbatim:
 
 ## Mock sign-off
 
-| Surface | Mock | sha256 | Signer | Date | Verdict |
-| ------- | ---- | ------ | ------ | ---- | ------- |
+| Surface | Mock | Capture | sha256 | Signer | Date | Verdict |
+| ------- | ---- | ------- | ------ | ------ | ---- | ------- |
 
 ## Mock parity
 
@@ -91,3 +91,13 @@ Rules:
 - Every round doc carries `## Mock sign-off` (or `n/a — no user-visible surface`) and `## Mock parity`
   (or `n/a — no mock`).
 - A round with no mock records "no mock"; it never skips silently.
+- **A round that changes a user-visible surface commits the picture.** The `## Mock sign-off` row names
+  the surface's re-run baseline under `ui/e2e/baseline/` as well as the signed mock, so the reviewer reads
+  the build against the drawing instead of the diff statistics. A sign-off that names no capture, on a
+  round whose diff carries none, is a `P1` finding (owner, 2026-11-15). The rule travels in two directions
+  and they are not substitutes: a **mock re-cut** moves the drawing to the build, a **baseline re-capture**
+  (`npm run ui:capture`) records the build so it can be set against the drawing, and a round that says
+  "matches" without the capture is a claim with no artefact. A new screen has no baseline until its entry
+  is added to the capture spec, and that entry is part of the same round. Five defects in the MVP release
+  were invisible to code review, to `npm run verify` and to the test suite, and visible only in a
+  photograph.

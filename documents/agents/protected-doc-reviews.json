@@ -54,13 +54,13 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "7534f68e09e25d4dec0c7e1bbdd9abbc84ada5257d6d0260a4b96d0f0ec906e6",
+      "sha256": "f467c8ef67cf3ee8bb6ec38073336d8f7ee485d03477e80df228a19eb7aab14f",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the template gains a Grill section before Plan and the rules list gains its line (R7) - an unattended round carries a numbered frontier, each question naming a recommendation and its cost, while a Tier 0 record has no round doc; the gate proves a grill opened and the reviewer owns whether the frontier was whole. why: the owner asked whether the repo grill rule was followed, and 3 of 15 round docs carried a decision record while the rounds since withdrew claims, split rounds and deleted a page on the implementer judgement. rejected: leaving it to discipline (a rule with no failing artefact is a preference); backfilling the twelve merged docs (a reconstructed frontier is a fabricated record); letting the regex stand as the control, which the review returned REWORK on.",
-      "verdict": "REWORK then fixed",
-      "attestation": "The protected review read README.md in full, scripts/check-round.mjs in full (R7 at 150-185 and 412-416) and the round doc. It agreed the recommendation-and-cost requirement is sourced from AGENTS.md section 2, then returned REWORK on one P1: the text positioned the regex as the control and silently dropped the whole-frontier mandate both section 2 and section 17 carry, so a round could grill one question and pass. It also found three P2s: the template framing claimed section 17 says something it does not; \"one numbered question per line\" mis-describes a gate that accepts multi-line blocks; and the Tier 0 carve-out was missing. The text now carries the reviewer wording - the gate proves a grill opened, frontier completeness is the reviewer control, and a Tier 0 record has no round doc.",
+      "reason": "changes: the round template's Mock sign-off table gains a Capture column, and the rules list gains the capture-in-round rule - a round that changes a user-visible surface names that surface's re-run baseline (ui/e2e/baseline, npm run ui:capture) beside the signed mock, a new screen's capture-spec entry ships in the same round, and a sign-off that names no capture on a round whose diff carries none is a P1. why: five defects in the MVP release - a status pill over its text, the raw RRULE in a schedule cell, a clipped actions column, two missing FR-59a columns and a page verb rendered as a secondary button - were invisible to code review, to npm run verify and to the whole test suite, and visible only in a capture; the comparison pack found them after every gate had passed, so the picture has to travel with the round. rejected: a mandatory human comparison on every round (owner: a line, not a ritual); a new check-round regex, because no mechanical surface-to-baseline map exists and a guard that guesses would fail honest rounds; an AGENTS.md section 14 edit, which already delegates mock procedure to this skill.",
+      "verdict": "PASS with nits, then PASS on confirmation",
+      "attestation": "Two rounds against deepseek-v4-pro build 0813. The first returned PASS with nits and two P2s: \"without either\" undercut the mandatory-capture rule, and \"a baseline re-capture moves the evidence to the drawing\" inverted the direction of a capture. Both were fixed in the same edit, together with the reviewer's two nits - the regeneration command is now named, and a new screen's missing baseline is stated as part of the round. The reviewer confirmed the fixes and returned PASS with no remaining P1, P2 or nits, and noted that the skill's step 12 mirrors the README rule without contradicting it.",
       "at": "2026-11-15"
     },
     {
@@ -143,13 +143,13 @@
     },
     {
       "path": ".opencode/skills/mock-build/SKILL.md",
-      "sha256": "f4069d27b630a42ae2e9c078b07c075b9d3cfb253fd10d4052aae624de513e7b",
+      "sha256": "cdf73a6d12f5f8c2651d808cf92c951885517cdcb989f1a17a431152091f8d0d",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: a new procedure step - never invent a control, because a mock depicts what the build does or what the signed target says, so a layout rule that needs another button changes the page drawn, not the page vocabulary; two pitfall rows (a control the page does not have; an arrangement pinned by presence); two drift-checklist rows (the utility order - Refresh immediately before the verb or menu; lane tables show each lane's buckets, not only its total). why: this round paid for all three faults, and the skill is the procedure an agent follows. rejected: leaving it to lessons.md alone (a reader who only loads the skill would repeat them).",
-      "verdict": "PASS",
-      "attestation": "Confirmed consistent with FR-9a and AC-50 as amended on 2026-11-15 (the utility sits immediately before the verb or menu) and with HC-28 (each lane shows its buckets), and with no contradiction of any other step. Noted, not changed: the drift table's header names the v2-shell roster as its reference while two new rows are not pixel values.",
+      "reason": "changes: the procedure gains step 12 - when the build moves to the drawing, the capture is the proof: a round that changes a user-visible surface without re-cutting its mock still commits the surface's Playwright baseline (produced by npm run ui:capture) and names it in the sign-off row - and the pitfalls table gains \"a surface changed with no capture in the diff\". why: the skill is where a mock is made and refreshed, so the other direction of the same rule belongs here, and the pitfall names the consequence rather than the omission; the five-defect incident showed the drawing and the build can sit in disagreement through a whole release. rejected: restating the round-template rule in full, which would give it two homes and two chances to drift; making a mock re-cut a substitute for a capture, which the text now says explicitly it is not.",
+      "verdict": "PASS with nits, then PASS on confirmation",
+      "attestation": "Reviewed in the same two rounds as the round template. The reviewer accepted step 12 as the mirror of the README rule, asked for the regeneration command to be named (done) and for the direction of a re-capture to read as recording the build rather than the drawing (done), and confirmed PASS on the changed text.",
       "at": "2026-11-15"
     },
     {
