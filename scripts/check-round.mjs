@@ -147,6 +147,43 @@ function sectionLines(text, heading) {
 
 const deviationsLines = (text) => sectionLines(text, 'Deviations');
 
+/**
+ * R7: an unattended round opens with a grill round. The doc must carry a `## Grill` section holding at
+ * least one numbered question, and each question must name its recommendation and its cost - the three
+ * parts AGENTS.md section 2 requires. A round that took a decision nobody grilled fails here rather than
+ * in a later review.
+ */
+function grillFailures(text, label, fail) {
+  const section = sectionLines(text, 'Grill');
+  if (section.length === 0) {
+    fail(
+      `${label}: an unattended round needs a "## Grill" section - the numbered frontier, each question with its recommendation and its cost (R7)`,
+    );
+    return;
+  }
+  const starts = section
+    .map((line, index) => ({ line: line.trim(), index }))
+    .filter((entry) => /^\d+\.\s+\S/.test(entry.line))
+    .map((entry) => entry.index);
+  if (starts.length === 0) {
+    fail(`${label}: "## Grill" holds no numbered question (R7)`);
+    return;
+  }
+  // A question runs from its number to the next one, so its recommendation and cost may sit on the
+  // lines under it rather than on one very long line.
+  for (const [position, start] of starts.entries()) {
+    const end = position + 1 < starts.length ? starts[position + 1] : section.length;
+    const block = section.slice(start, end).join(' ').replace(/\s+/g, ' ').trim();
+    const number = /^(\d+)\./.exec(block)?.[1] ?? '?';
+    if (!/recommend/i.test(block)) {
+      fail(`${label}: grill question ${number} names no recommendation (R7)`);
+    }
+    if (!/cost/i.test(block)) {
+      fail(`${label}: grill question ${number} names no cost (R7)`);
+    }
+  }
+}
+
 /** The reviewer's seat verdict (R5), the first `Seat:` line in `## Review`. */
 function seatVerdict(text) {
   return (
@@ -370,6 +407,12 @@ export function checkDocuments(files, changedPaths, readText, options = {}) {
           `${file}: Tier 2 needs a "worker <provider>/<model>" Implementer segment or a "## Deviations" line "Tier 2 parent-authored: <reason>" of at least ${PARENT_AUTHORED_MIN_REASON} characters (R2)`,
         );
       }
+    }
+
+    // R7: an unattended round names its grill. The Mode row is the corpus's own marker.
+    const modeCell = /^\|\s*Mode\s*\|([^\n]*)\|\s*$/m.exec(text)?.[1] ?? '';
+    if (/unattended/i.test(modeCell)) {
+      grillFailures(text, file, fail);
     }
 
     // R5: a Tier 2 round records the reviewer's seat verdict in "## Review".

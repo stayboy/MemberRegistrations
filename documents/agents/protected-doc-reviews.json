@@ -54,14 +54,14 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "5858f86e2a2135ce0fbb5d3b3405939017be1a992b93dce6f2fb136c7b88b3f5",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro:0813",
+      "sha256": "7534f68e09e25d4dec0c7e1bbdd9abbc84ada5257d6d0260a4b96d0f0ec906e6",
+      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: AGENTS.md §10a and the policy's Protected documents paragraph now name the reviewer seat the same way - deepseek-v4-pro 0813 outside 12:00-18:00, mimo-v2.6-pro as the window seat inside it or when no provider answers with 0813 - where both previously called mimo merely \"admissible\"; §17 and the policy's Unattended-rounds bullet now run the go-forward grill only once the owner accepts that the next round may begin; documents/lessons.md gains the two owner-accepted seat entries and its 2026-11-11 grill entry now says it replaced §17's end-of-round wording; documents/rounds/README.md states the Tier 2 deviation line's 20-character minimum and its bare-or-bulleted shape. why: the owner's 2026-11-09 Seats ruling and the 2026-11-11 lesson were contradicted by the text in two documents, and the guard enforced a minimum the README never stated. rejected: amending the lesson instead of §17; relaxing the guard; merging the two lessons into one.",
-      "verdict": "ACCEPTED",
-      "attestation": "Round 1 returned REWORK: the policy still carried the pre-ruling sentences in Protected documents and Unattended rounds, and the lesson kept a stale cross-reference. One fix pass amended four files, and the confirmation ACCEPTED at these hashes, with one P2 recorded rather than reopened: a pre-existing 2026-11-10 lesson still says §10a words the gate as a review by 0813 and that harmonising it is queued - both false now - and the policy's Spec review paragraph still says \"admissible\". Those two stale sentences go to the next protected round. Made no edits, ran no gates and committed nothing. Any later edit moves the text and must be re-reviewed and re-recorded.",
-      "at": "2026-11-11"
+      "reason": "changes: the template gains a Grill section before Plan and the rules list gains its line (R7) - an unattended round carries a numbered frontier, each question naming a recommendation and its cost, while a Tier 0 record has no round doc; the gate proves a grill opened and the reviewer owns whether the frontier was whole. why: the owner asked whether the repo grill rule was followed, and 3 of 15 round docs carried a decision record while the rounds since withdrew claims, split rounds and deleted a page on the implementer judgement. rejected: leaving it to discipline (a rule with no failing artefact is a preference); backfilling the twelve merged docs (a reconstructed frontier is a fabricated record); letting the regex stand as the control, which the review returned REWORK on.",
+      "verdict": "REWORK then fixed",
+      "attestation": "The protected review read README.md in full, scripts/check-round.mjs in full (R7 at 150-185 and 412-416) and the round doc. It agreed the recommendation-and-cost requirement is sourced from AGENTS.md section 2, then returned REWORK on one P1: the text positioned the regex as the control and silently dropped the whole-frontier mandate both section 2 and section 17 carry, so a round could grill one question and pass. It also found three P2s: the template framing claimed section 17 says something it does not; \"one numbered question per line\" mis-describes a gate that accepts multi-line blocks; and the Tier 0 carve-out was missing. The text now carries the reviewer wording - the gate proves a grill opened, frontier completeness is the reviewer control, and a Tier 0 record has no round doc.",
+      "at": "2026-11-15"
     },
     {
       "path": ".github/merge-policy.md",
