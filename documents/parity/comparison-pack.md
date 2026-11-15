@@ -120,12 +120,33 @@ Dark, mobile and meadow were not read in this pass; they are the same page in ot
 captures** with no live source: DoD item 5 names it outside parity. "imports-batches" has no mock at all.
 Both can be reviewed for consistency with the design language, never claimed as parity.
 
+## 13–15. Shepherding — the roster read
+
+| #   | What          | Mock                                                          | Build                                                       |
+| --- | ------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
+| 13a | Row actions   | a phone control (log call) and a `⋯` menu on every row        | **none at all**                                             |
+| 13b | Column order  | Member · Contacts · Residence · …                             | Member · **Residence · Contacts** · …                       |
+| 13c | Status column | `Status`, reading In church / Unknown / Not reported          | `Still in church`, reading Still in church / Never reported |
+| 13d | Filter chips  | counts beside the labels (All 7, Never called 2, Follow-up 4) | labels only                                                 |
+| 13e | Footer        | 7 assignments in this view                                    | 4 assignments in this view (fixture size)                   |
+
+**13a is a spec requirement, not a design difference.** FR-59a says the row actions — Contacts, Reassign
+and End — sit in one Fluent overflow on the row, with **Log call remaining the row visible primary
+action**. The build draws neither: there is no actions column in the capture. That is the largest finding
+the pack has produced — a signed, accepted element that is not built — and it is worth checking whether
+it is absent from the page or only from this state before it is called a gap.
+
+13b–13d are design differences a reader routes: the mock is the signed artefact, and the build reordered
+the columns and renamed the status header.
+
+Officers and the church report were not read in this pass.
+
 ## What the pack found
 
 1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
 2. **One retired item never applied** (raw RRULE in the series schedule cell).
 3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **Six rows still owed** — shell dark, mobile and meadow; shepherding officers, roster and report. Imports are outside parity by the DoD, and settings is open for a routing decision.
+4. **Four rows still owed** — shell dark, mobile and meadow; shepherding officers and the church report. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster missing its row actions is the first finding that looks like a build gap rather than a design difference.
 5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
    dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
 
