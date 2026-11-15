@@ -152,7 +152,18 @@ vi.mock('../components/ContactsDialog', () => ({
 }));
 
 vi.mock('../components/AssignShepherdDialog', () => ({
-  AssignShepherdDialog: () => <div>Reassign dialog opened</div>,
+  AssignShepherdDialog: ({
+    memberNo,
+    fixedOfficer,
+  }: {
+    memberNo?: string;
+    fixedOfficer?: { memberNo: string };
+  }) =>
+    fixedOfficer ? (
+      <div>Assign member dialog opened for officer {fixedOfficer.memberNo}</div>
+    ) : (
+      <div>Reassign dialog opened for {memberNo}</div>
+    ),
 }));
 
 vi.mock('./LogCallDialog', () => ({
@@ -386,13 +397,68 @@ describe('ShepherdingRosterPage row overflow (FR-59a)', () => {
 
     await user.click(trigger);
     await user.click(await screen.findByRole('menuitem', { name: 'Reassign' }));
-    expect(await screen.findByText('Reassign dialog opened')).toBeInTheDocument();
+    expect(await screen.findByText('Reassign dialog opened for M-1002')).toBeInTheDocument();
 
     await user.click(trigger);
     await user.click(await screen.findByRole('menuitem', { name: 'End' }));
     expect(
       await screen.findByText(`Confirm: End the assignment for ${label}?`),
     ).toBeInTheDocument();
+  });
+});
+
+describe('ShepherdingRosterPage page action (FR-9a)', () => {
+  it('renders Assign member as the one visible verb, after the refresh icon, with no Actions menu', async () => {
+    fixture.rows = ROSTER;
+    renderRoster();
+
+    await screen.findByText(labelOf(ROSTER[0]!));
+
+    // One verb renders as a visible button whose label is the accessible name.
+    const assign = screen.getByRole('button', { name: 'Assign member' });
+    expect(assign).toHaveTextContent('Assign member');
+    // The verb carries the person-plus icon the signed mock shows.
+    expect(assign.querySelector('svg')).not.toBeNull();
+
+    // FR-9a: the Refresh utility leads the run, so the icon precedes the verb.
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    expect(
+      refresh.compareDocumentPosition(assign) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // A page with exactly one verb never renders the one-item menu.
+    expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull();
+  });
+
+  it('opens the assign dialog for this roster officer from the page action', async () => {
+    const user = userEvent.setup();
+    fixture.rows = ROSTER;
+    renderRoster();
+
+    await screen.findByText(labelOf(ROSTER[0]!));
+    await user.click(screen.getByRole('button', { name: 'Assign member' }));
+
+    expect(
+      await screen.findByText('Assign member dialog opened for officer M-2001'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the page verb disabled until the roster read has settled', async () => {
+    fixture.rows = ROSTER;
+    fixture.gate = new Promise<void>((resolve) => {
+      fixture.release = resolve;
+    });
+    renderRoster();
+
+    const pending = await screen.findByRole('button', { name: 'Assign member' });
+    expect(pending).toBeDisabled();
+
+    fixture.release?.();
+    await screen.findByText(labelOf(ROSTER[0]!));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Assign member' })).toBeEnabled(),
+    );
   });
 });
 

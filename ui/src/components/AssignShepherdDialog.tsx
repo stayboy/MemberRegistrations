@@ -61,11 +61,33 @@ export interface AssignShepherdTarget {
   } | null;
 }
 
+/** The officer a member is assigned to when the dialog opens from that officer's roster. */
+export interface AssignShepherdOfficer {
+  readonly memberNo: string;
+  readonly memberName?: string;
+}
+
+export interface AssignShepherdDialogProps {
+  /** The member being assigned when the member is already known (member detail, a roster row). */
+  readonly memberNo?: string;
+  readonly memberName?: string;
+  /**
+   * Assign-to-this-officer mode (the roster's page action): the officer is fixed and the
+   * member is chosen here instead. Mutually exclusive with `memberNo`; the officer field
+   * and the member field swap, and the POST body is unchanged.
+   */
+  readonly fixedOfficer?: AssignShepherdOfficer;
+  readonly currentAssignment?: AssignShepherdTarget['currentAssignment'];
+  readonly onClose: () => void;
+  readonly onAssigned: () => void;
+}
+
 /**
  * Call sites: MemberDetailPage (assign when there is no shepherd, reassign when
- * there is one) and ShepherdingRosterPage (reassign a roster row). Feature
- * component: it owns the assignment POST and the 409 consent round trip; the
- * caller owns invalidation through `onAssigned`.
+ * there is one), ShepherdingRosterPage (reassign a roster row) and the roster's
+ * `Assign member` page action (`fixedOfficer`: assign a chosen member to that
+ * officer). Feature component: it owns the assignment POST and the 409 consent
+ * round trip; the caller owns invalidation through `onAssigned`.
  *
  * A `409` with `currentAssignment` names the current officer and pauses; the
  * retry is an explicit click and carries the returned id (FR-63, AC-37).
@@ -73,22 +95,21 @@ export interface AssignShepherdTarget {
 export function AssignShepherdDialog({
   memberNo,
   memberName,
+  fixedOfficer,
   currentAssignment,
   onClose,
   onAssigned,
-}: {
-  memberNo: string;
-  memberName?: string;
-  currentAssignment?: AssignShepherdTarget['currentAssignment'];
-  onClose: () => void;
-  onAssigned: () => void;
-}) {
+}: AssignShepherdDialogProps) {
   const styles = useStyles();
   const { baseUrl, session, signOut } = useSession();
   const { formatDate } = useDateTimeFormat();
   const token = session?.token ?? '';
 
-  const [officerMemberNo, setOfficerMemberNo] = useState<string | null>(null);
+  const [officerMemberNo, setOfficerMemberNo] = useState<string | null>(
+    fixedOfficer?.memberNo ?? null,
+  );
+  const [chosenMemberNo, setChosenMemberNo] = useState<string | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [officerError, setOfficerError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -97,6 +118,9 @@ export function AssignShepherdDialog({
   const [replaceAssignmentId, setReplaceAssignmentId] = useState<string | undefined>(
     currentAssignment?.assignmentId,
   );
+
+  // In fixed-officer mode the member is the picker; otherwise the member is the subject.
+  const targetMemberNo = memberNo ?? chosenMemberNo;
 
   const assignMutation = useMutation({
     mutationFn: (input: AssignmentInput) => assignMember(baseUrl, token, input),
@@ -108,14 +132,15 @@ export function AssignShepherdDialog({
     const reasonMessage = validateReason(reason);
     setReasonError(reasonMessage);
     setOfficerError(officerMemberNo ? null : 'Choose the officer who will shepherd this member.');
+    setMemberError(targetMemberNo ? null : 'Choose the member this officer will shepherd.');
 
-    if (reasonMessage || !officerMemberNo) return;
+    if (reasonMessage || !officerMemberNo || !targetMemberNo) return;
 
     setFormError(null);
     assignMutation.mutate(
       {
         officerMemberNo,
-        memberNo,
+        memberNo: targetMemberNo,
         reason: reason.trim(),
         ...(nextReplaceAssignmentId ? { replaceAssignmentId: nextReplaceAssignmentId } : {}),
       },
@@ -146,7 +171,11 @@ export function AssignShepherdDialog({
     );
   }
 
-  const title = currentAssignment ? 'Reassign member' : 'Assign a shepherd';
+  const title = fixedOfficer
+    ? 'Assign a member'
+    : currentAssignment
+      ? 'Reassign member'
+      : 'Assign a shepherd';
 
   return (
     <Dialog
@@ -159,9 +188,39 @@ export function AssignShepherdDialog({
         <DialogBody>
           <DialogTitle>{title}</DialogTitle>
           <DialogContent className={styles.content}>
-            <Text size={200} className={styles.muted}>
-              {memberName ? `${memberName} · ${memberNo}` : memberNo}
-            </Text>
+            {fixedOfficer ? (
+              <div className={styles.note}>
+                <Text weight="semibold">Officer</Text>
+                <Text size={200}>
+                  {fixedOfficer.memberName
+                    ? `${fixedOfficer.memberName} · ${fixedOfficer.memberNo}`
+                    : fixedOfficer.memberNo}
+                </Text>
+                <Text size={200} className={styles.muted}>
+                  The new assignment starts today and the member leaves the unassigned pool.
+                </Text>
+              </div>
+            ) : (
+              <Text size={200} className={styles.muted}>
+                {memberName ? `${memberName} · ${memberNo}` : memberNo}
+              </Text>
+            )}
+
+            {fixedOfficer ? (
+              <MemberPicker
+                label="Member"
+                value={chosenMemberNo}
+                onChange={(value) => {
+                  setChosenMemberNo(value);
+                  setMemberError(null);
+                  setConflict(null);
+                  setFormError(null);
+                }}
+                excludeMemberNo={fixedOfficer.memberNo}
+                validationState={memberError ? 'error' : 'none'}
+                validationMessage={memberError ?? undefined}
+              />
+            ) : null}
 
             {currentAssignment ? (
               <div className={styles.note}>
@@ -179,19 +238,21 @@ export function AssignShepherdDialog({
               </div>
             ) : null}
 
-            <MemberPicker
-              label="Officer"
-              value={officerMemberNo}
-              onChange={(value) => {
-                setOfficerMemberNo(value);
-                setOfficerError(null);
-                setConflict(null);
-                setFormError(null);
-              }}
-              excludeMemberNo={memberNo}
-              validationState={officerError ? 'error' : 'none'}
-              validationMessage={officerError ?? undefined}
-            />
+            {fixedOfficer ? null : (
+              <MemberPicker
+                label="Officer"
+                value={officerMemberNo}
+                onChange={(value) => {
+                  setOfficerMemberNo(value);
+                  setOfficerError(null);
+                  setConflict(null);
+                  setFormError(null);
+                }}
+                excludeMemberNo={memberNo}
+                validationState={officerError ? 'error' : 'none'}
+                validationMessage={officerError ?? undefined}
+              />
+            )}
 
             <Field
               label="Reason"
@@ -228,7 +289,8 @@ export function AssignShepherdDialog({
               <MessageBar intent="warning">
                 <MessageBarBody>
                   <MessageBarTitle>This member already has a shepherd</MessageBarTitle>
-                  Member {memberNo} is currently shepherded by officer {conflict.officerMemberNo}{' '}
+                  Member {targetMemberNo} is currently shepherded by officer{' '}
+                  {conflict.officerMemberNo}{' '}
                   (the wire carries no name), assigned {formatDate(conflict.assignedOn)}.
                   Reassigning ends that assignment and keeps its history. Confirm to resend with the
                   current assignment.
