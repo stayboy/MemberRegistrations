@@ -418,9 +418,6 @@ export function SeriesDetailPage() {
                           <TableCell>
                             <div className={styles.identity}>
                               <Text>{scheduleLabel(version.rrule)}</Text>
-                              <Text size={200} className={styles.muted}>
-                                {version.rrule}
-                              </Text>
                             </div>
                           </TableCell>
                           <TableCell>

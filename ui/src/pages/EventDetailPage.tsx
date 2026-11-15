@@ -344,8 +344,8 @@ export function EventDetailPage() {
                           <TableCell>{formatDate(item.date)}</TableCell>
                           <TableCell>{formatTime(item.startTime)}</TableCell>
                           <TableCell>{item.endTime ? formatTime(item.endTime) : '—'}</TableCell>
-                          <TableCell>
-                            <div className={styles.identity}>
+                          <TableCell className={styles.statusCell}>
+                            <div className={styles.statusStack}>
                               <Badge
                                 appearance="tint"
                                 color={statusColor(item.status)}

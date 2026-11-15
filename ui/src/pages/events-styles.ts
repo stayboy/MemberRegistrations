@@ -48,8 +48,21 @@ export const useEventStyles = makeStyles({
     lineHeight: tokens.lineHeightBase400,
     fontWeight: tokens.fontWeightSemibold,
   },
+  // The session table has eight columns at 1440 px; the status pill was painting over the source
+  // label beside it. The cell refuses to shrink and the table scrolls instead of colliding.
+  statusCell: {
+    whiteSpace: 'nowrap',
+  },
+  statusStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    // A Badge stretches to its flex container unless it is told otherwise, which drew a 150px pill
+    // around a four-letter word.
+    alignItems: 'flex-start',
+  },
   sessionTable: {
-    minWidth: '980px',
+    minWidth: '1180px',
   },
   state: {
     display: 'flex',
