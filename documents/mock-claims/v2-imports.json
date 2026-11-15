@@ -98,6 +98,20 @@
         "sha256": "64b2e8e9afbf0f1522ea10c7cddb695f044ae08b9abbaa324126509db5c4de6e",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
+    },
+    "01-members-import": {
+      "mock": {
+        "path": "mockups/v2-imports/01-members-import.png",
+        "sha256": "6eaf15676fa6a12ec72fcd05c16bb3bd30cb6e3dd259e6a14034dfcae5be8636"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "6eaf15676fa6a12ec72fcd05c16bb3bd30cb6e3dd259e6a14034dfcae5be8636",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
     }
   },
   "inventory": [
