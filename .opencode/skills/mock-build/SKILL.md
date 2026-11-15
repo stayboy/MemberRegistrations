@@ -73,6 +73,11 @@ different shell from the built one.
     `documents/mock-claims/<set>.json` with `coverage: "target"`. The owner's sign-off flips it to `signed`
     with `{ by, at, sha256 }`; the round doc then carries a `## Mock sign-off` row naming the same
     `mockups/<set>/<state>.png` and a `Mock coverage:` line (`check-round` R6).
+12. **When the build moves to the drawing, the capture is the proof.** A round that changes a user-visible
+    surface without re-cutting its mock still commits that surface's Playwright baseline
+    (`ui/e2e/baseline/<name>.png`, produced by `npm run ui:capture`) and names it in the sign-off row, so
+    the reviewer sees the build beside the drawing. A mock re-cut and a baseline re-capture are not
+    substitutes: one moves the drawing, the other records the build.
 
 ## Drift checklist
 
@@ -96,18 +101,19 @@ different shell from the built one.
 
 ## Pitfalls this skill exists to prevent
 
-| Pitfall                                      | Symptom                                                                          |
-| -------------------------------------------- | -------------------------------------------------------------------------------- |
-| A wrapper class the stylesheet owns          | page inset, text centred, muted colours, 233 px rows                             |
-| Overriding instead of composing              | each override fixes one thing and breaks the shared rhythm                       |
-| Numbers that do not describe the rows        | 28 assigned over 7 rows, or a chip count that disagrees with its tile            |
-| A second image for one state                 | two "targets" and no way to say which was signed                                 |
-| Refreshing without the archive in view       | uppercase headers, bordered icon buttons, blue chips - all "plausible" alone     |
-| Reconstructing Fluent by hand                | chevrons as text characters, wrong switch size, wrong chip radius                |
-| A guard that names the box, not its contents | `side-nav` present but every item icon-less, so two sets shipped without them    |
-| A control the page does not have             | a second verb invented to satisfy a rule, so the mock stops describing the build |
-| An arrangement pinned by presence            | the icon rendered on the wrong side and the test still passed                    |
-| Trusting the guard instead of the picture    | a check can only catch what its rules name; the owner's eye caught the icons     |
+| Pitfall                                       | Symptom                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| A wrapper class the stylesheet owns           | page inset, text centred, muted colours, 233 px rows                                        |
+| Overriding instead of composing               | each override fixes one thing and breaks the shared rhythm                                  |
+| Numbers that do not describe the rows         | 28 assigned over 7 rows, or a chip count that disagrees with its tile                       |
+| A second image for one state                  | two "targets" and no way to say which was signed                                            |
+| Refreshing without the archive in view        | uppercase headers, bordered icon buttons, blue chips - all "plausible" alone                |
+| Reconstructing Fluent by hand                 | chevrons as text characters, wrong switch size, wrong chip radius                           |
+| A guard that names the box, not its contents  | `side-nav` present but every item icon-less, so two sets shipped without them               |
+| A control the page does not have              | a second verb invented to satisfy a rule, so the mock stops describing the build            |
+| An arrangement pinned by presence             | the icon rendered on the wrong side and the test still passed                               |
+| Trusting the guard instead of the picture     | a check can only catch what its rules name; the owner's eye caught the icons                |
+| A surface changed with no capture in the diff | the drawing and the build are compared by nobody until the next release, so the drift ships |
 
 ## Done means
 
