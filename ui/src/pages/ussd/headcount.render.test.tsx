@@ -240,6 +240,12 @@ describe('HeadcountReadFirst', () => {
       current: { adults: CURRENT, children: CHILDREN },
       observations: [CHILDREN, CURRENT, SUPERSEDED],
     });
+    // The current-lanes table alone, so its buckets cannot be satisfied by the
+    // history table's identically worded bucket cell (HC-28).
+    const lanes = markup.slice(
+      markup.indexOf('aria-label="Current headcounts"'),
+      markup.indexOf('aria-label="Headcount observations"'),
+    );
 
     // Both lanes are rows in the current table, each with its own asOf and recorder.
     expect(markup).toContain('Adult service');
@@ -248,11 +254,43 @@ describe('HeadcountReadFirst', () => {
     expect(markup).toContain('2026-11-08T10:50:00.000Z');
     expect(markup).toContain('demo.officer');
     expect(markup).toContain('demo.children');
+    // Each lane carries its own buckets, between Mode and Count, labelled from
+    // the mode's reference data rather than the total alone.
+    expect(lanes.indexOf('Mode')).toBeLessThan(lanes.indexOf('Buckets'));
+    expect(lanes.indexOf('Buckets')).toBeLessThan(lanes.indexOf('Count'));
+    expect(lanes).toContain('Adult men 62 · Adult women 71 · Children 9');
+    expect(lanes).toContain('Boys 5 · Girls 6 · Adults 7');
     // Two lane rows plus the two current history rows carry Correct.
     expect(markup.match(/Correct/g)?.length).toBe(4);
     // `>Current<` is the history badge; the table header is a label, not a row.
     expect(markup.match(/>Current</g)?.length).toBe(2);
     expect(markup).toContain('Valid for 2026-11-08T09:58:00.000Z');
+  });
+
+  it('keeps an all-zero lane as a row with a 0 total and an em-dash for its buckets', () => {
+    const zero: Headcount = {
+      ...VISITORS,
+      id: 'headcount-zero',
+      total: 0,
+      supersedesId: null,
+      lines: [],
+    };
+    const markup = readFirst({ current: { visitors: zero }, observations: [zero] });
+    const lanes = markup.slice(
+      markup.indexOf('aria-label="Current headcounts"'),
+      markup.indexOf('aria-label="Headcount observations"'),
+    );
+
+    // The lane is still a row, still correctable, and shows its zero total.
+    expect(lanes).toContain('Visitors');
+    expect(lanes).toContain('—');
+    expect(lanes).toContain('Correct');
+    // No bucket rows: the history cell's "All zero" wording does not leak into
+    // the lane row, and nothing claims a bucket the operator did not count.
+    expect(lanes).not.toContain('All zero');
+    expect(lanes).not.toContain('Visitor men');
+    // The history table keeps its own wording for the same observation.
+    expect(markup).toContain('All zero');
   });
 
   it('does not render a row for a lane with no observation', () => {
