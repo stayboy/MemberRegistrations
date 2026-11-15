@@ -4,30 +4,18 @@ test.beforeEach(async ({ page }) => {
   await seedSession(page);
 });
 
-test('the series list shows the schedule and the next occurrence', async ({ page }) => {
+// A series is an activity in the events list, so its own list retires and the route redirects
+// (spec 4.3, AC-51). The list's own assertions move to the events list in the round that merges it.
+test('the retired series list redirects to the events list', async ({ page }) => {
   await open(page, '/events/series');
 
-  const table = page.getByRole('table', { name: 'Series' });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole('link', { name: 'Sunday Service' })).toBeVisible();
-  await expect(table.getByRole('link', { name: 'Bible Study' })).toBeVisible();
-
-  const sunday = table.getByRole('row').filter({ hasText: 'Sunday Service' });
-  await expect(sunday.getByText('Weekly on Sunday')).toBeVisible();
-  await expect(sunday.getByText('FREQ=WEEKLY;BYDAY=SU')).toBeVisible();
-  // The next occurrence is the first date the API returned for the window.
-  await expect(sunday.getByText('Jan 4, 2026', { exact: true })).toBeVisible();
-  await expect(sunday.getByText('2 cancelled · 0 extra')).toBeVisible();
-
-  const bibleStudy = table.getByRole('row').filter({ hasText: 'Bible Study' });
-  await expect(bibleStudy.getByText('Monthly on day 15')).toBeVisible();
-  await expect(bibleStudy.getByText('Jan 15, 2026', { exact: true })).toBeVisible();
-  await expect(bibleStudy.getByText('None')).toBeVisible();
+  await expect(page).toHaveURL(/\/events$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Events' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Series' })).toHaveCount(0);
 });
 
 test('the series detail shows versions, exceptions and the occurrence window', async ({ page }) => {
-  await open(page, '/events/series');
-  await page.getByRole('link', { name: 'Sunday Service' }).click();
+  await open(page, '/events/series-1?kind=series');
 
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
 
@@ -68,8 +56,7 @@ test('the series detail shows versions, exceptions and the occurrence window', a
 });
 
 test('the series entry opens the import flow filtered to the series', async ({ page }) => {
-  await open(page, '/events/series');
-  await page.getByRole('link', { name: 'Sunday Service' }).click();
+  await open(page, '/events/series-1?kind=series');
 
   await openActions(page);
   const entry = page.getByRole('menuitem', { name: 'Import attendance' });

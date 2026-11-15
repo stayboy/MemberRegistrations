@@ -25,7 +25,6 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `events-list.png`             | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`          |
 | `event-detail.png`            | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`         |
 | `event-attendance-dialog.png` | Attendance dialog for the first session          | 1440 × 900  | `v2-events/06-attendance-rows.png`      |
-| `series-list.png`             | Series list, schedule and next occurrence        | 1440 × 900  | `v2-events/03-series-list.png`          |
 | `series-detail.png`           | Series detail, versions, exceptions, occurrences | 1440 × 1000 | `v2-events/04-series-detail.png`        |
 | `shepherding-officers.png`    | Shepherding officers, coverage and officer table | 1440 × 900  | `v2-shell/07-shepherding-officers.png`  |
 | `shepherding-roster.png`      | Shepherding roster for the fixture officer       | 1440 × 900  | `v2-shell/08-shepherding-roster.png`    |

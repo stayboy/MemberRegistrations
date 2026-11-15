@@ -171,14 +171,8 @@ test('attendance dialog', async ({ page }) => {
   await capture(page, 'event-attendance-dialog');
 });
 
-test('series list', async ({ page }) => {
-  await openScreen(page, '/events/series', { width: 1440, height: 900 });
-  await expect(page.getByRole('table', { name: 'Series' })).toBeVisible();
-  await capture(page, 'series-list');
-});
-
 test('series detail', async ({ page }) => {
-  await openScreen(page, '/events/series/series-1', { width: 1440, height: 1000 });
+  await openScreen(page, '/events/series-1?kind=series', { width: 1440, height: 1000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Schedule versions' })).toBeVisible();
   await capture(page, 'series-detail');

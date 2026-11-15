@@ -3,11 +3,10 @@ import { expect, open, seedSession, test } from './fixtures';
 const SCREENS = [
   { route: '/members', heading: 'Members', ready: 'table' },
   { route: '/events', heading: 'Events', ready: 'table' },
-  { route: '/events/series', heading: 'Series', ready: 'table' },
   { route: '/members/new', heading: 'Add member', ready: 'form' },
   { route: '/members/M-1001', heading: 'Kwame Asante (Male, 41y)', ready: 'detail' },
   { route: '/events/event-1', heading: 'Sunday Service', ready: 'table' },
-  { route: '/events/series/series-1', heading: 'Sunday Service', ready: 'table' },
+  { route: '/events/series-1?kind=series', heading: 'Sunday Service', ready: 'table' },
 ] as const;
 
 const WIDTHS = [360, 768, 1440] as const;

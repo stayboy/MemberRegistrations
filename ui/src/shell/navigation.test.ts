@@ -29,9 +29,20 @@ describe('contextual section resolution', () => {
   it('names the member database import and retires the event list', () => {
     expect(navItemForPath('/imports/members').label).toBe('Member database');
     expect(navItemForPath('/imports/batches').label).toBe('Batch lookup');
-    expect(navItemForPath('/imports/attendance').label).toBe('Attendance registry');
 
     const imports = SECTIONS.find((section) => section.id === 'imports');
     expect(imports?.items.map((item) => item.path)).not.toContain('/imports/events');
+  });
+
+  it('advertises no retired route (AC-51)', () => {
+    const paths = SECTIONS.flatMap((section) => section.items.map((item) => item.path));
+    // Attendance is imported from a session row and a series is an activity, so neither has a page.
+    expect(paths).not.toContain('/imports/attendance');
+    expect(paths).not.toContain('/events/series');
+  });
+
+  it('keeps headcount off the USSD section, because a count needs its activity', () => {
+    const ussd = SECTIONS.find((section) => section.id === 'ussd');
+    expect(ussd?.items.map((item) => item.path)).not.toContain('/ussd/headcount');
   });
 });
