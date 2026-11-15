@@ -122,19 +122,20 @@ Both can be reviewed for consistency with the design language, never claimed as 
 
 ## 13–15. Shepherding — the roster read
 
-| #   | What          | Mock                                                          | Build                                                       |
-| --- | ------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
-| 13a | Row actions   | a phone control (log call) and a `⋯` menu on every row        | **none at all**                                             |
-| 13b | Column order  | Member · Contacts · Residence · …                             | Member · **Residence · Contacts** · …                       |
-| 13c | Status column | `Status`, reading In church / Unknown / Not reported          | `Still in church`, reading Still in church / Never reported |
-| 13d | Filter chips  | counts beside the labels (All 7, Never called 2, Follow-up 4) | labels only                                                 |
-| 13e | Footer        | 7 assignments in this view                                    | 4 assignments in this view (fixture size)                   |
+| #   | What          | Mock                                                          | Build                                                                                                                        |
+| --- | ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 13a | Row actions   | a phone control (log call) and a `⋯` menu on every row        | **built but clipped**: `RowActionMenu` exists, and the table overflows its panel so the column sits outside the visible area |
+| 13b | Column order  | Member · Contacts · Residence · …                             | Member · **Residence · Contacts** · …                                                                                        |
+| 13c | Status column | `Status`, reading In church / Unknown / Not reported          | `Still in church`, reading Still in church / Never reported                                                                  |
+| 13d | Filter chips  | counts beside the labels (All 7, Never called 2, Follow-up 4) | labels only                                                                                                                  |
+| 13e | Footer        | 7 assignments in this view                                    | 4 assignments in this view (fixture size)                                                                                    |
 
-**13a is a spec requirement, not a design difference.** FR-59a says the row actions — Contacts, Reassign
-and End — sit in one Fluent overflow on the row, with **Log call remaining the row visible primary
-action**. The build draws neither: there is no actions column in the capture. That is the largest finding
-the pack has produced — a signed, accepted element that is not built — and it is worth checking whether
-it is absent from the page or only from this state before it is called a gap.
+**13a is a layout defect, not a missing feature — corrected after checking the source.** My first read of
+the capture said the actions were absent; `ShepherdingRosterPage` has a `RowActionMenu` (FR-59a: Contacts,
+Reassign, End, with Log call visible) at line 185. What the capture shows is that the **table overflows
+its panel** at 1440 px, so the actions column falls outside the visible area. The requirement is built
+and unreachable at this width, which is worse than either a gap or a difference: a reader cannot tell
+it is there.
 
 13b–13d are design differences a reader routes: the mock is the signed artefact, and the build reordered
 the columns and renamed the status header.
@@ -146,7 +147,7 @@ Officers and the church report were not read in this pass.
 1. **One build defect** (`Held`/`Mixed` overlap) — a UI fix, not a mock change.
 2. **One retired item never applied** (raw RRULE in the series schedule cell).
 3. **One stale mock** (the headcount dialog) — the drawing must follow the model.
-4. **Four rows still owed** — shell dark, mobile and meadow; shepherding officers and the church report. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster missing its row actions is the first finding that looks like a build gap rather than a design difference.
+4. **Four rows still owed** — shell dark, mobile and meadow; shepherding officers and the church report. Imports are outside parity by the DoD; settings and the collapsed rail are open for routing; the roster's row actions are built but clipped by an overflowing table, which is a layout defect rather than a gap.
 5. **Three surfaces with no signed mock at all** (member detail, add member, contacts and the attendance
    dialog) — they can be reviewed for consistency with the design language, never claimed as parity.
 
