@@ -480,8 +480,12 @@ separate Attendance section, that is Q1.
   capture time. The UI MUST NOT read a stored live flag or ask the operator to
   declare "live".
 - FR-5: A series MUST appear in the events list as an activity, showing name, ministry, a
-  human-readable schedule, next occurrence and archived state from `GET /v1/series`. There is no
-  separate series list (owner, 2026-11-15).
+  human-readable schedule and archived state from `GET /v1/series`, and its **next occurrence** from that
+  series' own `GET /v1/series/:id/occurrences` over a 90-day window - `SeriesDto` carries no next
+  occurrence, and adding one would be a wire change. "Today" is the **series timezone** (FR-6b), an
+  archived series is not read at all, and the row appears even when the event window is empty. The read is
+  one per series and MUST be revisited before a listing can carry enough series for the fan-out to
+  matter (owner, 2026-11-15). There is no separate series list (owner, 2026-11-15).
 - FR-6: The activity detail for a series MUST show each schedule version (`effectiveFrom`, `rrule`,
   `endsOn`),
   exceptions (`cancelled` / `extra`), a date-window occurrence list and the attendance/offering
