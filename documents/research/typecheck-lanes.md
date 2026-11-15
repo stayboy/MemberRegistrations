@@ -1,5 +1,8 @@
 # Typecheck lanes: does the production build catch what the DOM lane misses?
 
+**Status: a note, not a lesson** (owner, 2026-11-15). It explains one build failure; it changes no
+decision. It is kept for the evidence, not for admission to `documents/lessons.md`.
+
 **2026-11-15.** Corroborating a proposed lesson: _"The DOM lane is not the production build. `npm --prefix ui run
 build` type-checks the test files too … and the symptom is 'webServer exited 2', which names neither the file nor
 the rule."_ The incident: `ui/src/components/SessionHeadcount.dom.test.tsx` cast `HeadcountInput` straight to
