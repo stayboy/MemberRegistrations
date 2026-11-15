@@ -1,0 +1,323 @@
+{
+  "set": "v2-events",
+  "specs": [
+    "documents/specs/member-registrations-ui.md",
+    "documents/specs/member-registrations-events-offerings.md"
+  ],
+  "surfaces": [
+    {
+      "id": "event-detail",
+      "route": "/events/:id",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": [
+        "one page verb",
+        "Active offerings panel",
+        "whether it ended the session",
+        "seeded with that event",
+        "archived series or cancelled event"
+      ]
+    },
+    {
+      "id": "series-detail",
+      "route": "/events/series/:id",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": [
+        "one page verb",
+        "the four summary tiles are visible",
+        "adds a schedule version or exception",
+        "the import flow opens at"
+      ]
+    }
+  ],
+  "states": {
+    "event-detail-series": {
+      "mock": {
+        "path": "mockups/v2-events/08-event-detail-series.png",
+        "sha256": "f3eff2fc4187200d4bded78c225b4a9a5d488b3fc352d19d91a7fb7ea00b469e",
+        "source": "mockups/v2-events/08-event-detail-series.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "f3eff2fc4187200d4bded78c225b4a9a5d488b3fc352d19d91a7fb7ea00b469e",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "event-detail-cancelled": {
+      "mock": {
+        "path": "mockups/v2-events/09-event-detail-cancelled.png",
+        "sha256": "b2aacb101e87b9ae3686d497d4bf62c3b267bc981dd09e32ce092272cb854422",
+        "source": "mockups/v2-events/09-event-detail-cancelled.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "b2aacb101e87b9ae3686d497d4bf62c3b267bc981dd09e32ce092272cb854422",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "series-detail": {
+      "mock": {
+        "path": "mockups/v2-events/04-series-detail.png",
+        "sha256": "070bbe649d0d19a04d9ba3b439f3b1514442e19ce16bc9c37321ed678a72a40c",
+        "source": "mockups/v2-events/08-series-detail-entry.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "070bbe649d0d19a04d9ba3b439f3b1514442e19ce16bc9c37321ed678a72a40c",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    }
+  },
+  "inventory": [
+    {
+      "surface": "event-detail",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "EV-DETAIL-VERB"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-3",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/events.spec.ts::the event detail shows the read-only Active offerings panel and terms"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-4a",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/events.spec.ts::a cancelled session shows its reason, and a legacy one says it is missing"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-7",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/events.spec.ts::the series-backed event entry seeds the import flow"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-10",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        }
+      ]
+    },
+    {
+      "surface": "series-detail",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "EV-SERIES-MENU"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-5",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/series.spec.ts::the series detail shows versions, exceptions and the occurrence window"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-6",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-7",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/series.spec.ts::the series entry opens the import flow filtered to the series"
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "EV-VERBS",
+      "as": "operator",
+      "iWant": "the event and series detail action rows to follow the one-verb rule",
+      "soThat": "the action row reads the same on every page",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "EV-DETAIL-VERB",
+      "story": "EV-VERBS",
+      "state": "event-detail-series",
+      "claim": "Import attendance is the page’s one visible verb, at the trailing edge of the action row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-DETAIL-NO-MENU",
+      "story": "EV-VERBS",
+      "state": "event-detail-series",
+      "claim": "A one-item Actions menu is drawn beside the verb.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "no Actions menu is rendered"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-DETAIL-REFRESH-FIRST",
+      "story": "EV-VERBS",
+      "state": "event-detail-series",
+      "claim": "The Refresh icon is drawn before the Back control and before the verb.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "before every control in the row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-DETAIL-NO-MENUITEM",
+      "story": "EV-VERBS",
+      "state": "event-detail-series",
+      "claim": "The Refresh control is an item inside a menu.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "it is never a menu item"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-CANCEL-VERB",
+      "story": "EV-VERBS",
+      "state": "event-detail-cancelled",
+      "claim": "Import attendance is still the page’s one visible verb on a cancelled event.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-CANCEL-REASON",
+      "story": "EV-VERBS",
+      "state": "event-detail-cancelled",
+      "claim": "The cancelled session row states the cancellation reason.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "EV-SERIES-MENU",
+      "story": "EV-VERBS",
+      "state": "series-detail",
+      "claim": "Import attendance, Edit and Archive are grouped in one Actions menu.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "one Actions menu holds them"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-SERIES-NO-STANDALONE",
+      "story": "EV-VERBS",
+      "state": "series-detail",
+      "claim": "A standalone single-verb button is drawn beside the Actions menu.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "one Actions menu holds them"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EV-SERIES-REFRESH-FIRST",
+      "story": "EV-VERBS",
+      "state": "series-detail",
+      "claim": "The Refresh icon leads the run, before Back and before the Actions menu.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "before Back, the verb and the menu"
+      },
+      "control": "spec"
+    }
+  ]
+}
