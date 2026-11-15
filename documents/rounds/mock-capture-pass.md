@@ -50,8 +50,9 @@ gate-run 2026-11-15T05:14:08.855Z profile=full steps=7/7 lines=7 bytes=854
 
 ## Mock sign-off
 
-The signed states whose bytes moved. They are **not re-signed**: every catalogue still carries the hash that
-was signed, and the mismatch is the request below.
+The fourteen signed states were **re-signed by the owner on 2026-11-15**. The table below is the recorded
+hash for each; the six `mvp-offerings` **reference** states also moved and had their hashes corrected as a
+record fix, since they carry no signature. A hash audit over every catalogue state now reports **0 stale**.
 
 | Surface           | Mock                                     | sha256                                                             | Signer | Date       | Verdict |
 | ----------------- | ---------------------------------------- | ------------------------------------------------------------------ | ------ | ---------- | ------- |

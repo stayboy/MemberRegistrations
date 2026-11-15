@@ -18,7 +18,7 @@
     "01-before-quick-pick": {
       "mock": {
         "path": "mockups/offering-grid/01-before-quick-pick.png",
-        "sha256": "99c2dd0baca7643da4614da6a63b5e8df16366bf470e61cbb1a8da580e204a34",
+        "sha256": "fd4e2b499d867c2e5539eaedd95dee3a1f3b71be9e5fa4b006017b3b013156f7",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
@@ -27,92 +27,142 @@
     "02-grid-blank": {
       "mock": {
         "path": "mockups/offering-grid/02-grid-blank.png",
-        "sha256": "39bcc7d3bf8bec4ba093c4a0140e7d1446eabf86d6e0254959d5ffe35b650797",
+        "sha256": "de30c861d2dc5c3f3150cee5552c628610fbd8c61c5a763592a12095bfd4b053",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "de30c861d2dc5c3f3150cee5552c628610fbd8c61c5a763592a12095bfd4b053"
+      }
     },
     "03-grid-filled": {
       "mock": {
         "path": "mockups/offering-grid/03-grid-filled.png",
-        "sha256": "16a6af179843a30443a41700a834f0c5b846c313e29bd82aca107784103dae51",
+        "sha256": "8a19cd5e30c03efeffdb0e65ba0b18b60c791fe95ae6b76b0c311b25a7542841",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "8a19cd5e30c03efeffdb0e65ba0b18b60c791fe95ae6b76b0c311b25a7542841"
+      }
     },
     "04-grid-invalid": {
       "mock": {
         "path": "mockups/offering-grid/04-grid-invalid.png",
-        "sha256": "7031315de6f299bf2f6325e3f39930c47a67ac38981616a8a73d4a2a470bc228",
+        "sha256": "4aafeb1e1f0849f6b622be6fb3a39a92c6e0da6d49ccf4eb6d6a52e3f7ac9433",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "4aafeb1e1f0849f6b622be6fb3a39a92c6e0da6d49ccf4eb6d6a52e3f7ac9433"
+      }
     },
     "05-grid-pending": {
       "mock": {
         "path": "mockups/offering-grid/05-grid-pending.png",
-        "sha256": "5bdf3b98dce90f356aef2dcfd0511258b11f22cfb1504b27efbb7ee6423de70d",
+        "sha256": "4299c13d21bf84cc42431b3ec056e2a6b2a9fbf4a20edd49fdb3ccd1c6c2cb4e",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "4299c13d21bf84cc42431b3ec056e2a6b2a9fbf4a20edd49fdb3ccd1c6c2cb4e"
+      }
     },
     "06-grid-error": {
       "mock": {
         "path": "mockups/offering-grid/06-grid-error.png",
-        "sha256": "1219d5d8b7ad9922708a45a740e2c17745520acbd8a04b5ba49f00a5084fc38e",
+        "sha256": "8460e9d2ad3ed16c5d5571b2acd0f86aff644703120f5fc5c324f99c8e707c33",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "8460e9d2ad3ed16c5d5571b2acd0f86aff644703120f5fc5c324f99c8e707c33"
+      }
     },
     "07-correction-oneoff": {
       "mock": {
         "path": "mockups/offering-grid/07-correction-oneoff.png",
-        "sha256": "b033b2514350c7d90a880311b80867e8b43c379283fb9674987d9c57ae19f0bf",
+        "sha256": "a135d3d0bf1cc2334a4e28645cdfb4fe0d8e8f2cec566fef04f749c7db285999",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "a135d3d0bf1cc2334a4e28645cdfb4fe0d8e8f2cec566fef04f749c7db285999"
+      }
     },
     "08-custom-merge": {
       "mock": {
         "path": "mockups/offering-grid/08-custom-merge.png",
-        "sha256": "60ebd746167c68ee607fbc06351826da49b226b32d5a310e456b0d284edf7bc0",
+        "sha256": "a229e5d6504b2613548c314ddb81130afeacdd631988d99f13e737b8b8b1f697",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "a229e5d6504b2613548c314ddb81130afeacdd631988d99f13e737b8b8b1f697"
+      }
     },
     "09-unconfigured": {
       "mock": {
         "path": "mockups/offering-grid/09-unconfigured.png",
-        "sha256": "b4c9bbc9cb75706f53bd582b7e802e06a6705b23741bb8f5681f4466d5dcb796",
+        "sha256": "5d00a2f400d4f4983f3c536fa1b35be795011c1f306046c1a4ace2d66099d9a9",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "5d00a2f400d4f4983f3c536fa1b35be795011c1f306046c1a4ace2d66099d9a9"
+      }
     },
     "10-all-hidden": {
       "mock": {
         "path": "mockups/offering-grid/10-all-hidden.png",
-        "sha256": "b677559900f335a314eb7e689adcff66aa94d6b8323c86e087c8fe2490f38a60",
+        "sha256": "daa02a734e93e64665dee5f0b663e720994e0f6101de71d4b1b0d34ff92706ce",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "daa02a734e93e64665dee5f0b663e720994e0f6101de71d4b1b0d34ff92706ce"
+      }
     },
     "11-history-hidden-line": {
       "mock": {
         "path": "mockups/offering-grid/11-history-hidden-line.png",
-        "sha256": "098ff63fe5d9f3b02eb56a3b1ddb62e3f01c6da38eaa06ad6a9321396f8f65f2",
+        "sha256": "1ca3b6799a42632af660aefe7d58fee941da0f50b6febeea1335c01a2eb86331",
         "source": "mockups/offering-grid/01-offering-grid.html"
       },
       "baseline": null,
-      "coverage": "signed"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-15",
+        "sha256": "1ca3b6799a42632af660aefe7d58fee941da0f50b6febeea1335c01a2eb86331"
+      }
     },
     "12-narrow": {
       "mock": {
