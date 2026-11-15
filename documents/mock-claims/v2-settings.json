@@ -1,0 +1,94 @@
+{
+  "set": "v2-settings",
+  "specs": ["documents/specs/member-registrations-ui.md"],
+  "surfaces": [
+    {
+      "id": "settings",
+      "route": "/settings",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["^AC-5:", "^AC-27:"]
+    }
+  ],
+  "states": {
+    "date-time-settings": {
+      "mock": {
+        "path": "mockups/v2-settings/01-date-time-settings.png",
+        "sha256": "a438472b5a9954f2ed1b0ba0bf0874ba9f82276c367ad24c5e1bd69f8816d0b3",
+        "source": "mockups/v2-settings/01-date-time-settings.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "a438472b5a9954f2ed1b0ba0bf0874ba9f82276c367ad24c5e1bd69f8816d0b3",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    }
+  },
+  "inventory": [
+    {
+      "surface": "settings",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-5",
+          "disposition": "claimed",
+          "entry": "SET-FOOTER"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-27",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "SET-APPEARANCE",
+      "as": "operator",
+      "iWant": "the appearance controls in the sidebar footer to reach every surface",
+      "soThat": "the register looks the way I chose after a reload",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-5",
+        "quote": "the operator changes the accent and toggles dark mode"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "SET-FOOTER",
+      "story": "SET-APPEARANCE",
+      "state": "date-time-settings",
+      "claim": "The sidebar footer offers the accent choice and a dark-mode toggle.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-5"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-5",
+        "quote": "the operator changes the accent and toggles dark mode"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SET-TIMEZONE",
+      "story": "SET-APPEARANCE",
+      "state": "date-time-settings",
+      "claim": "Date and time shows the timezone field the series override reads.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    }
+  ]
+}

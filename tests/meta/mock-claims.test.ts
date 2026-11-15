@@ -972,6 +972,20 @@ describe('mock-claims: the absence/state rule', () => {
     delete rowOf(catalogue, 'AC-2').test;
     expect(failuresOf(catalogue).join('\n')).toContain('absence/state');
   });
+
+  it('does not fire on a plural: "no Actions menu" is not the phrase "no action"', () => {
+    // AC-50 requires the absence an image can show, so its clause must stay claimable by an image.
+    const text = SPEC_TEXT.replace(
+      'the roster label reads Roster. (FR-7)',
+      'the roster label reads Roster and no Actions menu is rendered. (FR-7)',
+    );
+    const catalogue = validCatalogue();
+    const entry = entryOf(catalogue, 'FX-LIVE-01');
+    entry.ac = ['AC-7'];
+    entry.spec = { file: SPEC, anchor: 'AC-7', quote: 'the roster label reads Roster' };
+    const failures = failuresOf(catalogue, context({ ...FILES, [SPEC]: text })).join('\n');
+    expect(failures).not.toContain('absence/state');
+  });
 });
 
 // --- the generator ------------------------------------------------------------------------------

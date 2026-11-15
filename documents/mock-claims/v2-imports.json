@@ -1,0 +1,259 @@
+{
+  "set": "v2-imports",
+  "specs": [
+    "documents/specs/member-registrations-ui.md",
+    "documents/specs/member-registrations-events-offerings.md"
+  ],
+  "surfaces": [
+    {
+      "id": "imports-attendance",
+      "route": "/imports/attendance",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": [
+        "one page verb",
+        "a CSV with 10,001 rows",
+        "the batch id, kind, row count, checksum",
+        "falls on a different date from the selected session",
+        "this capture will end it"
+      ]
+    },
+    {
+      "id": "imports-members",
+      "route": "/imports/members",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["a CSV with 10,001 rows", "the batch id, kind, row count, checksum"]
+    }
+  ],
+  "states": {
+    "attendance-live": {
+      "mock": {
+        "path": "mockups/v2-imports/02-attendance-live.png",
+        "sha256": "4abf39a93eaac85f2f7bf0115f163db551833490325eb1ec65e485117c8b74f5",
+        "source": "mockups/v2-imports/02-attendance-live.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "4abf39a93eaac85f2f7bf0115f163db551833490325eb1ec65e485117c8b74f5",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "attendance-ended": {
+      "mock": {
+        "path": "mockups/v2-imports/03-attendance-ended.png",
+        "sha256": "287aac46b226dd47409e25c68e080be3b7e281fb604a852f7f2843c9512b01ce",
+        "source": "mockups/v2-imports/03-attendance-ended.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "287aac46b226dd47409e25c68e080be3b7e281fb604a852f7f2843c9512b01ce",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "attendance-past-open": {
+      "mock": {
+        "path": "mockups/v2-imports/04-attendance-past-open.png",
+        "sha256": "3072ed27e89886a9d8f017cc30ed051a0f5197c96bf01eba8102c5ef065963b9",
+        "source": "mockups/v2-imports/04-attendance-past-open.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "3072ed27e89886a9d8f017cc30ed051a0f5197c96bf01eba8102c5ef065963b9",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    },
+    "attendance-not-started": {
+      "mock": {
+        "path": "mockups/v2-imports/05-attendance-not-started.png",
+        "sha256": "64b2e8e9afbf0f1522ea10c7cddb695f044ae08b9abbaa324126509db5c4de6e",
+        "source": "mockups/v2-imports/05-attendance-not-started.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-15",
+        "sha256": "64b2e8e9afbf0f1522ea10c7cddb695f044ae08b9abbaa324126509db5c4de6e",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+      }
+    }
+  },
+  "inventory": [
+    {
+      "surface": "imports-attendance",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "IMP-LIVE-MENU"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-18",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-19",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-20",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-events-offerings.md",
+          "id": "AC-7a",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        }
+      ]
+    },
+    {
+      "surface": "imports-members",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-18",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-19",
+          "disposition": "deferred",
+          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "IMP-STATES",
+      "as": "operator",
+      "iWant": "the attendance import page to state which session state the chosen occurrence is in",
+      "soThat": "I do not upload a file that cannot be written",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "a bare icon button"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "IMP-LIVE-MENU",
+      "story": "IMP-STATES",
+      "state": "attendance-live",
+      "claim": "An Actions menu is drawn on a page whose only control is Refresh.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "renders no menu"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "IMP-LIVE-REFRESH",
+      "story": "IMP-STATES",
+      "state": "attendance-live",
+      "claim": "Refresh is a bare icon button with an accessible name.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "a bare icon button"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "IMP-LIVE-STATE",
+      "story": "IMP-STATES",
+      "state": "attendance-live",
+      "claim": "The occurrence panel states the capture is Live and gives the recorded time.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "IMP-ENDED-STATE",
+      "story": "IMP-STATES",
+      "state": "attendance-ended",
+      "claim": "The occurrence panel states the capture has ended.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "IMP-ENDED-REFRESH",
+      "story": "IMP-STATES",
+      "state": "attendance-ended",
+      "claim": "Refresh is a bare icon button with an accessible name.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-50"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "a bare icon button"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "IMP-PAST-STATE",
+      "story": "IMP-STATES",
+      "state": "attendance-past-open",
+      "claim": "The occurrence panel states the session is a past session.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "IMP-NOT-STARTED-STATE",
+      "story": "IMP-STATES",
+      "state": "attendance-not-started",
+      "claim": "The occurrence panel states the capture has not started.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    }
+  ]
+}

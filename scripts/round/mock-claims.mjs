@@ -500,7 +500,11 @@ export function validateCatalogue(catalogue, ctx = {}) {
   // absence/state tripwire ----------------------------------------------------------------------
   const absence = new Map();
   for (const ac of allAcs) {
-    const word = ABSENCE_WORDS.find((candidate) => ac.text.toLowerCase().includes(candidate));
+    const word = ABSENCE_WORDS.find((candidate) =>
+      // Whole words only: "no action" must not fire on "no Actions menu", which is the clause that
+      // requires the absence an image can show (AC-50). A plural is a different phrase.
+      new RegExp(`\\b${candidate}\\b`, 'i').test(ac.text),
+    );
     if (word) absence.set(keyOf(ac.file, ac.id), { ...ac, word });
   }
   const absenceFor = (file, id) => {
