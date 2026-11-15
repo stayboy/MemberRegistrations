@@ -126,11 +126,29 @@ describe('SessionHeadcount', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save correction' }));
     // A correction supersedes the row it corrects; it does not post a fresh asOf.
-    expect(api.recordHeadcount).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      'event-1',
-      expect.objectContaining({ sessionDate: '2026-11-08', supersedesId: adults.id }),
+    const payload = vi.mocked(api.recordHeadcount).mock.calls[0]?.[3] as Record<string, unknown>;
+    expect(payload).toMatchObject({ sessionDate: '2026-11-08', supersedesId: adults.id });
+    // HC-3: a correction keeps the observation's own asOf, so it posts none.
+    expect(payload).not.toHaveProperty('asOf');
+  });
+
+  it('offers no correction for a retired mixed observation', async () => {
+    current = { mixed: headcount('mixed', 300) };
+    renderCell();
+    expect(await screen.findByText('Mixed (retired)')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Correct' })).toBeNull();
+  });
+
+  it('closes both actions once the session is ended or cancelled', async () => {
+    current = { adults: headcount('adults', 120) };
+    renderWithProviders(
+      <DateTimeProvider>
+        <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" disabled />
+      </DateTimeProvider>,
     );
+    const record = await screen.findByRole('button', { name: 'Record headcount' });
+    const correct = await screen.findByRole('button', { name: 'Correct' });
+    expect(record).toBeDisabled();
+    expect(correct).toBeDisabled();
   });
 });

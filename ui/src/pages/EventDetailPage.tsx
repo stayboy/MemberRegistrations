@@ -377,7 +377,9 @@ export function EventDetailPage() {
                             <SessionHeadcount
                               eventId={event.id}
                               sessionDate={item.date}
-                              disabled={item.status === 'cancelled'}
+                              disabled={
+                                item.status === 'cancelled' || Boolean(item.capture?.ended)
+                              }
                             />
                           </TableCell>
                           <TableCell>{formatPresentExpected(item)}</TableCell>
