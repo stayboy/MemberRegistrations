@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isUnauthorized } from '../../api/errors';
 import { getEvent, getEventAttendance } from '../../api/events';
-import { getHeadcounts, recordHeadcount, type Headcount } from '../../api/ussd';
+import { getHeadcounts, recordHeadcount, HEADCOUNT_MODES, type Headcount } from '../../api/ussd';
 import { useSession } from '../../auth/SessionProvider';
 import {
   EventSessionPicker,
@@ -42,7 +42,7 @@ function errorMessage(error: unknown): string {
 
 /**
  * USSD → Headcount. The operator's actual counted attendance for one session:
- * a read-first page with the current observation, the register-derived Roster
+ * a read-first page with one row per recorded lane, the register-derived Roster
  * beside it, and the append-only observation history newest first. Record and
  * Correct are dialogs from the page; a correction keeps the corrected
  * observation's `asOf` and supersedes it without deleting it. The roster is
@@ -136,11 +136,9 @@ export function UssdHeadcountPage() {
       setActionError('This session is closed; a correction is no longer accepted.');
       return;
     }
-    // The specialised and retired lanes are read-only here this round; the lane
-    // UI that corrects them is the next round.
-    if (row.mode !== 'adults' && row.mode !== 'children') {
+    if (row.mode === 'mixed') {
       setNotice(null);
-      setActionError('Only an adults or children observation can be corrected from this page.');
+      setActionError('A Mixed (retired) observation is read-only history.');
       return;
     }
     setRecordOpen(false);
@@ -157,10 +155,21 @@ export function UssdHeadcountPage() {
   }
 
   const page = headcountsQuery.data;
-  // The page names one lane. Its map carries every lane's tip, so a later lane
-  // view reads another key without a second request (HC-16, HC-17).
-  const current = page?.current[mode] ?? null;
+  // One request carries every lane's tip (HC-16, HC-17). The rows render each
+  // recorded lane; the dialog keeps its own mode picker.
   const observations = page?.observations ?? [];
+  const lanes = HEADCOUNT_MODES.flatMap((lane) => {
+    const row = page?.current[lane] ?? null;
+    return row ? [row] : [];
+  });
+  // The shared close carries the latest lane's final count (HC-24).
+  const latestCurrent =
+    [...lanes].sort(
+      (left, right) =>
+        right.asOf.localeCompare(left.asOf) ||
+        right.recordedAt.localeCompare(left.recordedAt) ||
+        right.id.localeCompare(left.id),
+    )[0] ?? null;
   const roster = rosterQuery.data?.expected;
 
   const event = eventQuery.data?.event;
@@ -199,8 +208,8 @@ export function UssdHeadcountPage() {
       setRecordOpen(false);
       setCorrection(null);
       resetEntry();
-      // Keep reading the lane the operator just wrote; the lane switcher is next round.
-      setMode(recorded.mode === 'children' ? 'children' : 'adults');
+      // Keep the dialog's picker on the lane the operator just wrote.
+      setMode(recorded.mode === 'mixed' ? 'adults' : recorded.mode);
       setNotice(
         correction
           ? 'Correction saved. The earlier observation stays readable and valid for its asOf.'
@@ -221,7 +230,7 @@ export function UssdHeadcountPage() {
   const endMutation = useMutation({
     mutationFn: () => {
       if (!selection) throw new Error('Choose an event session first.');
-      if (!current) {
+      if (!latestCurrent) {
         throw new Error('Record a headcount first; the end capture carries the final count.');
       }
       // The shared close is a capture: a new observation in the named lane with
@@ -229,8 +238,8 @@ export function UssdHeadcountPage() {
       // count readable.
       return recordHeadcount(baseUrl, token, selection.eventId, {
         sessionDate: selection.sessionDate,
-        mode,
-        lines: current.lines.map((line) => ({ code: line.code, count: line.count })),
+        mode: latestCurrent.mode === 'mixed' ? 'adults' : latestCurrent.mode,
+        lines: latestCurrent.lines.map((line) => ({ code: line.code, count: line.count })),
         ended: true,
       });
     },
@@ -270,7 +279,7 @@ export function UssdHeadcountPage() {
       sectionId="ussd"
       title="USSD headcount"
       submenu="Headcount"
-      description="The counted attendance for one session. Every entry is an append-only observation with an asOf; a correction supersedes the current row without deleting it. The register-derived roster is shown separately and is never merged."
+      description="The counted attendance for one session. Every entry is an append-only observation with an asOf; a correction supersedes the current row of its lane without deleting it. The register-derived roster is shown separately and is never merged."
       actions={[
         {
           id: 'record-headcount',
@@ -369,7 +378,6 @@ export function UssdHeadcountPage() {
         ) : (
           <HeadcountReadFirst
             current={page?.current ?? {}}
-            lane={mode}
             observations={observations}
             roster={roster}
             rosterPending={rosterQuery.isPending}

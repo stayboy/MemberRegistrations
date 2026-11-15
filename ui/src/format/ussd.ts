@@ -4,6 +4,7 @@ import type {
   CodeStatus,
   Headcount,
   HeadcountLineInput,
+  HeadcountMode,
   HeadcountReadMode,
 } from '../api/ussd';
 import { shiftUtcDate } from './date-window';
@@ -154,7 +155,7 @@ export function activityCountLabel(count: number): string {
   return `${count} ${count === 1 ? 'event' : 'events'}`;
 }
 
-export type HeadcountEntryMode = 'adults' | 'children';
+export type HeadcountEntryMode = HeadcountMode;
 
 export const HEADCOUNT_MODE_OPTIONS: readonly {
   readonly value: HeadcountEntryMode;
@@ -162,6 +163,8 @@ export const HEADCOUNT_MODE_OPTIONS: readonly {
 }[] = [
   { value: 'adults', label: 'Adult service' },
   { value: 'children', label: 'Children service' },
+  { value: 'visitors', label: 'Visitors' },
+  { value: 'presbyters', label: 'Presbyters' },
 ];
 
 const HEADCOUNT_MODE_LABELS: Record<HeadcountReadMode, string> = {
@@ -182,7 +185,13 @@ export type HeadcountFieldKey =
   | 'adultUnspecified'
   | 'childMale'
   | 'childFemale'
-  | 'childUnspecified';
+  | 'childUnspecified'
+  | 'visitorMale'
+  | 'visitorFemale'
+  | 'visitorChildren'
+  | 'elder'
+  | 'deaconess'
+  | 'deacon';
 
 export interface HeadcountField {
   readonly key: HeadcountFieldKey;
@@ -195,6 +204,12 @@ const ADULTS: HeadcountField = { key: 'adultUnspecified', label: 'Adults' };
 const CHILD_MALE: HeadcountField = { key: 'childMale', label: 'Boys' };
 const CHILD_FEMALE: HeadcountField = { key: 'childFemale', label: 'Girls' };
 const CHILDREN: HeadcountField = { key: 'childUnspecified', label: 'Children' };
+const VISITOR_MALE: HeadcountField = { key: 'visitorMale', label: 'Visitor men' };
+const VISITOR_FEMALE: HeadcountField = { key: 'visitorFemale', label: 'Visitor women' };
+const VISITOR_CHILDREN: HeadcountField = { key: 'visitorChildren', label: 'Visitor children' };
+const ELDERS: HeadcountField = { key: 'elder', label: 'Elders' };
+const DEACONESS: HeadcountField = { key: 'deaconess', label: 'Deaconess' };
+const DEACONS: HeadcountField = { key: 'deacon', label: 'Deacons' };
 
 /** The bucket code behind each entry field, as the mode's reference rows declare it. */
 const BUCKET_CODES: Record<HeadcountFieldKey, string> = {
@@ -204,15 +219,31 @@ const BUCKET_CODES: Record<HeadcountFieldKey, string> = {
   childMale: 'child-male',
   childFemale: 'child-female',
   childUnspecified: 'child-unspecified',
+  visitorMale: 'visitor-male',
+  visitorFemale: 'visitor-female',
+  visitorChildren: 'visitor-children',
+  elder: 'elder',
+  deaconess: 'deaconess',
+  deacon: 'deacon',
 };
 
 /**
- * The three-number entry. Adult service counts Adult men, Adult women and
- * Children; children service counts Boys, Girls and Adults in that order. The
- * visitors and presbyters lanes are entry surfaces for the next round.
+ * The three-number entry line for the chosen lane. Adult service counts Adult
+ * men, Adult women and Children; Children service counts Boys, Girls and Adults;
+ * Visitors counts Visitor men, Visitor women and Visitor children; Presbyters
+ * counts Elders, Deaconess and Deacons (HC-8, HC-13).
  */
 export function headcountFields(mode: HeadcountEntryMode): readonly HeadcountField[] {
-  return mode === 'children' ? [CHILD_MALE, CHILD_FEMALE, ADULTS] : [ADULT_MALE, ADULT_FEMALE, CHILDREN];
+  switch (mode) {
+    case 'children':
+      return [CHILD_MALE, CHILD_FEMALE, ADULTS];
+    case 'visitors':
+      return [VISITOR_MALE, VISITOR_FEMALE, VISITOR_CHILDREN];
+    case 'presbyters':
+      return [ELDERS, DEACONESS, DEACONS];
+    default:
+      return [ADULT_MALE, ADULT_FEMALE, CHILDREN];
+  }
 }
 
 export type HeadcountFormValues = Record<HeadcountFieldKey, string>;
@@ -225,6 +256,12 @@ export function emptyHeadcountForm(): HeadcountFormValues {
     childMale: '',
     childFemale: '',
     childUnspecified: '',
+    visitorMale: '',
+    visitorFemale: '',
+    visitorChildren: '',
+    elder: '',
+    deaconess: '',
+    deacon: '',
   };
 }
 

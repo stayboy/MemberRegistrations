@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createPgDb } from '../../src/db/pg.js';
 import { migrate } from '../../src/db/migrate.js';
 import type { Db } from '../../src/db/sql.js';
 import { OfferingCountRepository } from '../../src/repos/offering-counts.js';
 import { OfferingRepository } from '../../src/repos/offerings.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { createScratchPgDb } from '../helpers/scratch-db.js';
 
 let harness: TestApp;
 let today: string;
@@ -626,8 +626,10 @@ async function ensureMember(): Promise<string> {
 }
 
 /**
- * The same repository contract on the pooled `pg` driver. Set `TEST_DATABASE_URL`
- * to a scratch branch (never production) to run it; skipped otherwise.
+ * The same repository contract on the pooled `pg` driver. Set
+ * `TEST_DATABASE_URL` to a scratch server (never production) that allows
+ * creating databases; the block migrates and uses a database of its own and
+ * drops it afterwards. Skipped otherwise.
  */
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -637,7 +639,7 @@ describe.skipIf(!testDatabaseUrl)('offering counts on the pooled pg driver', () 
   let eventId: string;
 
   beforeAll(async () => {
-    pooled = createPgDb(testDatabaseUrl!);
+    pooled = await createScratchPgDb(testDatabaseUrl!);
     await migrate(pooled);
 
     const [offering] = await pooled.query<{ id: string }>(

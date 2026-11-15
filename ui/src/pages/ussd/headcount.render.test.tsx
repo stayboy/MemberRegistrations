@@ -53,11 +53,59 @@ const CHILDREN: Headcount = {
   asOf: '2026-11-08T10:50:00.000Z',
   total: 18,
   recordedAt: '2026-11-08T10:52:00.000Z',
+  recordedBy: 'demo.children',
   supersedesId: null,
   lines: [
     { code: 'child-male', label: 'Boys', count: 5 },
     { code: 'child-female', label: 'Girls', count: 6 },
     { code: 'adult-unspecified', label: 'Adults', count: 7 },
+  ],
+};
+
+const VISITORS: Headcount = {
+  ...CURRENT,
+  id: 'headcount-4',
+  mode: 'visitors',
+  asOf: '2026-11-08T10:55:00.000Z',
+  total: 9,
+  recordedAt: '2026-11-08T10:57:00.000Z',
+  supersedesId: null,
+  lines: [
+    { code: 'visitor-male', label: 'Visitor men', count: 3 },
+    { code: 'visitor-female', label: 'Visitor women', count: 4 },
+    { code: 'visitor-children', label: 'Visitor children', count: 2 },
+  ],
+};
+
+const PRESBYTERS: Headcount = {
+  ...CURRENT,
+  id: 'headcount-5',
+  mode: 'presbyters',
+  asOf: '2026-11-08T11:00:00.000Z',
+  total: 6,
+  recordedAt: '2026-11-08T11:02:00.000Z',
+  supersedesId: null,
+  lines: [
+    { code: 'elder', label: 'Elders', count: 2 },
+    { code: 'deaconess', label: 'Deaconess', count: 1 },
+    { code: 'deacon', label: 'Deacons', count: 3 },
+  ],
+};
+
+const MIXED: Headcount = {
+  ...CURRENT,
+  id: 'headcount-mixed',
+  mode: 'mixed',
+  asOf: '2026-11-08T10:20:00.000Z',
+  total: 20,
+  recordedAt: '2026-11-08T10:22:00.000Z',
+  recordedBy: 'legacy.officer',
+  supersedesId: null,
+  lines: [
+    { code: 'adult-male', label: 'Adult men', count: 8 },
+    { code: 'adult-female', label: 'Adult women', count: 7 },
+    { code: 'child-male', label: 'Boys', count: 3 },
+    { code: 'child-female', label: 'Girls', count: 2 },
   ],
 };
 
@@ -81,6 +129,24 @@ function fields(overrides: Partial<Parameters<typeof HeadcountDialogFields>[0]> 
       onModeChange={() => {}}
       onValueChange={() => {}}
       onAsOfChange={() => {}}
+      {...overrides}
+    />,
+  );
+}
+
+function readFirst(
+  overrides: Partial<Parameters<typeof HeadcountReadFirst>[0]> = {},
+): string {
+  return render(
+    <HeadcountReadFirst
+      current={{ adults: CURRENT }}
+      observations={[CURRENT, SUPERSEDED]}
+      roster={160}
+      rosterPending={false}
+      rosterError={false}
+      pending={false}
+      formatInstant={formatInstant}
+      onCorrect={() => {}}
       {...overrides}
     />,
   );
@@ -114,6 +180,28 @@ describe('HeadcountDialogFields', () => {
     expect(markup).not.toContain('Mixed service');
   });
 
+  it('records Visitor men, Visitor women and Visitor children in Visitors', () => {
+    const markup = fields({ mode: 'visitors', values: headcountFormFrom(VISITORS) });
+
+    expect(markup).toContain('Visitors');
+    expect(markup).toContain('Visitor men');
+    expect(markup).toContain('Visitor women');
+    expect(markup).toContain('>Visitor children</label>');
+    expect(markup).toContain('value="3"');
+    expect(markup).not.toContain('>Adult women</label>');
+  });
+
+  it('records Elders, Deaconess and Deacons in Presbyters', () => {
+    const markup = fields({ mode: 'presbyters', values: headcountFormFrom(PRESBYTERS) });
+
+    expect(markup).toContain('Presbyters');
+    expect(markup).toContain('Elders');
+    expect(markup).toContain('Deaconess');
+    expect(markup).toContain('>Deacons</label>');
+    expect(markup).toContain('value="2"');
+    expect(markup).not.toContain('>Adult men</label>');
+  });
+
   it('corrects the current observation with the kept asOf and no date input', () => {
     const markup = fields({ correction: CURRENT });
 
@@ -128,19 +216,7 @@ describe('HeadcountDialogFields', () => {
 
 describe('HeadcountReadFirst', () => {
   it('is read-first: no record form or inputs, only the Current and row Correct actions', () => {
-    const markup = render(
-      <HeadcountReadFirst
-        current={{ adults: CURRENT }}
-        lane="adults"
-        observations={[CURRENT, SUPERSEDED]}
-        roster={160}
-        rosterPending={false}
-        rosterError={false}
-        pending={false}
-        formatInstant={formatInstant}
-        onCorrect={() => {}}
-      />,
-    );
+    const markup = readFirst();
 
     expect(markup).toContain('Current headcount');
     expect(markup).toContain('Adult service');
@@ -159,61 +235,51 @@ describe('HeadcountReadFirst', () => {
     expect(markup).not.toContain('Record a headcount');
   });
 
-  it('reads one lane but marks every lane’s own current row', () => {
-    const markup = render(
-      <HeadcountReadFirst
-        current={{ adults: CURRENT, children: CHILDREN }}
-        lane="adults"
-        observations={[CHILDREN, CURRENT, SUPERSEDED]}
-        roster={160}
-        rosterPending={false}
-        rosterError={false}
-        pending={false}
-        formatInstant={formatInstant}
-        onCorrect={() => {}}
-      />,
-    );
+  it('shows one row per recorded lane with its own asOf and recorder and a Correct on each', () => {
+    const markup = readFirst({
+      current: { adults: CURRENT, children: CHILDREN },
+      observations: [CHILDREN, CURRENT, SUPERSEDED],
+    });
 
-    // One Correct on the adults card, one on each lane's current history row.
-    expect(markup.match(/Correct/g)?.length).toBe(3);
-    // `>Current<` is the history badge; the card header reads "Current headcount · …".
+    // Both lanes are rows in the current table, each with its own asOf and recorder.
+    expect(markup).toContain('Adult service');
+    expect(markup).toContain('Children service');
+    expect(markup).toContain('2026-11-08T10:42:00.000Z');
+    expect(markup).toContain('2026-11-08T10:50:00.000Z');
+    expect(markup).toContain('demo.officer');
+    expect(markup).toContain('demo.children');
+    // Two lane rows plus the two current history rows carry Correct.
+    expect(markup.match(/Correct/g)?.length).toBe(4);
+    // `>Current<` is the history badge; the table header is a label, not a row.
     expect(markup.match(/>Current</g)?.length).toBe(2);
     expect(markup).toContain('Valid for 2026-11-08T09:58:00.000Z');
   });
 
-  it('renders the named lane empty even when another lane has a count', () => {
-    const markup = render(
-      <HeadcountReadFirst
-        current={{ adults: null, children: CHILDREN }}
-        lane="adults"
-        observations={[CHILDREN]}
-        roster={160}
-        rosterPending={false}
-        rosterError={false}
-        pending={false}
-        formatInstant={formatInstant}
-        onCorrect={() => {}}
-      />,
-    );
+  it('does not render a row for a lane with no observation', () => {
+    const markup = readFirst({
+      current: { adults: null, children: CHILDREN },
+      observations: [CHILDREN],
+    });
 
-    expect(markup).toContain('No headcount recorded for this session yet.');
-    expect(markup).toContain('Current');
+    expect(markup).toContain('Children service');
+    expect(markup).not.toContain('Adult service');
+    expect(markup).not.toContain('No headcount recorded for this session yet.');
   });
 
-  it('renders the empty history state', () => {
-    const markup = render(
-      <HeadcountReadFirst
-        current={{}}
-        lane="adults"
-        observations={[]}
-        roster={160}
-        rosterPending={false}
-        rosterError={false}
-        pending={false}
-        formatInstant={formatInstant}
-        onCorrect={() => {}}
-      />,
-    );
+  it('labels a legacy mixed observation Mixed (retired) and offers no Correct on it', () => {
+    const markup = readFirst({
+      current: { adults: CURRENT, mixed: MIXED },
+      observations: [CURRENT, MIXED],
+    });
+
+    expect(markup).toContain('Mixed (retired)');
+    // The retired row stays in history but is not a current lane row and has no
+    // Correct: only the adults lane row and its current history row offer it.
+    expect(markup.match(/Correct/g)?.length).toBe(2);
+  });
+
+  it('renders the empty history and current states', () => {
+    const markup = readFirst({ current: {}, observations: [] });
 
     expect(markup).toContain('No headcount recorded for this session yet.');
     expect(markup).toContain('No observation for this session yet.');

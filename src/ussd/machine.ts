@@ -197,18 +197,23 @@ export interface UssdMemberContext {
   presbyterRank: number | null;
 }
 
+/** The live lanes the phone offers and reads. `mixed` is retired (HC-9). */
+export type UssdHeadcountMode = 'adults' | 'children' | 'visitors' | 'presbyters';
+
+/** One non-zero bucket of a headcount, in the mode's declared order. */
+export interface UssdHeadcountLine {
+  code: string;
+  label: string;
+  count: number;
+}
+
 export interface UssdHeadcount {
   id: string;
-  /** The phone offers and reads only the two live entry lanes (HC-9). */
-  mode: 'adults' | 'children';
+  mode: UssdHeadcountMode;
   asOf: string;
   total: number;
-  adultMale: number;
-  adultFemale: number;
-  adultUnspecified: number;
-  childMale: number;
-  childFemale: number;
-  childUnspecified: number;
+  /** The mode's non-zero buckets; an all-zero observation carries none. */
+  lines: UssdHeadcountLine[];
 }
 
 /** The selected event's register count and the caller's own presence. */
@@ -271,18 +276,14 @@ export interface UssdServices {
   currentHeadcount(
     eventId: string,
     sessionDate: string,
-    mode: 'adults' | 'children',
+    mode: UssdHeadcountMode,
   ): Promise<UssdHeadcount | null>;
   recordHeadcount(input: {
     eventId: string;
     sessionDate: string;
-    mode: 'adults' | 'children';
-    adultMale: number;
-    adultFemale: number;
-    adultUnspecified: number;
-    childMale: number;
-    childFemale: number;
-    childUnspecified: number;
+    mode: UssdHeadcountMode;
+    /** The mode's three numbered buckets, in its declared entry order. */
+    counts: readonly [number, number, number];
     supersedesId?: string;
     phoneHash: string;
   }): Promise<UssdHeadcount>;
@@ -380,16 +381,13 @@ export interface UssdContext {
   doneLabel?: string;
   doneKind?: 'clock' | 'delegate' | 'code';
   headcount?: UssdHeadcount | null;
-  headcountMode?: 'adults' | 'children';
+  headcountMode?: UssdHeadcountMode;
+  /** The last ordinary lane chosen; specialised lanes never enter this memory. */
+  headcountLastMode?: 'adults' | 'children';
   headcountCorrecting?: boolean;
   headcountPending?: {
-    mode: 'adults' | 'children';
-    adultMale: number;
-    adultFemale: number;
-    adultUnspecified: number;
-    childMale: number;
-    childFemale: number;
-    childUnspecified: number;
+    mode: UssdHeadcountMode;
+    counts: [number, number, number];
   };
   headcountTotal?: number;
   requestReference?: string;
@@ -462,25 +460,69 @@ function clockTime(iso: string | undefined): string {
   return date.toISOString().slice(11, 16);
 }
 
-function headcountModeLabel(mode: 'adults' | 'children'): string {
-  if (mode === 'children') return t('headcount.children_service');
-  return t('headcount.adult_service');
+interface HeadcountEntry {
+  mode: UssdHeadcountMode;
+  label: GlossaryKey;
+  prompt: GlossaryKey;
+  buckets: readonly [GlossaryKey, GlossaryKey, GlossaryKey];
 }
 
-/** The three-number restatement; each handset mode maps its own buckets. */
+/**
+ * The four headcount menu entries, in menu order. Adult service and Children
+ * service keep the remembered-mode preselect; Visitors and Presbyters are their
+ * own lanes with their own bucket vocabulary and never enter that memory
+ * (HC-8, HC-26).
+ */
+const HEADCOUNT_ENTRIES: readonly HeadcountEntry[] = [
+  {
+    mode: 'adults',
+    label: 'headcount.adult_service',
+    prompt: 'prompt.headcount_adults',
+    buckets: ['label.male', 'label.female', 'label.children'],
+  },
+  {
+    mode: 'children',
+    label: 'headcount.children_service',
+    prompt: 'prompt.headcount_children',
+    buckets: ['label.male', 'label.female', 'label.adults'],
+  },
+  {
+    mode: 'visitors',
+    label: 'headcount.visitors_service',
+    prompt: 'prompt.headcount_visitors',
+    buckets: ['label.male', 'label.female', 'label.children'],
+  },
+  {
+    mode: 'presbyters',
+    label: 'headcount.presbyters_service',
+    prompt: 'prompt.headcount_presbyters',
+    buckets: ['label.elders', 'label.deaconess', 'label.deacons'],
+  },
+];
+
+function headcountEntry(mode: UssdHeadcountMode): HeadcountEntry {
+  return HEADCOUNT_ENTRIES.find((entry) => entry.mode === mode) ?? HEADCOUNT_ENTRIES[0]!;
+}
+
+function headcountModeLabel(mode: UssdHeadcountMode): string {
+  return t(headcountEntry(mode).label);
+}
+
+/** The three-number restatement of an observation's own lines. */
 function headcountBucketLine(headcount: {
-  mode: 'adults' | 'children';
-  adultMale: number;
-  adultFemale: number;
-  adultUnspecified: number;
-  childMale: number;
-  childFemale: number;
-  childUnspecified: number;
+  lines: readonly { label: string; count: number }[];
 }): string {
-  if (headcount.mode === 'children') {
-    return `${headcount.childMale} ${t('label.male')}, ${headcount.childFemale} ${t('label.female')}, ${headcount.adultUnspecified} ${t('label.adults')}`;
-  }
-  return `${headcount.adultMale} ${t('label.male')}, ${headcount.adultFemale} ${t('label.female')}, ${headcount.childUnspecified} ${t('label.children')}`;
+  return headcount.lines.map((line) => `${line.count} ${line.label}`).join(', ');
+}
+
+/** The three-number restatement before save; every bucket is named. */
+function headcountPendingLine(pending: {
+  mode: UssdHeadcountMode;
+  counts: [number, number, number];
+}): string {
+  return headcountEntry(pending.mode)
+    .buckets.map((key, index) => `${pending.counts[index]} ${t(key)}`)
+    .join(', ');
 }
 
 function monthStart(date: string): string {
@@ -1371,11 +1413,10 @@ function renderedHeadcount(context: UssdContext): Rendered {
   const lines = [...noticeLines(context), t('attendance.headcount')];
   const options: UssdOption[] = [];
   if (headcount) {
-    lines.push(
-      `${headcountModeLabel(headcount.mode)} · ${clockTime(headcount.asOf)}`,
-      headcountBucketLine(headcount),
-      `${t('label.total')} ${headcount.total}`,
-    );
+    const buckets = headcountBucketLine(headcount);
+    lines.push(`${headcountModeLabel(headcount.mode)} · ${clockTime(headcount.asOf)}`);
+    if (buckets) lines.push(buckets);
+    lines.push(`${t('label.total')} ${headcount.total}`);
   } else {
     lines.push(t('status.no_headcount'));
   }
@@ -1395,6 +1436,7 @@ function renderedHeadcount(context: UssdContext): Rendered {
 }
 
 function headcountLastMode(context: UssdContext): 'adults' | 'children' {
+  if (context.headcountLastMode) return context.headcountLastMode;
   return context.headcount?.mode === 'children' ? 'children' : 'adults';
 }
 
@@ -1404,19 +1446,20 @@ function renderedHeadcountMode(context: UssdContext): Rendered {
     ...noticeLines(context),
     t('attendance.headcount'),
     `${t('label.last_mode')} ${headcountModeLabel(last)}`,
-    `1 ${t('headcount.adult_service')}`,
-    `2 ${t('headcount.children_service')}`,
   ];
+  const options: UssdOption[] = [];
+  HEADCOUNT_ENTRIES.forEach((entry, index) => {
+    const key = String(index + 1);
+    const label = t(entry.label);
+    lines.push(`${key} ${label}`);
+    options.push({ key, label });
+  });
   const nav = navLines('attendance.headcount.mode', context, false);
   return screen(
     'attendance.headcount.mode',
     context,
     [...lines, ...nav.lines],
-    [
-      { key: '1', label: t('headcount.adult_service') },
-      { key: '2', label: t('headcount.children_service') },
-      ...nav.options,
-    ],
+    [...options, ...nav.options],
   );
 }
 
@@ -1426,7 +1469,7 @@ function renderedHeadcountEntry(context: UssdContext): Rendered {
     'attendance.headcount.entry',
     context,
     headcountModeLabel(mode),
-    mode === 'children' ? t('prompt.headcount_children') : t('prompt.headcount_adults'),
+    t(headcountEntry(mode).prompt),
   );
 }
 
@@ -1438,14 +1481,8 @@ function renderedHeadcountConfirm(context: UssdContext): Rendered {
     headcountModeLabel(pending?.mode ?? context.headcountMode ?? 'adults'),
   ];
   if (pending) {
-    lines.push(headcountBucketLine(pending));
-    const total =
-      pending.adultMale +
-      pending.adultFemale +
-      pending.adultUnspecified +
-      pending.childMale +
-      pending.childFemale +
-      pending.childUnspecified;
+    lines.push(headcountPendingLine(pending));
+    const total = pending.counts.reduce((sum, count) => sum + count, 0);
     lines.push(`${t('label.total')} ${total}`);
   }
   lines.push(`1 ${t('action.save')}`, `2 ${t('action.change')}`);
@@ -1787,9 +1824,9 @@ async function openAttendance(
 async function openHeadcount(context: UssdContext, services: UssdServices): Promise<AdvanceResult> {
   const event = context.event;
   if (!event) return noEvent(context, 'attendance.clocking');
-  // The screen names one lane; this round that is the adults or children mode
-  // last chosen. The four-entry navigation is the next round.
-  const lane = context.headcountMode ?? 'adults';
+  // The screen names one lane: the last lane viewed, or the remembered ordinary
+  // mode when the session has none yet. The menu offers one entry per lane.
+  const lane = context.headcountMode ?? headcountLastMode(context);
   const headcount = await services.currentHeadcount(event.id, event.sessionDate, lane);
   return {
     state: 'attendance.headcount',
@@ -2824,13 +2861,21 @@ export async function advance(
   }
 
   if (state === 'attendance.headcount.mode') {
-    const mode = value === '1' ? 'adults' : value === '2' ? 'children' : null;
-    if (!mode) return invalid(state, context, 'error.invalid_choice');
-    return {
-      state: 'attendance.headcount.entry',
-      context: { ...context, headcountMode: mode, headcountPending: undefined, notice: undefined },
-      done: false,
+    const index = /^\d+$/.test(value) ? Number(value) : 0;
+    const entry = HEADCOUNT_ENTRIES[index - 1];
+    if (!entry) return invalid(state, context, 'error.invalid_choice');
+    const next: UssdContext = {
+      ...context,
+      headcountMode: entry.mode,
+      headcountPending: undefined,
+      notice: undefined,
     };
+    // The two ordinary lanes share a remembered mode; a specialised lane is its
+    // own entry and must not overwrite that memory (HC-26).
+    if (entry.mode === 'adults' || entry.mode === 'children') {
+      next.headcountLastMode = entry.mode;
+    }
+    return { state: 'attendance.headcount.entry', context: next, done: false };
   }
 
   if (state === 'attendance.headcount.entry') {
@@ -2842,33 +2887,19 @@ export async function advance(
     if ([first, second, third].some((count) => count > 10_000)) {
       return invalid(state, context, 'error.invalid_headcount');
     }
-    const mode = context.headcountMode ?? 'adults';
-    const pending =
-      mode === 'children'
-        ? {
-            mode,
-            adultMale: 0,
-            adultFemale: 0,
-            adultUnspecified: third,
-            childMale: first,
-            childFemale: second,
-            childUnspecified: 0,
-          }
-        : {
-            mode,
-            adultMale: first,
-            adultFemale: second,
-            adultUnspecified: 0,
-            childMale: 0,
-            childFemale: 0,
-            childUnspecified: third,
-          };
     if (first + second + third > 30_000) {
       return invalid(state, context, 'error.invalid_headcount');
     }
     return {
       state: 'attendance.headcount.confirm',
-      context: { ...context, headcountPending: pending, notice: undefined },
+      context: {
+        ...context,
+        headcountPending: {
+          mode: context.headcountMode ?? 'adults',
+          counts: [first, second, third],
+        },
+        notice: undefined,
+      },
       done: false,
     };
   }
@@ -2890,12 +2921,7 @@ export async function advance(
         eventId: event.id,
         sessionDate: event.sessionDate,
         mode: pending.mode,
-        adultMale: pending.adultMale,
-        adultFemale: pending.adultFemale,
-        adultUnspecified: pending.adultUnspecified,
-        childMale: pending.childMale,
-        childFemale: pending.childFemale,
-        childUnspecified: pending.childUnspecified,
+        counts: pending.counts,
         supersedesId: context.headcountCorrecting ? context.headcount?.id : undefined,
         phoneHash: session.phoneHash,
       });
@@ -2907,6 +2933,10 @@ export async function advance(
           headcountTotal: headcount.total,
           headcountPending: undefined,
           headcountCorrecting: false,
+          headcountLastMode:
+            pending.mode === 'adults' || pending.mode === 'children'
+              ? pending.mode
+              : context.headcountLastMode,
           notice: undefined,
         },
         done: false,

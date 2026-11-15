@@ -94,6 +94,51 @@ test('the headcount page is read-first and records and corrects through dialogs'
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('shows every recorded lane and corrects the second without moving the first asOf', async ({
+  page,
+}) => {
+  await open(page, '/ussd/headcount');
+  await chooseFoundationService(page);
+
+  const current = page.getByRole('table', { name: 'Current headcounts' });
+  const adultsRow = current.getByRole('row', { name: /Adult service/ });
+  await expect(adultsRow).toContainText('142');
+  await expect(adultsRow).toContainText('Jan 10, 2999, 09:08 AM');
+
+  // Record a second lane through the portal; both lanes stay current (HC-3).
+  await page.getByRole('button', { name: 'Record headcount' }).click();
+  const recordDialog = page.getByRole('dialog');
+  await recordDialog.getByRole('radio', { name: 'Children service' }).check();
+  await recordDialog.getByLabel('As of').fill('2999-01-10T11:00');
+  await recordDialog.getByLabel('Boys').fill('5');
+  await recordDialog.getByLabel('Girls').fill('6');
+  await recordDialog.getByLabel('Adults', { exact: true }).fill('7');
+  await expect(recordDialog.getByText('Total 18')).toBeVisible();
+  await recordDialog.getByRole('button', { name: 'Record headcount' }).click();
+
+  await expect(page.getByText('Headcount recorded.')).toBeVisible();
+  const childrenRow = current.getByRole('row', { name: /Children service/ });
+  await expect(childrenRow).toContainText('18');
+  await expect(childrenRow).toContainText('Jan 10, 2999, 11:00 AM');
+
+  // Correct the children lane only; the adults lane keeps its own asOf.
+  await childrenRow.getByRole('button', { name: 'Correct' }).click();
+  const correctDialog = page.getByRole('dialog');
+  await expect(correctDialog.getByText('Keeping asOf Jan 10, 2999, 11:00 AM')).toBeVisible();
+  await expect(correctDialog.getByLabel('As of')).toHaveCount(0);
+  await correctDialog.getByLabel('Boys').fill('6');
+  await expect(correctDialog.getByText('Total 19')).toBeVisible();
+  await correctDialog.getByRole('button', { name: 'Save correction' }).click();
+
+  await expect(
+    page.getByText('Correction saved. The earlier observation stays readable', { exact: false }),
+  ).toBeVisible();
+  await expect(adultsRow).toContainText('Jan 10, 2999, 09:08 AM');
+  await expect(adultsRow).toContainText('142');
+  await expect(childrenRow).toContainText('Jan 10, 2999, 11:00 AM');
+  await expect(childrenRow).toContainText('19');
+});
+
 test('a live session offers an enabled End of session action', async ({ page, gateway }) => {
   gateway.includeActionStates = true;
   await open(page, '/ussd/headcount');

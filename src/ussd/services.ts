@@ -26,6 +26,7 @@ import type {
   UssdAttendance,
   UssdEvent,
   UssdHeadcount,
+  UssdHeadcountMode,
   UssdMemberContext,
   UssdOffering,
   UssdPledge,
@@ -323,64 +324,40 @@ function holderRelationship(storedType: string, declaredByHolder: boolean): stri
   return storedType;
 }
 
-/** The lane's bucket codes in the phone screen's existing six-bucket vocabulary. */
-const USSD_BUCKET_FIELDS = {
-  'adult-male': 'adultMale',
-  'adult-female': 'adultFemale',
-  'adult-unspecified': 'adultUnspecified',
-  'child-male': 'childMale',
-  'child-female': 'childFemale',
-  'child-unspecified': 'childUnspecified',
-} as const;
+/** The mode's three entry buckets, in the declared prompt order. */
+const HEADCOUNT_BUCKET_CODES: Record<UssdHeadcountMode, readonly [string, string, string]> = {
+  adults: ['adult-male', 'adult-female', 'child-unspecified'],
+  children: ['child-male', 'child-female', 'adult-unspecified'],
+  visitors: ['visitor-male', 'visitor-female', 'visitor-children'],
+  presbyters: ['elder', 'deaconess', 'deacon'],
+};
 
-type UssdBucketField = (typeof USSD_BUCKET_FIELDS)[keyof typeof USSD_BUCKET_FIELDS];
-
-/** The lines of one lane as the headcount screens still render them this round. */
+/** The phone carries the observation and its own lines; no fixed bucket fields. */
 function toUssdHeadcount(headcount: Headcount): UssdHeadcount {
-  const buckets: Record<UssdBucketField, number> = {
-    adultMale: 0,
-    adultFemale: 0,
-    adultUnspecified: 0,
-    childMale: 0,
-    childFemale: 0,
-    childUnspecified: 0,
-  };
-  for (const line of headcount.lines) {
-    const field = USSD_BUCKET_FIELDS[line.code as keyof typeof USSD_BUCKET_FIELDS];
-    if (field) buckets[field] = line.count;
-  }
   return {
     id: headcount.id,
-    // The phone reads only the two live entry lanes; a legacy mixed observation
-    // is never requested here, and the retired lane stays readable over HTTP.
-    mode: headcount.mode === 'children' ? 'children' : 'adults',
+    // The phone reads the four live lanes only; a legacy mixed observation is
+    // never requested here, and the retired lane stays readable over HTTP.
+    mode: headcount.mode === 'mixed' ? 'adults' : headcount.mode,
     asOf: headcount.asOf,
     total: headcount.total,
-    ...buckets,
+    lines: headcount.lines.map((line) => ({
+      code: line.code,
+      label: line.label,
+      count: line.count,
+    })),
   };
 }
 
-/** The three buckets the adults or children screen writes, in entry order. */
-function ussdLines(input: {
-  mode: 'adults' | 'children';
-  adultMale: number;
-  adultFemale: number;
-  adultUnspecified: number;
-  childMale: number;
-  childFemale: number;
-  childUnspecified: number;
-}): Array<{ code: string; count: number }> {
-  return input.mode === 'children'
-    ? [
-        { code: 'child-male', count: input.childMale },
-        { code: 'child-female', count: input.childFemale },
-        { code: 'adult-unspecified', count: input.adultUnspecified },
-      ]
-    : [
-        { code: 'adult-male', count: input.adultMale },
-        { code: 'adult-female', count: input.adultFemale },
-        { code: 'child-unspecified', count: input.childUnspecified },
-      ];
+/** The three buckets the chosen lane writes, in its entry order. */
+function ussdLines(
+  mode: UssdHeadcountMode,
+  counts: readonly [number, number, number],
+): Array<{ code: string; count: number }> {
+  return HEADCOUNT_BUCKET_CODES[mode].map((code, index) => ({
+    code,
+    count: counts[index]!,
+  }));
 }
 
 /**
@@ -635,13 +612,8 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
     async recordHeadcount(input: {
       eventId: string;
       sessionDate: string;
-      mode: 'adults' | 'children';
-      adultMale: number;
-      adultFemale: number;
-      adultUnspecified: number;
-      childMale: number;
-      childFemale: number;
-      childUnspecified: number;
+      mode: UssdHeadcountMode;
+      counts: readonly [number, number, number];
       supersedesId?: string;
       phoneHash: string;
     }): Promise<UssdHeadcount> {
@@ -650,7 +622,7 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
         {
           sessionDate: input.sessionDate,
           mode: input.mode,
-          lines: ussdLines(input),
+          lines: ussdLines(input.mode, input.counts),
           supersedesId: input.supersedesId,
         },
         `ussd:${input.phoneHash}`,
@@ -661,7 +633,7 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
     async currentHeadcount(
       eventId: string,
       sessionDate: string,
-      mode: 'adults' | 'children',
+      mode: UssdHeadcountMode,
     ): Promise<UssdHeadcount | null> {
       const headcount = await deps.headcounts.current(eventId, sessionDate, mode);
       return headcount ? toUssdHeadcount(headcount) : null;

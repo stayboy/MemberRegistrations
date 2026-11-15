@@ -1,10 +1,10 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from '../../src/db/migrate.js';
-import { createPgDb } from '../../src/db/pg.js';
 import type { Db } from '../../src/db/sql.js';
 import { SeriesRepository } from '../../src/repos/series.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { createScratchPgDb } from '../helpers/scratch-db.js';
 
 function utcToday(): string {
   return new Date().toISOString().slice(0, 10);
@@ -462,7 +462,9 @@ describe('series window summary', () => {
 
 /**
  * The same summary read on the pooled `pg` driver. Set `TEST_DATABASE_URL` to a
- * scratch branch (never production) to run it; skipped otherwise.
+ * scratch server (never production) that allows creating databases; the block
+ * migrates and uses a database of its own and drops it afterwards. Skipped
+ * otherwise.
  */
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -471,7 +473,7 @@ describe.skipIf(!testDatabaseUrl)('series window summary on the pooled pg driver
   let seriesId: string;
 
   beforeAll(async () => {
-    pooled = createPgDb(testDatabaseUrl!);
+    pooled = await createScratchPgDb(testDatabaseUrl!);
     await migrate(pooled);
     const repo = new SeriesRepository(pooled);
 

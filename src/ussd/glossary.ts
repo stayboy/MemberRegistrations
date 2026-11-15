@@ -57,6 +57,9 @@ export const GLOSSARY = {
   'label.adult_female': { full: 'Adult female', short: 'Adult female' },
   'label.child_male': { full: 'Child male', short: 'Child male' },
   'label.child_female': { full: 'Child female', short: 'Child female' },
+  'label.elders': { full: 'Elders', short: 'Elders' },
+  'label.deaconess': { full: 'Deaconess', short: 'Deaconess' },
+  'label.deacons': { full: 'Deacons', short: 'Deacons' },
   'label.event': { full: 'Event', short: 'event' },
   'label.events': { full: 'Events', short: 'events' },
   'label.tomorrow': { full: 'Tomorrow', short: 'tomorrow' },
@@ -76,6 +79,14 @@ export const GLOSSARY = {
   'prompt.headcount_children': {
     full: 'Enter male,female,adults',
     short: 'Enter male,female,adults',
+  },
+  'prompt.headcount_visitors': {
+    full: 'Enter male,female,children',
+    short: 'Enter male,female,children',
+  },
+  'prompt.headcount_presbyters': {
+    full: 'Enter elders,deaconess,deacons',
+    short: 'Enter elders,deaconess,deacons',
   },
   'error.code_invalid': { full: 'Invalid code', short: 'Bad code' },
   'error.code_used': { full: 'Code already used', short: 'Code used' },
@@ -102,6 +113,8 @@ export const GLOSSARY = {
   'attendance.no_data': { full: 'No attendance yet', short: 'No attendance' },
   'headcount.adult_service': { full: 'Adult service', short: 'Adult service' },
   'headcount.children_service': { full: 'Children service', short: 'Children service' },
+  'headcount.visitors_service': { full: 'Visitors', short: 'Visitors' },
+  'headcount.presbyters_service': { full: 'Presbyters', short: 'Presbyters' },
   'status.regular': { full: 'Regular', short: 'Regular' },
   'status.non_regular': { full: 'Non-Regular', short: 'Non-reg' },
   'status.not_enough_data': { full: 'Not enough data', short: 'No data' },
