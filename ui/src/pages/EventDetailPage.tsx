@@ -27,6 +27,7 @@ import {
   type EventVenueType,
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
+import { SessionHeadcount } from '../components/SessionHeadcount';
 import { PageFrame } from '../components/PageFrame';
 import { TermsDialog } from '../components/TermsDialog';
 import {
@@ -332,6 +333,7 @@ export function EventDetailPage() {
                         <TableHeaderCell>Status</TableHeaderCell>
                         <TableHeaderCell>Source</TableHeaderCell>
                         <TableHeaderCell>Present/expected</TableHeaderCell>
+                        <TableHeaderCell>Headcount</TableHeaderCell>
                         <TableHeaderCell>Attendance</TableHeaderCell>
                       </TableRow>
                     </TableHeader>
@@ -371,6 +373,13 @@ export function EventDetailPage() {
                             </div>
                           </TableCell>
                           <TableCell>{sessionSourceLabel(item.source)}</TableCell>
+                          <TableCell>
+                            <SessionHeadcount
+                              eventId={event.id}
+                              sessionDate={item.date}
+                              disabled={item.status === 'cancelled'}
+                            />
+                          </TableCell>
                           <TableCell>{formatPresentExpected(item)}</TableCell>
                           <TableCell>
                             <Button
