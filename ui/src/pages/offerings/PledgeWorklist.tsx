@@ -14,11 +14,7 @@ import {
 } from '@fluentui/react-components';
 import { ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons';
 import { Fragment, useState } from 'react';
-import type {
-  OfferingSummaryPledgeCounts,
-  PledgeItem,
-  PledgeStatus,
-} from '../../api/offerings';
+import type { OfferingSummaryPledgeCounts, PledgeItem, PledgeStatus } from '../../api/offerings';
 import { formatMoneyMinor } from '../../format/welfare';
 import { useOfferingsStyles } from './offerings-styles';
 
@@ -98,7 +94,9 @@ export function PledgeWorklist({
           </Text>
         </div>
       ) : (
-        <div className={viewAll ? `${styles.tableWrap} ${styles.worklistScroll}` : styles.tableWrap}>
+        <div
+          className={viewAll ? `${styles.tableWrap} ${styles.worklistScroll}` : styles.tableWrap}
+        >
           <Table className={styles.worklistTable} size="small" aria-label="Pledge worklist">
             <TableHeader>
               <TableRow>
@@ -121,9 +119,7 @@ export function PledgeWorklist({
                           className={styles.expander}
                           size="small"
                           appearance="transparent"
-                          icon={
-                            expanded ? <ChevronDownRegular /> : <ChevronRightRegular />
-                          }
+                          icon={expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
                           aria-expanded={expanded}
                           aria-controls={detailId}
                           aria-label={`${expanded ? 'Hide' : 'Show'} details for ${pledge.memberName}`}
@@ -169,7 +165,11 @@ export function PledgeWorklist({
                               <Text size={200} className={styles.muted}>
                                 Pledge status
                               </Text>
-                              <Badge appearance="tint" color={statusColor(pledge.status)} size="small">
+                              <Badge
+                                appearance="tint"
+                                color={statusColor(pledge.status)}
+                                size="small"
+                              >
                                 {statusLabel(pledge.status)}
                               </Badge>
                             </div>
@@ -211,7 +211,9 @@ export function PledgeWorklist({
         </Text>
         {hasMore ? (
           <Button size="small" appearance="secondary" onClick={() => setViewAll((value) => !value)}>
-            {viewAll ? `Showing ${pledges.length} of up to ${limit} · Collapse` : `View all ${limit}`}
+            {viewAll
+              ? `Showing ${pledges.length} of up to ${limit} · Collapse`
+              : `View all ${limit}`}
           </Button>
         ) : null}
       </div>

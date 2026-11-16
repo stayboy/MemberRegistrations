@@ -19,8 +19,12 @@ describe('resolveGatewayOrigin', () => {
   });
 
   it('allows http only for a loopback host in a development build', () => {
-    expect(resolveGatewayOrigin('http://localhost:3000', DEVELOPMENT)).toBe('http://localhost:3000');
-    expect(resolveGatewayOrigin('http://127.0.0.1:3000/', DEVELOPMENT)).toBe('http://127.0.0.1:3000');
+    expect(resolveGatewayOrigin('http://localhost:3000', DEVELOPMENT)).toBe(
+      'http://localhost:3000',
+    );
+    expect(resolveGatewayOrigin('http://127.0.0.1:3000/', DEVELOPMENT)).toBe(
+      'http://127.0.0.1:3000',
+    );
     expect(() => resolveGatewayOrigin('http://example.com', DEVELOPMENT)).toThrow(/loopback/);
     expect(() => resolveGatewayOrigin('http://localhost:3000', PRODUCTION)).toThrow(/https/);
   });

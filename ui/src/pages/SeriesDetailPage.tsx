@@ -213,7 +213,6 @@ export function SeriesDetailPage() {
         </Button>
       }
       actions={[
-
         ...(archived
           ? []
           : [

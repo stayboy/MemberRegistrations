@@ -252,7 +252,11 @@ export interface HeadcountInput {
   readonly ended?: boolean;
 }
 
-export function headcountsPath(eventId: string, sessionDate: string, mode?: HeadcountReadMode): string {
+export function headcountsPath(
+  eventId: string,
+  sessionDate: string,
+  mode?: HeadcountReadMode,
+): string {
   const params = new URLSearchParams({ sessionDate });
   if (mode) params.set('mode', mode);
   return `${eventDetailPath(eventId)}/headcounts?${params.toString()}`;

@@ -26,7 +26,8 @@ export function KpiTile({
   visual?: ReactNode;
 }) {
   const styles = useOfferingsStyles();
-  const valueClass = tone === 'negative' ? `${styles.kpiValue} ${styles.kpiValueNegative}` : styles.kpiValue;
+  const valueClass =
+    tone === 'negative' ? `${styles.kpiValue} ${styles.kpiValueNegative}` : styles.kpiValue;
 
   return (
     <Card className={styles.kpi}>

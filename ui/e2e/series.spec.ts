@@ -54,4 +54,3 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(summary.getByText('2', { exact: true })).toBeVisible();
   await expect(summary.getByText('paid this window')).toBeVisible();
 });
-

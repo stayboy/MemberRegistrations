@@ -64,7 +64,11 @@ export function RecordedOffertoriesList({
         ) : (
           <>
             <div className={styles.tableWrap}>
-              <Table className={styles.table} size="small" aria-label="Recorded offertories this session">
+              <Table
+                className={styles.table}
+                size="small"
+                aria-label="Recorded offertories this session"
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHeaderCell>Member</TableHeaderCell>
@@ -81,7 +85,10 @@ export function RecordedOffertoriesList({
                       </TableCell>
                       <TableCell>{offeringName}</TableCell>
                       <TableCell>
-                        {formatMoneyMinor(contribution.amountMinor, contribution.currency || currency)}
+                        {formatMoneyMinor(
+                          contribution.amountMinor,
+                          contribution.currency || currency,
+                        )}
                       </TableCell>
                       <TableCell>{formatInstant(contribution.createdAt)}</TableCell>
                     </TableRow>

@@ -140,7 +140,12 @@ function ActivityPage() {
 function HeadcountRedirect() {
   const [params] = useSearchParams();
   const eventId = params.get('event');
-  return <Navigate to={eventId ? `/events/${encodeURIComponent(eventId)}?kind=event` : '/events'} replace />;
+  return (
+    <Navigate
+      to={eventId ? `/events/${encodeURIComponent(eventId)}?kind=event` : '/events'}
+      replace
+    />
+  );
 }
 
 /**

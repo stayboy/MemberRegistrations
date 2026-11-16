@@ -103,9 +103,7 @@ describe('count rows', () => {
     expect(oneOff?.pieces).toBe('1');
     expect(rows).toHaveLength(13);
     expect(customRowCount(rows, 'GHS')).toBe(1);
-    expect(gridDenominations('GHS').some((entry) => entry.denominationMinor === 2550)).toBe(
-      false,
-    );
+    expect(gridDenominations('GHS').some((entry) => entry.denominationMinor === 2550)).toBe(false);
   });
 
   it('sums a repeated one-off value into its existing row', () => {
@@ -194,9 +192,7 @@ describe('rowsFromObservation', () => {
   });
 
   it('re-renders a hidden observed line as a one-off', () => {
-    const rows = rowsFromObservation(COUNT, 'GHS', [
-      { denominationMinor: 2000, enabled: false },
-    ]);
+    const rows = rowsFromObservation(COUNT, 'GHS', [{ denominationMinor: 2000, enabled: false }]);
 
     expect(rows.filter((row) => row.denominationMinor === 2000)).toHaveLength(1);
     expect(rows.at(-1)).toEqual({ denominationMinor: 2000, pieces: '39' });

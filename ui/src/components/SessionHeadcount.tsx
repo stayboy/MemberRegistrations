@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, MessageBar, MessageBarBody, Text, makeStyles, tokens } from '@fluentui/react-components';
+import {
+  Button,
+  MessageBar,
+  MessageBarBody,
+  Text,
+  makeStyles,
+  tokens,
+} from '@fluentui/react-components';
 import { getHeadcounts, recordHeadcount, type Headcount, type HeadcountPage } from '../api/ussd';
 import { postAttendanceImport } from '../api/imports';
 import { isUnauthorized } from '../api/errors';
@@ -56,7 +63,8 @@ function laneRows(
   const rows: { mode: string; label: string; row: Headcount; correctable: boolean }[] = [];
   for (const [mode, row] of Object.entries(current)) {
     if (!row) continue;
-    const label = mode === 'mixed' ? 'Mixed (retired)' : (LANE_LABELS.get(mode as HeadcountEntryMode) ?? mode);
+    const label =
+      mode === 'mixed' ? 'Mixed (retired)' : (LANE_LABELS.get(mode as HeadcountEntryMode) ?? mode);
     // A legacy `mixed` observation is history: it is shown, never superseded (HC-9).
     rows.push({ mode, label, row, correctable: mode !== 'mixed' });
   }
@@ -185,7 +193,9 @@ export function SessionHeadcount({
       postAttendanceImport(baseUrl, token, { eventId, sessionDate, rows: [], ended: true }),
     onSuccess: () => {
       setEndError(null);
-      void queryClient.invalidateQueries({ queryKey: ['headcounts', baseUrl, eventId, sessionDate] });
+      void queryClient.invalidateQueries({
+        queryKey: ['headcounts', baseUrl, eventId, sessionDate],
+      });
       void queryClient.invalidateQueries({ queryKey: ['events', baseUrl, 'detail', eventId] });
     },
     onError: (failure: unknown) => {

@@ -127,5 +127,4 @@ test.describe('accessibility', () => {
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   }
-
 });

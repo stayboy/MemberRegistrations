@@ -112,7 +112,11 @@ export function OfferingCountEntry({
     return (
       <div
         key={entry.denominationMinor}
-        className={overCap ? `${styles.denominationCell} ${styles.denominationCellInvalid}` : styles.denominationCell}
+        className={
+          overCap
+            ? `${styles.denominationCell} ${styles.denominationCellInvalid}`
+            : styles.denominationCell
+        }
       >
         <Field label={denominationLabel(entry.denominationMinor, currency)}>
           <Input
@@ -135,7 +139,10 @@ export function OfferingCountEntry({
   }
 
   return (
-    <section className={showHeader ? styles.panel : undefined} aria-label="Record an offering count">
+    <section
+      className={showHeader ? styles.panel : undefined}
+      aria-label="Record an offering count"
+    >
       {showHeader ? (
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>
@@ -173,9 +180,7 @@ export function OfferingCountEntry({
           <MessageBar intent="info">
             <MessageBarBody>
               {catalogueExists ? (
-                <strong>
-                  All denominations for {currency} are hidden; enter one-off rows.
-                </strong>
+                <strong>All denominations for {currency} are hidden; enter one-off rows.</strong>
               ) : (
                 <strong>No denominations are configured for {currency}.</strong>
               )}

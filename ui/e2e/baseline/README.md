@@ -12,29 +12,29 @@ stubbed gateway from `ui/e2e/fixtures.ts`, `deviceScaleFactor: 1`, the locale pi
 timezone to `UTC`, reduced motion, animations disabled and the caret hidden. It is a separate
 Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never writes images.
 
-| File                          | Screen                                           | Viewport    | Mock reference                          |
-| ----------------------------- | ------------------------------------------------ | ----------- | --------------------------------------- |
-| `shell-light.png`             | Shell, expanded sidebar, fluent light            | 1440 × 900  | `v2-shell/01-shell-expanded-light.png`  |
-| `shell-dark.png`              | Shell, expanded sidebar, fluent dark             | 1440 × 900  | `v2-shell/03-shell-expanded-dark.png`   |
-| `shell-collapsed.png`         | Shell, collapsed icon rail, light                | 1440 × 900  | `v2-shell/02-shell-collapsed-light.png` |
-| `shell-mobile.png`            | Shell, 390 px sections menu, collapsed rail      | 390 × 844   | `v2-shell/06-mobile.png`                |
-| `shell-meadow.png`            | Shell, Meadow accent, light                      | 1440 × 900  | `v2-shell/05-meadow-accent.png`         |
-| `members-list.png`            | Members list, compact rows                       | 1440 × 900  | `v2-shell/10-members-refined.png`       |
-| `member-detail.png`           | Member detail, Subscriptions tab                 | 1440 × 900  | `v2-shell/12-subscriptions.png`         |
-| `member-add.png`              | Add member form                                  | 1440 × 1200 | `v2-shell/11-add-member.png`            |
-| `events-list.png`             | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`          |
-| `event-detail.png`            | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`         |
-| `event-headcount-dialog.png` | Event detail, the headcount capture dialog         | 1440 x 900  | `v2-events/06-record-headcount-dialog.png` |
-| `event-import-panel.png`      | Event detail, the attendance import panel          | 1440 x 900  | `v2-events/07-import-attendance-panel.png`  |
-| `event-attendance-dialog.png` | Attendance dialog for the first session          | 1440 × 900  | `v2-events/06-attendance-rows.png`      |
-| `series-detail.png`           | Series detail, versions, exceptions, occurrences | 1440 × 1000 | `v2-events/04-series-detail.png`        |
-| `shepherding-officers.png`    | Shepherding officers, coverage and officer table | 1440 × 900  | `v2-shell/07-shepherding-officers.png`  |
-| `shepherding-roster.png`      | Shepherding roster for the fixture officer       | 1440 × 900  | `v2-shell/08-shepherding-roster.png`    |
-| `shepherding-report.png`      | Church report and status distribution            | 1440 × 900  | `v2-shell/09-shepherding-report.png`    |
-| `contacts-dialog.png`         | Contacts dialog for the first fixture member     | 1440 × 900  | `v2-shell/16-contacts.png`              |
-| `imports-members.png`         | Member database import, format and drop zone     | 1440 × 1150 | `v2-imports/01-members-import.png`      |
-| `imports-batches.png`         | Batch lookup, empty tab history                  | 1440 × 900  | none (no mock)                          |
-| `settings.png`                | Settings, appearance / date-time / session       | 1440 × 1150 | `v2-settings/01-date-time-settings.png` |
+| File                          | Screen                                           | Viewport    | Mock reference                             |
+| ----------------------------- | ------------------------------------------------ | ----------- | ------------------------------------------ |
+| `shell-light.png`             | Shell, expanded sidebar, fluent light            | 1440 × 900  | `v2-shell/01-shell-expanded-light.png`     |
+| `shell-dark.png`              | Shell, expanded sidebar, fluent dark             | 1440 × 900  | `v2-shell/03-shell-expanded-dark.png`      |
+| `shell-collapsed.png`         | Shell, collapsed icon rail, light                | 1440 × 900  | `v2-shell/02-shell-collapsed-light.png`    |
+| `shell-mobile.png`            | Shell, 390 px sections menu, collapsed rail      | 390 × 844   | `v2-shell/06-mobile.png`                   |
+| `shell-meadow.png`            | Shell, Meadow accent, light                      | 1440 × 900  | `v2-shell/05-meadow-accent.png`            |
+| `members-list.png`            | Members list, compact rows                       | 1440 × 900  | `v2-shell/10-members-refined.png`          |
+| `member-detail.png`           | Member detail, Subscriptions tab                 | 1440 × 900  | `v2-shell/12-subscriptions.png`            |
+| `member-add.png`              | Add member form                                  | 1440 × 1200 | `v2-shell/11-add-member.png`               |
+| `events-list.png`             | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`             |
+| `event-detail.png`            | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`            |
+| `event-headcount-dialog.png`  | Event detail, the headcount capture dialog       | 1440 x 900  | `v2-events/06-record-headcount-dialog.png` |
+| `event-import-panel.png`      | Event detail, the attendance import panel        | 1440 x 900  | `v2-events/07-import-attendance-panel.png` |
+| `event-attendance-dialog.png` | Attendance dialog for the first session          | 1440 × 900  | `v2-events/06-attendance-rows.png`         |
+| `series-detail.png`           | Series detail, versions, exceptions, occurrences | 1440 × 1000 | `v2-events/04-series-detail.png`           |
+| `shepherding-officers.png`    | Shepherding officers, coverage and officer table | 1440 × 900  | `v2-shell/07-shepherding-officers.png`     |
+| `shepherding-roster.png`      | Shepherding roster for the fixture officer       | 1440 × 900  | `v2-shell/08-shepherding-roster.png`       |
+| `shepherding-report.png`      | Church report and status distribution            | 1440 × 900  | `v2-shell/09-shepherding-report.png`       |
+| `contacts-dialog.png`         | Contacts dialog for the first fixture member     | 1440 × 900  | `v2-shell/16-contacts.png`                 |
+| `imports-members.png`         | Member database import, format and drop zone     | 1440 × 1150 | `v2-imports/01-members-import.png`         |
+| `imports-batches.png`         | Batch lookup, empty tab history                  | 1440 × 900  | none (no mock)                             |
+| `settings.png`                | Settings, appearance / date-time / session       | 1440 × 1150 | `v2-settings/01-date-time-settings.png`    |
 
 `member-add` and `series-detail` use the mocks' real PNG dimensions (1200 px and 1000 px tall) rather
 than a rounded 900 px, because those screens scroll below the fold. `imports-batches` has no local

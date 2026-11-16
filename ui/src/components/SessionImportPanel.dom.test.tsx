@@ -38,12 +38,7 @@ describe('SessionImportPanel', () => {
     renderWithProviders(
       <MemoryRouter>
         <DateTimeProvider>
-          <SessionImportPanel
-            open
-            occurrence={occurrence}
-            onClose={vi.fn()}
-            onImported={vi.fn()}
-          />
+          <SessionImportPanel open occurrence={occurrence} onClose={vi.fn()} onImported={vi.fn()} />
         </DateTimeProvider>
       </MemoryRouter>,
     );
