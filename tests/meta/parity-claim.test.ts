@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
  */
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const packPath = join(repoRoot, 'documents', 'parity', 'comparison-pack.md');
+const registerPath = join(repoRoot, 'documents', 'parity', 'unclaimables.md');
 
 /** The pack's top table: the rows above the first `## ` heading. */
 function topTableRows(text: string): string[] {
@@ -53,5 +54,76 @@ describe('the parity claim names its scope', () => {
 
   it('states its verdict, not only its rows', () => {
     expect(text).toContain('## What the pack found');
+  });
+});
+
+/** A register row's cells, with its leading and trailing empty split dropped. */
+function tableCells(row: string): string[] {
+  return row
+    .split('|')
+    .map((cell) => cell.trim())
+    .slice(1, -1);
+}
+
+/** The register's table body: the header row and the separator row dropped. */
+function registerRows(text: string): string[] {
+  return text
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('|'))
+    .slice(1)
+    .filter((row) => !tableCells(row).every((cell) => /^-+$/.test(cell)));
+}
+
+describe('the un-claimables register', () => {
+  const text = existsSync(registerPath) ? readFileSync(registerPath, 'utf8') : '';
+
+  it('exists and carries its title', () => {
+    expect(existsSync(registerPath), `the un-claimables register is missing: ${registerPath}`).toBe(
+      true,
+    );
+    expect(text, 'the register must open with its own heading').toContain(
+      '# The un-claimables register',
+    );
+  });
+
+  it('gives every row all four of its fields', () => {
+    const broken = registerRows(text).filter((row) => {
+      const cells = tableCells(row);
+      return cells.length !== 4 || cells.some((cell) => cell.length === 0);
+    });
+    expect(
+      broken,
+      `a register row lost a field; every row names the surface, what is unproven, why it is accepted and what would close it:\n${broken.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('lists at least four un-claimable rows', () => {
+    expect(
+      registerRows(text).length,
+      'the register must keep a row per un-claimable surface rather than a paragraph that loses one',
+    ).toBeGreaterThan(3);
+  });
+
+  it('names every surface the pack calls not claimable', () => {
+    const lower = text.toLowerCase();
+    const missing = [
+      'member detail',
+      'add and edit member',
+      'contacts dialog',
+      'attendance dialog',
+      'import batch list',
+      'ussd simulator',
+      'legacy prototype captures',
+    ].filter((name) => !lower.includes(name));
+    expect(
+      missing,
+      `the surfaces the pack cannot claim are missing from the register:\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('records the gate risk that is not a surface', () => {
+    const lower = text.toLowerCase();
+    expect(lower, 'the register must name the flaky deep-link assertion').toContain('deep-link');
+    expect(lower, 'the register must call that assertion flaky').toContain('flaky');
   });
 });
