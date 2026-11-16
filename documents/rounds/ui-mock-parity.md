@@ -179,13 +179,13 @@ below are confirmed against that capture, not the stale files.
 
 ### Add member (`v2-shell/11-add-member.png`)
 
-| Mock element                                    | Decision        | Why                                                                                                     |
-| ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------- |
-| Contact kind + contact value on the create form | **retire**      | the shipped form states contacts are added after creation; the spec moved them behind the member record |
-| Ministries multi-select                         | **retire**      | ministries are assigned on the member record, not at creation                                           |
-| Success banner and member preview               | **retire**      | mock-only illustration                                                                                  |
-| Maiden name and alias fields                    | **keep actual** | the mock omits them; both are captured and shown                                                        |
-| One Cancel/Create pair at the foot              | **keep actual** | shipped puts them in the page header                                                                    |
+| Mock element                                    | Decision               | Why                                                                                                                                  |
+| ----------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Contact kind + contact value on the create form | **adopt** (2026-11-16) | reversed by FR-29a (owner): registration gains a `Contacts` section sent in the one create request; the edit path stays contact-free |
+| Ministries multi-select                         | **retire**             | ministries are assigned on the member record, not at creation                                                                        |
+| Success banner and member preview               | **retire**             | mock-only illustration                                                                                                               |
+| Maiden name and alias fields                    | **keep actual**        | the mock omits them; both are captured and shown                                                                                     |
+| One Cancel/Create pair at the foot              | **keep actual**        | shipped puts them in the page header                                                                                                 |
 
 ### Series list (`v2-events/03-series-list.png`)
 
@@ -329,7 +329,7 @@ n/a — planning document; each build round is reviewed on its own.
 
 ## Mock parity
 
-Mock coverage: claimed 6 · e2e-only 5 · deferred 1 · prose 1
+Mock coverage: claimed 7 · e2e-only 6 · deferred 1 · prose 2
 
 The contacts state's sign-off, claim atoms and pair are carried by round `contacts-dialog-parity`;
 this ledger keeps the adopt/queue verdicts, and the superseded contacts verdict is recorded above.

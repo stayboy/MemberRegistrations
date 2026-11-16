@@ -21,7 +21,7 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `shell-meadow.png`            | Shell, Meadow accent, light                      | 1440 × 900  | `v2-shell/05-meadow-accent.png`            |
 | `members-list.png`            | Members list, compact rows                       | 1440 × 900  | `v2-shell/10-members-refined.png`          |
 | `member-detail.png`           | Member detail, Subscriptions tab                 | 1440 × 900  | `v2-shell/12-subscriptions.png`            |
-| `member-add.png`              | Add member form                                  | 1440 × 1200 | `v2-shell/11-add-member.png`               |
+| `member-add.png`              | Add member form                                  | 1440 × 1400 | `v2-shell/11-add-member.png`               |
 | `events-list.png`             | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`             |
 | `event-detail.png`            | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`            |
 | `event-headcount-dialog.png`  | Event detail, the headcount capture dialog       | 1440 x 900  | `v2-events/06-record-headcount-dialog.png` |
@@ -32,11 +32,12 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `shepherding-roster.png`      | Shepherding roster for the fixture officer       | 1440 × 900  | `v2-shell/08-shepherding-roster.png`       |
 | `shepherding-report.png`      | Church report and status distribution            | 1440 × 900  | `v2-shell/09-shepherding-report.png`       |
 | `contacts-dialog.png`         | Contacts dialog for the first fixture member     | 1440 × 900  | `v2-shell/16-contacts.png`                 |
+| `contacts-editable.png`       | Editable contacts dialog on the member record    | 1440 × 900  | `v2-shell/18-contacts-editable.png`        |
 | `imports-members.png`         | Member database import, format and drop zone     | 1440 × 1150 | `v2-imports/01-members-import.png`         |
 | `imports-batches.png`         | Batch lookup, empty tab history                  | 1440 × 900  | none (no mock)                             |
 | `settings.png`                | Settings, appearance / date-time / session       | 1440 × 1150 | `v2-settings/01-date-time-settings.png`    |
 
-`member-add` and `series-detail` use the mocks' real PNG dimensions (1200 px and 1000 px tall) rather
+`member-add` and `series-detail` use the mocks' real PNG dimensions (1400 px and 1000 px tall) rather
 than a rounded 900 px, because those screens scroll below the fold. `imports-batches` has no local
 mock; its viewport follows the other 900 px screens.
 

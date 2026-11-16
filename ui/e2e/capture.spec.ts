@@ -139,7 +139,7 @@ test('member detail', async ({ page }) => {
 });
 
 test('add member', async ({ page }) => {
-  await openScreen(page, '/members/new', { width: 1440, height: 1200 });
+  await openScreen(page, '/members/new', { width: 1440, height: 1400 });
   await expect(page.getByRole('heading', { level: 1, name: 'Add member' })).toBeVisible();
   await expect(page.getByLabel('Member number')).toBeVisible();
   await capture(page, 'member-add');
@@ -227,8 +227,22 @@ test('contacts dialog', async ({ page }) => {
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('region', { name: 'Phone' })).toBeVisible();
+  // The flat list's first row: kind, value and status live in one row (FR-78).
+  await expect(dialog.getByRole('listitem').filter({ hasText: '+233 20 000 0001' })).toBeVisible();
   await capture(page, 'contacts-dialog');
+});
+
+test('contacts editable', async ({ page }) => {
+  await openScreen(page, '/members/M-1001', { width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Contacts' });
+  await expect(dialog).toBeVisible();
+  // AC-53: the add row sits above the list, and owned rows carry Remove.
+  await expect(dialog.getByRole('textbox', { name: 'Contact value' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Remove +233 20 000 0001' })).toBeVisible();
+  await capture(page, 'contacts-editable');
 });
 
 // --- Imports and settings --------------------------------------------------

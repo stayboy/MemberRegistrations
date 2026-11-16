@@ -197,7 +197,7 @@ export interface MemberListPage {
   readonly nextCursor?: string;
 }
 
-/** Mirrors `createMemberSchema`, minus the contacts and ministries collections. */
+/** Mirrors `createMemberSchema`, minus the ministries collection. */
 export interface MemberInput {
   readonly memberNo: string;
   readonly firstName: string;
@@ -211,12 +211,14 @@ export interface MemberInput {
   readonly addressLine?: string | null;
   readonly joinedOn?: string | null;
   readonly isPresbyter?: boolean;
+  /** Entered on the create form (FR-29a); a blank field sends no row. */
+  readonly contacts?: readonly ContactInput[];
 }
 
 type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
 
-/** `memberNo` is immutable, so the update body cannot carry it. */
-export type MemberUpdateInput = Partial<Mutable<Omit<MemberInput, 'memberNo'>>>;
+/** `memberNo` is immutable and contacts have their own endpoints (FR-29a). */
+export type MemberUpdateInput = Partial<Mutable<Omit<MemberInput, 'memberNo' | 'contacts'>>>;
 
 /** Mirrors `contactInputSchema`; the API normalises the value by kind. */
 export interface ContactInput {
