@@ -57,8 +57,10 @@ why it survived three rounds of code review.
 | 4b  | Occurrences   | session rows with `Record headcount` and `Import` | dates only (Date · Exception · Events), because `OccurrenceListDto` carries no event ids — the parked R2b                                          |
 | 4c  | Panels        | tiles and schedule only                           | a definition card (Ministry/Timezone/Status/Archived/Description) as well                                                                          |
 
-4a is a triage item that was never applied: the retire verdict exists in `ui-mock-parity.md` and the code
-still renders the RRULE.
+4a was fixed after this pack was written: the cells read `scheduleLabel(rrule)` (`SeriesActivityRow.tsx`,
+`SeriesDetailPage.tsx`), so the readable label renders without the raw string. This paragraph used to say
+the code still rendered the RRULE; that verdict was stale, and the release claim's "fixed" rests on the
+second reading.
 
 ## 5. Headcount dialog — the mock is the stale artefact
 
@@ -235,10 +237,10 @@ Both can be reviewed for consistency with the design language, never claimed as 
 
 ## What the pack found
 
-1. **Five build defects.** Three fixed before this pass (`Held`/`Mixed` overlap, the raw RRULE in the
-   series schedule cell, the status-pill overlap), and two fixed here: the roster's clipped row actions
-   (`roster-eleven-columns`) and the officers page's missing FR-58 totals and colliding identity
-   (`officers-church-totals`).
+1. **Five build defects.** Two fixed before this pass (`Held`/`Mixed` overlap and the status-pill overlap),
+   the raw RRULE in the series schedule cell fixed after the pass was written (see section 4), and two fixed
+   here: the roster's clipped row actions (`roster-eleven-columns`) and the officers page's missing FR-58
+   totals and colliding identity (`officers-church-totals`).
 2. **One spec gap per surface, both the same shape.** The roster drew nine columns against FR-59a's
    eleven, and the officers page drew none of FR-58's totals. In both the mock was ahead of the build,
    and in both the fix was to move the build to the drawing.
