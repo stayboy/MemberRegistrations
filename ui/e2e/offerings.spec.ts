@@ -30,7 +30,9 @@ test('the offerings dashboard shows the four tiles, tabbed breakdown, worklist a
   // The default breakdown tab is by offering; the event and member tabs stay reachable.
   await expect(page.getByRole('table', { name: 'Totals by offering' })).toBeVisible();
   await expect(page.getByText('Share of paid')).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Totals by offering' }).getByText('Tithe')).toBeVisible();
+  await expect(
+    page.getByRole('table', { name: 'Totals by offering' }).getByText('Tithe'),
+  ).toBeVisible();
 
   await page.getByRole('tab', { name: 'By event' }).click();
   await expect(page.getByRole('table', { name: 'Totals by event' })).toBeVisible();

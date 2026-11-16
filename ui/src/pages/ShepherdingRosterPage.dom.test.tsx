@@ -422,9 +422,7 @@ describe('ShepherdingRosterPage page action (FR-9a)', () => {
 
     // FR-9a: the Refresh utility leads the run, so the icon precedes the verb.
     const refresh = screen.getByRole('button', { name: 'Refresh' });
-    expect(
-      refresh.compareDocumentPosition(assign) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(refresh.compareDocumentPosition(assign) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // A page with exactly one verb never renders the one-item menu.
     expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull();

@@ -125,7 +125,10 @@ describe('sessionCaptureLine', () => {
 
   it('says No capture yet, and Cancelled for a cancelled session with none', () => {
     expect(
-      sessionCaptureLine({ ...captureSession, capture: null }, new Date('2026-01-05T00:30:00.000Z')),
+      sessionCaptureLine(
+        { ...captureSession, capture: null },
+        new Date('2026-01-05T00:30:00.000Z'),
+      ),
     ).toBe('No capture yet');
     expect(
       sessionCaptureLine(

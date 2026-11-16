@@ -111,11 +111,11 @@ export function EventDetailPage() {
   // from an effect, so closing the panel and dropping the parameter are the same act.
   const linkedDate = searchParams.get('import');
   const linkedSession =
-    linkedDate && event ? event.sessions.find((candidate) => candidate.date === linkedDate) : undefined;
+    linkedDate && event
+      ? event.sessions.find((candidate) => candidate.date === linkedDate)
+      : undefined;
   const panelOccurrence: Occurrence | null =
     importFor ?? (event && linkedSession ? occurrenceFrom(event, linkedSession) : null);
-
-
 
   const sessions = event?.sessions ?? [];
 
@@ -378,23 +378,24 @@ export function EventDetailPage() {
                             <SessionHeadcount
                               eventId={event.id}
                               sessionDate={item.date}
-                              disabled={
-                                item.status === 'cancelled' || Boolean(item.capture?.ended)
-                              }
+                              disabled={item.status === 'cancelled' || Boolean(item.capture?.ended)}
                               onImport={
                                 event.seriesId
                                   ? () => setImportFor(occurrenceFrom(event, item))
                                   : undefined
                               }
                               endAction={endActionState(
-                                captureState({
-                                  date: item.date,
-                                  startTime: item.startTime,
-                                  endTime: item.endTime,
-                                  timezone: event.timezone,
-                                  status: item.status,
-                                  capture: item.capture ?? null,
-                                }, new Date()),
+                                captureState(
+                                  {
+                                    date: item.date,
+                                    startTime: item.startTime,
+                                    endTime: item.endTime,
+                                    timezone: event.timezone,
+                                    status: item.status,
+                                    capture: item.capture ?? null,
+                                  },
+                                  new Date(),
+                                ),
                               )}
                             />
                           </TableCell>

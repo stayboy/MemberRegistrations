@@ -49,6 +49,13 @@
 
 Out of scope: Vercel, GitHub Pages, production secrets, the release tag, PITR and alerting.
 
+**Drifts are cut (owner, 2026-11-16).** Any mock-versus-build difference still open when the tag is cut
+ships as a **named exclusion in the release claim**, not as a fix round: the claim says what was compared
+and what was not, in the sentence that makes it. The first entry is 8f, the page's single verb drawn as a
+secondary button in the build and a filled primary in five mocks
+(`documents/parity/comparison-pack.md`). This is a scope ruling, not a quality bar: the difference is
+recorded, and the next release that touches `PageFrame` pays one line for it.
+
 ## Current state
 
 | Item                    | State                                                                                                                                                                           |

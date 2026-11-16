@@ -24,12 +24,7 @@ export interface CaptureSession {
 export type SessionPhase = 'live' | 'not-started' | 'past';
 
 /** The computed state; `live | not-started | past-open` also describe a no-capture session. */
-export type CaptureStateKind =
-  | 'live'
-  | 'not-started'
-  | 'past-open'
-  | 'ended'
-  | 'cancelled';
+export type CaptureStateKind = 'live' | 'not-started' | 'past-open' | 'ended' | 'cancelled';
 
 export interface CaptureState {
   readonly kind: CaptureStateKind;

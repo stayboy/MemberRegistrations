@@ -211,11 +211,7 @@ export function PageFrame({
           >
             {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
             {verbs.length === 1 && soleVerb ? (
-              <Button
-                icon={soleVerb.icon}
-                disabled={soleVerb.disabled}
-                onClick={soleVerb.onSelect}
-              >
+              <Button icon={soleVerb.icon} disabled={soleVerb.disabled} onClick={soleVerb.onSelect}>
                 {soleVerb.label}
               </Button>
             ) : null}

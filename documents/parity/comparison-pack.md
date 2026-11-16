@@ -140,8 +140,13 @@ queued, and the attendance column shows the not-available dash under FR-69 while
 member` on the members page, and the same verb in each of the five shell states. The mock is the signed
 artefact, and a page's one verb is meant to be the loudest control on the screen - a secondary outline
 reads as an optional action beside the table. The fix is one appearance prop in
-`ui/src/components/PageFrame.tsx` and a re-capture, which belongs in the hardening round rather than in
-this docs round.
+`ui/src/components/PageFrame.tsx` and a re-capture.
+
+**Disposition: declared, not fixed** (owner, 2026-11-16: "cut the drifts and focus on the MVP"). The fix is
+an appearance judgement with two directions - change the build, or re-cut five mocks - and neither buys a
+line of behaviour. It ships as a named difference in the release claim, and the claim says so in the
+sentence that makes it, not in a footnote. The residual is recorded rather than carried: if the next
+release touches `PageFrame`, the prop is one line.
 
 ## 13–15. Shepherding — the roster read
 

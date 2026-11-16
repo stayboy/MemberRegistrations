@@ -64,12 +64,12 @@ describe('captureState', () => {
     const live = captureState(session(), NOW);
     expect(live.hasCapture).toBe(false);
     expect(captureStateLabel(live, 'UTC')).toBe('Live');
-    expect(captureStateLabel(captureState(session(), new Date('2026-01-04T08:00:00.000Z')), 'UTC')).toBe(
-      'Not started · this capture will end it',
-    );
-    expect(captureStateLabel(captureState(session(), new Date('2026-01-04T12:00:00.000Z')), 'UTC')).toBe(
-      'Past session · this capture will end it',
-    );
+    expect(
+      captureStateLabel(captureState(session(), new Date('2026-01-04T08:00:00.000Z')), 'UTC'),
+    ).toBe('Not started · this capture will end it');
+    expect(
+      captureStateLabel(captureState(session(), new Date('2026-01-04T12:00:00.000Z')), 'UTC'),
+    ).toBe('Past session · this capture will end it');
   });
 
   it('shows the ended state with the capture clock', () => {

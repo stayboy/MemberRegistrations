@@ -1,7 +1,12 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Button } from '@fluentui/react-components';
-import { AddRegular, ArrowClockwiseRegular, ArrowImportRegular, ArrowLeftRegular } from '@fluentui/react-icons';
+import {
+  AddRegular,
+  ArrowClockwiseRegular,
+  ArrowImportRegular,
+  ArrowLeftRegular,
+} from '@fluentui/react-icons';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -56,7 +61,14 @@ function renderFrame(actions: readonly PageAction[], controls?: ReactNode) {
 }
 
 function addMember(onSelect = vi.fn(), disabled = false): PageAction {
-  return { id: 'add-member', kind: 'verb', label: 'Add member', icon: <AddRegular />, onSelect, disabled };
+  return {
+    id: 'add-member',
+    kind: 'verb',
+    label: 'Add member',
+    icon: <AddRegular />,
+    onSelect,
+    disabled,
+  };
 }
 
 function refresh(onSelect = vi.fn(), disabled = false): PageAction {
@@ -146,10 +158,9 @@ describe('PageFrame action row (FR-9a)', () => {
     renderFrame([addMember(), refresh()]);
 
     const buttons = screen.getAllByRole('button');
-    expect(buttons.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
-      'Refresh',
-      'Add member',
-    ]);
+    expect(
+      buttons.map((button) => button.getAttribute('aria-label') ?? button.textContent),
+    ).toEqual(['Refresh', 'Add member']);
     // FR-9a: the verb holds the trailing edge, so the utility sits before it, never after.
     expect(
       precedes(

@@ -290,10 +290,9 @@ export function AssignShepherdDialog({
                 <MessageBarBody>
                   <MessageBarTitle>This member already has a shepherd</MessageBarTitle>
                   Member {targetMemberNo} is currently shepherded by officer{' '}
-                  {conflict.officerMemberNo}{' '}
-                  (the wire carries no name), assigned {formatDate(conflict.assignedOn)}.
-                  Reassigning ends that assignment and keeps its history. Confirm to resend with the
-                  current assignment.
+                  {conflict.officerMemberNo} (the wire carries no name), assigned{' '}
+                  {formatDate(conflict.assignedOn)}. Reassigning ends that assignment and keeps its
+                  history. Confirm to resend with the current assignment.
                   <div className={styles.conflictActions}>
                     <Button
                       appearance="primary"

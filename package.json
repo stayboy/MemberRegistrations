@@ -40,9 +40,10 @@
     "officers:list": "tsx src/authn/cli.ts list",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --check . && npm --prefix ui run format:check",
     "smoke:local": "node scripts/smoke-local.mjs",
-    "ui:test:dom": "npm --prefix ui run test:dom"
+    "ui:test:dom": "npm --prefix ui run test:dom",
+    "drill:backup": "node scripts/drill/backup.mjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.6",

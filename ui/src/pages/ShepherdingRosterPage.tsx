@@ -852,7 +852,11 @@ export function ShepherdingRosterPage() {
           fixedOfficer={{
             memberNo: selectedOfficer.memberNo,
             memberName: selectedOfficer.name
-              ? memberLabelFromName(selectedOfficer.name, selectedOfficer.gender, selectedOfficer.age)
+              ? memberLabelFromName(
+                  selectedOfficer.name,
+                  selectedOfficer.gender,
+                  selectedOfficer.age,
+                )
               : undefined,
           }}
           onClose={() => setAssignMemberOpen(false)}

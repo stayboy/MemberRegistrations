@@ -727,7 +727,9 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                                     >
                                       Open member
                                     </MenuItem>
-                                    <MenuItem onClick={() => setContactsFor(member)}>Contacts</MenuItem>
+                                    <MenuItem onClick={() => setContactsFor(member)}>
+                                      Contacts
+                                    </MenuItem>
                                   </MenuList>
                                 </MenuPopover>
                               </Menu>

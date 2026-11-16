@@ -1474,8 +1474,7 @@ function buildRoutes(
               headcount.mode === mode &&
               headcount.supersededBy === null,
           );
-        const asOf =
-          target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
+        const asOf = target?.asOf ?? (text(body.asOf) || `${sessionDate}T09:00:00.000Z`);
         if (!asOf.startsWith(sessionDate)) {
           return problem(422, 'asOf must fall within the session day');
         }
