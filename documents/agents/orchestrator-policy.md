@@ -7,9 +7,12 @@ delta: what this repository enables, the gates it runs, and what it deliberately
 
 ## Tiers in this repo
 
-- **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0. The
-  parent implements, self-reviews and self-accepts; the commit body is the record.
-- **Tier 1 (Plan)** - a behavioural change. Approved spec + parent implements + written acceptance.
+- **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0. A
+  worker implements where there is code to write, and the worker-model seat reviews the change at Tier 0
+  too (owner, 2026-11-16); the parent answers its findings, integrates, self-reviews and self-accepts, and
+  the commit body is the record.
+- **Tier 1 (Plan)** - a behavioural change. Approved spec + **a worker implements** + the parent
+  integrates and writes the acceptance.
 - **Tier 2 (Reviewed)** — multi-file behaviour, migrations, auth, wire contracts or risk. Tier 1 plus
   an independent reviewer (`code-review` Standards + Spec; fallback: the read-only `reviewer` agent).
 - **Tier 3 and a dedicated UI tester are not adopted here.** The V2 UI gate is the minimal
@@ -19,7 +22,7 @@ The skill catalogues the Tier 3 seats for repos that enable them; this policy di
 
 **Spec review (all tiers).** Every behavioural spec, new or amended, is reviewed by a **separate**
 `ollama-cloud/deepseek-v4-pro:0813` session - never the author - **before the implementer builds
-against it** (the parent at Tier 0-1, the worker at Tier 2). The procedure is the canonical skill's
+against it** (the worker, at every tier). The procedure is the canonical skill's
 Procedure step 1b; this paragraph records the repo's model choice and record.
 `cline-pass/cline-pass/mimo-v2.6-pro` is admissible in the 12:00–18:00 local window or when no
 provider answers 0813, with the basis recorded. The verdict and the reviewed revision go
@@ -42,12 +45,25 @@ the cline-pass provider for the same model (`cline-pass/cline-pass/deepseek-v4.1
 no other seat is clocked. An explicit owner override for a named round beats any ranking here, and the
 round doc records it.
 
-| Seat                                                        | Ranked models (first available wins)                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker (Tier 2+ implementer)                                | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
-| Reviewer / plan gate / spec review / acceptance (all tiers) | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `mimo-v2.6-pro` on whichever configured provider answers. Inside it: 1. `mimo-v2.6-pro` on whichever configured provider answers (`cline-pass` first, `ollama-cloud` as the fallback); 2. `ollama-cloud/deepseek-v4-pro:0813` |
-| Grill-me (go-forward round)                                 | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
-| Git executor (all git writes)                               | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                                                                                                                                                                                                                          |
+| Seat                                                                                                | Ranked models (first available wins)                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker (implements at every tier; reviews a Tier 0 change)                                          | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
+| Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `mimo-v2.6-pro` on whichever configured provider answers. Inside it: 1. `mimo-v2.6-pro` on whichever configured provider answers (`cline-pass` first, `ollama-cloud` as the fallback); 2. `ollama-cloud/deepseek-v4-pro:0813` |
+| Grill-me (every round that opens one)                                                               | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
+| Git executor (all git writes)                                                                       | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                                                                                                                                                                                                                          |
+
+**A worker at every tier (owner, 2026-11-16).** The worker seat implements at Tier 0-1 as well as
+Tier 2, on the ranking above; the parent integrates, runs the gates, writes the round doc (the commit body
+at Tier 0) and accepts, and at Tier 2 the reviewer stays independent of the worker. The same seat also
+**reviews a Tier 0 change**: a solo round has no independent reviewer, so the worker-model pass is where a
+wrong reading of the brief surfaces. The review is a separate session from the one that wrote the change,
+on the same seat - the point is a second reading of the brief, not an independent gate - and the parent's
+self-accept stands only after each finding is answered (answered, not necessarily fixed), with the commit
+body naming each finding and its answer. Tier 1 keeps its written acceptance and
+Tier 2 its independent reviewer; the worker-model review is a Tier 0 addition, not a replacement for
+either. A docs-only file inside a round the parent is integrating is still the parent's to write; the
+implementation of a change is the worker's. The point is not ceremony - a second author reads the brief,
+and the parent's own context is the one that already knows what it meant.
 
 The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the
 file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the
@@ -63,10 +79,13 @@ The seat is off when `.opencode/agents/git-executor.md` is absent; the fallback 
 live seat, and git returns to the parent.
 
 The reviewer is the pro seat — `deepseek-v4-pro:0813`, or its ranked fallback, which is the seat
-between 12:00 and 18:00 — in every tier. The gate
-must not be the author, so at Tier 2+ the flash worker implements and the pro session reviews; a pro
-session does not both implement and review. A seat is unavailable only when no provider answers its
-first model/build (credit exhaustion, HTTP 429 and timeouts count; a catalogue listing does not); the
+between 12:00 and 18:00 — wherever a tier has an independent review. The gate
+must not be the author, so the flash worker implements and the pro session reviews; a pro
+session does not both implement and review. A Tier 0 change gets the worker-model pass described above
+instead, because a solo round has no independent gate to fill - except a protected document, which keeps
+its pro-seat review under `AGENTS.md` section 10a and therefore gets both. A seat is unavailable only when
+no provider answers its first model/build (credit exhaustion, HTTP 429 and timeouts count; a catalogue
+listing does not); the
 next model in the ranking is then admissible with the reason recorded. When the whole ranking is
 unavailable, the round **parks**; never self-review or invent a third model.
 
