@@ -46,6 +46,17 @@
         "no contact value appears",
         "one page verb"
       ]
+    },
+    {
+      "id": "contacts-dialog",
+      "route": "/members",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["no contact value appears"]
     }
   ],
   "states": {
@@ -246,16 +257,25 @@
     "16-contacts": {
       "mock": {
         "path": "mockups/v2-shell/16-contacts.png",
-        "sha256": "c398bbf37d6092cb404b00856d82dd495ef9971acf237556b03a0daec0f8b1ea"
+        "sha256": "7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207",
+        "source": "mockups/v2-shell/16-contacts.html"
+      },
+      "baseline": "ui/e2e/baseline/contacts-dialog.png",
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-16",
+        "sha256": "7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207"
+      }
+    },
+    "18-contacts-editable": {
+      "mock": {
+        "path": "mockups/v2-shell/18-contacts-editable.png",
+        "sha256": "fd7f379dc412b38688d775f2f64986a57270f8205e64d502c757c14ff42a7fe6",
+        "source": "mockups/v2-shell/18-contacts-editable.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "c398bbf37d6092cb404b00856d82dd495ef9971acf237556b03a0daec0f8b1ea",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     },
     "17-find-contact": {
       "mock": {
@@ -353,6 +373,24 @@
           "entry": "ML-VERB"
         }
       ]
+    },
+    {
+      "surface": "contacts-dialog",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "anchorKind": "prose",
+          "anchor": "5.8 States and errors",
+          "disposition": "claimed",
+          "entries": ["CT-NOTE", "CT-GLYPH", "CT-INFO", "CT-NO-COPY", "CT-NO-MARK"]
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-47",
+          "disposition": "claimed",
+          "entry": "CT-NO-VALUE"
+        }
+      ]
     }
   ],
   "stories": [
@@ -376,6 +414,17 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-11a",
         "quote": "it reads `FullName (Gender, Ny)`"
+      }
+    },
+    {
+      "id": "CT-DIALOG",
+      "as": "operator",
+      "iWant": "contact values only after I explicitly open them, and a drawing that says so",
+      "soThat": "the privacy rule I am judging is visible on the surface itself",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-47",
+        "quote": "opening it groups phone/email/WhatsApp values with owner/linked status"
       }
     }
   ],
@@ -619,6 +668,103 @@
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
+    },
+    {
+      "id": "CT-NOTE",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "The privacy note above the groups carries FR-78's exact two-sentence copy.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "opening this dialog is the only way to see them here."
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-GLYPH",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "The privacy note leads with the shield-lock privacy glyph.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "drawing's leading shield-lock privacy glyph (not an information mark)"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-INFO",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "Every rendered contact-group heading carries its focusable information affordance.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "Each rendered contact-group heading MUST carry a focusable information affordance"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-NO-COPY",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "A copy affordance inside the read-only dialog.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "read-only (no copy or edit)"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-NO-MARK",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "An information mark on the privacy note in place of the shield-lock glyph.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "not an information mark"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-NO-VALUE",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "A phone number, email address or WhatsApp value printed in the grid behind the dialog.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-47"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-47",
+        "quote": "no contact value appears"
+      },
+      "control": "spec"
     }
   ]
 }
