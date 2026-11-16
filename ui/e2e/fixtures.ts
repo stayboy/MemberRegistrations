@@ -1759,6 +1759,17 @@ class GatewayStub {
       });
     });
 
+    // The sign-in gate probes the gateway before it asks for a link; an unstubbed `/health` looked
+    // exactly like an unreachable church API, so the gate's own states could never be reached.
+    await page.route('**/health', async (route) => {
+      const cors = GatewayStub.cors(route.request());
+      await route.fulfill({
+        status: 200,
+        headers: { ...cors, 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'ok' }),
+      });
+    });
+
     // The session gateway's auth routes live at `/auth/*`, not under
     // `/gateway/v1/*`: `fetchMe` calls `${baseUrl}/auth/me`.
     await page.route('**/auth/**', async (route) => {
@@ -1782,6 +1793,17 @@ class GatewayStub {
 
       if (request.method() === 'POST' && url.pathname === '/auth/logout') {
         await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+
+      // The sign-in gate's own request: an addressed officer gets a link, and the page says so.
+      // A 202 with no body is a parse error to `gatewayRequest`, which reads JSON for any non-204.
+      if (request.method() === 'POST' && url.pathname === '/auth/magic-link') {
+        await route.fulfill({
+          status: 202,
+          headers: { ...cors, 'content-type': 'application/json' },
+          body: JSON.stringify({ status: 'accepted' }),
+        });
         return;
       }
 

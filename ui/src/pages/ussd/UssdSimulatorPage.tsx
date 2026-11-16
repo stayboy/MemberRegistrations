@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { ApiError, isUnauthorized } from '../../api/errors';
 import { sendUssdSession, type UssdProvider, type UssdSimulatorResponse } from '../../api/ussd';
 import { useSession } from '../../auth/SessionProvider';
+import { callbackCurl, runnableCurl } from '../../format/ussd-callback';
 import { PageFrame } from '../../components/PageFrame';
 import { useUssdStyles } from './ussd-styles';
 
@@ -61,17 +62,6 @@ function callbackPayload(
     null,
     2,
   );
-}
-
-function callbackCurl(payload: string, baseUrl: string): string {
-  const singleQuoted = payload.replace(/'/g, `'\\''`);
-  return [
-    `raw='${singleQuoted}'`,
-    `sig=$(printf '%s' "$raw" | openssl dgst -sha256 -hmac "$PAYMENT_GATEWAY_SECRET" | sed 's/^.* //')`,
-    `curl -X POST '${baseUrl}/v1/payments/callback' \\`,
-    `  -H 'Content-Type: application/json' -H "X-Payment-Signature: $sig" \\`,
-    '  --data-raw "$raw"',
-  ].join('\n');
 }
 
 /**
@@ -365,11 +355,11 @@ export function UssdSimulatorPage() {
               <Text size={200} weight="semibold">
                 Signed callback template
               </Text>
-              <pre className={styles.inlineCode}>{callbackCurl(payload, baseUrl)}</pre>
+              <pre className={styles.inlineCode}>{callbackCurl(payload)}</pre>
               <Button
                 size="small"
                 appearance="secondary"
-                onClick={() => copy('curl', callbackCurl(payload, baseUrl))}
+                onClick={() => copy('curl', runnableCurl(payload, baseUrl))}
               >
                 {copied === 'curl' ? 'Copied' : 'Copy command'}
               </Button>

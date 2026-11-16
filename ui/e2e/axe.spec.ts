@@ -128,3 +128,31 @@ test.describe('accessibility', () => {
     });
   }
 });
+
+/**
+ * The sign-in gate is unauthenticated, so it cannot be a row in `SCREENS`: that list runs inside the
+ * shell, behind `RequireSession`. It gets its own entry point, and the release claim names the states
+ * audited here and the ones it does not reach.
+ */
+test.describe('the sign-in gate', () => {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`/connect passes WCAG 2.2 AA in ${scheme} mode`, async ({ page }) => {
+      await seedTheme(page, 'fluent', scheme);
+      await open(page, '/connect');
+      await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+      await expectSeededTheme(page, 'fluent', scheme);
+      await audit(page, `sign-in idle (${scheme})`);
+
+      // The address was accepted: the success bar joins the form.
+      await page.getByLabel('Officer email').fill('efua@example.test');
+      await page.getByRole('button', { name: /email me a sign-in link/i }).click();
+      await expect(page.getByText(/a sign-in link has been sent/i)).toBeVisible();
+      await audit(page, `sign-in link sent (${scheme})`);
+
+      // An expired session adds the warning bar; the gate is reachable by URL with the reason.
+      await open(page, '/connect?reason=expired');
+      await expect(page.getByText(/your session expired or was revoked/i)).toBeVisible();
+      await audit(page, `sign-in expired (${scheme})`);
+    });
+  }
+});

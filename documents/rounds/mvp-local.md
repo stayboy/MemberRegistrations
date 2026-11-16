@@ -56,6 +56,15 @@ secondary button in the build and a filled primary in five mocks
 (`documents/parity/comparison-pack.md`). This is a scope ruling, not a quality bar: the difference is
 recorded, and the next release that touches `PageFrame` pays one line for it.
 
+**The accessibility claim names its route and state scope (owner, 2026-11-16).** `ui/e2e/axe.spec.ts`
+audits: the members list, the events list, the offerings list and one event detail; the shell in four
+accents × two schemes; the Offerings count page and its record dialog; and the **sign-in gate** in three
+states - idle, link sent, and expired session - in both schemes. It does **not** audit: the
+signing-you-in and signed-in states of the gate, its transport-error bar, member detail, member add/edit,
+archived members, the series form, the imports pages, the three shepherding pages, the USSD pages other
+than offerings, admin ministries, settings, or the not-found route. The sentence is the claim: anything
+added to that suite joins this list, and anything left out is named here rather than implied.
+
 ## Current state
 
 | Item                    | State                                                                                                                                                                           |
