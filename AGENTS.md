@@ -33,14 +33,19 @@ Use the tiered workflow in the shared `orchestrator` skill, narrowed by
 body).
 
 - **Tier 0 (Solo)** — docs, config, or a contained change the owner explicitly places at Tier 0
-  (trivial or no behaviour risk). The parent implements, self-reviews and self-accepts; the commit
-  body is the record.
-- **Tier 1 (Plan)** — a behavioural change. Approved spec + parent implements + written acceptance.
+  (trivial or no behaviour risk). A worker implements where there is code to write, and the worker-model
+  seat reviews the change at Tier 0 too; the parent answers its findings, integrates, self-reviews and
+  self-accepts, and the commit body is the record.
+- **Tier 1 (Plan)** — a behavioural change. Approved spec + a worker implements + the parent accepts in
+  writing.
 - **Tier 2 (Reviewed)** — multi-file behaviour, migrations, auth, wire contracts or risk. Tier 1 plus
   a `code-review` pass (Standards + Spec; fallback: the read-only `reviewer` subagent).
 
-At Tier 0–1 the parent implements; at Tier 2+ a worker implements and the reviewer gate is
-independent of it (see the policy). If the tier is genuinely ambiguous, put it in the grill round; do
+A worker implements at every tier (owner, 2026-11-16), and at Tier 0 the worker-model seat also reviews the
+change before the parent self-accepts; the parent integrates, runs the gates, writes the
+round doc (the commit body at Tier 0) and accepts, and at Tier 2 the reviewer gate stays independent of the
+worker (see the policy).
+If the tier is genuinely ambiguous, put it in the grill round; do
 not guess. Tier 3 and a dedicated UI tester stay deferred; the V2 UI gate is the minimal check in
 ticket 19.
 
@@ -285,11 +290,12 @@ reintroduce them silently.
   flips: the cline-pass provider is tried first and `ollama-cloud` is the fallback (owner, 2026-11-11). The
   window moves **the grill-me, reviewer-class and worker seats**; every other seat is unclocked (owner,
   2026-11-13).
-- **Worker seat (owner, 2026-11-13).** The Tier 2+ implementer follows the window like the seats above:
-  between 12:00 and 18:00 local it is `cline-pass/cline-pass/deepseek-v4.1-flash-1017`, and outside the
-  window the same model on `ollama-cloud` (`ollama-cloud/deepseek-v4.1-flash:1017`). An explicit owner
-  override for a round beats both, and the round doc records it. The parent integrates and commits; at
-  Tier 2+ it does not author the implementation.
+- **Worker seat (owner, 2026-11-13).** The implementer — at every tier since 2026-11-16 — follows the
+  window like the seats above: between 12:00 and 18:00 local it is
+  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`, and outside the window the same model on
+  `ollama-cloud` (`ollama-cloud/deepseek-v4.1-flash:1017`). An explicit owner
+  override for a round beats both, and the round doc records it. The parent integrates, runs the gates and
+  commits; it does not author the implementation at any tier.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
   recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
   recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report
