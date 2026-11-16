@@ -1221,6 +1221,7 @@ function parseJson(raw: string | null): unknown {
 function createdDetail(input: unknown): MemberDetail {
   const body = asRecord(input);
   const memberNo = text(body.memberNo);
+  const contacts = createdContacts(body, memberNo);
 
   return {
     id: `created-${memberNo}`,
@@ -1235,7 +1236,7 @@ function createdDetail(input: unknown): MemberDetail {
     joinedOn: optionalText(body.joinedOn),
     isPresbyter: body.isPresbyter === true,
     archivedAt: null,
-    contactCount: 0,
+    contactCount: contacts.length,
     ministries: [],
     maidenName: optionalText(body.maidenName),
     alias: optionalText(body.alias),
@@ -1245,12 +1246,52 @@ function createdDetail(input: unknown): MemberDetail {
     version: 1,
     createdAt: FIXED_INSTANT,
     updatedAt: FIXED_INSTANT,
-    contacts: [],
+    contacts,
     subscriptions: [],
     relationships: [],
     attendance: [],
   };
 }
+
+/** The `contacts[]` the create body carried, as the new member's own values (FR-29a). */
+function createdContacts(
+  body: Record<string, unknown>,
+  memberNo: string,
+): readonly MemberContact[] {
+  const rows = Array.isArray(body.contacts) ? body.contacts : [];
+
+  return rows.flatMap((entry, index) => {
+    const row = asRecord(entry);
+    const kind = text(row.kind);
+    const value = text(row.value);
+    if (kind !== 'phone' && kind !== 'email' && kind !== 'whatsapp') return [];
+    return [
+      {
+        id: `created-contact-${index}`,
+        kind,
+        value,
+        displayOrder: index,
+        ownerMemberNo: memberNo,
+        linked: false,
+      },
+    ];
+  });
+}
+
+/**
+ * The API's uniqueness rule, mirrored: a contact value belongs to exactly one
+ * member, so an entered value another member already owns fails the whole create
+ * with a 409 naming that value (FR-29a). Keys follow `normalizeContactValue`.
+ */
+function contactKey(kind: string, value: string): string {
+  const trimmed = value.trim();
+  if (kind === 'email') return trimmed.toLowerCase();
+  return trimmed.replace(/\D/g, '').replace(/^0+/, '');
+}
+
+const OWNED_CONTACT_VALUES: ReadonlySet<string> = new Set(
+  [...CONTACTS_1001, ...CONTACTS_1002].map((contact) => contactKey(contact.kind, contact.value)),
+);
 
 /**
  * Routes are matched by method + path, most specific first. The query string is
@@ -1293,6 +1334,13 @@ function buildRoutes(
         if (!detail.memberNo) return problem(422, 'memberNo is required');
         if (created.has(detail.memberNo) || DETAILS.has(detail.memberNo)) {
           return problem(409, `A member with number ${detail.memberNo} already exists`);
+        }
+        // The create is atomic: a value another member owns fails it before anything is written,
+        // and the 409 names the value so the form can put it against that field (FR-29a).
+        for (const contact of detail.contacts) {
+          if (OWNED_CONTACT_VALUES.has(contactKey(contact.kind, contact.value))) {
+            return problem(409, `Contact value "${contact.value}" already belongs to a member`);
+          }
         }
         created.set(detail.memberNo, detail);
         return reply(detail, 201, { Location: `/v1/members/${detail.memberNo}` });

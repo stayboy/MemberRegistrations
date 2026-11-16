@@ -49,11 +49,11 @@ test('the Include archived switch moves to the archived view', async ({ page }) 
 const PRIVACY_NOTE =
   'Contact values are shown only after this explicit action. The members list returns a count, not the values; opening this dialog is the only way to see them here.';
 
-/** FR-78/FR-81: each group's information button is named with this exact sentence. */
-const GROUP_INFO =
+/** FR-78/FR-81: the note's information button carries this exact sentence. */
+const OWNERSHIP_INFO =
   'Owned values belong to this member. Linked values are shared from another member and stay with its owner.';
 
-test('the Contacts action opens the grouped contacts dialog', async ({ page }) => {
+test('the Contacts action opens the flat contacts dialog', async ({ page }) => {
   await open(page, '/members');
   // A table-row control, not a page action: FR-9a scopes the menu to the action row.
   await page.getByRole('button', { name: 'Contacts · 2 for Kwame Asante (Male, 41y)' }).click();
@@ -63,30 +63,31 @@ test('the Contacts action opens the grouped contacts dialog', async ({ page }) =
   // The whole note, not just its first sentence (FR-78).
   await expect(dialog.getByText(PRIVACY_NOTE, { exact: true })).toBeVisible();
 
-  const phone = dialog.getByRole('region', { name: 'Phone' });
-  const email = dialog.getByRole('region', { name: 'Email' });
-  const whatsapp = dialog.getByRole('region', { name: 'WhatsApp' });
+  // FR-78/AC-47: one information affordance for the whole dialog, on the note and
+  // named with the exact ownership sentence.
+  const info = dialog.locator(`button[aria-label="${OWNERSHIP_INFO}"]`);
+  await expect(info).toHaveCount(1);
+  await expect(info).toBeVisible();
 
-  // Every rendered group is a heading carrying the shared owned/linked affordance (FR-78).
-  for (const [group, name] of [
-    [phone, 'Phone'],
-    [email, 'Email'],
-    [whatsapp, 'WhatsApp'],
-  ] as const) {
-    const heading = group.getByRole('heading', { level: 3, name });
-    await expect(heading).toBeVisible();
-    // FR-78 puts the affordance on the heading row, not elsewhere in the group.
-    await expect(
-      heading.locator('xpath=..').getByRole('button', { name: GROUP_INFO, exact: true }),
-    ).toBeVisible();
-    // …and exactly one per group, so the row is the only place it lives.
-    await expect(group.getByRole('button', { name: GROUP_INFO, exact: true })).toHaveCount(1);
-  }
+  // One flat list in the contract's kind order, each row carrying the kind, the
+  // value and the owner/linked status at its right.
+  const rows = dialog.getByRole('listitem');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText('Phone');
+  await expect(rows.nth(0)).toContainText('+233 20 000 0001');
+  await expect(rows.nth(0)).toContainText('Owned');
+  await expect(rows.nth(1)).toContainText('Email');
+  await expect(rows.nth(1)).toContainText('kwame.asante@example.test');
+  await expect(rows.nth(1)).toContainText('Owned');
+  await expect(rows.nth(2)).toContainText('WhatsApp');
+  await expect(rows.nth(2)).toContainText('+233 20 000 0009');
+  await expect(rows.nth(2)).toContainText('Linked · M-1002');
 
-  await expect(phone).toContainText('+233 20 000 0001');
-  await expect(email).toContainText('kwame.asante@example.test');
-  await expect(whatsapp).toContainText('+233 20 000 0009');
-  await expect(whatsapp).toContainText('Linked · M-1002');
+  // AC-53's second half: the read-only call site offers no add, remove or edit.
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Add' })).toHaveCount(0);
+  await expect(dialog.getByText('Add contact')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^Remove / })).toHaveCount(0);
 
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('dialog', { name: 'Contacts' })).toHaveCount(0);
@@ -99,6 +100,10 @@ test('the add-member route creates the member and lands on the detail', async ({
   await page.getByLabel('Member number').fill('M-1004');
   await page.getByLabel('First name').fill('Yaa');
   await page.getByLabel('Last name').fill('Owusu');
+  // FR-29a: the three contact fields ride the one create request; the blank WhatsApp field
+  // contributes no row at all.
+  await page.getByLabel('Phone').fill('+233 24 555 0104');
+  await page.getByLabel('Email').fill('yaa.owusu@example.test');
 
   const created = page.waitForResponse(
     (response) =>
@@ -115,6 +120,10 @@ test('the add-member route creates the member and lands on the detail', async ({
     memberNo: 'M-1004',
     firstName: 'Yaa',
     lastName: 'Owusu',
+    contacts: [
+      { kind: 'phone', value: '+233 24 555 0104' },
+      { kind: 'email', value: 'yaa.owusu@example.test' },
+    ],
   });
 
   // The created member is navigated to and fetched back by its route.
@@ -122,4 +131,55 @@ test('the add-member route creates the member and lands on the detail', async ({
   await expect(page).toHaveURL(/#\/members\/M-1004$/);
   await expect(page.getByRole('tab', { name: /Overview/ })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Attendance/ })).toBeVisible();
+
+  // AC-52's other half: the new member's detail shows them. The detail's own
+  // Contacts action opens the flat list, and the created value is read off a row.
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+
+  const contacts = page.getByRole('dialog', { name: 'Contacts' });
+  await expect(contacts).toBeVisible();
+  await expect(
+    contacts.getByRole('listitem').filter({ hasText: '+233 24 555 0104' }),
+  ).toBeVisible();
+});
+
+test('a contact value another member owns returns 409 against its field and keeps the form', async ({
+  page,
+}) => {
+  await open(page, '/members/new');
+
+  await page.getByLabel('Member number').fill('M-1007');
+  await page.getByLabel('First name').fill('Akosua');
+  await page.getByLabel('Last name').fill('Boateng');
+  await page.getByLabel('Place of residence').fill('Adenta');
+  // Owned by M-1002 in the fixture register.
+  await page.getByLabel('Phone').fill('+233 20 000 0002');
+  await page.getByLabel('Email').fill('akosua.boateng@example.test');
+
+  const rejected = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/gateway/v1/members',
+  );
+
+  await page.getByRole('button', { name: 'Create member' }).click();
+  expect((await rejected).status()).toBe(409);
+
+  // The message names the value and sits against that field (FR-29a/AC-52)…
+  await expect(
+    page.getByText('Contact value "+233 20 000 0002" already belongs to a member'),
+  ).toBeVisible();
+  await expect(page.getByLabel('Phone')).toHaveAttribute('aria-invalid', 'true');
+
+  // …the create was atomic, so no member exists and the form stays open with every entered value…
+  await expect(page).toHaveURL(/#\/members\/new$/);
+  await expect(page.getByLabel('Member number')).toHaveValue('M-1007');
+  await expect(page.getByLabel('First name')).toHaveValue('Akosua');
+  await expect(page.getByLabel('Last name')).toHaveValue('Boateng');
+  await expect(page.getByLabel('Place of residence')).toHaveValue('Adenta');
+  await expect(page.getByLabel('Email')).toHaveValue('akosua.boateng@example.test');
+
+  // …and the member-number field is not blamed for it.
+  await expect(page.getByLabel('Member number')).not.toHaveAttribute('aria-invalid', 'true');
 });

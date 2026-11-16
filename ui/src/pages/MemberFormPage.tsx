@@ -37,6 +37,7 @@ import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import {
   GENDER_OPTIONS,
+  contactConflictErrors,
   createEmptyMemberForm,
   fromMemberDetail,
   isStaleConflictError,
@@ -182,6 +183,13 @@ function MemberFormView({
             void signOut();
             return;
           }
+          // FR-29a: the create is atomic, so a contact value another member already owns
+          // returns 409 against that field; every other entered value stays in the form.
+          const contactErrors = contactConflictErrors(error, values);
+          if (contactErrors) {
+            setErrors(contactErrors);
+            return;
+          }
           const memberNoMessage = memberNoConflictMessage(error);
           if (memberNoMessage) {
             setErrors({ memberNo: memberNoMessage });
@@ -272,7 +280,7 @@ function MemberFormView({
   const title = isEdit ? 'Edit member' : 'Add member';
   const description = isEdit
     ? 'Update the registration. Member number is permanent, and contacts are managed separately from the Contacts action.'
-    : 'Create a registration. The API returns 201 with a Location header for the new member. Subscriptions and contacts are added after the member exists.';
+    : 'Create a registration. The API returns 201 with a Location header for the new member. Contacts are entered here and travel in that one request; subscriptions are added from the member record after creation.';
 
   return (
     <PageFrame
@@ -437,11 +445,8 @@ function MemberFormView({
         <section className={styles.section} aria-labelledby="member-residence-heading">
           <div className={styles.sectionHeader}>
             <h2 id="member-residence-heading" className={styles.sectionTitle}>
-              Contact and residence
+              Residence
             </h2>
-            <Text size={200} className={styles.helper}>
-              A contact value is normalised by kind and checked for uniqueness by the API.
-            </Text>
           </div>
 
           <div className={styles.grid}>
@@ -470,17 +475,60 @@ function MemberFormView({
 
           <div className={styles.note}>
             <Text size={200}>
-              Contacts are not part of this form, so contact values never appear inline in the
-              member grid.{' '}
               {isEdit
-                ? 'Use the Contacts action on the member record.'
-                : 'Add contacts from the member record after creation.'}
+                ? 'Contacts are not part of this form, so contact values never appear inline in the member grid. Use the Contacts action on the member record.'
+                : 'Residence and address are optional and are part of the create payload. Contacts have their own section below.'}
             </Text>
             {isEdit ? (
               <Link to={`/members/${encodeURIComponent(memberNo)}`}>Open member record</Link>
             ) : null}
           </div>
         </section>
+
+        {/* FR-29a: contacts are entered before the member exists, in the same create request.
+            The edit form has none: contacts are managed on the member record (FR-29). */}
+        {isEdit ? null : (
+          <section className={styles.section} aria-labelledby="member-contacts-heading">
+            <div className={styles.sectionHeader}>
+              <h2 id="member-contacts-heading" className={styles.sectionTitle}>
+                Contacts
+              </h2>
+              <Text size={200} className={styles.helper}>
+                Optional, and sent in the same <code>POST /v1/members</code> body. A value already
+                owned by another member returns 409 against that field and keeps this form open.
+              </Text>
+            </div>
+
+            <div className={styles.grid}>
+              <Field
+                label="Phone"
+                validationState={errors.phone ? 'error' : 'none'}
+                validationMessage={errors.phone}
+              >
+                <Input value={values.phone} onChange={(_, data) => setField('phone', data.value)} />
+              </Field>
+
+              <Field
+                label="Email"
+                validationState={errors.email ? 'error' : 'none'}
+                validationMessage={errors.email}
+              >
+                <Input value={values.email} onChange={(_, data) => setField('email', data.value)} />
+              </Field>
+
+              <Field
+                label="WhatsApp"
+                validationState={errors.whatsapp ? 'error' : 'none'}
+                validationMessage={errors.whatsapp}
+              >
+                <Input
+                  value={values.whatsapp}
+                  onChange={(_, data) => setField('whatsapp', data.value)}
+                />
+              </Field>
+            </div>
+          </section>
+        )}
 
         <section className={styles.section} aria-labelledby="member-church-heading">
           <div className={styles.sectionHeader}>
@@ -517,9 +565,9 @@ function MemberFormView({
           </div>
 
           <Text size={200} className={styles.helper}>
-            The API validates member-number and contact uniqueness. A duplicate member number
-            returns 409 and is shown against the member-number field. Subscriptions are added from
-            the member&apos;s Subscriptions view after creation.
+            {isEdit
+              ? "The API validates member-number and contact uniqueness. A duplicate member number returns 409 and is shown against the member-number field. Subscriptions are added from the member's Subscriptions view after creation."
+              : "The API validates member-number and contact uniqueness. A duplicate member number returns 409 and is shown against the member-number field; so does a contact value another member already owns, shown against that field. Subscriptions are added from the member's Subscriptions view after creation."}
           </Text>
         </section>
       </form>

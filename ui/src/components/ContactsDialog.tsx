@@ -9,7 +9,6 @@ import {
   DialogSurface,
   DialogTitle,
   Dropdown,
-  Field,
   InfoLabel,
   Input,
   MessageBar,
@@ -39,25 +38,31 @@ import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from './ConfirmDialog';
 import { memberInitials, memberLabel } from '../format/member';
 
-const CONTACT_GROUPS: readonly { kind: ContactKind; label: string }[] = [
-  { kind: 'phone', label: 'Phone' },
-  { kind: 'email', label: 'Email' },
-  { kind: 'whatsapp', label: 'WhatsApp' },
+/**
+ * FR-78 fixes the flat list's order: the contract's kind order first, then
+ * `displayOrder` within a kind. This array is both that order and the kind's
+ * visible name; the placeholder is the drawing's wording for the add row.
+ */
+const CONTACT_KINDS: readonly { kind: ContactKind; label: string; placeholder: string }[] = [
+  { kind: 'phone', label: 'Phone', placeholder: 'Phone number' },
+  { kind: 'email', label: 'Email', placeholder: 'Email address' },
+  { kind: 'whatsapp', label: 'WhatsApp', placeholder: 'WhatsApp number' },
 ];
 
 /**
- * FR-78 fixes this copy exactly, as one string: the note above the groups says
- * why the values appeared and where they came from. Do not reword or truncate it.
+ * FR-78 fixes this copy exactly, as one string: the note above the list says why
+ * the values appeared and where they came from. Do not reword or truncate it.
  */
 const CONTACT_PRIVACY_NOTE =
   'Contact values are shown only after this explicit action. The members list returns a count, not the values; opening this dialog is the only way to see them here.';
 
 /**
- * FR-78/FR-81 fix the group affordance's accessible name and its tooltip content
- * to one string. The explicit `aria-label` is what carries it: Fluent associates
- * `aria-describedby` only while the tooltip is open.
+ * FR-78/FR-81 fix the note's information affordance and its tooltip content to one
+ * string. The button carries it as `aria-label` and as the tooltip body; the explicit
+ * label is required because Fluent associates `aria-describedby` only while the
+ * tooltip is open.
  */
-const CONTACT_GROUP_INFO =
+const CONTACT_OWNERSHIP_INFO =
   'Owned values belong to this member. Linked values are shared from another member and stay with its owner.';
 
 const useStyles = makeStyles({
@@ -100,68 +105,66 @@ const useStyles = makeStyles({
     fontSize: '20px',
     color: tokens.colorNeutralForeground2,
   },
-  contactGroups: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalL,
-  },
-  contactGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
-  },
   /**
-   * The group title keeps heading semantics (it is an `<h3>`, as the drawing shows)
-   * and the Fluent `InfoLabel` sits beside it, so the heading's accessible name stays
-   * the group name while the info button carries the FR-78 description (FR-81).
+   * FR-78: one bordered container holds every value; the rows are separated by a
+   * divider rather than by gaps between separate boxes.
    */
-  contactGroupHeading: {
+  contactList: {
     display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalXS,
-  },
-  contactGroupTitle: {
+    flexDirection: 'column',
+    // A real <ul>: the list container keeps its box by resetting the element's own
+    // marker, indent and block margin, and the implicit `list` role stays.
+    listStyleType: 'none',
     margin: 0,
-    fontSize: tokens.fontSizeBase300,
-    fontWeight: tokens.fontWeightSemibold,
-    lineHeight: tokens.lineHeightBase300,
+    padding: 0,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
+    overflow: 'hidden',
   },
   // FR-78: the 42 px row rhythm is the drawing's; Fluent's spacing tokens have no
   // 42 px step, so the floor stays literal and the padding keeps the token scale.
+  // The kind leads in a fixed muted column, the value takes the room left, and the
+  // owner/linked status sits at the row's right.
   contactRow: {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: '84px minmax(0, 1fr) auto',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: tokens.spacingHorizontalM,
     minHeight: '42px',
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
-    borderRadius: tokens.borderRadiusMedium,
+    padding: `0 ${tokens.spacingHorizontalM}`,
+  },
+  contactRowDivided: {
+    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  contactKind: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
   },
   contactValue: {
     wordBreak: 'break-all',
   },
-  contactActions: {
+  contactStatus: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
+    whiteSpace: 'nowrap',
   },
   contactOwner: {
     color: tokens.colorNeutralForeground3,
-    whiteSpace: 'nowrap',
   },
+  /** The add row sits above the list, with its error directly under it (AC-53). */
   addForm: {
     display: 'flex',
     flexDirection: 'column',
-    gap: tokens.spacingVerticalM,
-    paddingTop: tokens.spacingVerticalM,
-    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+    gap: tokens.spacingVerticalS,
   },
   addFields: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(140px, 1fr) minmax(180px, 2fr) auto',
-    alignItems: 'end',
-    gap: tokens.spacingHorizontalM,
+    gridTemplateColumns: '150px minmax(0, 1fr) auto',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
   },
 });
 
@@ -208,12 +211,33 @@ function contactErrorMessage(error: unknown, fallback: string): string {
 }
 
 function kindLabel(kind: ContactKind): string {
-  return CONTACT_GROUPS.find((group) => group.kind === kind)?.label ?? kind;
+  return CONTACT_KINDS.find((entry) => entry.kind === kind)?.label ?? kind;
+}
+
+function kindPlaceholder(kind: ContactKind): string {
+  return CONTACT_KINDS.find((entry) => entry.kind === kind)?.placeholder ?? 'Contact value';
 }
 
 /**
- * The add-contact form and its mutation. It is mounted only when the dialog is
- * editable, so the read-only list call site never creates a write path (FR-78).
+ * FR-78: the contract's kind order first, then `displayOrder` within a kind, so
+ * the response's own preference order survives. One flat list, one sort.
+ */
+function orderContacts(contacts: readonly MemberContact[]): MemberContact[] {
+  const rank = new Map(CONTACT_KINDS.map((entry, index) => [entry.kind, index]));
+  return contacts
+    .slice()
+    .sort(
+      (left, right) =>
+        (rank.get(left.kind) ?? 0) - (rank.get(right.kind) ?? 0) ||
+        left.displayOrder - right.displayOrder,
+    );
+}
+
+/**
+ * The add-contact row and its mutation (FR-78, AC-53). It is mounted only when the
+ * dialog is editable, so the read-only list call site never creates a write path.
+ * One row, no field labels: the drawing's `Dropdown` + `Input` + primary `Add`;
+ * the failed add renders directly beneath that row with the entered value kept.
  */
 function ContactAddForm({ memberNo, onAdded }: { memberNo: string; onAdded: () => void }) {
   const styles = useStyles();
@@ -255,47 +279,37 @@ function ContactAddForm({ memberNo, onAdded }: { memberNo: string; onAdded: () =
 
   return (
     <div className={styles.addForm}>
-      <Text weight="semibold">Add contact</Text>
-      {addError ? (
-        <MessageBar intent="error">
-          <MessageBarBody>
-            <MessageBarTitle>The contact was not added</MessageBarTitle>
-            {addError}
-          </MessageBarBody>
-        </MessageBar>
-      ) : null}
       <div className={styles.addFields}>
-        <Field label="Kind">
-          <Dropdown
-            value={kindLabel(kind)}
-            selectedOptions={[kind]}
-            onOptionSelect={(_, data) => {
-              const next = CONTACT_GROUPS.find((group) => group.kind === data.optionValue);
-              if (next) setKind(next.kind);
-            }}
-          >
-            {CONTACT_GROUPS.map((group) => (
-              <Option key={group.kind} value={group.kind}>
-                {group.label}
-              </Option>
-            ))}
-          </Dropdown>
-        </Field>
-        <Field label="Value" hint="Normalised by kind; a duplicate returns 409.">
-          <Input
-            value={value}
-            onChange={(_, data) => {
-              setValue(data.value);
-              setAddError(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                add();
-              }
-            }}
-          />
-        </Field>
+        <Dropdown
+          aria-label="Kind"
+          value={kindLabel(kind)}
+          selectedOptions={[kind]}
+          onOptionSelect={(_, data) => {
+            const next = CONTACT_KINDS.find((entry) => entry.kind === data.optionValue);
+            if (next) setKind(next.kind);
+          }}
+        >
+          {CONTACT_KINDS.map((entry) => (
+            <Option key={entry.kind} value={entry.kind}>
+              {entry.label}
+            </Option>
+          ))}
+        </Dropdown>
+        <Input
+          aria-label="Contact value"
+          placeholder={kindPlaceholder(kind)}
+          value={value}
+          onChange={(_, data) => {
+            setValue(data.value);
+            setAddError(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              add();
+            }
+          }}
+        />
         <Button
           appearance="primary"
           onClick={add}
@@ -304,6 +318,14 @@ function ContactAddForm({ memberNo, onAdded }: { memberNo: string; onAdded: () =
           Add
         </Button>
       </div>
+      {addError ? (
+        <MessageBar intent="error">
+          <MessageBarBody>
+            <MessageBarTitle>The contact was not added</MessageBarTitle>
+            {addError}
+          </MessageBarBody>
+        </MessageBar>
+      ) : null}
     </div>
   );
 }
@@ -368,10 +390,10 @@ function ContactRemoveDialog({
  * Call sites: MembersPage (contacts action, read-only), MemberDetailPage
  * (contacts action, editable) and ShepherdingRosterPage (contacts action,
  * read-only; the roster passes `displayName` because it has no name split). The
- * list dialog shows grouped values and their owner/linked status but cannot add
- * or remove them (FR-78, AC-47); the detail dialog is editable because opening
- * the member is already an explicit action (FR-29). All call sites share the
- * `['member', baseUrl, memberNo]` cache key.
+ * list dialog is one flat list of values with their owner/linked status and
+ * cannot add, remove, copy or edit them (FR-78, AC-47); the detail dialog is
+ * editable because opening the member is already an explicit action (FR-29, AC-53).
+ * All call sites share the `['member', baseUrl, memberNo]` cache key.
  */
 export function ContactsDialog({
   member,
@@ -454,9 +476,22 @@ export function ContactsDialog({
                     </div>
                   </div>
 
+                  {/*
+                    FR-78: the note is the dialog's single information affordance, and the
+                    note's own copy is the `InfoLabel`'s label, so the button sits inline at
+                    the end of the sentence instead of on a line of its own. The button
+                    carries the ownership sentence as its `aria-label` and its tooltip
+                    (FR-81); Fluent also wires `aria-labelledby` to the label it is handed.
+                  */}
                   <div className={styles.note}>
                     <ShieldLockRegular className={styles.noteIcon} aria-hidden />
-                    <Text size={200}>{CONTACT_PRIVACY_NOTE}</Text>
+                    <InfoLabel
+                      size="small"
+                      info={{ children: CONTACT_OWNERSHIP_INFO }}
+                      infoButton={{ 'aria-label': CONTACT_OWNERSHIP_INFO }}
+                    >
+                      {CONTACT_PRIVACY_NOTE}
+                    </InfoLabel>
                   </div>
 
                   {editable && actionError ? (
@@ -466,6 +501,15 @@ export function ContactsDialog({
                         {actionError}
                       </MessageBarBody>
                     </MessageBar>
+                  ) : null}
+
+                  {/* AC-53: the add row sits above the list, never below it. */}
+                  {editable && !detail.isPending && !detail.isError ? (
+                    <ContactAddForm
+                      key={open ? 'add-open' : 'add-closed'}
+                      memberNo={memberNo}
+                      onAdded={invalidate}
+                    />
                   ) : null}
 
                   {detail.isPending ? (
@@ -489,77 +533,49 @@ export function ContactsDialog({
                   ) : contacts.length === 0 ? (
                     <Text className={styles.muted}>No contacts recorded for this member.</Text>
                   ) : (
-                    <div className={styles.contactGroups}>
-                      {CONTACT_GROUPS.map((group) => {
-                        const items = contacts
-                          .filter((contact) => contact.kind === group.kind)
-                          .slice()
-                          .sort((left, right) => left.displayOrder - right.displayOrder);
-                        if (items.length === 0) return null;
-
-                        return (
-                          <section
-                            key={group.kind}
-                            className={styles.contactGroup}
-                            aria-label={group.label}
-                          >
-                            <div className={styles.contactGroupHeading}>
-                              <h3 className={styles.contactGroupTitle}>{group.label}</h3>
-                              {/*
-                                The InfoLabel carries no text of its own: the heading holds the
-                                group name, so Fluent's default `aria-labelledby` (which would name
-                                the button after the group) resolves to nothing and the explicit
-                                `aria-label` above is what the button announces (FR-78, FR-81).
-                              */}
-                              <InfoLabel
-                                size="small"
-                                info={{ children: CONTACT_GROUP_INFO }}
-                                infoButton={{ 'aria-label': CONTACT_GROUP_INFO }}
-                              />
+                    <ul className={styles.contactList}>
+                      {orderContacts(contacts).map((contact, index) => (
+                        <li
+                          key={contact.id}
+                          className={
+                            index === 0
+                              ? styles.contactRow
+                              : `${styles.contactRow} ${styles.contactRowDivided}`
+                          }
+                        >
+                          <Text size={200} className={styles.contactKind}>
+                            {kindLabel(contact.kind)}
+                          </Text>
+                          <Text className={styles.contactValue}>{contact.value}</Text>
+                          {contact.linked ? (
+                            <Text size={200} className={styles.contactOwner}>
+                              Linked · {contact.ownerMemberNo}
+                            </Text>
+                          ) : (
+                            <div className={styles.contactStatus}>
+                              <Text size={200} className={styles.contactOwner}>
+                                Owned
+                              </Text>
+                              {editable ? (
+                                <Button
+                                  size="small"
+                                  appearance="subtle"
+                                  icon={<DeleteRegular />}
+                                  aria-label={`Remove ${contact.value}`}
+                                  onClick={() => {
+                                    setActionError(null);
+                                    setRemoveTarget(contact);
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              ) : null}
                             </div>
-                            {items.map((contact) => (
-                              <div key={contact.id} className={styles.contactRow}>
-                                <Text className={styles.contactValue}>{contact.value}</Text>
-                                {contact.linked ? (
-                                  <Text size={200} className={styles.contactOwner}>
-                                    Linked · {contact.ownerMemberNo}
-                                  </Text>
-                                ) : (
-                                  <div className={styles.contactActions}>
-                                    <Text size={200} className={styles.contactOwner}>
-                                      Owned
-                                    </Text>
-                                    {editable ? (
-                                      <Button
-                                        size="small"
-                                        appearance="subtle"
-                                        icon={<DeleteRegular />}
-                                        aria-label={`Remove ${contact.value}`}
-                                        onClick={() => {
-                                          setActionError(null);
-                                          setRemoveTarget(contact);
-                                        }}
-                                      >
-                                        Remove
-                                      </Button>
-                                    ) : null}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </section>
-                        );
-                      })}
-                    </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-
-                  {editable && !detail.isPending && !detail.isError ? (
-                    <ContactAddForm
-                      key={open ? 'add-open' : 'add-closed'}
-                      memberNo={memberNo}
-                      onAdded={invalidate}
-                    />
-                  ) : null}
                 </DialogContent>
                 <DialogActions>
                   <Button appearance="secondary" onClick={() => onOpenChange(false)}>

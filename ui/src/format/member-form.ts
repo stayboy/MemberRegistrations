@@ -1,5 +1,7 @@
 import { ApiError } from '../api/errors';
 import type {
+  ContactInput,
+  ContactKind,
   Gender,
   MemberDetail,
   MemberDetailResult,
@@ -25,9 +27,28 @@ export type MemberFormField =
   | 'placeOfResidence'
   | 'addressLine'
   | 'joinedOn'
-  | 'isPresbyter';
+  | 'isPresbyter'
+  | CreateContactField;
 
 export type MemberFormErrors = Partial<Record<MemberFormField, string>>;
+
+/** The three optional contact fields the create form offers (FR-29a). */
+export type CreateContactField = 'phone' | 'email' | 'whatsapp';
+
+/**
+ * The create form's contact fields in the order FR-29a fixes, each paired with
+ * the API's contact kind: the label the operator reads and the kind the request
+ * carries are one entry, so neither can drift.
+ */
+export const CREATE_CONTACT_FIELDS: readonly {
+  readonly field: CreateContactField;
+  readonly kind: ContactKind;
+  readonly label: string;
+}[] = [
+  { field: 'phone', kind: 'phone', label: 'Phone' },
+  { field: 'email', kind: 'email', label: 'Email' },
+  { field: 'whatsapp', kind: 'whatsapp', label: 'WhatsApp' },
+];
 
 export interface MemberFormValues {
   readonly memberNo: string;
@@ -42,6 +63,10 @@ export interface MemberFormValues {
   readonly addressLine: string;
   readonly joinedOn: string;
   readonly isPresbyter: boolean;
+  /** Create only: the edit form has no contact fields (FR-29a). */
+  readonly phone: string;
+  readonly email: string;
+  readonly whatsapp: string;
 }
 
 export const GENDER_OPTIONS: readonly { readonly value: Gender; readonly label: string }[] = [
@@ -100,6 +125,29 @@ function optionalDate(value: string, label: string): string | null {
     : `${label} must be a real date in YYYY-MM-DD form.`;
 }
 
+/**
+ * Mirrors the API's `contactInputSchema` and `normalizeContactValue`: an optional
+ * value is at most 256 characters, an email has to look like one, and a phone or
+ * WhatsApp value must carry 7 to 15 digits. Rejecting here keeps an obvious typo
+ * out of the one atomic create request.
+ */
+function optionalContact(kind: ContactKind, value: string, label: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > 256) return `${label} must be 256 characters or fewer.`;
+
+  if (kind === 'email') {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed.toLowerCase())
+      ? null
+      : `${label} must be an email address.`;
+  }
+
+  const digits = trimmed.replace(/\D/g, '').replace(/^0+/, '');
+  return digits.length >= 7 && digits.length <= 15
+    ? null
+    : `${label} must be a phone number with 7 to 15 digits.`;
+}
+
 /** The client-side mirror of the API's create/update constraints. */
 export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   const errors: MemberFormErrors = {};
@@ -139,6 +187,11 @@ export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   const joinedOn = optionalDate(values.joinedOn, 'Joined on');
   if (joinedOn) errors.joinedOn = joinedOn;
 
+  for (const { field, kind, label } of CREATE_CONTACT_FIELDS) {
+    const contact = optionalContact(kind, values[field], label);
+    if (contact) errors[field] = contact;
+  }
+
   return errors;
 }
 
@@ -157,10 +210,17 @@ export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberForm
     addressLine: '',
     joinedOn,
     isPresbyter: false,
+    phone: '',
+    email: '',
+    whatsapp: '',
   };
 }
 
-/** Prefills edit mode from the detail DTO (FR-25). */
+/**
+ * Prefills edit mode from the detail DTO (FR-25). The three contact fields stay
+ * blank: contacts are managed on the member record (FR-29), not through the edit
+ * form, so they can never ride an update body.
+ */
 export function fromMemberDetail(member: MemberDetail): MemberFormValues {
   return {
     memberNo: member.memberNo,
@@ -175,15 +235,34 @@ export function fromMemberDetail(member: MemberDetail): MemberFormValues {
     addressLine: member.addressLine ?? '',
     joinedOn: member.joinedOn ?? '',
     isPresbyter: member.isPresbyter,
+    phone: '',
+    email: '',
+    whatsapp: '',
   };
 }
 
 /**
+ * The create body's `contacts[]` (FR-29a): one row per entered value in the
+ * section's own order, and no row for a blank field.
+ */
+export function toContactInputs(values: MemberFormValues): ContactInput[] {
+  const rows: ContactInput[] = [];
+
+  for (const { field, kind } of CREATE_CONTACT_FIELDS) {
+    const value = values[field].trim();
+    if (value.length > 0) rows.push({ kind, value });
+  }
+
+  return rows;
+}
+
+/**
  * The create body: optional blanks become `null`, which the API treats as an
- * explicit clear rather than an omission.
+ * explicit clear rather than an omission. Contacts ride the same request
+ * (FR-29a) and the key is absent entirely when no value was entered.
  */
 export function toCreatePayload(values: MemberFormValues): MemberInput {
-  return {
+  const payload: MemberInput = {
     memberNo: values.memberNo.trim(),
     firstName: values.firstName.trim(),
     lastName: values.lastName.trim(),
@@ -197,6 +276,9 @@ export function toCreatePayload(values: MemberFormValues): MemberInput {
     joinedOn: blankToNull(values.joinedOn),
     isPresbyter: values.isPresbyter,
   };
+
+  const contacts = toContactInputs(values);
+  return contacts.length > 0 ? { ...payload, contacts } : payload;
 }
 
 /**
@@ -261,6 +343,9 @@ export function mergeKeptValues(
       addressLine: kept.addressLine ?? base.addressLine,
       joinedOn: kept.joinedOn ?? base.joinedOn,
       isPresbyter: kept.isPresbyter ?? base.isPresbyter,
+      phone: kept.phone ?? base.phone,
+      email: kept.email ?? base.email,
+      whatsapp: kept.whatsapp ?? base.whatsapp,
     },
     etag: latest.etag,
   };
@@ -291,4 +376,39 @@ export function memberNoConflictMessage(error: unknown): string | null {
   if (!isConflictError(error)) return null;
   const detail = (error as ApiError).message.trim();
   return detail || 'A member with this member number already exists.';
+}
+
+/** The API's own normalisation, so a quoted value in a 409 finds its field. */
+function contactKey(kind: ContactKind, value: string): string {
+  const trimmed = value.trim();
+  if (kind === 'email') return trimmed.toLowerCase();
+  return trimmed.replace(/\D/g, '').replace(/^0+/, '');
+}
+
+/**
+ * The create is atomic, so a contact value that already belongs to another
+ * member fails the whole request with a `409` naming the value (FR-29a). That
+ * message belongs against the field it names; every other entered value stays
+ * in the form, because nothing was created and nothing is reset. A `409` that
+ * names no entered contact is the member-number duplicate, handled by
+ * `memberNoConflictMessage`.
+ */
+export function contactConflictErrors(
+  error: unknown,
+  values: MemberFormValues,
+): MemberFormErrors | null {
+  if (!isConflictError(error)) return null;
+  const detail = (error as ApiError).message.trim();
+  const quoted = /"([^"]+)"/.exec(detail)?.[1];
+  if (!quoted) return null;
+
+  const hit = CREATE_CONTACT_FIELDS.find(({ field, kind }) => {
+    const entered = values[field].trim();
+    return entered.length > 0 && contactKey(kind, entered) === contactKey(kind, quoted);
+  });
+  if (!hit) return null;
+
+  const errors: MemberFormErrors = {};
+  errors[hit.field] = detail;
+  return errors;
 }

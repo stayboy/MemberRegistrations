@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/errors';
 import type { MemberDetail, MemberDetailResult } from '../api/members';
 import {
+  contactConflictErrors,
   createEmptyMemberForm,
   fromMemberDetail,
   isStaleConflictError,
@@ -94,6 +95,22 @@ describe('validateMemberForm', () => {
     expect(errors.otherNames).toBeDefined();
     expect(errors.addressLine).toBeDefined();
   });
+
+  it('mirrors the API contact constraints on the three optional fields', () => {
+    const errors = validateMemberForm({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+      phone: '12',
+      email: 'not-an-address',
+      whatsapp: 'x'.repeat(257),
+    });
+
+    expect(errors.phone).toBeDefined();
+    expect(errors.email).toBeDefined();
+    expect(errors.whatsapp).toBeDefined();
+  });
 });
 
 describe('createEmptyMemberForm', () => {
@@ -151,6 +168,76 @@ describe('toUpdatePayload', () => {
     const original = fromMemberDetail(detail());
     const changed = { ...original, placeOfResidence: '' };
     expect(toUpdatePayload(changed, original)).toEqual({ placeOfResidence: null });
+  });
+
+  it('never sends contacts: the edit form has none (FR-29a)', () => {
+    const original = fromMemberDetail(detail());
+    const changed = { ...original, phone: '+233 24 555 0109', email: 'ama@example.test' };
+    expect(toUpdatePayload(changed, original)).toEqual({});
+  });
+});
+
+describe('contacts on the create body (FR-29a)', () => {
+  it('makes one row per entered value in the section order and skips blanks', () => {
+    const payload = toCreatePayload({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+      phone: ' +233 24 555 0109 ',
+      whatsapp: '+233 20 000 0009',
+    });
+
+    expect(payload.contacts).toEqual([
+      { kind: 'phone', value: '+233 24 555 0109' },
+      { kind: 'whatsapp', value: '+233 20 000 0009' },
+    ]);
+  });
+
+  it('omits the contacts key entirely when every value is blank', () => {
+    const payload = toCreatePayload({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+    });
+
+    expect(payload).not.toHaveProperty('contacts');
+  });
+});
+
+describe('contactConflictErrors', () => {
+  it('puts a 409 that quotes an entered value against that field', () => {
+    const values = {
+      ...createEmptyMemberForm('2026-11-04'),
+      phone: '+233 20 000 0002',
+      email: 'Kofi@Example.test',
+    };
+
+    expect(
+      contactConflictErrors(
+        new ApiError(409, 'Contact value "kofi@example.test" already belongs to a member'),
+        values,
+      ),
+    ).toEqual({ email: 'Contact value "kofi@example.test" already belongs to a member' });
+
+    expect(
+      contactConflictErrors(
+        new ApiError(409, 'Contact value "+233 20 000 0002" already belongs to a member'),
+        values,
+      ),
+    ).toEqual({ phone: 'Contact value "+233 20 000 0002" already belongs to a member' });
+  });
+
+  it('leaves a duplicate member number to the member-number field', () => {
+    const values = { ...createEmptyMemberForm('2026-11-04'), phone: '+233 24 555 0109' };
+
+    expect(
+      contactConflictErrors(
+        new ApiError(409, 'A member with number M-1001 already exists'),
+        values,
+      ),
+    ).toBeNull();
   });
 });
 

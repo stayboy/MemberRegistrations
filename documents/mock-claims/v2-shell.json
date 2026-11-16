@@ -57,6 +57,17 @@
         }
       ],
       "acsMatch": ["no contact value appears"]
+    },
+    {
+      "id": "add-member-form",
+      "route": "/members/new",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["Add member page", "registration with contact values entered"]
     }
   ],
   "states": {
@@ -201,15 +212,15 @@
     "11-add-member": {
       "mock": {
         "path": "mockups/v2-shell/11-add-member.png",
-        "sha256": "f5bfc451462f0e0dceb99d73584c994a2b41a76ad64a8ab89dc0da9d0cdadd7e"
+        "sha256": "c204e606d49c53c8588a69ff8dd88c2b0f67c5016aea52f7fcc69a897c9deead",
+        "source": "mockups/v2-shell/11-add-member.html"
       },
-      "baseline": null,
-      "coverage": "auto-signed",
+      "baseline": "ui/e2e/baseline/member-add.png",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "f5bfc451462f0e0dceb99d73584c994a2b41a76ad64a8ab89dc0da9d0cdadd7e",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+        "by": "owner",
+        "at": "2026-11-16",
+        "sha256": "c204e606d49c53c8588a69ff8dd88c2b0f67c5016aea52f7fcc69a897c9deead"
       }
     },
     "12-subscriptions": {
@@ -257,7 +268,7 @@
     "16-contacts": {
       "mock": {
         "path": "mockups/v2-shell/16-contacts.png",
-        "sha256": "7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207",
+        "sha256": "6b154603a77613c2512766a3710a93d02c823538e6804e8eec5f6b7f0388d0e6",
         "source": "mockups/v2-shell/16-contacts.html"
       },
       "baseline": "ui/e2e/baseline/contacts-dialog.png",
@@ -265,17 +276,22 @@
       "signed": {
         "by": "owner",
         "at": "2026-11-16",
-        "sha256": "7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207"
+        "sha256": "6b154603a77613c2512766a3710a93d02c823538e6804e8eec5f6b7f0388d0e6"
       }
     },
     "18-contacts-editable": {
       "mock": {
         "path": "mockups/v2-shell/18-contacts-editable.png",
-        "sha256": "fd7f379dc412b38688d775f2f64986a57270f8205e64d502c757c14ff42a7fe6",
+        "sha256": "b05acd5bce03f626560be80a6e6b8a377af83b29deefbe1949acf555af1d3868",
         "source": "mockups/v2-shell/18-contacts-editable.html"
       },
-      "baseline": null,
-      "coverage": "target"
+      "baseline": "ui/e2e/baseline/contacts-editable.png",
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-16",
+        "sha256": "b05acd5bce03f626560be80a6e6b8a377af83b29deefbe1949acf555af1d3868"
+      }
     },
     "17-find-contact": {
       "mock": {
@@ -382,13 +398,55 @@
           "anchorKind": "prose",
           "anchor": "5.8 States and errors",
           "disposition": "claimed",
-          "entries": ["CT-NOTE", "CT-GLYPH", "CT-INFO", "CT-NO-COPY", "CT-NO-MARK"]
+          "entries": [
+            "CT-NOTE",
+            "CT-GLYPH",
+            "CT-INFO",
+            "CT-NO-COPY",
+            "CT-NO-MARK",
+            "CT-LIST",
+            "CE-ADDROW",
+            "CE-REMOVE",
+            "CE-NO-NEW-FIELDS",
+            "CE-NO-REORDER"
+          ]
         },
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-47",
           "disposition": "claimed",
           "entry": "CT-NO-VALUE"
+        }
+      ]
+    },
+    {
+      "surface": "add-member-form",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "anchorKind": "prose",
+          "anchor": "5.3 Members",
+          "disposition": "claimed",
+          "entries": [
+            "AM-SECTION",
+            "AM-FIELDS",
+            "AM-409-COPY",
+            "AM-NO-KIND-DROPDOWN",
+            "AM-NO-ADD-ROW",
+            "AM-NO-CONTACT-OUTSIDE"
+          ]
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-42",
+          "disposition": "e2e-only",
+          "test": "ui/e2e/members.spec.ts::the add-member route creates the member and lands on the detail"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-52",
+          "disposition": "claimed",
+          "entry": "AM-CREATE-REQUEST"
         }
       ]
     }
@@ -424,7 +482,18 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-47",
-        "quote": "opening it groups phone/email/WhatsApp values with owner/linked status"
+        "quote": "one flat list of phone/email/WhatsApp values"
+      }
+    },
+    {
+      "id": "AM-CONTACTS",
+      "as": "registrar",
+      "iWant": "to enter a new member and their contacts in one registration",
+      "soThat": "the household reaches the register without a second visit to the record",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-52",
+        "quote": "a registration with contact values entered"
       }
     }
   ],
@@ -705,7 +774,7 @@
       "id": "CT-INFO",
       "story": "CT-DIALOG",
       "state": "16-contacts",
-      "claim": "Every rendered contact-group heading carries its focusable information affordance.",
+      "claim": "The privacy note carries the dialog's single focusable information affordance.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "prose",
@@ -713,7 +782,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "5.8 States and errors",
-        "quote": "Each rendered contact-group heading MUST carry a focusable information affordance"
+        "quote": "The note MUST carry the dialog's single focusable information affordance"
       },
       "control": "spec"
     },
@@ -729,7 +798,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "5.8 States and errors",
-        "quote": "read-only (no copy or edit)"
+        "quote": "the dialog MUST offer no add, no remove, no copy"
       },
       "control": "spec"
     },
@@ -763,6 +832,199 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-47",
         "quote": "no contact value appears"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-SECTION",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "The create form draws a Contacts section between Residence and Church.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "order Identity, Residence, Contacts, Church"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-FIELDS",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "The section offers exactly three optional fields: Phone, Email and WhatsApp.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "three optional fields named `Phone`, `Email` and"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-409-COPY",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "The section note says a value owned by another member is shown against that field.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "MUST show against that field, MUST name the value"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-CREATE-REQUEST",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "Contact values are captured on the registration form, before the member exists.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-52"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-52",
+        "quote": "a registration with contact values entered"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-NO-KIND-DROPDOWN",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "A contact-kind dropdown (phone / email / whatsapp chooser) on the create form.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "three optional fields named `Phone`, `Email` and"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-NO-ADD-ROW",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "An add-another-contact row control (repeatable kind/value rows).",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "three optional fields named `Phone`, `Email` and"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AM-NO-CONTACT-OUTSIDE",
+      "story": "AM-CONTACTS",
+      "state": "11-add-member",
+      "claim": "A contact field outside the Contacts section, in identity, residence or church.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.3 Members",
+        "quote": "order Identity, Residence, Contacts, Church"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CT-LIST",
+      "story": "CT-DIALOG",
+      "state": "16-contacts",
+      "claim": "The values render as one flat list in a single bordered container, kind named in each row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "one flat list in a single bordered container"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CE-ADDROW",
+      "story": "CT-DIALOG",
+      "state": "18-contacts-editable",
+      "claim": "The editable dialog's input row sits above the list, not below it.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "sits above the list rather than below it"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CE-REMOVE",
+      "story": "CT-DIALOG",
+      "state": "18-contacts-editable",
+      "claim": "Each row this member owns carries a Remove control.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "the Remove action stays on each row this member owns"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CE-NO-NEW-FIELDS",
+      "story": "CT-DIALOG",
+      "state": "18-contacts-editable",
+      "claim": "A label, country-code or verification field in the input row.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "there is no label, country code, verification flag"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "CE-NO-REORDER",
+      "story": "CT-DIALOG",
+      "state": "18-contacts-editable",
+      "claim": "Move-up / move-down reorder controls on a row.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "prose",
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "5.8 States and errors",
+        "quote": "reorder control or per-row edit control"
       },
       "control": "spec"
     }
