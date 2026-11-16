@@ -77,7 +77,8 @@
         "at": "2026-11-15",
         "sha256": "4bfb188864b316e6df431bf786618896d03783a07f4e082055f1d6851cff3cae",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "02-shell-collapsed-light": {
       "mock": {
@@ -92,7 +93,8 @@
         "at": "2026-11-15",
         "sha256": "e7b28c8f3d063fc2d2eda8a92378c615303544c68ae5060ed8186dfb4a39a302",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "03-shell-expanded-dark": {
       "mock": {
@@ -107,7 +109,8 @@
         "at": "2026-11-15",
         "sha256": "cf5c356b463cd86dd3385c5620015743cedb187d8a9c907ad2258a71e18e3f05",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "05-meadow-accent": {
       "mock": {
@@ -122,7 +125,8 @@
         "at": "2026-11-15",
         "sha256": "3ca688ee3a6698c0c23a89433f1df8782c8fb0a86b7804017888a8581161cb16",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "06-mobile": {
       "mock": {
@@ -137,7 +141,8 @@
         "at": "2026-11-15",
         "sha256": "8ab3098bb056183115d731cc466d7b0dcdafecf004939c8ae905848d3eda79fc",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "07-shepherding-officers": {
       "mock": {
@@ -179,7 +184,8 @@
         "at": "2026-11-15",
         "sha256": "0df0992cdbd8073de7e01ed629c06be5a3ce01cf78a3f214feb17999a9d3cea9",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      },
+      "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
     "11-add-member": {
       "mock": {
