@@ -144,9 +144,15 @@ from this round's base commit before it is signed.** That is now an acceptance c
 
 ### Contacts dialog (`v2-shell/16-contacts.png`)
 
-**Adopt as built.** Paragraph, Phone, Email, the "Owned" affordance, Close / Open member — all present.
-The shipped dialog adds a linked-contact row (WhatsApp, "Linked · M-1002"), a later feature the mock
-predates. No change.
+**Superseded 2026-11-16 by round `contacts-dialog-parity`.** The verdict below is retired: the
+drawing's privacy-note copy, its shield-lock glyph and the per-group information affordance were the
+drawing's, not the build's, and the build was the side that moved (FR-78 as amended). The mock was
+re-cut to the signed identity label (#64) and the linked WhatsApp value (FR-31); the code was never
+reverted toward the 2026-11-03 image.
+
+**Earlier verdict (2026-11-04, retired.)** Adopt as built. Paragraph, Phone, Email, the "Owned"
+affordance, Close / Open member — all present. The shipped dialog added a linked-contact row
+(WhatsApp, "Linked · M-1002"), a later feature the mock predates. No change.
 
 ### Imports (`v2-imports/01-members-import.png`)
 
@@ -317,11 +323,16 @@ n/a — planning document; each build round is reviewed on its own.
 
 ## Mock sign-off
 
-Pending — the reduced target for the Shepherding roster is the first to sign.
+| Surface         | Mock                               | Capture                               | sha256                                                             | Signer | Date       | Verdict                                            |
+| --------------- | ---------------------------------- | ------------------------------------- | ------------------------------------------------------------------ | ------ | ---------- | -------------------------------------------------- |
+| Contacts dialog | `mockups/v2-shell/16-contacts.png` | `ui/e2e/baseline/contacts-dialog.png` | `7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207` | owner  | 2026-11-16 | signed (carried by round `contacts-dialog-parity`) |
 
 ## Mock parity
 
-Pending — the triage table is the parity record until each surface is rebuilt.
+Mock coverage: claimed 6 · e2e-only 5 · deferred 1 · prose 1
+
+The contacts state's sign-off, claim atoms and pair are carried by round `contacts-dialog-parity`;
+this ledger keeps the adopt/queue verdicts, and the superseded contacts verdict is recorded above.
 
 ## Acceptance
 

@@ -8,19 +8,20 @@ here are the release gate's inputs, not the gate itself — a `drift` row is a f
 and a signed mock has now been read; the rows marked `not claimable` have no signed mock, so parity cannot
 be claimed for them at all.
 
-| #     | Surface                                           | Baseline                                                             | Mock                                       | Hash          | Read                                        |
-| ----- | ------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------ | ------------- | ------------------------------------------- |
-| 1     | members list                                      | `members-list.png`                                                   | `v2-shell/01-shell-expanded-light.png`     | `4bfb1888…`   | **read — matches**                          |
-| 2     | events list                                       | `events-list.png`                                                    | `v2-events/01-events-list.png`             | `16a6249f…`   | **read — matches**                          |
-| 3     | activity detail, event kind                       | `event-detail.png`                                                   | `v2-events/04-activity-detail-event.png`   | `bcb0c03c…`   | **read — drift + defect, fixed**            |
-| 4     | activity detail, series kind                      | `series-detail.png`                                                  | `v2-events/03-activity-detail-series.png`  | `cccb7001…`   | **read — drift**                            |
-| 5     | headcount dialog                                  | `event-headcount-dialog.png`                                         | `v2-events/06-record-headcount-dialog.png` | `c65614ec…`   | **read — the mock was stale, re-cut**       |
-| 6     | import panel                                      | `event-import-panel.png`                                             | `v2-events/07-import-attendance-panel.png` | `24bd2629…`   | **read — matches**                          |
-| 7     | settings                                          | `settings.png`                                                       | `v2-settings/01-date-time-settings.png`    | `f6b66b7f…`   | **read — mock re-cut to the build**         |
-| 8–12  | shell ×5 (light, dark, collapsed, mobile, meadow) | `shell-*.png`                                                        | `v2-shell/01…06`                           | see catalogue | **read — matches; the rail gained support** |
-| 13–15 | shepherding officers, roster, report              | `shepherding-*.png`                                                  | `v2-shell/07…09`                           | see catalogue | **read — 4 defects and 2 spec gaps, fixed** |
-| 16–17 | imports members, batches                          | `imports-*.png`                                                      | `v2-imports/01-members-import.png`; none   | see catalogue | **outside parity** (DoD item 5)             |
-| 18–21 | member detail, add, contacts, attendance dialog   | `member-*.png`, `contacts-dialog.png`, `event-attendance-dialog.png` | **no signed mock state**                   | —             | not claimable                               |
+| #          | Surface                                           | Baseline                                      | Mock                                       | Hash          | Read                                                                 |
+| ---------- | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------ | ------------- | -------------------------------------------------------------------- |
+| 1          | members list                                      | `members-list.png`                            | `v2-shell/01-shell-expanded-light.png`     | `4bfb1888…`   | **read — matches**                                                   |
+| 2          | events list                                       | `events-list.png`                             | `v2-events/01-events-list.png`             | `16a6249f…`   | **read — matches**                                                   |
+| 3          | activity detail, event kind                       | `event-detail.png`                            | `v2-events/04-activity-detail-event.png`   | `bcb0c03c…`   | **read — drift + defect, fixed**                                     |
+| 4          | activity detail, series kind                      | `series-detail.png`                           | `v2-events/03-activity-detail-series.png`  | `cccb7001…`   | **read — drift**                                                     |
+| 5          | headcount dialog                                  | `event-headcount-dialog.png`                  | `v2-events/06-record-headcount-dialog.png` | `c65614ec…`   | **read — the mock was stale, re-cut**                                |
+| 6          | import panel                                      | `event-import-panel.png`                      | `v2-events/07-import-attendance-panel.png` | `24bd2629…`   | **read — matches**                                                   |
+| 7          | settings                                          | `settings.png`                                | `v2-settings/01-date-time-settings.png`    | `f6b66b7f…`   | **read — mock re-cut to the build**                                  |
+| 8–12       | shell ×5 (light, dark, collapsed, mobile, meadow) | `shell-*.png`                                 | `v2-shell/01…06`                           | see catalogue | **read — matches; the rail gained support**                          |
+| 13–15      | shepherding officers, roster, report              | `shepherding-*.png`                           | `v2-shell/07…09`                           | see catalogue | **read — 4 defects and 2 spec gaps, fixed**                          |
+| 16–17      | imports members, batches                          | `imports-*.png`                               | `v2-imports/01-members-import.png`; none   | see catalogue | **outside parity** (DoD item 5)                                      |
+| 18, 19, 21 | member detail, add, attendance dialog             | `member-*.png`, `event-attendance-dialog.png` | **no signed mock state**                   | —             | not claimable                                                        |
+| 20         | contacts dialog                                   | `contacts-dialog.png`                         | `v2-shell/16-contacts.png`                 | `7b2f4248…`   | **read — signed 2026-11-16; the build moved to the drawing (FR-78)** |
 
 ## 1. Members list — matches
 
@@ -57,8 +58,10 @@ why it survived three rounds of code review.
 | 4b  | Occurrences   | session rows with `Record headcount` and `Import` | dates only (Date · Exception · Events), because `OccurrenceListDto` carries no event ids — the parked R2b                                          |
 | 4c  | Panels        | tiles and schedule only                           | a definition card (Ministry/Timezone/Status/Archived/Description) as well                                                                          |
 
-4a is a triage item that was never applied: the retire verdict exists in `ui-mock-parity.md` and the code
-still renders the RRULE.
+4a was fixed after this pack was written: the cells read `scheduleLabel(rrule)` (`SeriesActivityRow.tsx`,
+`SeriesDetailPage.tsx`), so the readable label renders without the raw string. This paragraph used to say
+the code still rendered the RRULE; that verdict was stale, and the release claim's "fixed" rests on the
+second reading.
 
 ## 5. Headcount dialog — the mock is the stale artefact
 
@@ -235,10 +238,10 @@ Both can be reviewed for consistency with the design language, never claimed as 
 
 ## What the pack found
 
-1. **Five build defects.** Three fixed before this pass (`Held`/`Mixed` overlap, the raw RRULE in the
-   series schedule cell, the status-pill overlap), and two fixed here: the roster's clipped row actions
-   (`roster-eleven-columns`) and the officers page's missing FR-58 totals and colliding identity
-   (`officers-church-totals`).
+1. **Five build defects.** Two fixed before this pass (`Held`/`Mixed` overlap and the status-pill overlap),
+   the raw RRULE in the series schedule cell fixed after the pass was written (see section 4), and two fixed
+   here: the roster's clipped row actions (`roster-eleven-columns`) and the officers page's missing FR-58
+   totals and colliding identity (`officers-church-totals`).
 2. **One spec gap per surface, both the same shape.** The roster drew nine columns against FR-59a's
    eleven, and the officers page drew none of FR-58's totals. In both the mock was ahead of the build,
    and in both the fix was to move the build to the drawing.
@@ -247,9 +250,10 @@ Both can be reviewed for consistency with the design language, never claimed as 
    and its preview folded into the card. Not every drift means the build is wrong.
 5. **No row is owed.** The church report is read above and found no defect: the build is ahead of that
    drawing on the totals and follows the spec on the window.
-6. **Five surfaces with no signed mock at all** (member detail, add member, contacts, the attendance
-   dialog, and the import batch list) — they can be reviewed for consistency with the design language,
-   never claimed as parity.
+6. **Four surfaces with no signed mock at all** (member detail, add member, the attendance
+   dialog, and the import batch list) - they can be reviewed for consistency with the design language,
+   never claimed as parity. **Contacts left this list on 2026-11-16**: `v2-shell/16-contacts.png` was
+   rebuilt from a live source, re-cut to FR-78 and signed, and its build baseline sits beside it.
 
 ## The recommendation
 

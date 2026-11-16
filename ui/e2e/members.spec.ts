@@ -45,6 +45,14 @@ test('the Include archived switch moves to the archived view', async ({ page }) 
   await expect(page).toHaveURL(/\/members\/archived/);
 });
 
+/** FR-78 fixes the note as one string; the test spells it out rather than importing it. */
+const PRIVACY_NOTE =
+  'Contact values are shown only after this explicit action. The members list returns a count, not the values; opening this dialog is the only way to see them here.';
+
+/** FR-78/FR-81: each group's information button is named with this exact sentence. */
+const GROUP_INFO =
+  'Owned values belong to this member. Linked values are shared from another member and stay with its owner.';
+
 test('the Contacts action opens the grouped contacts dialog', async ({ page }) => {
   await open(page, '/members');
   // A table-row control, not a page action: FR-9a scopes the menu to the action row.
@@ -52,15 +60,31 @@ test('the Contacts action opens the grouped contacts dialog', async ({ page }) =
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();
-  await expect(
-    dialog.getByText('Contact values are shown only after this explicit action.'),
-  ).toBeVisible();
+  // The whole note, not just its first sentence (FR-78).
+  await expect(dialog.getByText(PRIVACY_NOTE, { exact: true })).toBeVisible();
 
-  await expect(dialog.getByRole('region', { name: 'Phone' })).toContainText('+233 20 000 0001');
-  await expect(dialog.getByRole('region', { name: 'Email' })).toContainText(
-    'kwame.asante@example.test',
-  );
+  const phone = dialog.getByRole('region', { name: 'Phone' });
+  const email = dialog.getByRole('region', { name: 'Email' });
   const whatsapp = dialog.getByRole('region', { name: 'WhatsApp' });
+
+  // Every rendered group is a heading carrying the shared owned/linked affordance (FR-78).
+  for (const [group, name] of [
+    [phone, 'Phone'],
+    [email, 'Email'],
+    [whatsapp, 'WhatsApp'],
+  ] as const) {
+    const heading = group.getByRole('heading', { level: 3, name });
+    await expect(heading).toBeVisible();
+    // FR-78 puts the affordance on the heading row, not elsewhere in the group.
+    await expect(
+      heading.locator('xpath=..').getByRole('button', { name: GROUP_INFO, exact: true }),
+    ).toBeVisible();
+    // …and exactly one per group, so the row is the only place it lives.
+    await expect(group.getByRole('button', { name: GROUP_INFO, exact: true })).toHaveCount(1);
+  }
+
+  await expect(phone).toContainText('+233 20 000 0001');
+  await expect(email).toContainText('kwame.asante@example.test');
   await expect(whatsapp).toContainText('+233 20 000 0009');
   await expect(whatsapp).toContainText('Linked · M-1002');
 

@@ -10,6 +10,7 @@ import {
   DialogTitle,
   Dropdown,
   Field,
+  InfoLabel,
   Input,
   MessageBar,
   MessageBarBody,
@@ -21,7 +22,7 @@ import {
   shorthands,
   tokens,
 } from '@fluentui/react-components';
-import { DeleteRegular } from '@fluentui/react-icons';
+import { DeleteRegular, ShieldLockRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, isUnauthorized } from '../api/errors';
@@ -44,9 +45,26 @@ const CONTACT_GROUPS: readonly { kind: ContactKind; label: string }[] = [
   { kind: 'whatsapp', label: 'WhatsApp' },
 ];
 
+/**
+ * FR-78 fixes this copy exactly, as one string: the note above the groups says
+ * why the values appeared and where they came from. Do not reword or truncate it.
+ */
+const CONTACT_PRIVACY_NOTE =
+  'Contact values are shown only after this explicit action. The members list returns a count, not the values; opening this dialog is the only way to see them here.';
+
+/**
+ * FR-78/FR-81 fix the group affordance's accessible name and its tooltip content
+ * to one string. The explicit `aria-label` is what carries it: Fluent associates
+ * `aria-describedby` only while the tooltip is open.
+ */
+const CONTACT_GROUP_INFO =
+  'Owned values belong to this member. Linked values are shared from another member and stay with its owner.';
+
 const useStyles = makeStyles({
+  // FR-78: a 600 px surface, capped at the viewport so a narrow screen never scrolls sideways.
   dialogSurface: {
-    maxWidth: '620px',
+    width: '600px',
+    maxWidth: '100%',
   },
   dialogContent: {
     display: 'flex',
@@ -69,11 +87,18 @@ const useStyles = makeStyles({
   },
   note: {
     display: 'flex',
+    alignItems: 'flex-start',
     gap: tokens.spacingHorizontalS,
     padding: tokens.spacingHorizontalM,
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
     borderRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2,
+  },
+  /** The drawing's leading shield-lock glyph; it sits on the note's first text line. */
+  noteIcon: {
+    flexShrink: 0,
+    fontSize: '20px',
+    color: tokens.colorNeutralForeground2,
   },
   contactGroups: {
     display: 'flex',
@@ -85,11 +110,30 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
   },
+  /**
+   * The group title keeps heading semantics (it is an `<h3>`, as the drawing shows)
+   * and the Fluent `InfoLabel` sits beside it, so the heading's accessible name stays
+   * the group name while the info button carries the FR-78 description (FR-81).
+   */
+  contactGroupHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+  },
+  contactGroupTitle: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase300,
+    fontWeight: tokens.fontWeightSemibold,
+    lineHeight: tokens.lineHeightBase300,
+  },
+  // FR-78: the 42 px row rhythm is the drawing's; Fluent's spacing tokens have no
+  // 42 px step, so the floor stays literal and the padding keeps the token scale.
   contactRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: tokens.spacingHorizontalM,
+    minHeight: '42px',
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
     borderRadius: tokens.borderRadiusMedium,
@@ -411,9 +455,8 @@ export function ContactsDialog({
                   </div>
 
                   <div className={styles.note}>
-                    <Text size={200}>
-                      Contact values are shown only after this explicit action.
-                    </Text>
+                    <ShieldLockRegular className={styles.noteIcon} aria-hidden />
+                    <Text size={200}>{CONTACT_PRIVACY_NOTE}</Text>
                   </div>
 
                   {editable && actionError ? (
@@ -460,7 +503,20 @@ export function ContactsDialog({
                             className={styles.contactGroup}
                             aria-label={group.label}
                           >
-                            <Text weight="semibold">{group.label}</Text>
+                            <div className={styles.contactGroupHeading}>
+                              <h3 className={styles.contactGroupTitle}>{group.label}</h3>
+                              {/*
+                                The InfoLabel carries no text of its own: the heading holds the
+                                group name, so Fluent's default `aria-labelledby` (which would name
+                                the button after the group) resolves to nothing and the explicit
+                                `aria-label` above is what the button announces (FR-78, FR-81).
+                              */}
+                              <InfoLabel
+                                size="small"
+                                info={{ children: CONTACT_GROUP_INFO }}
+                                infoButton={{ 'aria-label': CONTACT_GROUP_INFO }}
+                              />
+                            </div>
                             {items.map((contact) => (
                               <div key={contact.id} className={styles.contactRow}>
                                 <Text className={styles.contactValue}>{contact.value}</Text>
