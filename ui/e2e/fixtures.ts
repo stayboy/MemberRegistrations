@@ -68,6 +68,21 @@ export async function seedTheme(page: Page, accent: AccentId, scheme: Scheme): P
   );
 }
 
+/** Every stored value as one string per entry; no key name is assumed. */
+export async function storedValues(page: Page): Promise<{ session: string; local: string }> {
+  return page.evaluate(() => {
+    const dump = (storage: Storage): string => {
+      const values: string[] = [];
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index) ?? '';
+        values.push(`${key}=${storage.getItem(key) ?? ''}`);
+      }
+      return values.join('\n');
+    };
+    return { session: dump(sessionStorage), local: dump(localStorage) };
+  });
+}
+
 /** Opens a hash route under the preview base (`./` keeps `/MemberRegistrations/`). */
 export async function open(page: Page, route: `/${string}`): Promise<void> {
   await page.goto(`./#${route}`);
@@ -1177,6 +1192,16 @@ interface GatewayReply {
   readonly headers?: Record<string, string>;
 }
 
+/** A confirmed import's body as the panel sends it (FR-36, FR-36a). */
+export interface ImportCommit {
+  readonly kind: 'members' | 'attendance';
+  readonly body: Record<string, unknown>;
+  readonly rows: readonly unknown[];
+}
+
+/** The reply a test wants the import commit to give: a `201` batch or an `import_failed` `422`. */
+export type ImportStubReply = GatewayReply;
+
 interface RouteEntry {
   readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly pattern: RegExp;
@@ -1301,6 +1326,7 @@ const OWNED_CONTACT_VALUES: ReadonlySet<string> = new Set(
 function buildRoutes(
   created: Map<string, MemberDetail>,
   actionStatesEnabled: () => boolean,
+  importReplyFor: (commit: ImportCommit) => ImportStubReply | null,
 ): readonly RouteEntry[] {
   // The action-state events exist for the capture-state tests; they are opt-in so a
   // session dated today cannot win another surface's "next session" selection.
@@ -1877,6 +1903,41 @@ function buildRoutes(
       handle: () => reply(IMPORT_FORMATS),
     },
     {
+      // AC-19/AC-20: the panel's commit is the subject, so a test may state the reply it expects.
+      // Unset, the stub accepts the rows it received and reports them as one batch.
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/imports\/(members|attendance)$/,
+      handle: (call, [kind]) => {
+        const body = asRecord(call.body);
+        const rows = Array.isArray(body.rows) ? body.rows : [];
+        const commit: ImportCommit = {
+          kind: kind === 'attendance' ? 'attendance' : 'members',
+          body,
+          rows,
+        };
+        const override = importReplyFor(commit);
+        if (override) return override;
+
+        return reply(
+          {
+            id: `batch-e2e-${commit.kind}`,
+            kind: commit.kind,
+            actor: 'officer-1',
+            rowCount: rows.length,
+            checksum: `sha256:e2e-${commit.kind}`,
+            createdAt: FIXED_INSTANT,
+            ...(commit.kind === 'attendance'
+              ? {
+                  eventInstanceId: optionalText(body.eventId),
+                  sessionDate: optionalText(body.sessionDate),
+                }
+              : {}),
+          },
+          201,
+        );
+      },
+    },
+    {
       method: 'GET',
       pattern: /^\/gateway\/v1\/shepherding\/officers$/,
       handle: () => reply({ items: [SHEPHERDING_ROSTER_SUMMARY] }),
@@ -1898,9 +1959,16 @@ class GatewayStub {
   private readonly created = new Map<string, MemberDetail>();
   /** Opt-in: the action-state events a capture-state test asks for. */
   includeActionStates = false;
+  /**
+   * Opt-in: the reply the confirmed import POSTs give. Unset, the stub accepts the rows and reports
+   * one batch. The behavioural ACs assert the summary and the `422 import_failed` body, so the test
+   * that owns the surface states the wire itself (FR-36, FR-37).
+   */
+  importReply: ((commit: ImportCommit) => ImportStubReply) | null = null;
   private readonly routes: readonly RouteEntry[] = buildRoutes(
     this.created,
     () => this.includeActionStates,
+    (commit) => this.importReply?.(commit) ?? null,
   );
   private readonly unmatched: string[] = [];
 

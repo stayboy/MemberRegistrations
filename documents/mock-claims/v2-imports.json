@@ -128,25 +128,25 @@
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-18",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         },
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-19",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         },
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-20",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         },
         {
           "file": "documents/specs/member-registrations-events-offerings.md",
           "id": "AC-7a",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         }
       ]
     },
@@ -156,14 +156,14 @@
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-18",
-          "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "disposition": "e2e-only",
+          "test": "ui/e2e/imports.spec.ts::a member CSV over the 10,000-row limit shows split guidance and sends nothing"
         },
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-19",
-          "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "disposition": "e2e-only",
+          "test": "ui/e2e/imports.spec.ts::a confirmed member import shows the batch summary and keeps no file contents in browser storage"
         }
       ]
     }

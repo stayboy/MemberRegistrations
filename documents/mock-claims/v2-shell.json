@@ -345,7 +345,7 @@
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-4",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         },
         {
           "file": "documents/specs/member-registrations-ui.md",

@@ -207,7 +207,7 @@
           "file": "documents/specs/member-registrations-events-offerings.md",
           "id": "AC-6",
           "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
         }
       ]
     },
