@@ -34,6 +34,8 @@ instruction.
 | `push`                | Push the current branch. Never opens a PR.                                                                                                                                                                                                                                                                                                                                                          |
 | `pr` / `pull request` | Open the pull request to `main`. Never merges.                                                                                                                                                                                                                                                                                                                                                      |
 | `merge`               | Merge **only when green**. If the work is uncommitted, this one verb covers the whole chain: commit the change set, push the branch, open the PR, wait for `verify`, `ui` and `ui-e2e`, squash merge, delete the branch, pull `main`. If the PR for the current branch already exists, it covers waiting and merging. It never authorises merging a blocked PR, a `--admin` merge, or a force push. |
+| `sync`                | Switch to `main` and pull the merged result (`git switch main`, then `git pull --ff-only`). Never merges, never pushes.                                                                                                                                                                                                                                                                             |
+| `tag`                 | Create an annotated tag on the current commit. Never pushes it.                                                                                                                                                                                                                                                                                                                                     |
 | `go unattended`       | Pre-authorises commit, push, PR and merge for that round, or for every round up to the milestone the instruction names (`AGENTS.md` §17).                                                                                                                                                                                                                                                           |
 
 "Merge" implies its prerequisites because the merged result cannot exist otherwise; the reverse never
@@ -45,6 +47,17 @@ that quotes the owner's verb; the parent verifies the result. Delegation changes
 command, never who authorises it. What the seat may not do — infer consent, or carry more than one verb
 per brief — is `AGENTS.md` §9 and `.opencode/agents/git-executor.md`; a `merge` brief still carries
 one verb even though that verb expands to several commands.
+
+**Seat, budget and record.** A brief carries the shape the seat's own file defines: the owner's verb, or
+the round doc's owner-approved `Verbs this round needs:` line that contains it; `branch:`; `files:` and
+`message:` for a commit; `tree:`; and `checks:` for a merge — plus the round's budget as its own literal
+`git-seat-budget: <amount>` line, which the seat's budget section requires before any other check. The
+seat's refusal logic then verifies the tree hash and that the staged list is exactly `files:`; it runs no
+further pre-check, and the parent supplies those values and verifies the outcome. A seat that runs a
+command the brief never named is refusing, not flaking. The standing default, the `0`-parks rule, the
+single retry, the `Actor` column and the probe live in `documents/agents/orchestrator-policy.md`, with
+the model ids in `documents/agents/seats.json`; this section owns what a brief contains and who is
+accountable for it.
 
 ## Status checks
 

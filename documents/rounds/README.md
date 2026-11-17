@@ -50,6 +50,10 @@ Goal, scope, expected files, acceptance criteria (numbered).
 | ---- | ---------------- | --------- |
 | ...  | `npm run verify` | pass/fail |
 
+A round that changes any seat rule adds a verification row to the table above saying the seat files and
+`.github/merge-policy.md` were re-read against the new paragraph, because the hash tripwire never
+proves two files agree (see `documents/agents/orchestrator-policy.md`, "A drift is asymmetric").
+
 The section ends with the gate-run signature line, pasted verbatim:
 
     gate-run <ISO-8601 UTC> profile=<name> steps=<passed>/<total> lines=<n> bytes=<n>

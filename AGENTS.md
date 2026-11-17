@@ -127,10 +127,11 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 - The **git-executor** seat (`.opencode/agents/git-executor.md`; class `git-executor`, a free provider
   first and the metered one last, mapped in `documents/agents/seats.json`) may execute the command on a
   brief that quotes the owner's verb; the parent keeps the decision and verifies every result. The seat
-  never infers consent, runs one verb per brief, and parks when unavailable. A round's git spend
-  defaults to **12 briefs** (a `git-seat-budget:` line may only lower or raise it, `0` parks), the round
-  doc declares `Verbs this round needs:` so the owner's go names them, and every write names its actor
-  in the round doc's per-write table. Seat and budget rules: `documents/agents/orchestrator-policy.md`.
+  never infers consent, runs one verb per brief, and parks when unavailable. The round doc declares
+  `Verbs this round needs:` so the owner's go names them, and every write names its actor in the round
+  doc's per-write table. The budget, its default, the retry, the probe and the ranking are
+  `documents/agents/orchestrator-policy.md`'s; the model ids are
+  `documents/agents/seats.json`'s.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for
