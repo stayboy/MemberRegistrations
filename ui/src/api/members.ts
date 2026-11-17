@@ -14,13 +14,26 @@ export type MemberStatus = 'active' | 'archived';
 export type CallOutcome = 'reached' | 'no_answer' | 'wrong_number';
 export type StillInChurch = 'yes' | 'no' | 'unknown';
 
+/** The duty a member carries inside one ministry (FR-29, 2026-11-17). */
+export interface MinistryPosition {
+  readonly code: string;
+  readonly label: string;
+}
+
+/**
+ * One ministry the member serves in, mirroring `MinistryDto`: the reference
+ * entry plus the member's role there. The summary and detail both carry it.
+ */
 export interface MinistryRef {
   readonly code: string;
   readonly name: string;
+  readonly position: MinistryPosition | null;
 }
 
-/** Mirrors `MinistryDto`; the reference list is used by the Ministries tab. */
-export interface Ministry extends MinistryRef {
+/** The global reference entry from `GET /v1/ministries`. It carries no role. */
+export interface Ministry {
+  readonly code: string;
+  readonly name: string;
   readonly description: string | null;
   readonly active: boolean;
 }
@@ -82,10 +95,17 @@ export interface MemberSubscription {
   readonly id: string;
   readonly kind: SubscriptionKind;
   readonly scope: 'individual' | 'household';
-  readonly status: 'active' | 'ended';
+  /** The API's three states; a legacy ended row keeps `ended` (FR-29). */
+  readonly status: 'active' | 'ended' | 'expired';
   readonly reference: string | null;
   readonly startedOn: string;
   readonly endedOn: string | null;
+  /**
+   * The paid period end, present on the richer member-subscription read. The
+   * detail projection does not carry it yet, so it is optional here and the
+   * overview's "next ends" line appears only when the payload has it.
+   */
+  readonly periodEnd?: string | null;
   readonly role: 'policyholder' | 'covered';
   readonly policyholderMemberNo: string;
   readonly coveredMemberNos: readonly string[];
@@ -159,15 +179,36 @@ export interface MemberShepherding {
   readonly recentCalls: readonly (ShepherdingCall & { readonly officerMemberNo: string })[];
 }
 
+/** The current shepherd the detail projects (FR-29): no assignment id, no history. */
+export interface MemberShepherd {
+  readonly memberNo: string;
+  readonly name: string;
+  readonly gender: Gender;
+  readonly age: number | null;
+  readonly assignedOn: string;
+}
+
+/** All-time call counts for the member's shepherding history; a null date means no such call. */
+export interface MemberCalls {
+  readonly attempts: number;
+  readonly conversations: number;
+  readonly lastCalledOn: string | null;
+  readonly lastReachedOn: string | null;
+}
+
 export interface AttendanceEntry {
   readonly id: string;
   readonly date: string;
   readonly source: 'import' | 'manual';
+  /** The event instance the row belongs to, on both series and standalone rows. */
+  readonly eventId: string;
+  readonly eventName: string;
 }
 
 export interface MemberAttendanceSeries {
-  readonly seriesId: string;
-  readonly seriesName: string;
+  /** Null on a standalone event row, whose entries share one `eventId`. */
+  readonly seriesId: string | null;
+  readonly seriesName: string | null;
   readonly ministry: string | null;
   readonly attended: number;
   readonly expected: number;
@@ -178,10 +219,27 @@ export interface MemberAttendanceSeries {
 
 export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscriptions'> {
   readonly id: string;
+  /** The presbyter title, when the member holds one (FR-25a). */
+  readonly title: {
+    readonly code: string;
+    readonly label: string;
+    readonly titledOn: string | null;
+  } | null;
+  readonly membershipCardNo: string | null;
+  /** Officer-set verification timestamp; the overview shows a check badge while present. */
+  readonly verifiedAt: string | null;
   readonly maidenName: string | null;
   readonly alias: string | null;
   readonly dob: string | null;
   readonly addressLine: string | null;
+  /** UTC date the member joined this assembly; distinct from `joinedOn`. */
+  readonly assemblyJoinedOn: string | null;
+  readonly cameFrom: string | null;
+  /** UTC date the member moved out; null while they are still here. */
+  readonly movedOutOn: string | null;
+  readonly movedToAssembly: string | null;
+  readonly shepherd: MemberShepherd | null;
+  readonly calls: MemberCalls;
   readonly purgedAt: string | null;
   readonly version: number;
   readonly createdAt: string;
@@ -210,6 +268,11 @@ export interface MemberInput {
   readonly placeOfResidence?: string | null;
   readonly addressLine?: string | null;
   readonly joinedOn?: string | null;
+  /** The four membership facts (FR-29, API 2026-11-17); blank submits `null`. */
+  readonly assemblyJoinedOn?: string | null;
+  readonly cameFrom?: string | null;
+  readonly movedOutOn?: string | null;
+  readonly movedToAssembly?: string | null;
   readonly isPresbyter?: boolean;
   /** Entered on the create form (FR-29a); a blank field sends no row. */
   readonly contacts?: readonly ContactInput[];
@@ -632,7 +695,7 @@ export async function removeCoverage(
   );
 }
 
-/** `GET /v1/ministries`; the Ministries tab filters the reference list. */
+/** `GET /v1/ministries`; the overview's add control filters the reference list. */
 export async function listMinistries(
   baseUrl: string,
   sessionToken: string,

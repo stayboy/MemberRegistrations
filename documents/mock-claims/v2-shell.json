@@ -313,7 +313,7 @@
         "sha256": "10fb130ff8e3d3f5da558c433552dca3e0c2ceb8aa2fd9fbfb7bc665d91a0385",
         "source": "mockups/v2-shell/19-member-overview-collapsed.html"
       },
-      "baseline": null,
+      "baseline": "ui/e2e/baseline/member-detail-overview.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
@@ -341,7 +341,7 @@
         "sha256": "241f8a4bf2a29a6b30816bec6c4f1f2c80aca552a6c64a3a4164794622c690c8",
         "source": "mockups/v2-shell/19-member-overview-empty.html"
       },
-      "baseline": null,
+      "baseline": "ui/e2e/baseline/member-detail-overview-empty.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
@@ -355,7 +355,7 @@
         "sha256": "f0110ac43c495ce6a74cd15b267dd999dac5e42e4dd80c2234f7ff6e39dd6ceb",
         "source": "mockups/v2-shell/19-member-overview-narrow.html"
       },
-      "baseline": null,
+      "baseline": "ui/e2e/baseline/member-detail-overview-narrow.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",

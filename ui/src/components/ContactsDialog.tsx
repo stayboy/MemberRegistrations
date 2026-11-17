@@ -678,8 +678,9 @@ function ContactConfirmDialog({
 
 /**
  * Call sites: MembersPage (contacts action, read-only), MemberDetailPage
- * (contacts action, editable) and ShepherdingRosterPage (contacts action,
- * read-only; the roster passes `displayName` because it has no name split). The
+ * (the tab-row `View Contacts (n)` button, editable) and ShepherdingRosterPage
+ * (contacts action, read-only; the roster passes `displayName` because it has no
+ * name split). The
  * list dialog is one flat list of values with their owner/linked status and
  * cannot add, remove, copy or edit them (FR-78, AC-47); the detail dialog is
  * editable because opening the member is already an explicit action (FR-29, AC-53).

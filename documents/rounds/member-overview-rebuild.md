@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                                           |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                                                                      |
+| Status                 | CLOSED                                                                                                                                                    |
 | Tier                   | 2                                                                                                                                                         |
 | Mode                   | `attended`                                                                                                                                                |
 | Base                   | `feat/member-create-completeness` (stacked; see Deviations)                                                                                               |
@@ -200,6 +200,9 @@ Mock coverage: claimed 7 · e2e-only 6 · deferred 1 · prose 2 (v2-shell; uncha
 states are now `signed` by the owner on 2026-11-17 and carry no claims). The mock guard passes 77/77. No drawing was re-cut for the
 create form or the contacts dialog; this round's five states are new, and the owner's instruction to
 sign them suspends "no more signing" for this surface only.
+
+This round closes as the docs and sign-off round; the build is
+member-overview-impl, which supersedes its Plan and Acceptance rows.
 
 ## Acceptance
 

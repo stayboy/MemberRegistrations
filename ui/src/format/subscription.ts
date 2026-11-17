@@ -9,7 +9,8 @@ import { utcToday } from './member-form';
 
 export type SubscriptionScope = 'individual' | 'household';
 export type SubscriptionRole = 'policyholder' | 'covered';
-export type SubscriptionStatus = 'active' | 'ended';
+/** The API's three member-subscription states (FR-29). */
+export type SubscriptionStatus = 'active' | 'ended' | 'expired';
 
 export interface SubscriptionFormValues {
   readonly kind: SubscriptionKind | '';
@@ -59,7 +60,8 @@ export function subscriptionRoleLabel(role: SubscriptionRole): string {
 }
 
 export function subscriptionStatusLabel(status: SubscriptionStatus): string {
-  return status === 'active' ? 'Active' : 'Ended';
+  if (status === 'active') return 'Active';
+  return status === 'expired' ? 'Expired' : 'Ended';
 }
 
 function isCalendarDate(value: string): boolean {

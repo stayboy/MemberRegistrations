@@ -33,6 +33,15 @@ function detail(overrides: Partial<MemberDetail> = {}): MemberDetail {
     placeOfResidence: 'Adenta',
     addressLine: null,
     joinedOn: '2026-01-04',
+    title: null,
+    membershipCardNo: null,
+    verifiedAt: null,
+    assemblyJoinedOn: null,
+    cameFrom: null,
+    movedOutOn: null,
+    movedToAssembly: null,
+    shepherd: null,
+    calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     isPresbyter: true,
     archivedAt: null,
     purgedAt: null,
@@ -233,6 +242,62 @@ describe('ministries on the create body (FR-71)', () => {
     const original = fromMemberDetail(detail());
     const changed = { ...original, ministries: ['CHOIR'] };
     expect(toUpdatePayload(changed, original)).toEqual({});
+  });
+});
+
+describe('membership fields (FR-29)', () => {
+  it('leaves assemblyJoinedOn blank on a new form and sends null for every blank field', () => {
+    const form = createEmptyMemberForm('2026-11-04');
+    expect(form.assemblyJoinedOn).toBe('');
+
+    const payload = toCreatePayload({
+      ...form,
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+    });
+
+    expect(payload).toMatchObject({
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+    });
+  });
+
+  it('round-trips the four fields through the edit form and the update body', () => {
+    const member = detail({
+      assemblyJoinedOn: '2018-02-04',
+      cameFrom: 'Kumasi Central',
+      movedOutOn: '2021-06-30',
+      movedToAssembly: 'Accra North',
+    });
+    const form = fromMemberDetail(member);
+
+    expect(form).toMatchObject({
+      assemblyJoinedOn: '2018-02-04',
+      cameFrom: 'Kumasi Central',
+      movedOutOn: '2021-06-30',
+      movedToAssembly: 'Accra North',
+    });
+    expect(toUpdatePayload({ ...form }, form)).toEqual({});
+    expect(toUpdatePayload({ ...form, cameFrom: 'Tema New Town' }, form)).toEqual({
+      cameFrom: 'Tema New Town',
+    });
+  });
+
+  it('rejects an unreal assembly join or move-out date', () => {
+    const errors = validateMemberForm({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+      assemblyJoinedOn: '2020-02-30',
+      movedOutOn: '30/06/2021',
+    });
+
+    expect(errors.assemblyJoinedOn).toBeDefined();
+    expect(errors.movedOutOn).toBeDefined();
   });
 });
 

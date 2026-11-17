@@ -112,7 +112,7 @@ const MINISTRIES: readonly Ministry[] = [
   },
 ];
 
-const CHOIR: MinistryRef = { code: 'CHR', name: 'Choir' };
+const CHOIR: MinistryRef = { code: 'CHR', name: 'Choir', position: null };
 
 /** One active product for the create form's optional subscription selector. */
 const SUBSCRIPTION_PRODUCT = {
@@ -224,9 +224,27 @@ const ATTENDANCE_1001: readonly MemberAttendanceSeries[] = [
     remaining: 2,
     status: 'ongoing',
     entries: [
-      { id: 'attendance-1', date: '2025-12-07', source: 'import' },
-      { id: 'attendance-2', date: '2025-12-14', source: 'import' },
-      { id: 'attendance-3', date: '2025-12-21', source: 'manual' },
+      {
+        id: 'attendance-1',
+        date: '2025-12-07',
+        source: 'import',
+        eventId: 'event-1',
+        eventName: 'Sunday Service',
+      },
+      {
+        id: 'attendance-2',
+        date: '2025-12-14',
+        source: 'import',
+        eventId: 'event-1',
+        eventName: 'Sunday Service',
+      },
+      {
+        id: 'attendance-3',
+        date: '2025-12-21',
+        source: 'manual',
+        eventId: 'event-1',
+        eventName: 'Sunday Service',
+      },
     ],
   },
 ];
@@ -289,6 +307,26 @@ const DETAILS = new Map<string, MemberDetail>([
       ageMonths: 492,
       placeOfResidence: 'Tema',
       joinedOn: '2019-03-03',
+      title: { code: 'ELD', label: 'Elder', titledOn: '2021-02-01' },
+      membershipCardNo: 'MC-1001',
+      verifiedAt: '2024-05-02T11:00:00.000Z',
+      assemblyJoinedOn: '2019-03-03',
+      cameFrom: 'Accra Central',
+      movedOutOn: null,
+      movedToAssembly: null,
+      shepherd: {
+        memberNo: 'M-1002',
+        name: 'Ama Mensah',
+        gender: 'female',
+        age: null,
+        assignedOn: '2025-01-02',
+      },
+      calls: {
+        attempts: 6,
+        conversations: 4,
+        lastCalledOn: '2025-11-14',
+        lastReachedOn: '2025-11-14',
+      },
       isPresbyter: true,
       archivedAt: null,
       contactCount: 2,
@@ -320,6 +358,15 @@ const DETAILS = new Map<string, MemberDetail>([
       ageMonths: null,
       placeOfResidence: 'Accra',
       joinedOn: '2020-07-19',
+      title: null,
+      membershipCardNo: null,
+      verifiedAt: null,
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+      shepherd: null,
+      calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
       isPresbyter: false,
       archivedAt: null,
       contactCount: 2,
@@ -1285,6 +1332,15 @@ function createdDetail(input: unknown): MemberDetail {
     ageMonths: null,
     placeOfResidence: optionalText(body.placeOfResidence),
     joinedOn: optionalText(body.joinedOn),
+    title: null,
+    membershipCardNo: null,
+    verifiedAt: null,
+    assemblyJoinedOn: optionalText(body.assemblyJoinedOn),
+    cameFrom: optionalText(body.cameFrom),
+    movedOutOn: optionalText(body.movedOutOn),
+    movedToAssembly: optionalText(body.movedToAssembly),
+    shepherd: null,
+    calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     isPresbyter: body.isPresbyter === true,
     archivedAt: null,
     contactCount: contacts.length,

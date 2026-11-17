@@ -1,15 +1,13 @@
 import {
-  Badge,
   Button,
   Dropdown,
-  Field,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
   Option,
   Text,
 } from '@fluentui/react-components';
-import { AddRegular, DismissRegular } from '@fluentui/react-icons';
+import { AddRegular } from '@fluentui/react-icons';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { useState } from 'react';
 import { isUnauthorized } from '../api/errors';
@@ -19,7 +17,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { errorMessage, inlineActionError } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 
-export interface MemberMinistriesTabProps {
+export interface MemberMinistriesSectionProps {
   readonly member: MemberDetail;
   readonly ministries: readonly Ministry[];
   readonly ministriesLoading: boolean;
@@ -30,12 +28,13 @@ export interface MemberMinistriesTabProps {
 }
 
 /**
- * Member-detail **Ministries** tab (FR-29): the assigned list plus add from the
- * `GET /v1/ministries` reference list and remove with confirmation. Removing an
- * assignment is not deleting the ministry; MemberDetailPage owns the queries and
- * mutations.
+ * The overview's fixed **Ministries** panel (FR-29): every assignment in detail
+ * order with the member's role, `Add` by code from the `GET /v1/ministries`
+ * reference list and `Remove` as unassign with confirmation. Removing an
+ * assignment is not deleting the ministry or its history; MemberDetailPage owns
+ * the queries and mutations.
  */
-export function MemberMinistriesTab({
+export function MemberMinistriesSection({
   member,
   ministries,
   ministriesLoading,
@@ -43,10 +42,11 @@ export function MemberMinistriesTab({
   addMutation,
   removeMutation,
   onInvalidate,
-}: MemberMinistriesTabProps) {
+}: MemberMinistriesSectionProps) {
   const styles = useMemberDetailStyles();
   const { signOut } = useSession();
 
+  const [addOpen, setAddOpen] = useState(false);
   const [selectedCode, setSelectedCode] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<MinistryRef | null>(null);
@@ -72,6 +72,7 @@ export function MemberMinistriesTab({
     addMutation.mutate(selected.code, {
       onSuccess: () => {
         setSelectedCode('');
+        setAddOpen(false);
         onInvalidate();
       },
       onError: (error: unknown) => {
@@ -100,7 +101,7 @@ export function MemberMinistriesTab({
     <section className={styles.section} aria-labelledby="member-ministries-heading">
       <div className={styles.sectionHeader}>
         <h2 id="member-ministries-heading" className={styles.sectionTitle}>
-          Ministries
+          Ministries <span className={styles.sectionCount}>{member.ministries.length}</span>
         </h2>
       </div>
 
@@ -114,25 +115,27 @@ export function MemberMinistriesTab({
       ) : null}
 
       {member.ministries.length === 0 ? (
-        <Text className={styles.muted}>No ministries assigned.</Text>
+        <Text className={styles.muted}>No ministries recorded</Text>
       ) : (
-        <ul className={styles.entryList} aria-label="Assigned ministries">
+        <ul className={styles.panelList} aria-label="Assigned ministries">
           {member.ministries.map((ministry) => (
-            <li key={ministry.code}>
-              <span className={styles.entry}>
-                <Badge appearance="outline" color="informative" title={ministry.name}>
-                  {ministry.code} · {ministry.name}
-                </Badge>
-                <Button
-                  size="small"
-                  appearance="transparent"
-                  icon={<DismissRegular />}
-                  aria-label={`Remove ${ministry.code}`}
-                  onClick={() => setRemoveTarget(ministry)}
-                >
-                  Remove
-                </Button>
+            <li key={ministry.code} className={styles.panelRow}>
+              <span className={styles.panelRowInline}>
+                <Text>
+                  {ministry.name} ·{' '}
+                  <Text as="span" size={200} className={styles.muted}>
+                    {ministry.code} · {ministry.position?.label ?? 'No role recorded'}
+                  </Text>
+                </Text>
               </span>
+              <Button
+                size="small"
+                appearance="transparent"
+                aria-label={`Remove ${ministry.name}`}
+                onClick={() => setRemoveTarget(ministry)}
+              >
+                Remove
+              </Button>
             </li>
           ))}
         </ul>
@@ -147,16 +150,14 @@ export function MemberMinistriesTab({
         </MessageBar>
       ) : null}
 
-      <div className={styles.addRow}>
-        <Field
-          label="Add ministry"
-          className={styles.addField}
-          hint="Assign an active ministry from the reference list."
-        >
+      {addOpen ? (
+        <div className={styles.panelAddRow}>
           <Dropdown
+            aria-label="Ministry"
+            className={styles.addField}
             value={selected ? `${selected.code} · ${selected.name}` : 'Select a ministry'}
             selectedOptions={selected ? [selected.code] : []}
-            disabled={ministriesLoading || available.length === 0}
+            disabled={ministriesLoading || available.length === 0 || addMutation.isPending}
             onOptionSelect={(_, data) => {
               setSelectedCode(data.optionValue ?? '');
               setActionError(null);
@@ -172,29 +173,49 @@ export function MemberMinistriesTab({
               </Option>
             ))}
           </Dropdown>
-        </Field>
-        <Button
-          icon={<AddRegular />}
-          appearance="primary"
-          data-testid="ministry-add"
-          onClick={addMinistry}
-          disabled={!selected || addMutation.isPending}
-        >
-          Add ministry
-        </Button>
-      </div>
-      {!ministriesLoading && !ministriesError && available.length === 0 ? (
-        <Text size={200} className={styles.muted}>
-          No unassigned active ministries remain.
-        </Text>
-      ) : null}
+          <Button
+            appearance="primary"
+            data-testid="ministry-add"
+            onClick={addMinistry}
+            disabled={!selected || addMutation.isPending}
+          >
+            Add
+          </Button>
+          <Button
+            appearance="transparent"
+            onClick={() => setAddOpen(false)}
+            disabled={addMutation.isPending}
+          >
+            Cancel
+          </Button>
+          {!ministriesLoading && !ministriesError && available.length === 0 ? (
+            <Text size={200} className={styles.muted}>
+              No unassigned active ministries remain.
+            </Text>
+          ) : null}
+        </div>
+      ) : (
+        <div className={styles.panelFoot}>
+          <Button
+            icon={<AddRegular />}
+            appearance="secondary"
+            onClick={() => setAddOpen(true)}
+            disabled={ministriesLoading}
+          >
+            Add
+          </Button>
+          <Text size={200} className={styles.muted}>
+            Assigned by code; removing unassigns.
+          </Text>
+        </div>
+      )}
 
       <ConfirmDialog
         open={removeTarget !== null}
-        title={removeTarget ? `Remove ${removeTarget.code}?` : 'Remove ministry?'}
+        title={removeTarget ? `Remove ${removeTarget.name}?` : 'Remove ministry?'}
         message={
           removeTarget
-            ? `${removeTarget.code} · ${removeTarget.name} is unassigned from this member. The ministry itself stays in the reference list.`
+            ? `${removeTarget.name} (${removeTarget.code}) is unassigned from this member. The ministry itself stays in the reference list.`
             : ''
         }
         confirmLabel="Remove ministry"

@@ -139,8 +139,7 @@ test.describe('accessibility', () => {
   }) => {
     await seedTheme(page, 'fluent', 'light');
     await open(page, '/members/M-1001');
-    await page.getByRole('button', { name: 'Actions' }).click();
-    await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+    await page.getByRole('button', { name: 'View Contacts (2)' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Contacts' });
     await expect(dialog).toBeVisible();

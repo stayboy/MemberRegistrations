@@ -29,6 +29,10 @@ export type MemberFormField =
   | 'placeOfResidence'
   | 'addressLine'
   | 'joinedOn'
+  | 'assemblyJoinedOn'
+  | 'cameFrom'
+  | 'movedOutOn'
+  | 'movedToAssembly'
   | 'isPresbyter'
   | CreateContactField
   | 'ministries'
@@ -70,6 +74,11 @@ export interface MemberFormValues {
   readonly placeOfResidence: string;
   readonly addressLine: string;
   readonly joinedOn: string;
+  /** FR-29 membership facts; `assemblyJoinedOn` has no default. Blank becomes `null`. */
+  readonly assemblyJoinedOn: string;
+  readonly cameFrom: string;
+  readonly movedOutOn: string;
+  readonly movedToAssembly: string;
   readonly isPresbyter: boolean;
   /** Create only: the edit form has no contact fields (FR-29a). */
   readonly phone: string;
@@ -201,6 +210,18 @@ export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   const joinedOn = optionalDate(values.joinedOn, 'Joined on');
   if (joinedOn) errors.joinedOn = joinedOn;
 
+  const assemblyJoinedOn = optionalDate(values.assemblyJoinedOn, 'Assembly joined');
+  if (assemblyJoinedOn) errors.assemblyJoinedOn = assemblyJoinedOn;
+
+  const cameFrom = optionalText(values.cameFrom, 'Came from', 200);
+  if (cameFrom) errors.cameFrom = cameFrom;
+
+  const movedOutOn = optionalDate(values.movedOutOn, 'Moved out');
+  if (movedOutOn) errors.movedOutOn = movedOutOn;
+
+  const movedToAssembly = optionalText(values.movedToAssembly, 'Moved to', 200);
+  if (movedToAssembly) errors.movedToAssembly = movedToAssembly;
+
   for (const { field, kind, label } of CREATE_CONTACT_FIELDS) {
     const contact = optionalContact(kind, values[field], label);
     if (contact) errors[field] = contact;
@@ -223,6 +244,10 @@ export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberForm
     placeOfResidence: '',
     addressLine: '',
     joinedOn,
+    assemblyJoinedOn: '',
+    cameFrom: '',
+    movedOutOn: '',
+    movedToAssembly: '',
     isPresbyter: false,
     phone: '',
     email: '',
@@ -252,6 +277,10 @@ export function fromMemberDetail(member: MemberDetail): MemberFormValues {
     placeOfResidence: member.placeOfResidence ?? '',
     addressLine: member.addressLine ?? '',
     joinedOn: member.joinedOn ?? '',
+    assemblyJoinedOn: member.assemblyJoinedOn ?? '',
+    cameFrom: member.cameFrom ?? '',
+    movedOutOn: member.movedOutOn ?? '',
+    movedToAssembly: member.movedToAssembly ?? '',
     isPresbyter: member.isPresbyter,
     phone: '',
     email: '',
@@ -297,6 +326,10 @@ export function toCreatePayload(values: MemberFormValues): MemberInput {
     placeOfResidence: blankToNull(values.placeOfResidence),
     addressLine: blankToNull(values.addressLine),
     joinedOn: blankToNull(values.joinedOn),
+    assemblyJoinedOn: blankToNull(values.assemblyJoinedOn),
+    cameFrom: blankToNull(values.cameFrom),
+    movedOutOn: blankToNull(values.movedOutOn),
+    movedToAssembly: blankToNull(values.movedToAssembly),
     isPresbyter: values.isPresbyter,
   };
 
@@ -367,6 +400,14 @@ export function toUpdatePayload(
   }
   if (next.addressLine !== base.addressLine) payload.addressLine = next.addressLine;
   if (next.joinedOn !== base.joinedOn) payload.joinedOn = next.joinedOn;
+  if (next.assemblyJoinedOn !== base.assemblyJoinedOn) {
+    payload.assemblyJoinedOn = next.assemblyJoinedOn;
+  }
+  if (next.cameFrom !== base.cameFrom) payload.cameFrom = next.cameFrom;
+  if (next.movedOutOn !== base.movedOutOn) payload.movedOutOn = next.movedOutOn;
+  if (next.movedToAssembly !== base.movedToAssembly) {
+    payload.movedToAssembly = next.movedToAssembly;
+  }
   if (next.isPresbyter !== base.isPresbyter) payload.isPresbyter = next.isPresbyter;
 
   return payload;
@@ -404,6 +445,10 @@ export function mergeKeptValues(
       placeOfResidence: kept.placeOfResidence ?? base.placeOfResidence,
       addressLine: kept.addressLine ?? base.addressLine,
       joinedOn: kept.joinedOn ?? base.joinedOn,
+      assemblyJoinedOn: kept.assemblyJoinedOn ?? base.assemblyJoinedOn,
+      cameFrom: kept.cameFrom ?? base.cameFrom,
+      movedOutOn: kept.movedOutOn ?? base.movedOutOn,
+      movedToAssembly: kept.movedToAssembly ?? base.movedToAssembly,
       isPresbyter: kept.isPresbyter ?? base.isPresbyter,
       phone: kept.phone ?? base.phone,
       email: kept.email ?? base.email,

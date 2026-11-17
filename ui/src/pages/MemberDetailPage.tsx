@@ -18,7 +18,6 @@ import {
 import {
   ArchiveRegular,
   ArrowUndoRegular,
-  ContactCardRegular,
   DeleteRegular,
   EditRegular,
 } from '@fluentui/react-icons';
@@ -51,23 +50,21 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
 import type { PageAction } from '../components/PageActions';
-import { contactLabel, memberLabel, memberLabelFromName } from '../format/member';
+import { memberLabel, memberLabelFromName } from '../format/member';
 import { isNotFoundError } from '../format/member-form';
+import { contactsAction } from '../overview/cards';
 import { MemberAttendanceTab } from './MemberAttendanceTab';
 import { errorMessage } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
-import { MemberMinistriesTab } from './MemberMinistriesTab';
 import { MemberOverviewTab } from './MemberOverviewTab';
-import { MemberRelationshipsTab } from './MemberRelationshipsTab';
 import { MemberShepherdingTab } from './MemberShepherdingTab';
 import { MemberSubscriptionsTab } from './MemberSubscriptionsTab';
 
-type MemberTab =
-  'overview' | 'attendance' | 'subscriptions' | 'ministries' | 'relationships' | 'shepherding';
+type MemberTab = 'overview' | 'attendance' | 'subscriptions' | 'shepherding';
 
 /**
  * Member-detail shell (FR-29): the header, actions, detail query and every
- * mutation, plus the six Fluent tabs. Tab bodies live in page-local siblings;
+ * mutation, plus the four Fluent tabs. Tab bodies live in page-local siblings;
  * shared dialogs (contacts, archive and purge) stay here.
  */
 export function MemberDetailPage() {
@@ -97,7 +94,7 @@ export function MemberDetailPage() {
   const ministriesQuery = useQuery({
     queryKey: ['ministries', baseUrl],
     queryFn: ({ signal }) => listMinistries(baseUrl, token, signal),
-    enabled: Boolean(token) && activeTab === 'ministries',
+    enabled: Boolean(token),
     staleTime: 5 * 60_000,
   });
 
@@ -289,6 +286,8 @@ export function MemberDetailPage() {
     );
   }
 
+  const contacts = contactsAction(member.contactCount);
+
   const actions: PageAction[] = [
     {
       id: 'edit',
@@ -298,13 +297,6 @@ export function MemberDetailPage() {
       onSelect: () => {
         navigate(`/members/${encodeURIComponent(memberNo)}/edit`);
       },
-    },
-    {
-      id: 'contacts',
-      kind: 'verb',
-      label: contactLabel(member.contactCount),
-      icon: <ContactCardRegular />,
-      onSelect: () => setContactsOpen(true),
     },
     isArchived
       ? {
@@ -340,7 +332,7 @@ export function MemberDetailPage() {
       sectionId="members"
       title={memberLabel(member)}
       submenu={member.memberNo}
-      description="Review the registration, attendance, ministries and coverage. Contacts open only from the explicit Contacts action."
+      description="Review the registration, attendance, ministries and coverage."
       actions={actions}
     >
       <div className={styles.page}>
@@ -353,23 +345,47 @@ export function MemberDetailPage() {
           </MessageBar>
         ) : null}
 
-        <TabList
-          selectedValue={activeTab}
-          onTabSelect={(_, data) => setActiveTab(data.value as MemberTab)}
-          data-testid="member-tabs"
-          aria-label="Member record sections"
-          className={styles.tabs}
-        >
-          <Tab value="overview">Overview</Tab>
-          <Tab value="attendance">Attendance</Tab>
-          <Tab value="subscriptions">Subscriptions</Tab>
-          <Tab value="ministries">Ministries</Tab>
-          <Tab value="relationships">Relationships</Tab>
-          <Tab value="shepherding">Shepherding</Tab>
-        </TabList>
+        <div className={styles.tabRow}>
+          <TabList
+            selectedValue={activeTab}
+            onTabSelect={(_, data) => setActiveTab(data.value as MemberTab)}
+            data-testid="member-tabs"
+            aria-label="Member record sections"
+            className={`${styles.tabs} ${styles.tabRowTabs}`}
+          >
+            <Tab value="overview">Overview</Tab>
+            <Tab value="attendance">Attendance</Tab>
+            <Tab value="subscriptions">Subscriptions</Tab>
+            <Tab value="shepherding">Shepherding</Tab>
+          </TabList>
+          <div className={styles.tabRowEnd}>
+            {contacts.show ? (
+              <Button appearance="primary" onClick={() => setContactsOpen(true)}>
+                {contacts.label}
+              </Button>
+            ) : (
+              <Text size={200} className={styles.muted}>
+                {contacts.label}
+              </Text>
+            )}
+          </div>
+        </div>
 
         <div className={styles.tabBody}>
-          {activeTab === 'overview' ? <MemberOverviewTab member={member} /> : null}
+          {activeTab === 'overview' ? (
+            <MemberOverviewTab
+              member={member}
+              ministries={ministriesQuery.data ?? []}
+              ministriesLoading={ministriesQuery.isFetching}
+              ministriesError={ministriesQuery.isError ? errorMessage(ministriesQuery.error) : null}
+              addMinistryMutation={addMinistryMutation}
+              removeMinistryMutation={removeMinistryMutation}
+              addRelationshipMutation={addRelationshipMutation}
+              removeRelationshipMutation={removeRelationshipMutation}
+              onInvalidate={invalidate}
+              onViewSubscriptions={() => setActiveTab('subscriptions')}
+            />
+          ) : null}
           {activeTab === 'attendance' ? <MemberAttendanceTab member={member} /> : null}
           {activeTab === 'subscriptions' ? (
             <MemberSubscriptionsTab
@@ -381,25 +397,6 @@ export function MemberDetailPage() {
               onInvalidate={invalidate}
               onActionError={setActionError}
               onClearActionError={() => setActionError(null)}
-            />
-          ) : null}
-          {activeTab === 'ministries' ? (
-            <MemberMinistriesTab
-              member={member}
-              ministries={ministriesQuery.data ?? []}
-              ministriesLoading={ministriesQuery.isFetching}
-              ministriesError={ministriesQuery.isError ? errorMessage(ministriesQuery.error) : null}
-              addMutation={addMinistryMutation}
-              removeMutation={removeMinistryMutation}
-              onInvalidate={invalidate}
-            />
-          ) : null}
-          {activeTab === 'relationships' ? (
-            <MemberRelationshipsTab
-              member={member}
-              addMutation={addRelationshipMutation}
-              removeMutation={removeRelationshipMutation}
-              onInvalidate={invalidate}
             />
           ) : null}
           {activeTab === 'shepherding' ? (

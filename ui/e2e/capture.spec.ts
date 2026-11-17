@@ -138,6 +138,28 @@ test('member detail', async ({ page }) => {
   await capture(page, 'member-detail');
 });
 
+test('member detail overview', async ({ page }) => {
+  await openScreen(page, '/members/M-1001', { width: 1440, height: 900 });
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Kwame Asante (Male, 41y)' }),
+  ).toBeVisible();
+  await capture(page, 'member-detail-overview');
+});
+
+test('member detail overview empty', async ({ page }) => {
+  await openScreen(page, '/members/M-1002', { width: 1440, height: 900 });
+  await expect(page.getByRole('heading', { level: 1, name: 'Ama Mensah' })).toBeVisible();
+  await capture(page, 'member-detail-overview-empty');
+});
+
+test('member detail overview narrow', async ({ page }) => {
+  await openScreen(page, '/members/M-1001', { width: 860, height: 900 });
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Kwame Asante (Male, 41y)' }),
+  ).toBeVisible();
+  await capture(page, 'member-detail-overview-narrow');
+});
+
 test('add member', async ({ page }) => {
   await openScreen(page, '/members/new', { width: 1440, height: 1400 });
   await expect(page.getByRole('heading', { level: 1, name: 'Add member' })).toBeVisible();
@@ -234,8 +256,7 @@ test('contacts dialog', async ({ page }) => {
 
 test('contacts editable', async ({ page }) => {
   await openScreen(page, '/members/M-1001', { width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+  await page.getByRole('button', { name: 'View Contacts (2)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();

@@ -8,8 +8,10 @@ import {
   fetchMemberDetail,
   listMinistries,
   subscribeMemberProduct,
+  updateMember,
   type MemberDetail,
   type MemberInput,
+  type MemberUpdateInput,
   type Ministry,
 } from '../api/members';
 import { listWelfareProducts, type WelfareProduct } from '../api/welfare';
@@ -74,6 +76,15 @@ const DETAIL: MemberDetail = {
   placeOfResidence: 'Tema',
   addressLine: '12 Harbour Road',
   joinedOn: '2019-03-03',
+  title: null,
+  membershipCardNo: null,
+  verifiedAt: null,
+  assemblyJoinedOn: '2019-03-03',
+  cameFrom: 'Accra Central',
+  movedOutOn: null,
+  movedToAssembly: null,
+  shepherd: null,
+  calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
   isPresbyter: true,
   archivedAt: null,
   purgedAt: null,
@@ -99,6 +110,7 @@ const DETAIL: MemberDetail = {
 
 const createMemberMock = vi.mocked(createMember);
 const fetchMemberDetailMock = vi.mocked(fetchMemberDetail);
+const updateMemberMock = vi.mocked(updateMember);
 const listMinistriesMock = vi.mocked(listMinistries);
 const subscribeMemberProductMock = vi.mocked(subscribeMemberProduct);
 const listWelfareProductsMock = vi.mocked(listWelfareProducts);
@@ -151,6 +163,8 @@ beforeEach(() => {
   createMemberMock.mockResolvedValue(DETAIL);
   fetchMemberDetailMock.mockReset();
   fetchMemberDetailMock.mockResolvedValue({ member: DETAIL, etag: '"v3"' });
+  updateMemberMock.mockReset();
+  updateMemberMock.mockResolvedValue(DETAIL);
   listMinistriesMock.mockReset();
   listMinistriesMock.mockResolvedValue(MINISTRIES);
   listWelfareProductsMock.mockReset();
@@ -369,5 +383,71 @@ describe('MemberFormPage subscription (FR-29a, AC-52)', () => {
     // Opening the record is the only remaining way out of the form.
     await user.click(openRecord);
     expect(await screen.findByRole('button', { name: 'Save changes' })).toBeVisible();
+  });
+});
+
+describe('MemberFormPage membership (FR-29)', () => {
+  it('sends the four membership fields on create, and null for a blank one', async () => {
+    const user = userEvent.setup();
+    renderForm('/members/new');
+
+    await user.type(field('Member number'), 'M-1009');
+    await user.type(field('First name'), 'Kofi');
+    await user.type(field('Last name'), 'Mensah');
+    await user.type(field('Assembly joined'), '2018-02-04');
+    await user.type(field('Came from'), 'Kumasi Central');
+    await user.type(field('Moved out'), '2021-06-30');
+    await user.type(field('Moved to'), 'Accra North');
+    await user.click(screen.getByRole('button', { name: 'Create member' }));
+
+    await waitFor(() => expect(createMemberMock).toHaveBeenCalledTimes(1));
+    const body = createMemberMock.mock.calls[0]?.[2] as MemberInput;
+    expect(body).toMatchObject({
+      assemblyJoinedOn: '2018-02-04',
+      cameFrom: 'Kumasi Central',
+      movedOutOn: '2021-06-30',
+      movedToAssembly: 'Accra North',
+    });
+  });
+
+  it('leaves the assembly join date empty and submits nulls for the four fields', async () => {
+    const user = userEvent.setup();
+    renderForm('/members/new');
+
+    // FR-29: no default; the operator must record it or leave it blank.
+    expect(field('Assembly joined')).toHaveValue('');
+
+    await user.type(field('Member number'), 'M-1009');
+    await user.type(field('First name'), 'Kofi');
+    await user.type(field('Last name'), 'Mensah');
+    await user.click(screen.getByRole('button', { name: 'Create member' }));
+
+    await waitFor(() => expect(createMemberMock).toHaveBeenCalledTimes(1));
+    const body = createMemberMock.mock.calls[0]?.[2] as MemberInput;
+    expect(body).toMatchObject({
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+    });
+  });
+
+  it('prefills the membership fields on edit and sends only the changed one', async () => {
+    const user = userEvent.setup();
+    renderForm('/members/M-1001');
+
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeVisible();
+    expect(field('Assembly joined')).toHaveValue('2019-03-03');
+    expect(field('Came from')).toHaveValue('Accra Central');
+    expect(field('Moved out')).toHaveValue('');
+    expect(field('Moved to')).toHaveValue('');
+
+    await user.clear(field('Came from'));
+    await user.type(field('Came from'), 'Tema New Town');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMemberMock).toHaveBeenCalledTimes(1));
+    const body = updateMemberMock.mock.calls[0]?.[3] as MemberUpdateInput;
+    expect(body).toEqual({ cameFrom: 'Tema New Town' });
   });
 });
