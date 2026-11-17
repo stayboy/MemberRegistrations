@@ -17,6 +17,12 @@ export default defineConfig({
     // a DOM test needs room, not speed.
     testTimeout: 15000,
     hookTimeout: 20000,
+    // jsdom rendering is CPU-bound: running files in parallel starves the render and
+    // makes an async query lose to the 1 s Testing Library budget, which failed
+    // SessionHeadcount's dialog query under load while the same test passed alone
+    // (owner ruling 2026-11-17). Serial costs about thirty extra seconds and makes
+    // the lane deterministic locally and in CI.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

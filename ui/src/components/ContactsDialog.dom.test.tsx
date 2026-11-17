@@ -1,10 +1,21 @@
 import { ShieldLockRegular } from '@fluentui/react-icons';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/errors';
-import { addContact, type MemberContact, type MemberDetail } from '../api/members';
-import { renderWithProviders } from '../test/render';
+import {
+  addContact,
+  fetchMemberDetail,
+  linkContact,
+  listMembers,
+  removeContact,
+  unlinkContact,
+  updateContact,
+  type MemberContact,
+  type MemberDetail,
+  type MemberSummary,
+} from '../api/members';
+import { createTestQueryClient, renderWithProviders } from '../test/render';
 import { ContactsDialog, type ContactsDialogMember } from './ContactsDialog';
 
 /**
@@ -15,7 +26,9 @@ import { ContactsDialog, type ContactsDialogMember } from './ContactsDialog';
  * with the owner/linked status at each row's right. AC-53 is pinned the other
  * way: the read-only dialog offers no add, remove, copy or edit control, and the
  * editable one puts the add row above the list with its failure directly under
- * that row.
+ * that row, an owned row's Edit/Remove, and a linked row's Unlink. AC-54 is the
+ * 409 link offer this file also drives: the owner resolved through the `contact`
+ * filter, the link confirmed, and no owner record left in the query cache.
  */
 
 /** Spelled out, not imported: the assertion is the spec's text, not the constant. */
@@ -24,6 +37,13 @@ const PRIVACY_NOTE =
 
 const OWNERSHIP_INFO =
   'Owned values belong to this member. Linked values are shared from another member and stay with its owner.';
+
+/** FR-78 words the offer; this test spells it out rather than importing it. */
+const LINK_OFFER = "Link the household's value";
+
+/** FR-78's cascade wording: this member and every member who shares the value. */
+const REMOVE_MESSAGE =
+  'This value is removed from this member and from every member who shares it.';
 
 const MEMBER: ContactsDialogMember = {
   memberNo: 'M-1001',
@@ -103,13 +123,86 @@ const DETAIL: MemberDetail = {
   attendance: [],
 };
 
+/** The other member the `contact` filter returns, read only to resolve an owner. */
+const OWNER: MemberDetail = {
+  ...DETAIL,
+  id: 'member-1002',
+  memberNo: 'M-1002',
+  firstName: 'Ama',
+  lastName: 'Mensah',
+  gender: 'female',
+  age: null,
+  ageMonths: null,
+  isPresbyter: false,
+  dob: null,
+  contacts: [
+    {
+      id: 'contact-1002-phone',
+      kind: 'phone',
+      value: '+233 20 000 0002',
+      displayOrder: 0,
+      ownerMemberNo: 'M-1002',
+      linked: false,
+    },
+    {
+      id: 'contact-1002-email',
+      kind: 'email',
+      value: 'ama.mensah@example.test',
+      displayOrder: 0,
+      ownerMemberNo: 'M-1002',
+      linked: false,
+    },
+  ],
+  contactCount: 2,
+};
+
+const OWNER_SUMMARY: MemberSummary = {
+  memberNo: 'M-1002',
+  firstName: 'Ama',
+  lastName: 'Mensah',
+  otherNames: null,
+  gender: 'female',
+  age: null,
+  ageMonths: null,
+  placeOfResidence: 'Accra',
+  joinedOn: '2020-07-19',
+  isPresbyter: false,
+  archivedAt: null,
+  contactCount: 2,
+  ministries: [],
+};
+
+/** The dialog's own member, returned by the filter for a value it already owns. */
+const SELF_SUMMARY: MemberSummary = {
+  memberNo: 'M-1001',
+  firstName: 'Kwame',
+  lastName: 'Asante',
+  otherNames: null,
+  gender: 'male',
+  age: 41,
+  ageMonths: 492,
+  placeOfResidence: 'Tema',
+  joinedOn: '2019-03-03',
+  isPresbyter: true,
+  archivedAt: null,
+  contactCount: CONTACTS.length,
+  ministries: [],
+};
+
+/** The owner line the offer renders: the label plus the member number, nothing else. */
+const OWNER_LINE = 'Owned by Ama Mensah (Female) · M-1002';
+
 vi.mock('../api/members', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/members')>();
   return {
     ...actual,
-    fetchMemberDetail: vi.fn(async () => ({ member: DETAIL, etag: null })),
+    fetchMemberDetail: vi.fn(),
     addContact: vi.fn(),
+    updateContact: vi.fn(),
     removeContact: vi.fn(),
+    linkContact: vi.fn(),
+    unlinkContact: vi.fn(),
+    listMembers: vi.fn(),
   };
 });
 
@@ -124,6 +217,16 @@ vi.mock('../api/gateway', async (importOriginal) => {
       actorId: 'efua',
     })),
   };
+});
+
+beforeEach(() => {
+  // The component's own detail read and the owner resolution share one function;
+  // the resolution asks for the other member, so the fixture answers by number.
+  vi.mocked(fetchMemberDetail).mockImplementation(async (_baseUrl, _token, memberNo) => ({
+    member: memberNo === 'M-1002' ? OWNER : DETAIL,
+    etag: null,
+  }));
+  vi.mocked(listMembers).mockResolvedValue({ items: [] });
 });
 
 function renderDialog(editable = false) {
@@ -278,6 +381,8 @@ describe('ContactsDialog read-only list (FR-78, AC-47)', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByLabelText('Kind')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Remove / })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Edit / })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Unlink / })).toBeNull();
 
     // The title's "no copy" claim: FR-78 makes the list dialog reveal-only, so
     // neither a copy control nor any copy affordance may exist.
@@ -287,11 +392,14 @@ describe('ContactsDialog read-only list (FR-78, AC-47)', () => {
     // Status stays on the rows while its actions do not.
     expect(screen.getAllByText('Owned')).toHaveLength(3);
     expect(screen.getByText('Linked · M-1002')).toBeInTheDocument();
+    // Not one row action of any kind, including inside the rows themselves.
+    const rows = screen.getAllByRole('listitem');
+    for (const row of rows) expect(within(row).queryAllByRole('button')).toHaveLength(0);
   });
 });
 
-describe('ContactsDialog editable list (FR-78, AC-53)', () => {
-  it('puts the add row above the list, Remove on owned rows only, and a failed add under the row', async () => {
+describe('ContactsDialog editable list (FR-78, AC-53, AC-54)', () => {
+  it('puts the add row above the list, two named actions on an owned row and Unlink on a linked one', async () => {
     const user = userEvent.setup();
     renderDialog(true);
 
@@ -314,36 +422,322 @@ describe('ContactsDialog editable list (FR-78, AC-53)', () => {
       'the list follows the add row',
     ).toBeTruthy();
 
-    // AC-53: Remove stays on the rows this member owns, and it is the row's only
-    // control — presence alone would let an extra per-row edit or reorder button
-    // ride beside it, so the owned row's button set is pinned to Remove.
+    // AC-53/FR-78: an owned row carries exactly two icon actions, each named with
+    // its verb, its kind and its value; the linked row carries Unlink and nothing
+    // else, so no Remove reaches a value this member does not own.
     const rows = within(list).getAllByRole('listitem');
-    for (const value of ['+233 20 000 0001', '+233 20 000 0004', 'kwame.asante@example.test']) {
+    for (const [value, kind] of [
+      ['+233 20 000 0001', 'phone'],
+      ['+233 20 000 0004', 'phone'],
+      ['kwame.asante@example.test', 'email'],
+    ] as const) {
       const row = rows.find((candidate) => candidate.textContent?.includes(value));
       expect(row, `an owned row for ${value}`).toBeDefined();
       const owned = row as HTMLElement;
-      expect(within(owned).getAllByRole('button'), `one control for ${value}`).toHaveLength(1);
+      const buttons = within(owned).getAllByRole('button');
+      expect(buttons, `two controls for ${value}`).toHaveLength(2);
       expect(
-        within(owned).getByRole('button', { name: `Remove ${value}` }),
-        `the owned row's only control is its Remove button`,
+        within(owned).getByRole('button', { name: `Edit ${kind} ${value}` }),
+        `the owned row's first control edits it`,
+      ).toBeInTheDocument();
+      expect(
+        within(owned).getByRole('button', { name: `Remove ${kind} ${value}` }),
+        `the owned row's second control removes it`,
       ).toBeInTheDocument();
     }
     const linkedRow = rows.find((candidate) => candidate.textContent?.includes('+233 20 000 0009'));
     expect(linkedRow, 'the linked row renders').toBeDefined();
-    expect(within(linkedRow as HTMLElement).queryAllByRole('button')).toHaveLength(0);
+    const linkedButtons = within(linkedRow as HTMLElement).getAllByRole('button');
+    expect(linkedButtons).toHaveLength(1);
+    expect(
+      within(linkedRow as HTMLElement).getByRole('button', {
+        name: 'Unlink whatsapp +233 20 000 0009',
+      }),
+    ).toBeInTheDocument();
 
     // AC-53: a rejected add shows under the input row and keeps the entered value.
-    const duplicate = new ApiError(409, 'Another member already owns +233 20 000 0004.');
+    const duplicate = new ApiError(
+      409,
+      'Contact value "+233 20 000 0004" already belongs to a member',
+    );
     vi.mocked(addContact).mockRejectedValueOnce(duplicate);
     await user.type(input, '+233 20 000 0004');
     await user.click(add);
 
-    const failure = await screen.findByText('Another member already owns +233 20 000 0004.');
+    const failure = await screen.findByText(
+      'Contact value "+233 20 000 0004" already belongs to a member',
+    );
     expect(input).toHaveValue('+233 20 000 0004');
     expect(vi.mocked(addContact)).toHaveBeenCalledTimes(1);
     expect(
       sitsDirectlyBelow(input.parentElement?.parentElement ?? null, failure),
       'the failed add renders directly under the input row',
     ).toBe(true);
+  });
+
+  it('edits a value in place and saves { value } only', async () => {
+    const user = userEvent.setup();
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.click(
+      await within(dialog).findByRole('button', { name: 'Edit phone +233 20 000 0001' }),
+    );
+
+    // FR-78: the row becomes the add row's one-row form, the value prefilled, with
+    // Save and Cancel - kind and displayOrder stay uneditable, so no kind control.
+    const editInput = within(dialog).getByRole('textbox', { name: 'Edit contact value' });
+    expect(editInput).toHaveValue('+233 20 000 0001');
+    const save = within(dialog).getByRole('button', { name: 'Save' });
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    const editingRow = within(dialog)
+      .getAllByRole('listitem')
+      .find((candidate) =>
+        within(candidate).queryByRole('textbox', { name: 'Edit contact value' }),
+      );
+    expect(editingRow, 'the edit form sits in the row').toBeDefined();
+    expect(within(editingRow as HTMLElement).queryByRole('combobox')).toBeNull();
+
+    vi.mocked(updateContact).mockResolvedValueOnce({
+      ...CONTACTS[3]!,
+      value: '+233 24 555 0101',
+    });
+    await user.clear(editInput);
+    await user.type(editInput, '+233 24 555 0101');
+    await user.click(save);
+
+    // The body is `{ value }` and nothing else: kind and displayOrder never ride it.
+    expect(vi.mocked(updateContact)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(updateContact)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'M-1001',
+      'contact-1001-phone-first',
+      { value: '+233 24 555 0101' },
+    );
+    // Success returns the row to display: the edit form is gone.
+    await waitFor(() =>
+      expect(within(dialog).queryByRole('textbox', { name: 'Edit contact value' })).toBeNull(),
+    );
+  });
+
+  it('keeps the typed value and shows a failed save under its row', async () => {
+    const user = userEvent.setup();
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.click(
+      await within(dialog).findByRole('button', { name: 'Edit phone +233 20 000 0001' }),
+    );
+    const editInput = within(dialog).getByRole('textbox', { name: 'Edit contact value' });
+
+    const duplicate = new ApiError(
+      409,
+      'Contact value "+233 20 000 0004" already belongs to a member',
+    );
+    vi.mocked(updateContact).mockRejectedValueOnce(duplicate);
+    await user.clear(editInput);
+    await user.type(editInput, '+233 20 000 0004');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    const failure = await screen.findByText(
+      'Contact value "+233 20 000 0004" already belongs to a member',
+    );
+    // FR-78: the entered value is kept and the message lands under that row.
+    expect(editInput).toHaveValue('+233 20 000 0004');
+    const row = within(dialog)
+      .getAllByRole('listitem')
+      .find((candidate) =>
+        within(candidate).queryByRole('textbox', { name: 'Edit contact value' }),
+      );
+    expect(row, 'the editing row is still the list item').toBeDefined();
+    expect(row, 'the failure belongs to the editing row').toContainElement(failure);
+    const order = editInput.compareDocumentPosition(failure) ?? 0;
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING, 'the message follows the input').toBeTruthy();
+  });
+
+  it('confirms Remove with the cascade wording and no count', async () => {
+    const user = userEvent.setup();
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.click(
+      await within(dialog).findByRole('button', { name: 'Remove phone +233 20 000 0001' }),
+    );
+
+    // FR-78: the title names the value, the body names the cascade, and no count.
+    const confirm = await screen.findByRole('dialog', { name: 'Remove +233 20 000 0001?' });
+    const body = within(confirm).getByText(REMOVE_MESSAGE);
+    expect(body).toBeInTheDocument();
+    expect(body.textContent, 'the confirmation carries no count').not.toMatch(/\d/);
+    expect(within(confirm).getByRole('button', { name: 'Remove contact' })).toBeInTheDocument();
+    expect(vi.mocked(removeContact)).not.toHaveBeenCalled();
+  });
+
+  it('resolves the 409 owner and links the household value without caching the owner', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listMembers).mockResolvedValueOnce({ items: [OWNER_SUMMARY] });
+    vi.mocked(linkContact).mockResolvedValueOnce({
+      id: 'contact-1002-phone',
+      kind: 'phone',
+      value: '+233 20 000 0002',
+      displayOrder: 0,
+      ownerMemberNo: 'M-1002',
+      linked: true,
+    });
+    const client = createTestQueryClient();
+    renderWithProviders(<ContactsDialog member={MEMBER} open onOpenChange={vi.fn()} editable />, {
+      client,
+    });
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Contact value' }),
+      '+233 20 000 0002',
+    );
+    vi.mocked(addContact).mockRejectedValueOnce(
+      new ApiError(409, 'Contact value "+233 20 000 0002" already belongs to a member'),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    // AC-54: the offer names the owner and its member number.
+    expect(await screen.findByText(OWNER_LINE)).toBeInTheDocument();
+    const link = within(dialog).getByRole('button', { name: LINK_OFFER });
+
+    // The owner was found through the existing contact filter, not a new endpoint.
+    expect(vi.mocked(listMembers)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ contact: '+233 20 000 0002' }),
+    );
+    // NFR-4: nothing else from the owner's record is rendered…
+    expect(screen.queryByText('ama.mensah@example.test')).toBeNull();
+    // …and the direct read left no member query entry behind.
+    const cached = client
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.queryKey);
+    expect(cached.some((key) => Array.isArray(key) && key.includes('M-1002'))).toBe(false);
+    // Positive control: the dialog's own member is in that same cache, so the
+    // negative above cannot pass on a mis-wired client.
+    expect(cached.some((key) => Array.isArray(key) && key.includes('M-1001'))).toBe(true);
+
+    await user.click(link);
+    expect(vi.mocked(linkContact)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'M-1001',
+      'contact-1002-phone',
+    );
+    // The offer is spent and the add row is clear for the next value.
+    await waitFor(() =>
+      expect(within(dialog).queryByRole('button', { name: LINK_OFFER })).toBeNull(),
+    );
+    expect(within(dialog).getByRole('textbox', { name: 'Contact value' })).toHaveValue('');
+  });
+
+  it('keeps the plain inline error and offers no link when the owner does not resolve', async () => {
+    const user = userEvent.setup();
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Contact value' }),
+      '+233 20 000 0002',
+    );
+    vi.mocked(addContact).mockRejectedValueOnce(
+      new ApiError(409, 'Contact value "+233 20 000 0002" already belongs to a member'),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    expect(
+      await screen.findByText('Contact value "+233 20 000 0002" already belongs to a member'),
+    ).toBeInTheDocument();
+    // The filter ran and found nobody who owns the value: no offer, error only.
+    await waitFor(() => expect(vi.mocked(listMembers)).toHaveBeenCalledTimes(1));
+    expect(within(dialog).queryByRole('button', { name: LINK_OFFER })).toBeNull();
+    expect(within(dialog).getByRole('textbox', { name: 'Contact value' })).toHaveValue(
+      '+233 20 000 0002',
+    );
+  });
+
+  it('makes no offer when the duplicate value is one this member already owns', async () => {
+    const user = userEvent.setup();
+    // The filter returns the dialog's own member; its row would be `linked: false`,
+    // but the offer is for a value "owned by another member" (FR-78).
+    vi.mocked(listMembers).mockResolvedValueOnce({ items: [SELF_SUMMARY] });
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Contact value' }),
+      '+233 20 000 0001',
+    );
+    vi.mocked(addContact).mockRejectedValueOnce(
+      new ApiError(409, 'Contact value "+233 20 000 0001" already belongs to a member'),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    expect(
+      await screen.findByText('Contact value "+233 20 000 0001" already belongs to a member'),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(vi.mocked(listMembers)).toHaveBeenCalledTimes(1));
+    expect(within(dialog).queryByRole('button', { name: LINK_OFFER })).toBeNull();
+    // The member's own record is not re-read to "resolve" itself.
+    expect(vi.mocked(fetchMemberDetail)).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the offer and puts a failed link beneath it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listMembers).mockResolvedValueOnce({ items: [OWNER_SUMMARY] });
+    vi.mocked(linkContact).mockRejectedValueOnce(
+      new ApiError(409, 'This contact is already linked'),
+    );
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Contact value' }),
+      '+233 20 000 0002',
+    );
+    vi.mocked(addContact).mockRejectedValueOnce(
+      new ApiError(409, 'Contact value "+233 20 000 0002" already belongs to a member'),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    await screen.findByText(OWNER_LINE);
+    await user.click(within(dialog).getByRole('button', { name: LINK_OFFER }));
+
+    // FR-78: the offer stays and the failure sits beneath it.
+    expect(await within(dialog).findByText('This contact is already linked')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: LINK_OFFER })).toBeInTheDocument();
+    expect(within(dialog).getByText(OWNER_LINE)).toBeInTheDocument();
+  });
+
+  it('closes a failed Unlink confirmation and shows the action error above the list', async () => {
+    const user = userEvent.setup();
+    vi.mocked(unlinkContact).mockRejectedValueOnce(new Error('The link could not be removed.'));
+    renderDialog(true);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
+    await user.click(
+      await within(dialog).findByRole('button', { name: 'Unlink whatsapp +233 20 000 0009' }),
+    );
+    const confirm = await screen.findByRole('dialog', { name: 'Unlink +233 20 000 0009?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Unlink' }));
+
+    // FR-78: the confirmation closes, the list is unchanged, the action error is
+    // above the list and the row still offers Unlink.
+    expect(await screen.findByText('The link could not be removed.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Unlink +233 20 000 0009?' })).toBeNull();
+    expect(
+      within(dialog).getByRole('button', { name: 'Unlink whatsapp +233 20 000 0009' }),
+    ).toBeInTheDocument();
+    expect(vi.mocked(unlinkContact)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'M-1001',
+      'contact-1001-whatsapp',
+    );
   });
 });

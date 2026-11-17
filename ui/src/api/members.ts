@@ -460,6 +460,61 @@ export async function addContact(
   return contact;
 }
 
+/**
+ * `contactInputSchema.partial()`: this cycle edits the value and nothing else
+ * (FR-78), so kind and `displayOrder` cannot ride the request.
+ */
+export interface ContactUpdateInput {
+  readonly value: string;
+}
+
+/** `PUT /v1/members/:memberNo/contacts/:contactId` with `{ value }` only (FR-78). */
+export async function updateContact(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  contactId: string,
+  input: ContactUpdateInput,
+): Promise<MemberContact> {
+  const contact = await gatewayRequest<MemberContact>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/contacts/${encodeURIComponent(contactId)}`,
+    { method: 'PUT', body: input, sessionToken },
+  );
+  if (!contact) throw new ApiError(500, 'The updated contact response was empty.');
+  return contact;
+}
+
+/** `POST /v1/members/:memberNo/contacts/link` with `{ contactId }` (FR-78, AC-54). */
+export async function linkContact(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  contactId: string,
+): Promise<MemberContact> {
+  const contact = await gatewayRequest<MemberContact>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/contacts/link`,
+    { method: 'POST', body: { contactId }, sessionToken },
+  );
+  if (!contact) throw new ApiError(500, 'The linked contact response was empty.');
+  return contact;
+}
+
+/** `DELETE /v1/members/:memberNo/contacts/link/:contactId`; 204, the value stays with its owner. */
+export async function unlinkContact(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  contactId: string,
+): Promise<void> {
+  await gatewayRequest(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/contacts/link/${encodeURIComponent(contactId)}`,
+    { method: 'DELETE', sessionToken },
+  );
+}
+
 export async function removeContact(
   baseUrl: string,
   sessionToken: string,

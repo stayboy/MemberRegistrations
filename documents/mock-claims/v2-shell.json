@@ -992,7 +992,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "5.8 States and errors",
-        "quote": "the Remove action stays on each row this member owns"
+        "quote": "Each row this member owns carries two icon-only subtle Fluent buttons"
       },
       "control": "spec"
     },
@@ -1016,7 +1016,7 @@
       "id": "CE-NO-REORDER",
       "story": "CT-DIALOG",
       "state": "18-contacts-editable",
-      "claim": "Move-up / move-down reorder controls on a row.",
+      "claim": "A reorder control on a row.",
       "expect": "ABSENT",
       "class": "spec-required",
       "anchorKind": "prose",
@@ -1024,7 +1024,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "5.8 States and errors",
-        "quote": "reorder control or per-row edit control"
+        "quote": "no reorder control"
       },
       "control": "spec"
     }

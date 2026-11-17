@@ -85,13 +85,28 @@ and the parent's own context is the one that already knows what it meant.
 The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the parent verifies every result.
 One brief authorises one verb; the seat never infers consent.
 Consent is `AGENTS.md` section 9's and section 17's, never the budget's: a round's git spend is capped at **12 briefs by default**, the round doc states the arithmetic at open (`1 branch + N commits + 1 push + 1 pr + 1 merge`), and a `git-seat-budget:` line may only lower that default or raise it, with `0` parking every verb.
-Auto-accept never sets a number, and with no line the default applies — the metered default is contingent on the next sentence, not a substitute for it.
+Auto-accept never sets a number: **the parent writes the default into the round doc's `git-seat-budget:` line at open**, a metered brief that carries no amount is refused, and nothing else infers the amount (owner, 2026-11-17).
 The round doc declares `Verbs this round needs:` at open and the owner's go names them, so the brief quotes an approval that contains the verb by construction.
 `branch` MAY be cut when every modified or untracked path is this round's own `documents/rounds/<slug>.md`, and that file MUST appear in the round's first commit; any other dirty path refuses.
 Every write names its actor in the round doc's per-write table — `git-executor rung 1`, `git-executor rung 2` or `parent`, a parent row carrying its reason — with a `fallbackReason` on every switch, and each seat commit carries a `Model-Seat` trailer.
 A `shell-permission-denied` result is retried **once, never after a refusal**, and the retry is recorded in the `RESULT` line.
 Unavailability is a provider auth or model-not-found, HTTP 4xx/5xx, HTTP 429, a timed-out tool call, a prose-only response, a context/output cap too small for the brief, or an empty/refusal response.
 The seat is off when `.opencode/agents/git-executor.md` is absent; the fallback file alone is not a live seat, and git returns to the parent.
+
+**One owner per seat rule (owner, 2026-11-17).** A rule stated twice drifts, and the drift is found at first use - a refused brief, a chain that stops.
+Each rule therefore has exactly one home, and every other file points at it.
+
+| Rule                                                                                                                        | Owner                                   | Must not restate it                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| What a verb authorises, and the `merge` chain                                                                               | `.github/merge-policy.md`               | this file, `AGENTS.md`, the seat files                                                                              |
+| A brief's shape (verb, `branch`, `files`, `message`, `tree`, `checks`)                                                      | the seat files                          | `.github/merge-policy.md`, which points at them                                                                     |
+| A round's budget amount                                                                                                     | the round doc's `git-seat-budget:` line | this file states only the default; `AGENTS.md` points here; the seat files refuse without the line                  |
+| The default (12 briefs), the `0`-parks rule, the single retry, the `Actor` column, the probe and the replacement thresholds | this file                               | `.github/merge-policy.md` and `AGENTS.md` point here; the seat files carry only the refusal and the retry mechanics |
+| The model ids and their candidates                                                                                          | `documents/agents/seats.json`           | every protected document                                                                                            |
+
+**A drift is asymmetric (owner, 2026-11-17).** A **widening** drift - a file permitting a verb, a spend or a read that another file forbids - blocks the next git verb until the text is fixed and, where it is protected, re-reviewed.
+A **narrowing** drift - a stale example, a thinner sentence - is a note fixed the next time that file is touched.
+The hash tripwire proves the reviewed text landed; it never proves two files agree, so a round that changes any seat rule adds a Verification row saying the seat files and `.github/merge-policy.md` were re-read against the new paragraph, and `tests/meta/seat-rule-agreement.test.ts` asserts the split itself: this file carries the default, the `0`-parks rule and the retry; the seat files carry the refusal literal and no default; `.github/merge-policy.md` carries the pointer and no arithmetic.
 
 The reviewer is the `reviewer-pro` class — its first candidate is the one `AGENTS.md` section 10a pins
 by name, and the window moves it — wherever a tier has an independent review. The gate

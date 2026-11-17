@@ -68,8 +68,7 @@ rules below and the parent's post-action verification are the real control.
 ## Budget - refuse without it
 
 The brief must state the round's budget as `git-seat-budget: <amount>` - the amount the round doc
-declares, or `12` when it declares none (the standing default in
-`documents/agents/orchestrator-policy.md`). `git-seat-budget: 0` parks every verb: return
+declares. Never infer a default. `git-seat-budget: 0` parks every verb: return
 `REFUSED: budget parks this round`. Without any amount in the brief, return
 `REFUSED: no git-seat-budget` and do not run an action the parent has not declared inside the budget.
 
