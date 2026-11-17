@@ -326,7 +326,9 @@ deployed to Vercel as a single function.
   (`.xlsx`) template for download; a client that cannot take the file MUST be able to show the same
   column list inline.
 - FR-31: `GET /v1/members` MUST return `contactCount` instead of contact values; contact values are
-  readable only through the member detail or the contacts endpoints.
+  readable only through the member detail, which the contacts dialog reads with the query issued only
+  while that dialog is open (UI spec FR-78, as amended on 2026-11-16: the contacts-only `GET` this line
+  used to name was never built).
 - FR-31a: The `q` parameter of `GET /v1/members` MUST match only member number and name parts (first,
   last, other names, alias, maiden name), case-insensitively; it MUST NOT match owned or linked
   contact values. Contact-value lookup is the separate `contact` filter.
@@ -1727,3 +1729,7 @@ exists`) is retained**, so the `true` requirements apply only once a future aggr
 - **2026-11-04** — Spec-first for ticket 13a: `GET /v1/members` returns `contactCount` instead of
   contact values, supports `status=active|archived`, and adds page-level `include=attendance&seriesId=`
   and `include=subscriptions` aggregates.
+- **2026-11-16** - Corrects FR-31 to what ships: the contacts-only
+  `GET /v1/members/{memberNo}/contacts` was never added, so contact values are readable only through
+  the member detail, which the UI's contacts dialog reads with the query issued only while that dialog
+  is open (UI spec FR-78, amended the same day).

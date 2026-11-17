@@ -21,11 +21,12 @@ delta: what this repository enables, the gates it runs, and what it deliberately
 The skill catalogues the Tier 3 seats for repos that enable them; this policy disables the tier.
 
 **Spec review (all tiers).** Every behavioural spec, new or amended, is reviewed by a **separate**
-`ollama-cloud/deepseek-v4-pro:0813` session - never the author - **before the implementer builds
-against it** (the worker, at every tier). The procedure is the canonical skill's
-Procedure step 1b; this paragraph records the repo's model choice and record.
-`cline-pass/cline-pass/mimo-v2.6-pro` is admissible in the 12:00–18:00 local window or when no
-provider answers 0813, with the basis recorded. The verdict and the reviewed revision go
+session of the `reviewer-pro` class - never the author - **before the implementer builds against it**
+(the worker, at every tier). The class's first candidate is the one `AGENTS.md` section 10a pins by name
+(`deepseek-v4-pro` build `0813` outside the 12:00–18:00 local window, and `mimo-v2.6-pro` on whichever
+provider answers inside it), and a fallback states its basis. The procedure is the canonical skill's
+Procedure step 1b; this paragraph records the repo's model choice and record. The verdict and the
+reviewed revision go
 in the spec's status line plus the round doc, or the commit body at Tier 0. A typo, formatting or
 clarifying edit keeps only its changelog line. This is separate from the plan gate and the code review:
 the spec is the contract the implementer reads, so it is reviewed before the work starts, not after it
@@ -33,24 +34,40 @@ lands.
 
 ## Seats
 
-Model ranking is a repo instruction: use the first available model in each seat's list, and record the
-unavailable first choice and the chosen fallback in the round doc (the commit body at Tier 0) when the
-fallback is used. The fallback is standing-approved for these seats (owner, 2026-11-08); it is not a
+Model ranking is a repo instruction: use the first available candidate in each class's list, and record
+the unavailable first choice and the chosen candidate in the round doc (the commit body at Tier 0) when
+a fallback is used. The fallback is standing-approved for these seats (owner, 2026-11-08); it is not a
 renegotiation of the gate. This supersedes the earlier "a fallback needs the owner's recorded approval":
 the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00 local the
-reviewer / plan-gate / spec-review / acceptance seat is `cline-pass/cline-pass/mimo-v2.6-pro` (owner,
-2026-11-09); outside that window the ranking applies. The same window moves the **grill-me** seat to
-the cline-pass provider for the same model (`cline-pass/cline-pass/deepseek-v4.1-flash-1017`) (owner,
-2026-11-11). From 2026-11-13 the **worker** seat follows the window too, on the same provider rule, and
-no other seat is clocked. An explicit owner override for a named round beats any ranking here, and the
+reviewer / plan-gate / spec-review / acceptance class moves to `mimo-v2.6-pro` on whichever configured
+provider answers (owner, 2026-11-09); outside that window the ranking applies. The same window moves the
+**grill-me** class to the cline-pass provider for the same model (owner, 2026-11-11). From 2026-11-13 the
+**worker** class follows the window too, on the same provider rule, and no other class is clocked. An
+explicit owner override for a named round beats any ranking here, and the
 round doc records it.
 
-| Seat                                                                                                | Ranked models (first available wins)                                                                                                                                                                                                                                                                |
-| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker (implements at every tier; reviews a Tier 0 change)                                          | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
-| Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4-pro:0813`; 2. `mimo-v2.6-pro` on whichever configured provider answers. Inside it: 1. `mimo-v2.6-pro` on whichever configured provider answers (`cline-pass` first, `ollama-cloud` as the fallback); 2. `ollama-cloud/deepseek-v4-pro:0813` |
-| Grill-me (every round that opens one)                                                               | Outside 12:00–18:00 local: 1. `ollama-cloud/deepseek-v4.1-flash:1017`; 2. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Inside it: 1. `cline-pass/cline-pass/deepseek-v4.1-flash-1017`; 2. `ollama-cloud/deepseek-v4.1-flash:1017`                                                              |
-| Git executor (all git writes)                                                                       | 1. `opencode/beam-free`; 2. `ollama-cloud/mimo-v2.6-flash`                                                                                                                                                                                                                                          |
+| Seat                                                                                                | Class (ranked candidates live in `documents/agents/seats.json`)                                                                                            |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker (implements at every tier; reviews a Tier 0 change)                                          | `worker-flash` — windowed: inside 12:00–18:00 local the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last |
+| Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | `reviewer-pro` — windowed, and **its first candidate is pinned by name in `AGENTS.md` section 10a**; three candidates, the metered rungs last              |
+| Grill-me (every round that opens one)                                                               | `grill-flash` — windowed: inside the window the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last         |
+| Git executor (all git writes)                                                                       | `git-executor` — a free provider first, then the metered rungs; every metered brief draws on the round's brief cap                                         |
+
+**Capability classes (owner, 2026-11-17).** The table names classes; the class-to-model mapping lives in
+`documents/agents/seats.json`, which is not review-gated, so refreshing a candidate that disappeared is
+one mapping edit instead of a protected-document pass - **except** where a protected document pins a
+model by name: `AGENTS.md` section 10a pins `reviewer-pro`'s first candidate, so changing that candidate
+in `seats.json` is itself a review-gated step under section 10a. The mapping keeps three candidates per
+class, the metered rungs last, and one `probedAt` date per class.
+
+**Seat health is probed once per round (owner, 2026-11-17).** At round open the parent probes each
+class's first candidate once - a one-line dispatch - and records the outcome in the round doc's Seats
+table; that result holds for the local day, so a candidate that answered `model not found`, or a free
+provider that answered "Free usage limit reached", is not retried all day, and a recovered one is used
+again tomorrow. The probe is the day's first observation. A candidate whose **real dispatch** then fails
+in the same day - two observations in all - is replaced in `documents/agents/seats.json` at the round's
+end, with the substitution recorded in the round doc; two consecutive days of the same failure make the
+replacement the owner's decision rather than the round's.
 
 **A worker at every tier (owner, 2026-11-16).** The worker seat implements at Tier 0-1 as well as
 Tier 2, on the ranking above; the parent integrates, runs the gates, writes the round doc (the commit body
@@ -65,21 +82,19 @@ either. A docs-only file inside a round the parent is integrating is still the p
 implementation of a change is the worker's. The point is not ceremony - a second author reads the brief,
 and the parent's own context is the one that already knows what it meant.
 
-The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the
-file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the
-parent verifies every result. One brief authorises one verb; the seat never infers consent. Rung 2
-(`ollama-cloud/mimo-v2.6-flash`) runs only inside a `git-seat-budget:` the owner declared in the
-round doc before the round starts; auto-accept never declares it, and with no budget line the action
-parks. Every push, PR, merge and tag names the variant that performed it in the round doc's per-write
-table,
-with a `fallbackReason` on every switch; each seat commit carries a `Model-Seat` trailer.
-Unavailability is a provider auth or model-not-found, HTTP 4xx/5xx, HTTP 429, a timed-out tool call,
-a prose-only response, a context/output cap too small for the brief, or an empty/refusal response.
-The seat is off when `.opencode/agents/git-executor.md` is absent; the fallback file alone is not a
-live seat, and git returns to the parent.
+The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the parent verifies every result.
+One brief authorises one verb; the seat never infers consent.
+Consent is `AGENTS.md` section 9's and section 17's, never the budget's: a round's git spend is capped at **12 briefs by default**, the round doc states the arithmetic at open (`1 branch + N commits + 1 push + 1 pr + 1 merge`), and a `git-seat-budget:` line may only lower that default or raise it, with `0` parking every verb.
+Auto-accept never sets a number, and with no line the default applies — the metered default is contingent on the next sentence, not a substitute for it.
+The round doc declares `Verbs this round needs:` at open and the owner's go names them, so the brief quotes an approval that contains the verb by construction.
+`branch` MAY be cut when every modified or untracked path is this round's own `documents/rounds/<slug>.md`, and that file MUST appear in the round's first commit; any other dirty path refuses.
+Every write names its actor in the round doc's per-write table — `git-executor rung 1`, `git-executor rung 2` or `parent`, a parent row carrying its reason — with a `fallbackReason` on every switch, and each seat commit carries a `Model-Seat` trailer.
+A `shell-permission-denied` result is retried **once, never after a refusal**, and the retry is recorded in the `RESULT` line.
+Unavailability is a provider auth or model-not-found, HTTP 4xx/5xx, HTTP 429, a timed-out tool call, a prose-only response, a context/output cap too small for the brief, or an empty/refusal response.
+The seat is off when `.opencode/agents/git-executor.md` is absent; the fallback file alone is not a live seat, and git returns to the parent.
 
-The reviewer is the pro seat — `deepseek-v4-pro:0813`, or its ranked fallback, which is the seat
-between 12:00 and 18:00 — wherever a tier has an independent review. The gate
+The reviewer is the `reviewer-pro` class — its first candidate is the one `AGENTS.md` section 10a pins
+by name, and the window moves it — wherever a tier has an independent review. The gate
 must not be the author, so the flash worker implements and the pro session reviews; a pro
 session does not both implement and review. A Tier 0 change gets the worker-model pass described above
 instead, because a solo round has no independent gate to fill - except a protected document, which keeps

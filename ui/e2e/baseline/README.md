@@ -41,8 +41,9 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 than a rounded 900 px, because those screens scroll below the fold. `imports-batches` has no local
 mock; its viewport follows the other 900 px screens.
 
-`v2-shell/17-find-contact.png` has no capture: the UI has no `Find by contact` control yet, although
-FR-79/AC-48 specify one. The members toolbar currently offers name/member-number search only.
+`v2-shell/17-find-contact.png` has no capture: the UI ships a `Find by contact` control
+(`MembersPage.tsx`), but the capture suite has no case for that dialog yet, although FR-79/AC-48
+specify the surface.
 
 Two consecutive runs can differ by roughly 6–30 antialiased border/corner pixels on some cards (usually
 under 16); the content and state are stable. There is no pixel gate yet, so this folder is a review

@@ -124,10 +124,13 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
   unattended" pre-authorises those four for that round, or for every round up to the milestone it names
   (§17). Every action outside the round still
   needs its own instruction. Verb definitions: `.github/merge-policy.md` (Verb glossary).
-- The **git-executor** seat (`.opencode/agents/git-executor.md`, ranked `opencode/beam-free` then
-  `ollama-cloud/mimo-v2.6-flash`) may execute the command on a brief that quotes the owner's verb;
-  the parent keeps the decision and verifies every result. The seat never infers consent, runs one
-  verb per brief, and parks when unavailable. Seat and budget rules: `documents/agents/orchestrator-policy.md`.
+- The **git-executor** seat (`.opencode/agents/git-executor.md`; class `git-executor`, a free provider
+  first and the metered one last, mapped in `documents/agents/seats.json`) may execute the command on a
+  brief that quotes the owner's verb; the parent keeps the decision and verifies every result. The seat
+  never infers consent, runs one verb per brief, and parks when unavailable. A round's git spend
+  defaults to **12 briefs** (a `git-seat-budget:` line may only lower or raise it, `0` parks), the round
+  doc declares `Verbs this round needs:` so the owner's go names them, and every write names its actor
+  in the round doc's per-write table. Seat and budget rules: `documents/agents/orchestrator-policy.md`.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for
@@ -284,16 +287,14 @@ reintroduce them silently.
   round may begin, not automatically at the closing bell; when it runs, its recommendations are accepted
   automatically, so the next round starts without a second wait. The owner may still run a round
   attended by saying so. The consent is this rule, never the owner's silence.
-- **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session defaults to
-  `ollama-cloud/deepseek-v4.1-flash:1017` — the ollama provider first; if that provider fails, use
-  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`. Between 12:00 and 18:00 local the provider preference
-  flips: the cline-pass provider is tried first and `ollama-cloud` is the fallback (owner, 2026-11-11). The
-  window moves **the grill-me, reviewer-class and worker seats**; every other seat is unclocked (owner,
-  2026-11-13).
-- **Worker seat (owner, 2026-11-13).** The implementer — at every tier since 2026-11-16 — follows the
-  window like the seats above: between 12:00 and 18:00 local it is
-  `cline-pass/cline-pass/deepseek-v4.1-flash-1017`, and outside the window the same model on
-  `ollama-cloud` (`ollama-cloud/deepseek-v4.1-flash:1017`). An explicit owner
+- **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session runs on the `grill-flash` class
+  (mapping: `documents/agents/seats.json`) — ollama-cloud's candidate first, the cline-pass provider as
+  its fallback. Between 12:00 and 18:00 local the provider preference flips: the cline-pass provider is
+  tried first (owner, 2026-11-11). The window moves **the grill-me, reviewer and worker classes**; every
+  other class is unclocked (owner, 2026-11-13).
+- **Worker seat (owner, 2026-11-13).** The implementer — at every tier since 2026-11-16 — runs on the
+  `worker-flash` class (mapping: `documents/agents/seats.json`) and follows the window like the classes
+  above: the cline-pass provider between 12:00 and 18:00 local, ollama-cloud outside it. An explicit owner
   override for a round beats both, and the round doc records it. The parent integrates, runs the gates and
   commits; it does not author the implementation at any tier.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a

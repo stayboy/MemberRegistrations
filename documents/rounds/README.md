@@ -9,17 +9,28 @@ the durable record.
 ```md
 # Round — <slug>
 
-|                     |                                                                            |
-| ------------------- | -------------------------------------------------------------------------- |
-| Status              | OPEN / CLOSED / PARKED                                                     |
-| Tier                | 0 / 1 / 2                                                                  |
-| Mode                | `attended` / `unattended (auto-accept recommendations)`                    |
-| Base                | `<short sha>`                                                              |
-| Review rounds       | 0 / 1 / 2                                                                  |
-| Gate runs in parent | 0                                                                          |
-| Spec                | `documents/specs/<file>.md` (or `AGENTS.md` for process work)              |
-| Workers             | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)`           |
-| Implementer         | `parent <provider>/<model> (<scope>); worker <provider>/<model> (<scope>)` |
+|                        |                                                                            |
+| ---------------------- | -------------------------------------------------------------------------- |
+| Status                 | OPEN / CLOSED / PARKED                                                     |
+| Tier                   | 0 / 1 / 2                                                                  |
+| Mode                   | `attended` / `unattended (auto-accept recommendations)`                    |
+| Base                   | `<short sha>`                                                              |
+| Review rounds          | 0 / 1 / 2                                                                  |
+| Gate runs in parent    | 0                                                                          |
+| Spec                   | `documents/specs/<file>.md` (or `AGENTS.md` for process work)              |
+| Workers                | `single` / `parallel (tracks: A, B)` / `parallel (slices: A, B)`           |
+| Implementer            | `parent <provider>/<model> (<scope>); worker <provider>/<model> (<scope>)` |
+| Verbs this round needs | `branch, commit, push, pr, merge` (or `n/a — no git writes`)               |
+
+## Seats
+
+| Seat | Picked (local) | Window | Class          | Candidate probed            | Basis |
+| ---- | -------------- | ------ | -------------- | --------------------------- | ----- |
+| ...  | `YYYY-MM-DD`   | in/out | `worker-flash` | `provider/model` — answered | ...   |
+
+One row per dispatch, with the class, the candidate the day's probe chose, and the basis. The probe
+outcome holds for the local day, and a substitution records why (see
+`documents/agents/orchestrator-policy.md`, "Seat health is probed once per round").
 
 ## Grill
 
@@ -42,6 +53,17 @@ Goal, scope, expected files, acceptance criteria (numbered).
 The section ends with the gate-run signature line, pasted verbatim:
 
     gate-run <ISO-8601 UTC> profile=<name> steps=<passed>/<total> lines=<n> bytes=<n>
+
+## Git writes
+
+| Brief | Actor                 | Verb   | Variant             | Reason |
+| ----- | --------------------- | ------ | ------------------- | ------ |
+| 1     | `git-executor rung 2` | branch | `<class candidate>` | -      |
+
+One row per brief. The row count **is** the round's git spend; the default cap is 12 briefs and the
+arithmetic is `1 branch + N commits + 1 push + 1 pr + 1 merge` (see
+`documents/agents/orchestrator-policy.md`). An `Actor` of `parent` carries the reason the seat could
+not run that verb, and a variant switch carries its `fallbackReason`.
 
 ## Mock sign-off
 
