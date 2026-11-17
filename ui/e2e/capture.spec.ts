@@ -239,9 +239,11 @@ test('contacts editable', async ({ page }) => {
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await expect(dialog).toBeVisible();
-  // AC-53: the add row sits above the list, and owned rows carry Remove.
+  // AC-53: the add row sits above the list, and an owned row carries its named
+  // Edit and Remove glyph actions (FR-78, FR-81).
   await expect(dialog.getByRole('textbox', { name: 'Contact value' })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Remove +233 20 000 0001' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Edit phone +233 20 000 0001' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Remove phone +233 20 000 0001' })).toBeVisible();
   await capture(page, 'contacts-editable');
 });
 

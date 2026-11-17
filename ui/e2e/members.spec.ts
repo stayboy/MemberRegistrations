@@ -93,6 +93,78 @@ test('the Contacts action opens the flat contacts dialog', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'Contacts' })).toHaveCount(0);
 });
 
+/**
+ * FR-78/AC-53: the member detail's dialog is the editable variant, and Save sends
+ * `{ value }` only. The stubbed PUT rewrites the row, so the invalidated detail read
+ * is what must show the new value.
+ */
+test('the member detail edits a contact value in place', async ({ page }) => {
+  await open(page, '/members/M-1001');
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Contacts' });
+  await dialog.getByRole('button', { name: 'Edit phone +233 20 000 0001' }).click();
+
+  const input = dialog.getByRole('textbox', { name: 'Edit contact value' });
+  await expect(input).toHaveValue('+233 20 000 0001');
+  await input.fill('+233 24 555 0101');
+
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname === '/gateway/v1/members/M-1001/contacts/contact-1001-phone',
+  );
+  await dialog.getByRole('button', { name: 'Save' }).click();
+
+  const response = await saved;
+  expect(response.status()).toBe(200);
+  // The body is the value and nothing else: the kind stays uneditable this cycle.
+  expect(response.request().postDataJSON()).toEqual({ value: '+233 24 555 0101' });
+
+  // The row returns to display with the server's value.
+  await expect(dialog.getByRole('listitem').filter({ hasText: '+233 24 555 0101' })).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'Edit contact value' })).toHaveCount(0);
+});
+
+/**
+ * AC-54: a duplicate value's 409 resolves its owner through the `contact` filter and
+ * offers the household link; the linked row carries Unlink and no Remove, and
+ * Unlink reverses it.
+ */
+test('a duplicate contact value offers the household link, then unlinks', async ({ page }) => {
+  await open(page, '/members/M-1001');
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Contacts' });
+  // Owned by M-1002 in the fixture register.
+  await dialog.getByRole('textbox', { name: 'Contact value' }).fill('+233 20 000 0002');
+  await dialog.getByRole('button', { name: 'Add' }).click();
+
+  // The inline error stands, and the offer names the owner and its member number.
+  await expect(
+    dialog.getByText('Contact value "+233 20 000 0002" already belongs to a member'),
+  ).toBeVisible();
+  await expect(dialog.getByText('Owned by Ama Mensah (Female) · M-1002')).toBeVisible();
+
+  await dialog.getByRole('button', { name: "Link the household's value" }).click();
+
+  const linkedRow = dialog.getByRole('listitem').filter({ hasText: '+233 20 000 0002' });
+  await expect(linkedRow).toContainText('Linked · M-1002');
+  await expect(
+    linkedRow.getByRole('button', { name: 'Unlink phone +233 20 000 0002' }),
+  ).toBeVisible();
+  await expect(linkedRow.getByRole('button', { name: /^Remove / })).toHaveCount(0);
+
+  await linkedRow.getByRole('button', { name: 'Unlink phone +233 20 000 0002' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Unlink +233 20 000 0002?' });
+  await confirm.getByRole('button', { name: 'Unlink' }).click();
+
+  // The value stays with M-1002 and leaves this member's list.
+  await expect(dialog.getByRole('listitem').filter({ hasText: '+233 20 000 0002' })).toHaveCount(0);
+});
+
 test('the add-member route creates the member and lands on the detail', async ({ page }) => {
   await open(page, '/members/new');
   await expect(page.getByRole('heading', { level: 1, name: 'Add member' })).toBeVisible();

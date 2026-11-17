@@ -127,6 +127,38 @@ test.describe('accessibility', () => {
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   }
+
+  /**
+   * The contacts dialog's own screen, owed since the backlog row's trigger ("the
+   * next change to `ContactsDialog.tsx`"). It audits the editable variant with a row
+   * in edit mode and the 409 link offer visible, because those are the states this
+   * round added; light mode is enough.
+   */
+  test('the contacts dialog passes WCAG 2.2 AA in light mode while editing and offering a link', async ({
+    page,
+  }) => {
+    await seedTheme(page, 'fluent', 'light');
+    await open(page, '/members/M-1001');
+    await page.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Contacts' });
+    await expect(dialog).toBeVisible();
+
+    // One row in edit mode: Save/Cancel and the prefilled value beside the list.
+    await dialog.getByRole('button', { name: 'Edit phone +233 20 000 0001' }).click();
+    await expect(dialog.getByRole('textbox', { name: 'Edit contact value' })).toBeVisible();
+
+    // The 409 offer, resolved from the fixture's other owner (AC-54).
+    await dialog
+      .getByRole('textbox', { name: 'Contact value', exact: true })
+      .fill('+233 20 000 0002');
+    await dialog.getByRole('button', { name: 'Add' }).click();
+    await expect(dialog.getByRole('button', { name: "Link the household's value" })).toBeVisible();
+
+    await expectSeededTheme(page, 'fluent', 'light');
+    await audit(page, 'contacts dialog editable (light)');
+  });
 });
 
 /**

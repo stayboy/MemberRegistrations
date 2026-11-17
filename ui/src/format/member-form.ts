@@ -378,8 +378,12 @@ export function memberNoConflictMessage(error: unknown): string | null {
   return detail || 'A member with this member number already exists.';
 }
 
-/** The API's own normalisation, so a quoted value in a 409 finds its field. */
-function contactKey(kind: ContactKind, value: string): string {
+/**
+ * The API's own normalisation (`normalizeContactValue`), so a quoted value in a
+ * 409 finds its field - and, in the contacts dialog, its owner among the rows the
+ * `contact` filter returned (FR-78, AC-54).
+ */
+export function contactValueKey(kind: ContactKind, value: string): string {
   const trimmed = value.trim();
   if (kind === 'email') return trimmed.toLowerCase();
   return trimmed.replace(/\D/g, '').replace(/^0+/, '');
@@ -404,7 +408,7 @@ export function contactConflictErrors(
 
   const hit = CREATE_CONTACT_FIELDS.find(({ field, kind }) => {
     const entered = values[field].trim();
-    return entered.length > 0 && contactKey(kind, entered) === contactKey(kind, quoted);
+    return entered.length > 0 && contactValueKey(kind, entered) === contactValueKey(kind, quoted);
   });
   if (!hit) return null;
 

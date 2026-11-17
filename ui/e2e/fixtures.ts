@@ -1320,11 +1320,33 @@ function buildRoutes(
   );
   let headcountSeq = HEADCOUNTS.length;
 
+  /**
+   * FR-78's write actions mutate per-test state: a value added, edited, linked or
+   * unlinked must show up in the next detail read, or the invalidate-and-refetch
+   * the dialog relies on would prove nothing.
+   */
+  const contactState = new Map<string, MemberContact[]>(
+    [...DETAILS].map(([memberNo, detail]) => [memberNo, [...detail.contacts]]),
+  );
+
+  /** The API's uniqueness key, mirrored: email compares lower-cased, phones by digits. */
+  const matchesValue = (row: MemberContact, value: string) =>
+    contactKey(row.kind, value) === contactKey(row.kind, row.value);
+
   return [
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/members$/,
-      handle: () => reply({ items: MEMBERS }),
+      handle: (call) => {
+        // FR-79/FR-78: the explicit `contact` filter matches owners and linkers
+        // alike; the `linked` flag is what tells them apart in the dialog.
+        const contact = call.search.get('contact')?.trim();
+        if (!contact) return reply({ items: MEMBERS });
+        const items = MEMBERS.filter((member) =>
+          (contactState.get(member.memberNo) ?? []).some((row) => matchesValue(row, contact)),
+        );
+        return reply({ items });
+      },
     },
     {
       method: 'POST',
@@ -1369,7 +1391,114 @@ function buildRoutes(
       handle: (_call, [memberNo]) => {
         const detail = DETAILS.get(memberNo!) ?? created.get(memberNo!);
         if (!detail) return problem(404, `Member ${memberNo} was not found`);
-        return reply(detail, 200, { ETag: `"v${detail.version}"` });
+        const contacts = contactState.get(detail.memberNo) ?? [...detail.contacts];
+        // Only the list changes: the DTO's `contactCount` is the fixture's own
+        // number and the page's action label keys off it (FR-78).
+        return reply({ ...detail, contacts }, 200, {
+          ETag: `"v${detail.version}"`,
+        });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/members\/([^/]+)\/contacts$/,
+      handle: (call, [memberNo]) => {
+        const body = asRecord(call.body);
+        const kind = text(body.kind);
+        const value = text(body.value);
+        if (kind !== 'phone' && kind !== 'email' && kind !== 'whatsapp') {
+          return problem(422, 'kind must be phone, email or whatsapp');
+        }
+        if (!value.trim()) return problem(422, 'value is required');
+        // A value belongs to one member: a duplicate fails with the 409 that names
+        // it, which is the dialog's link path (FR-78, AC-54).
+        const duplicate = [...contactState.values()]
+          .flat()
+          .some((row) => row.kind === kind && matchesValue(row, value));
+        if (duplicate) {
+          return problem(409, `Contact value "${value}" already belongs to a member`);
+        }
+        const rows = contactState.get(memberNo!) ?? [];
+        const contact: MemberContact = {
+          id: `contact-${memberNo}-${rows.length + 1}`,
+          kind,
+          value: value.trim(),
+          displayOrder: rows.filter((row) => row.kind === kind).length,
+          ownerMemberNo: memberNo!,
+          linked: false,
+        };
+        contactState.set(memberNo!, [...rows, contact]);
+        return reply(contact, 201);
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/gateway\/v1\/members\/([^/]+)\/contacts\/([^/]+)$/,
+      handle: (call, [memberNo, contactId]) => {
+        const rows = contactState.get(memberNo!) ?? [];
+        const index = rows.findIndex((row) => row.id === contactId);
+        const current = rows[index];
+        if (!current) return problem(404, `Contact ${contactId} was not found`);
+        // Only the value is writable this cycle (FR-78).
+        const value = text(asRecord(call.body).value).trim();
+        if (!value) return problem(422, 'value is required');
+        const duplicate = [...contactState.entries()].some(([no, list]) =>
+          list.some(
+            (row, rowIndex) =>
+              !(no === memberNo && rowIndex === index) &&
+              row.kind === current.kind &&
+              matchesValue(row, value),
+          ),
+        );
+        if (duplicate) {
+          return problem(409, `Contact value "${value}" already belongs to a member`);
+        }
+        const updated: MemberContact = { ...current, value };
+        contactState.set(
+          memberNo!,
+          rows.map((row, rowIndex) => (rowIndex === index ? updated : row)),
+        );
+        return reply(updated);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/members\/([^/]+)\/contacts\/link$/,
+      handle: (call, [memberNo]) => {
+        const contactId = text(asRecord(call.body).contactId);
+        const owner = [...contactState.entries()].flatMap(([no, rows]) =>
+          rows.filter((row) => row.id === contactId && !row.linked).map((row) => ({ no, row })),
+        )[0];
+        if (!owner) return problem(404, `Contact ${contactId} was not found`);
+        const rows = contactState.get(memberNo!) ?? [];
+        if (rows.some((row) => row.id === contactId)) {
+          return problem(409, 'This contact is already linked to the member');
+        }
+        const linked: MemberContact = {
+          id: contactId,
+          kind: owner.row.kind,
+          value: owner.row.value,
+          displayOrder: rows.length,
+          ownerMemberNo: owner.no,
+          linked: true,
+        };
+        contactState.set(memberNo!, [...rows, linked]);
+        return reply(linked, 201);
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/gateway\/v1\/members\/([^/]+)\/contacts\/link\/([^/]+)$/,
+      handle: (_call, [memberNo, contactId]) => {
+        const rows = contactState.get(memberNo!) ?? [];
+        if (!rows.some((row) => row.id === contactId && row.linked)) {
+          return problem(404, `Linked contact ${contactId} was not found`);
+        }
+        contactState.set(
+          memberNo!,
+          rows.filter((row) => row.id !== contactId),
+        );
+        return reply(undefined, 204);
       },
     },
     {
