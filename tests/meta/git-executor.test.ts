@@ -41,6 +41,19 @@ describe('git executor seat', () => {
     }
   });
 
+  it('quotes the tree ref, because the harness rewrites an unquoted one', () => {
+    // Probed on 2026-11-17: `git rev-parse HEAD^{tree}` is rewritten into a PowerShell
+    // `-encodedCommand` and git answers `fatal: ambiguous argument 'dAByAGUAZQA='`, while
+    // `git rev-parse 'HEAD^{tree}'` returns the tree. The seat's own tree guard must be runnable.
+    for (const file of SEAT_FILES) {
+      const text = read(file);
+      expect(text, `${file} must quote HEAD^{tree}`).toContain("git rev-parse 'HEAD^{tree}'");
+      expect(text, `${file} carries an unquoted HEAD^{tree}`).not.toContain(
+        'git rev-parse HEAD^{tree}',
+      );
+    }
+  });
+
   it('keeps the git-state-only rule and carries no secret-shaped string', () => {
     expect(read(SEAT_FILES[0])).toContain(
       'Never print environment values, tokens, credentials or file contents',

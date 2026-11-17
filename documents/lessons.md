@@ -5,15 +5,29 @@ trigger that should have caught it. Product rules belong in the spec, not here.
 
 Propose an entry in the reply; it reaches this file only when the owner accepts it.
 
-**Admission (owner, 2026-11-15).** A lesson is admitted in two steps, and both are required:
+**Admission (owner, 2026-11-15; durability test, owner, 2026-11-17).** A lesson is admitted in three
+steps, and all are required:
 
-1. **A `grill-me` round weighs it**, its recommendations delivered automatically - asking one question
-   above all: does this change how the next piece of work is judged, or does it only explain a failure
-   that already happened? A proposition that is a **consequence of a technical failure** - a mistake, a
-   missed step, a flaky tool, a build that disagreed with a test runner - is **a note, not a lesson**. It
-   is recorded in the round doc and, where the evidence is worth keeping, in `documents/research/`, and it
-   never enters this file. A note changes the record; a lesson changes a decision.
-2. **Only a durable rule is proposed here**, and the owner accepts it.
+1. **A durability test precedes the proposal.** Before a proposition is offered as a candidate lesson,
+   answer three checks in writing and show them with it: **home** - does a governing file already own the
+   rule, which makes the proposal a note or a merge rather than a second home? **truth** - is every
+   factual claim true against the files and the record it cites? A claim that can be checked is checked,
+   not argued: run the command, read the file, cite the line. **durability** - apply step 2's test now,
+   before the proposal: would a future round judge work differently, and does the rule still say
+   anything once the tool or version that produced it changes? The proposer runs the test and shows the
+   three answers with the verdict - an entry, a merge into an existing entry, a note, or insufficient
+   evidence - and a proposition without them is not yet a candidate for this file. That verdict is the
+   proposer's evidence, not a second weighing: step 2's weighing still decides.
+   `documents/research/clef-lesson-durability.md` supplies the durable / note / insufficient-evidence
+   axis; merging into an existing entry is this file's fourth outcome.
+2. **A weighing follows** - a `grill-me` round, or the durability review where the owner asks for one
+   instead - its recommendations delivered automatically, asking one question above all: does this
+   change how the next piece of work is judged, or does it only explain a failure that already happened?
+   A proposition that is a **consequence of a technical failure** - a mistake, a missed step, a flaky
+   tool, a build that disagreed with a test runner - is **a note, not a lesson**. It is recorded in the
+   round doc and, where the evidence is worth keeping, in `documents/research/`, and it never enters this
+   file. A note changes the record; a lesson changes a decision.
+3. **Only a durable rule is proposed here**, and the owner accepts it.
 
 The distinction exists because the file is read as policy: an entry that says "we once broke the build"
 teaches nothing the next round can apply, and one such entry makes every entry look like history rather
@@ -39,7 +53,34 @@ limit as its evidence, seventeen lines). The three 2026-11-15 entries were accep
 close (2026-11-15, "all as recommended" on the grill, plus the owner's ruling that every editable skill file
 joins the protected set). The 2026-11-15 claim-scope entry was accepted at the end of the
 `capture-in-round` grill (2026-11-15, "all as recommended"), which also ruled the five-defect proposal that
-prompted it a **note**: a claim-scope rule was admitted, the incident was not.
+prompted it a **note**: a claim-scope rule was admitted, the incident was not. The 2026-11-17
+brief-shape entry was accepted in reply to the session that proposed it, after a durability review kept
+one candidate, merged one into it and demoted one to a note (2026-11-17, "review suggested lessons before
+write. test for durability").
+
+## 2026-11-17 — A brief instantiates the seat's shape; it never amends it
+
+**Rule.** A brief is an instance of the seat's shape: it fills the fields the seat file names, carries the
+owner's sentence and the round's budget line, and adds no rule of its own. A clause that forbids what the
+seat's guard requires is not extra safety - it asks the seat to skip the guard - and a constraint the
+file does not carry is a change to the file, made before dispatch, never an extra sentence in the brief.
+This governs the brief, not the files.
+
+**Evidence.** Both seat files make `tree:` mandatory and require a refusal when the hash does not match
+`git rev-parse 'HEAD^{tree}'`, and `.github/merge-policy.md:55` says the refusal logic "verifies the tree
+hash". A previous round lost three attempts on one commit to a missing budget line and then to a
+self-imposed `git rev-parse` pre-check (`documents/rounds/contacts-write-actions.md:18-20`); this round
+then made the second a standing clause, so every brief "forbids pre-checks (`git rev-parse`,
+`git status`, `git branch`)" (`:33-34`). The seat ran the guard its own file requires; the tool rejected the
+command (`shell-permission-denied`) and the action returned `FALLBACK`, with no commit landed. The budget
+refusal in the same round was the opposite case and the file's own rule working: the brief omitted a line
+the seat file requires, and the seat refused rather than guessed.
+
+**Trigger.** Writing or reviewing a brief: name the fields the seat file asks for, fill them, and check
+every constraint against the file; a constraint the file does not carry is a change to the seat file
+first.
+
+---
 
 ## 2026-11-15 — A claim names its scope
 
