@@ -74,11 +74,11 @@ The brief must contain:
 - `branch:`;
 - `files:` for a commit;
 - `message:` for a commit;
-- `tree:` the `git rev-parse HEAD^{tree}` the parent showed;
+- `tree:` the `git rev-parse 'HEAD^{tree}'` the parent showed;
 - `checks:` for a merge - the PR number and `verify`, `ui` and `ui-e2e` reported green.
 
 Return `REFUSED: <reason>` when the verb is absent from the owner's sentence, the tree hash does not
-match `git rev-parse HEAD^{tree}`, the file list is not what is staged, a merge brief does not state
+match `git rev-parse 'HEAD^{tree}'`, the file list is not what is staged, a merge brief does not state
 all three checks green, or the brief contains a secret or a credential. One brief authorises one verb:
 a commit brief cannot push.
 
