@@ -6,8 +6,8 @@
 | Tier                   | 2                                                                                                                                                             |
 | Mode                   | `attended`                                                                                                                                                    |
 | Base                   | `b01f0e8`                                                                                                                                                     |
-| Review rounds          | 0                                                                                                                                                             |
-| Gate runs in parent    | 0                                                                                                                                                             |
+| Review rounds          | 1 (Tier 2, Standards and Spec)                                                                                                                                |
+| Gate runs in parent    | 3                                                                                                                                                             |
 | Spec                   | `documents/specs/member-registrations-ui.md`                                                                                                                  |
 | Workers                | `single`                                                                                                                                                      |
 | Implementer            | `worker cline-pass/cline-pass/deepseek-v4.1-flash-1017 (e2e specs, fixtures, catalogue); parent opencode/deepseek-v4.1-flash-free (round doc, gates, record)` |
@@ -56,7 +56,9 @@ Seven questions, answered "all as recommended" (owner, 2026-11-17).
    openly.
 6. **What happens to the four deferred catalogue rows?** They move from `deferred` to `e2e-only`, naming
    the new specs; no drawing asserts behaviour, so no mock claim is added. **Cost:** the coverage line
-   moves from `e2e-only 6` to `e2e-only 10`, and the backlog row is removed.
+   moves from 7 to 10 across the v2 catalogues (plus AC-18 and AC-19 on `imports-members` and AC-27 on
+   `settings`), and the backlog row is renamed rather than removed, because three other ACs still anchor
+   to it.
 7. **Tier and seats.** Tier 2, worker implements, `code-review` gate; the worker seat is probed on
    cline-pass first inside the window, with `fallbackReason` recorded if it does not answer. **Cost:** one
    review pass and one probe; the worker cannot run a browser harness, so the parent runs e2e.
@@ -100,13 +102,15 @@ Acceptance criteria:
 | UI e2e               | `npx playwright test` (in `ui/`)                | pass - 74 tests, including the new imports and settings specs |
 | Mock catalogue guard | `npx vitest run tests/meta/mock-claims.test.ts` | pass - 77 tests                                               |
 
-gate-run 2026-11-17T14:03:39.356Z profile=full steps=7/7 lines=7 bytes=1025
+gate-run 2026-11-17T14:17:19.571Z profile=full steps=7/7 lines=7 bytes=1025
 
 ## Git writes
 
-| Brief | Actor                 | Verb   | Variant                        | Reason |
-| ----- | --------------------- | ------ | ------------------------------ | ------ |
-| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | -      |
+| Brief | Actor                 | Verb   | Variant                        | Reason                     |
+| ----- | --------------------- | ------ | ------------------------------ | -------------------------- |
+| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | -                          |
+| 2     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | the round build, `75cd917` |
+| 3     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | the Tier 2 fix pass        |
 
 ## Mock sign-off
 
@@ -114,7 +118,9 @@ n/a — no user-visible surface; no `ui/src/**` file changes.
 
 ## Mock parity
 
-n/a — no mock; these ACs describe behaviour, and no drawing asserts it.
+No mock is involved: these ACs describe behaviour, and no drawing asserts it. The disposition count does
+move: the v2 catalogues carried 7 `e2e-only` rows before this round and carry 10 after (+3: AC-18 and
+AC-19 on `imports-members`, AC-27 on `settings`). The attendance rows and AC-20 stay `deferred`.
 
 ## Acceptance
 
@@ -128,12 +134,16 @@ n/a — no mock; these ACs describe behaviour, and no drawing asserts it.
 
 ## Deviations
 
-- **AC-20 is parked, not delivered.** The worker's first version drove the panel from the deep link; that
-  case failed under parallel load, and the same run failed the existing
-  `events.spec.ts` deep-link case too. Opening the panel from the session row also failed under load,
-  which rules out the route as the cause and points at the panel's own open/close race - the backlog's
-  "The import panel's deep-link opening is unverified end to end" row named two prior reproducers and
-  this is a third. The two new attendance tests were removed rather than landed as flakes; the
+- **AC-20 is parked, not delivered, and the record of why follows section 8.** Attempt 1: the new
+  attendance case opened the panel from the deep link; the parallel run reported **75 passed / 1 failed**
+  (the new case) and, separately, **74 passed / 2 failed** once the pre-existing
+  `events.spec.ts` "the retired attendance route lands on the activity with its date" joined it. Attempt
+  2: opening the panel from the session row instead of the route failed the same way under parallel load.
+  Isolation: both cases pass alone; `npx playwright test e2e/events.spec.ts --workers=1` reports **7
+  passed**, and the new imports spec alone reports 4 passed. That points at load, not at the route, and
+  the panel's own open/close behaviour is the **hypothesis** - no failure text or trace was captured, so
+  the mechanism stays unproven. The backlog's older row prescribed exactly this single-worker run; it is
+  recorded here as run. The two attendance tests were removed rather than landed as flakes; the
   catalogue's attendance rows and AC-20 stay `deferred`.
 - **The settings test does not use `seedTheme`.** That helper writes the key on every navigation, so a
   reload assertion would prove the seed rather than the app. The preference is written once through

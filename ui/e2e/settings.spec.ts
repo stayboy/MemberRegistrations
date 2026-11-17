@@ -1,5 +1,12 @@
-import type { Page } from 'playwright/test';
-import { expect, open, SESSION_TOKEN, seedSession, THEME_STORAGE_KEY, test } from './fixtures';
+import {
+  expect,
+  open,
+  SESSION_TOKEN,
+  seedSession,
+  storedValues,
+  THEME_STORAGE_KEY,
+  test,
+} from './fixtures';
 
 /**
  * AC-27: a saved tab restores its appearance and its sidebar state, the credential arrives only from
@@ -16,21 +23,6 @@ import { expect, open, SESSION_TOKEN, seedSession, THEME_STORAGE_KEY, test } fro
 
 /** `--colorBrandBackground` for the ocean accent in the dark scheme (ramp stop 70). */
 const OCEAN_DARK_BRAND_BACKGROUND = '#005e85';
-
-/** Every stored value as one string per entry; no key name is assumed. */
-async function storedValues(page: Page): Promise<{ session: string; local: string }> {
-  return page.evaluate(() => {
-    const dump = (storage: Storage): string => {
-      const values: string[] = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index) ?? '';
-        values.push(`${key}=${storage.getItem(key) ?? ''}`);
-      }
-      return values.join('\n');
-    };
-    return { session: dump(sessionStorage), local: dump(localStorage) };
-  });
-}
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -66,10 +58,9 @@ test('the accent, scheme and collapsed sidebar survive a reload and the bearer s
   await expect(sidebar.getByRole('combobox', { name: 'Accent theme' })).toContainText('Ocean');
   await expect(sidebar.getByRole('switch', { name: 'Dark mode' })).toBeChecked();
   await expect(page.locator('html')).toHaveAttribute('data-scheme', 'dark');
-  const brandBackground = await page.evaluate(() => {
-    const provider = document.querySelector('.fui-FluentProvider');
-    return provider ? getComputedStyle(provider).getPropertyValue('--colorBrandBackground') : '';
-  });
+  const brandBackground = await sidebar.evaluate((element) =>
+    getComputedStyle(element).getPropertyValue('--colorBrandBackground'),
+  );
   expect(brandBackground.trim().toLowerCase()).toBe(OCEAN_DARK_BRAND_BACKGROUND);
 
   // Collapse the rail: the shell persists the state (FR-6), and the test never writes that key.

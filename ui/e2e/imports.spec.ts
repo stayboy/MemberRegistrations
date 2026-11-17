@@ -1,19 +1,25 @@
 import type { Page, Request } from 'playwright/test';
-import { expect, open, seedSession, test } from './fixtures';
+import { expect, open, seedSession, SESSION_TOKEN, storedValues, test } from './fixtures';
 
 /**
- * The two imports, end to end (UI spec AC-18, AC-19, AC-20; FR-35–FR-39). The panel parses the file
- * in the browser and sends nothing until the operator confirms, so the request log is the evidence
- * for the ACs that say "no request" or "the register is unchanged".
+ * The member import, end to end (UI spec AC-18, AC-19; FR-35-FR-39). The panel parses the file in the
+ * browser and sends nothing until the operator confirms, so the request log is the evidence for the
+ * AC that says "sends no request". AC-20's attendance cases are parked with the panel's open/close
+ * defect (`documents/backlog.md`, "Remaining behavioural ACs behind the v2 mock catalogues").
  */
 
-const MEMBERS_UPLOAD = '/gateway/v1/imports/members';
-
-/** Every request whose path is the upload route, preflight included, so "sends nothing" is literal. */
-function watchUploads(page: Page, path: string): Request[] {
+/**
+ * Every non-GET request to the imports family, preflight included, so "sends no request" covers a
+ * submission to any import route and not just the one pathname the test happens to upload to. The
+ * page's own `GET /v1/imports/formats` is not a submission and is excluded.
+ */
+function watchUploads(page: Page): Request[] {
   const requests: Request[] = [];
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname === path) requests.push(request);
+    const { pathname } = new URL(request.url());
+    if (pathname.startsWith('/gateway/v1/imports') && request.method() !== 'GET') {
+      requests.push(request);
+    }
   });
   return requests;
 }
@@ -39,7 +45,7 @@ test.beforeEach(async ({ page }) => {
 test('a member CSV over the 10,000-row limit shows split guidance and sends nothing', async ({
   page,
 }) => {
-  const uploads = watchUploads(page, MEMBERS_UPLOAD);
+  const uploads = watchUploads(page);
   await open(page, '/imports/members');
   await expect(page.getByRole('heading', { level: 1, name: 'Member database' })).toBeVisible();
 
@@ -64,7 +70,7 @@ test('a member CSV over the 10,000-row limit shows split guidance and sends noth
 test('a member CSV whose serialised body passes 1,048,576 bytes shows split guidance and sends nothing', async ({
   page,
 }) => {
-  const uploads = watchUploads(page, MEMBERS_UPLOAD);
+  const uploads = watchUploads(page);
   await open(page, '/imports/members');
   await expect(page.getByRole('heading', { level: 1, name: 'Member database' })).toBeVisible();
 
@@ -102,7 +108,7 @@ test('a confirmed member import shows the batch summary and keeps no file conten
   gateway,
 }) => {
   gateway.importReply = () => ({ status: 201, body: MEMBER_BATCH });
-  const uploads = watchUploads(page, MEMBERS_UPLOAD);
+  const uploads = watchUploads(page);
   await open(page, '/imports/members');
 
   await page.getByTestId('import-file').setInputFiles({
@@ -131,26 +137,26 @@ test('a confirmed member import shows the batch summary and keeps no file conten
   await expect(result.getByText(MEMBER_BATCH.checksum, { exact: true })).toBeVisible();
   await expect(result.getByText('Created', { exact: true })).toBeVisible();
   // The displayed time is the batch's instant; its `title` keeps the exact UTC value.
-  await expect(page.getByTitle(MEMBER_BATCH.createdAt, { exact: true })).toBeVisible();
+  await expect(result.getByTitle(MEMBER_BATCH.createdAt, { exact: true })).toBeVisible();
 
   // One confirmed import, one POST.
   expect(uploads.filter((request) => request.method() === 'POST')).toHaveLength(1);
 
-  // FR-39: the batch metadata may remain for this tab, the file's rows may not. Nothing pins the
-  // stored key names, so a different (still compliant) shape cannot make this pass or fail wrongly.
-  const stored = await page.evaluate(() => {
-    const dump = (storage: Storage): string => {
-      const values: string[] = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index) ?? '';
-        values.push(`${key}=${storage.getItem(key) ?? ''}`);
-      }
-      return values.join('\n');
-    };
-    return { session: dump(sessionStorage), local: dump(localStorage) };
-  });
+  // AC-19's "the file contents are discarded": no row text survives in the DOM, and the input no
+  // longer holds the file. Storage alone would pass while both still did.
+  for (const value of ['Zebulon', 'Nkrumah-Quartey', 'Adwoa', 'M-7701', 'M-7702']) {
+    await expect(page.getByText(value, { exact: false })).toHaveCount(0);
+  }
+  const filesHeld = await page
+    .getByTestId('import-file')
+    .evaluate((input) => (input as HTMLInputElement).files?.length ?? 0);
+  expect(filesHeld).toBe(0);
 
-  expect(stored.session).toContain(MEMBER_BATCH.id);
+  // FR-39: the batch metadata may remain for this tab, the file's rows may not. The seeded session is
+  // the sentinel that proves the scan is reading a populated store; the batch id is deliberately not
+  // required, because FR-39 says "may remain", not "must".
+  const stored = await storedValues(page);
+  expect(stored.session).toContain(SESSION_TOKEN);
   for (const value of ['Zebulon', 'Nkrumah-Quartey', 'Adwoa', 'M-7701', 'M-7702']) {
     expect(stored.session).not.toContain(value);
     expect(stored.local).not.toContain(value);

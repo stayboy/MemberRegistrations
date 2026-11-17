@@ -68,6 +68,21 @@ export async function seedTheme(page: Page, accent: AccentId, scheme: Scheme): P
   );
 }
 
+/** Every stored value as one string per entry; no key name is assumed. */
+export async function storedValues(page: Page): Promise<{ session: string; local: string }> {
+  return page.evaluate(() => {
+    const dump = (storage: Storage): string => {
+      const values: string[] = [];
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index) ?? '';
+        values.push(`${key}=${storage.getItem(key) ?? ''}`);
+      }
+      return values.join('\n');
+    };
+    return { session: dump(sessionStorage), local: dump(localStorage) };
+  });
+}
+
 /** Opens a hash route under the preview base (`./` keeps `/MemberRegistrations/`). */
 export async function open(page: Page, route: `/${string}`): Promise<void> {
   await page.goto(`./#${route}`);
