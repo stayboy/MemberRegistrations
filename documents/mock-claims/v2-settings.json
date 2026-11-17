@@ -72,8 +72,8 @@
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-27",
-          "disposition": "deferred",
-          "backlog": "Behavioural ACs behind the v2 mock catalogues"
+          "disposition": "e2e-only",
+          "test": "ui/e2e/settings.spec.ts::the accent, scheme and collapsed sidebar survive a reload and the bearer stays out of localStorage"
         }
       ]
     }
