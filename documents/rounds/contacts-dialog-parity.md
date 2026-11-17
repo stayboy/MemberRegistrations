@@ -142,6 +142,10 @@ change. The mock side of the pair is attested by the owner's signature above.
 
 ## Acceptance
 
+**Superseded 2026-11-16 by round `contacts-authoring`:** criteria 1–2 below describe the grouped
+presentation (a heading and an `InfoLabel` per kind) that the listview replaced. The dialog's current
+contract is FR-78 as amended and AC-53, and that round's record carries the acceptance for it.
+
 | #   | Criterion                                                                             | Evidence                                                                                                                                                          | Verdict |
 | --- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | 1   | Note renders the exact two-sentence copy with a leading shield-lock glyph             | `ContactsDialog.tsx` `CONTACT_PRIVACY_NOTE` + `ShieldLockRegular`; e2e exact-text assertion; `ContactsDialog.dom.test.tsx`                                        | met     |

@@ -323,9 +323,9 @@ n/a — planning document; each build round is reviewed on its own.
 
 ## Mock sign-off
 
-| Surface         | Mock                               | Capture                               | sha256                                                             | Signer | Date       | Verdict                                            |
-| --------------- | ---------------------------------- | ------------------------------------- | ------------------------------------------------------------------ | ------ | ---------- | -------------------------------------------------- |
-| Contacts dialog | `mockups/v2-shell/16-contacts.png` | `ui/e2e/baseline/contacts-dialog.png` | `7b2f4248df430343f9f2704d61ecdaac4baeb242a97eb55a656612486b873207` | owner  | 2026-11-16 | signed (carried by round `contacts-dialog-parity`) |
+| Surface         | Mock                               | Capture                               | sha256                                                             | Signer | Date       | Verdict                                                         |
+| --------------- | ---------------------------------- | ------------------------------------- | ------------------------------------------------------------------ | ------ | ---------- | --------------------------------------------------------------- |
+| Contacts dialog | `mockups/v2-shell/16-contacts.png` | `ui/e2e/baseline/contacts-dialog.png` | `6b154603a77613c2512766a3710a93d02c823538e6804e8eec5f6b7f0388d0e6` | owner  | 2026-11-16 | signed (listview re-cut; carried by round `contacts-authoring`) |
 
 ## Mock parity
 
