@@ -444,7 +444,7 @@ roster detail, not as global sidebar items.
     (`DELETE /v1/members/{memberNo}/ministries/{code}`) after confirming with `Remove <name>?`.
     Neither removes the ministry or its history (FR-32).
     With no assignments the section reads `No ministries recorded`. Each row shows the member's role
-    in that ministry from the detail's additive `positionCode` field, or `No role recorded`.
+    in that ministry from the detail's `position.label`, or `No role recorded`.
   - **Subscriptions are fixed**, never collapsed: every row is shown in detail order with its status,
     and a summary line reads `<active> active`, ` · next ends <date>` when an active `periodEnd`
     exists, and `<n> ended or expired` when any row is not active (the API's three statuses are active,
@@ -1097,7 +1097,7 @@ export interface ContactList {
 export interface MinistryRef {
   code: string;
   name: string;
-  positionCode: string | null;
+  position: { code: string; label: string } | null;
 }
 
 export interface Ministry extends MinistryRef {

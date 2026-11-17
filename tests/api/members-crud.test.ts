@@ -635,10 +635,13 @@ describe('members list contract', () => {
       (item: { seriesName: string }) => item.seriesName === 'Write Rule Today Series',
     );
     expect(entry).toMatchObject({ attended: 1, expected: 1 });
+    // Each entry names the event instance it came from (2026-11-17 amendment).
     expect(entry.entries).toContainEqual({
       id: accepted.body.id,
       date: day(0),
       source: 'manual',
+      eventId: accepted.body.eventId,
+      eventName: 'Write Rule Today Series',
     });
   });
 

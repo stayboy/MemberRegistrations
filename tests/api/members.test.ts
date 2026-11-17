@@ -42,6 +42,54 @@ function dobMonthsAgo(months: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** A UTC calendar date `offset` days from today. */
+function day(offset: number): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+let overviewEventNo = 0;
+
+async function createOverviewEvent(date: string, name: string): Promise<string> {
+  overviewEventNo += 1;
+  const response = await request(app)
+    .post('/v1/events')
+    .set(writeHeaders)
+    .send({
+      eventNo: `OVR-${overviewEventNo}`,
+      name,
+      startDate: date,
+      endDate: date,
+      startTime: '09:00',
+      venueType: 'auditorium',
+      sessions: [{ date }],
+    });
+  expect(response.status).toBe(201);
+  return response.body.id as string;
+}
+
+/** History is seeded directly: per-member writes accept only a session dated today. */
+async function seedOverviewAttendance(
+  eventId: string,
+  memberNo: string,
+  date: string,
+): Promise<void> {
+  const [member] = await harness.db.query<{ id: string }>(
+    'select id from members where member_no = $1',
+    [memberNo],
+  );
+  const [inserted] = await harness.db.query<{ id: string }>(
+    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
+     values ($1,$2,$3,'manual','seed')
+     on conflict (event_instance_id, session_date, member_id) do nothing
+     returning id`,
+    [member!.id, eventId, date],
+  );
+  expect(inserted).toBeTruthy();
+}
+
 describe('authentication and attribution', () => {
   it('rejects requests without a bearer token', async () => {
     const response = await request(app).get('/v1/members');
@@ -168,13 +216,25 @@ describe('member lifecycle', () => {
   });
 
   it('purges PII but keeps the member number reserved', async () => {
-    await create('M-1005', { alias: 'Ama' });
+    await create('M-1005', {
+      alias: 'Ama',
+      cameFrom: 'Tema Central',
+      movedToAssembly: 'Accra North',
+    });
 
     await request(app)
       .post('/v1/members/M-1005/purge')
       .set(writeHeaders)
       .send({ confirm: 'M-1005' })
       .expect(204);
+
+    // The two new free-text membership values join the erase list; the dates do not.
+    const [tombstone] = await harness.db.query<{
+      came_from: string | null;
+      moved_to_assembly: string | null;
+      alias: string | null;
+    }>('select came_from, moved_to_assembly, alias from members where member_no = $1', ['M-1005']);
+    expect(tombstone).toMatchObject({ came_from: null, moved_to_assembly: null, alias: null });
 
     await request(app)
       .get('/v1/members/M-1005')
@@ -467,6 +527,319 @@ describe('member card and verification', () => {
       .send({ verified: false });
     expect(cleared.status).toBe(200);
     expect(cleared.body.verifiedAt).toBeNull();
+  });
+});
+
+describe('membership fields and the overview projection', () => {
+  const OFFICER = 'M-7000';
+  const SUBJECT = 'M-7001';
+  const EMPTY = 'M-7002';
+  let recurringSeriesId = '';
+  let recurringEventId = '';
+  let standaloneEventId = '';
+  let expectedRecurring = 0;
+
+  beforeAll(async () => {
+    await create(OFFICER, {
+      firstName: 'Shepherd',
+      lastName: 'One',
+      gender: 'male',
+      dob: dobYearsAgo(40),
+      isPresbyter: true,
+    });
+    await create(SUBJECT, {
+      firstName: 'Subject',
+      lastName: 'Member',
+      joinedOn: day(-60),
+      assemblyJoinedOn: '2019-03-03',
+      cameFrom: 'Tema Central',
+      movedOutOn: '2026-02-01',
+      movedToAssembly: 'Accra North',
+    });
+    await create(EMPTY);
+
+    // One recurring series row: its event instance is dated on a real
+    // occurrence, so the counts are exercised as well as the entry identity.
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Overview Recurring Series',
+        timezone: 'UTC',
+        schedule: { effectiveFrom: day(-60), rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: day(-5) },
+      });
+    expect(series.status).toBe(201);
+    recurringSeriesId = series.body.id as string;
+
+    const occurrences = await request(app)
+      .get(`/v1/series/${recurringSeriesId}/occurrences`)
+      .query({ from: day(-60), to: day(-5) })
+      .set(readHeaders);
+    expect(occurrences.status).toBe(200);
+    const dates = occurrences.body.dates as string[];
+    expect(dates.length).toBeGreaterThan(0);
+    expectedRecurring = dates.length;
+
+    recurringEventId = await createOverviewEvent(
+      dates[dates.length - 1]!,
+      'Overview Recurring Meeting',
+    );
+    await harness.db.query('update event_instances set series_id = $2 where id = $1', [
+      recurringEventId,
+      recurringSeriesId,
+    ]);
+    await seedOverviewAttendance(recurringEventId, SUBJECT, dates[dates.length - 1]!);
+
+    // One standalone event row: no series, so the detail must not drop it.
+    standaloneEventId = await createOverviewEvent(day(-3), 'Overview Standalone Rally');
+    await seedOverviewAttendance(standaloneEventId, SUBJECT, day(-3));
+
+    const assignment = await request(app)
+      .post('/v1/shepherding/assignments')
+      .set(writeHeaders)
+      .send({ officerMemberNo: OFFICER, memberNo: SUBJECT, assignedOn: day(-30) });
+    expect(assignment.status).toBe(201);
+
+    const reached = await request(app)
+      .post(`/v1/shepherding/assignments/${assignment.body.id}/calls`)
+      .set(writeHeaders)
+      .send({ calledOn: day(-9), outcome: 'reached', stillInChurch: 'yes' });
+    expect(reached.status).toBe(201);
+
+    const missed = await request(app)
+      .post(`/v1/shepherding/assignments/${assignment.body.id}/calls`)
+      .set(writeHeaders)
+      .send({ calledOn: day(-2), outcome: 'no_answer' });
+    expect(missed.status).toBe(201);
+  });
+
+  it('round-trips the four membership fields through create, detail and update', async () => {
+    const created = await create('M-7100', {
+      assemblyJoinedOn: '2018-06-01',
+      cameFrom: 'Koforidua',
+      movedOutOn: '2025-12-31',
+      movedToAssembly: 'Ho Central',
+    });
+    const fields = {
+      assemblyJoinedOn: '2018-06-01',
+      cameFrom: 'Koforidua',
+      movedOutOn: '2025-12-31',
+      movedToAssembly: 'Ho Central',
+    };
+    expect(created.body).toMatchObject(fields);
+
+    const detail = await request(app).get('/v1/members/M-7100').set(readHeaders).expect(200);
+    expect(detail.body).toMatchObject(fields);
+    // `assemblyJoinedOn` is its own date, not a second name for `joinedOn`.
+    expect(detail.body.joinedOn).toBe('2026-01-01');
+
+    const list = await request(app).get('/v1/members').query({ q: 'M-7100' }).set(readHeaders);
+    expect(list.body.items[0]).not.toHaveProperty('assemblyJoinedOn');
+    expect(list.body.items[0]).not.toHaveProperty('cameFrom');
+    expect(list.body.items[0]).not.toHaveProperty('movedOutOn');
+    expect(list.body.items[0]).not.toHaveProperty('movedToAssembly');
+
+    const updated = await request(app)
+      .put('/v1/members/M-7100')
+      .set(writeHeaders)
+      .send({
+        assemblyJoinedOn: '2020-01-05',
+        cameFrom: 'Sunyani',
+        movedOutOn: '2026-03-04',
+        movedToAssembly: 'Tamale',
+      })
+      .expect(200);
+    expect(updated.body).toMatchObject({
+      assemblyJoinedOn: '2020-01-05',
+      cameFrom: 'Sunyani',
+      movedOutOn: '2026-03-04',
+      movedToAssembly: 'Tamale',
+    });
+
+    const reread = await request(app).get('/v1/members/M-7100').set(readHeaders).expect(200);
+    expect(reread.body).toMatchObject({
+      assemblyJoinedOn: '2020-01-05',
+      cameFrom: 'Sunyani',
+      movedOutOn: '2026-03-04',
+      movedToAssembly: 'Tamale',
+    });
+
+    const cleared = await request(app)
+      .put('/v1/members/M-7100')
+      .set(writeHeaders)
+      .send({ assemblyJoinedOn: null, cameFrom: null, movedOutOn: null, movedToAssembly: null })
+      .expect(200);
+    expect(cleared.body).toMatchObject({
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+    });
+
+    const clearedAgain = await request(app).get('/v1/members/M-7100').set(readHeaders).expect(200);
+    expect(clearedAgain.body).toMatchObject({
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+    });
+  });
+
+  it('leaves the four membership fields null when they are not supplied', async () => {
+    const detail = await request(app).get(`/v1/members/${EMPTY}`).set(readHeaders).expect(200);
+    expect(detail.body).toMatchObject({
+      assemblyJoinedOn: null,
+      cameFrom: null,
+      movedOutOn: null,
+      movedToAssembly: null,
+    });
+  });
+
+  it('rejects a membership date that is not an ISO calendar date', async () => {
+    const badCreate = await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({ memberNo: 'M-7101', firstName: 'A', lastName: 'B', assemblyJoinedOn: '03/03/2019' });
+    expect(badCreate.status).toBe(422);
+
+    const badUpdate = await request(app)
+      .put(`/v1/members/${SUBJECT}`)
+      .set(writeHeaders)
+      .send({ movedOutOn: '31-12-2025' });
+    expect(badUpdate.status).toBe(422);
+  });
+
+  it('projects the current shepherd and the all-time call counts on the detail', async () => {
+    const detail = await request(app).get(`/v1/members/${SUBJECT}`).set(readHeaders).expect(200);
+
+    expect(detail.body.shepherd).toMatchObject({
+      memberNo: OFFICER,
+      name: 'Shepherd One',
+      gender: 'male',
+      age: 40,
+      assignedOn: day(-30),
+    });
+    expect(detail.body.calls).toEqual({
+      attempts: 2,
+      conversations: 1,
+      lastCalledOn: day(-2),
+      lastReachedOn: day(-9),
+    });
+
+    // The detail reuses the shepherding projection: same shepherd, same counts.
+    const view = await request(app)
+      .get(`/v1/members/${SUBJECT}/shepherding`)
+      .set(readHeaders)
+      .expect(200);
+    expect(detail.body.shepherd.memberNo).toBe(view.body.shepherd.memberNo);
+    expect(detail.body.shepherd.assignedOn).toBe(view.body.shepherd.assignedOn);
+    expect(detail.body.calls).toMatchObject(view.body.calls);
+  });
+
+  it('returns a null shepherd and zeroed calls when no assignment exists', async () => {
+    const detail = await request(app).get(`/v1/members/${EMPTY}`).set(readHeaders).expect(200);
+
+    expect(detail.body.shepherd).toBeNull();
+    expect(detail.body.calls).toEqual({
+      attempts: 0,
+      conversations: 0,
+      lastCalledOn: null,
+      lastReachedOn: null,
+    });
+  });
+
+  it('carries the event identity on each recurring-series attendance entry', async () => {
+    const detail = await request(app).get(`/v1/members/${SUBJECT}`).set(readHeaders).expect(200);
+    const row = detail.body.attendance.find(
+      (item: { seriesId: string | null }) => item.seriesId === recurringSeriesId,
+    );
+
+    expect(row).toMatchObject({
+      seriesName: 'Overview Recurring Series',
+      attended: 1,
+      expected: expectedRecurring,
+    });
+    expect(row.entries).toHaveLength(1);
+    expect(row.entries[0]).toMatchObject({
+      eventId: recurringEventId,
+      eventName: 'Overview Recurring Meeting',
+    });
+
+    const attendance = await request(app)
+      .get(`/v1/members/${SUBJECT}/attendance`)
+      .set(readHeaders)
+      .expect(200);
+    const listed = attendance.body.series.find(
+      (item: { seriesId: string | null }) => item.seriesId === recurringSeriesId,
+    );
+    expect(listed.entries[0]).toMatchObject({
+      eventId: recurringEventId,
+      eventName: 'Overview Recurring Meeting',
+    });
+  });
+
+  it('returns non-series attendance as a row with null series identity, grouped by its event', async () => {
+    const detail = await request(app).get(`/v1/members/${SUBJECT}`).set(readHeaders).expect(200);
+    const row = detail.body.attendance.find(
+      (item: { seriesId: string | null }) => item.seriesId === null,
+    );
+
+    expect(row).toMatchObject({
+      seriesId: null,
+      seriesName: null,
+      ministry: null,
+      attended: 1,
+      expected: 1,
+      status: 'completed',
+    });
+    expect(row.entries).toEqual([
+      expect.objectContaining({
+        eventId: standaloneEventId,
+        eventName: 'Overview Standalone Rally',
+        date: day(-3),
+        source: 'manual',
+      }),
+    ]);
+
+    const attendance = await request(app)
+      .get(`/v1/members/${SUBJECT}/attendance`)
+      .set(readHeaders)
+      .expect(200);
+    const listed = attendance.body.series.find(
+      (item: { seriesId: string | null }) => item.seriesId === null,
+    );
+    expect(listed.entries[0]).toMatchObject({ eventId: standaloneEventId });
+  });
+
+  it('returns the event identity from a manual attendance write', async () => {
+    const series = await request(app)
+      .post('/v1/series')
+      .set(writeHeaders)
+      .send({
+        name: 'Overview Today Series',
+        timezone: 'UTC',
+        schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY' },
+      });
+    expect(series.status).toBe(201);
+
+    const recorded = await request(app)
+      .post(`/v1/members/${EMPTY}/attendance`)
+      .set(writeHeaders)
+      .send({ seriesId: series.body.id, date: day(0) });
+    expect(recorded.status).toBe(201);
+    expect(recorded.body.eventName).toBe('Overview Today Series');
+    expect(recorded.body.eventId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+
+    const detail = await request(app).get(`/v1/members/${EMPTY}`).set(readHeaders).expect(200);
+    const row = detail.body.attendance.find(
+      (item: { seriesId: string | null }) => item.seriesId === series.body.id,
+    );
+    expect(row.entries[0]).toMatchObject({
+      eventId: recorded.body.eventId,
+      eventName: 'Overview Today Series',
+    });
   });
 });
 

@@ -1206,4 +1206,18 @@ alter table event_session_headcounts
 -- reshape neither rewrites nor deletes them; the newest wins on read (HC-27).
 `,
   },
+  {
+    version: '0023_member_membership_fields',
+    sql: `
+-- Membership movement is four plain nullable values on the member, not a
+-- history table: when the member joined this assembly (distinct from joined_on,
+-- which is when the register first saw them), where they came from, when they
+-- moved out and where to. No default and no backfill - blank stays null, so a
+-- member who has not moved reads null rather than a guessed date.
+alter table members add column assembly_joined_on date;
+alter table members add column came_from text;
+alter table members add column moved_out_on date;
+alter table members add column moved_to_assembly text;
+`,
+  },
 ];
