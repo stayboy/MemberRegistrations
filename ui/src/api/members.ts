@@ -197,7 +197,7 @@ export interface MemberListPage {
   readonly nextCursor?: string;
 }
 
-/** Mirrors `createMemberSchema`, minus the ministries collection. */
+/** The create body's shape: the fields `createMemberSchema` accepts that this form collects. */
 export interface MemberInput {
   readonly memberNo: string;
   readonly firstName: string;
@@ -213,12 +213,16 @@ export interface MemberInput {
   readonly isPresbyter?: boolean;
   /** Entered on the create form (FR-29a); a blank field sends no row. */
   readonly contacts?: readonly ContactInput[];
+  /** Ministry codes chosen on the create form (FR-71); absent when none is chosen. */
+  readonly ministries?: readonly string[];
 }
 
 type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
 
-/** `memberNo` is immutable and contacts have their own endpoints (FR-29a). */
-export type MemberUpdateInput = Partial<Mutable<Omit<MemberInput, 'memberNo' | 'contacts'>>>;
+/** `memberNo` is immutable; contacts and ministries have their own endpoints (FR-29a, FR-71). */
+export type MemberUpdateInput = Partial<
+  Mutable<Omit<MemberInput, 'memberNo' | 'contacts' | 'ministries'>>
+>;
 
 /** Mirrors `contactInputSchema`; the API normalises the value by kind. */
 export interface ContactInput {
@@ -234,6 +238,26 @@ export interface SubscriptionInput {
   readonly reference?: string | null;
   readonly startedOn?: string;
   readonly coveredMemberNos?: readonly string[];
+}
+
+/** Mirrors `subscribeProductSchema`; the create form's one optional subscription (FR-29a). */
+export interface SubscribeProductInput {
+  readonly productCode: string;
+  /** Required only for a product whose payment mode is `either`; resolved server-side otherwise. */
+  readonly paidBy?: 'member' | 'church';
+  readonly coveredMemberNos?: readonly string[];
+}
+
+/** The product-backed row `POST …/subscriptions` returns (`memberSubscriptionSchema`). */
+export interface ProductSubscription {
+  readonly id: string;
+  readonly status: 'active' | 'expired' | 'ended';
+  readonly productCode: string | null;
+  readonly productName: string | null;
+  readonly scope: 'individual' | 'household';
+  readonly paidBy: 'member' | 'church' | null;
+  readonly periodStart: string | null;
+  readonly periodEnd: string | null;
 }
 
 export interface MemberDetailResult {
@@ -535,6 +559,27 @@ export async function addSubscription(
   input: SubscriptionInput,
 ): Promise<MemberSubscription> {
   const subscription = await gatewayRequest<MemberSubscription>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/subscriptions`,
+    { method: 'POST', body: input, sessionToken },
+  );
+  if (!subscription) throw new ApiError(500, 'The created subscription response was empty.');
+  return subscription;
+}
+
+/**
+ * `POST /v1/members/:memberNo/subscriptions` with the product body
+ * `subscribeProductSchema` parses (FR-29a). The route branches on `productCode`,
+ * so this is the product form of the same path `addSubscription` uses for the
+ * legacy `kind`/`scope` body.
+ */
+export async function subscribeMemberProduct(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  input: SubscribeProductInput,
+): Promise<ProductSubscription> {
+  const subscription = await gatewayRequest<ProductSubscription>(
     baseUrl,
     `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/subscriptions`,
     { method: 'POST', body: input, sessionToken },

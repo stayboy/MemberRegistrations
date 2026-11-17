@@ -114,6 +114,32 @@ const MINISTRIES: readonly Ministry[] = [
 
 const CHOIR: MinistryRef = { code: 'CHR', name: 'Choir' };
 
+/** One active product for the create form's optional subscription selector. */
+const SUBSCRIPTION_PRODUCT = {
+  id: 'product-1',
+  code: 'FAMILY',
+  name: 'Family cover',
+  description: null,
+  premiumMinor: 5000,
+  currency: 'GHS',
+  active: true,
+  paymentMode: 'member',
+  periodMonths: 12,
+  covers: 'individual',
+  maxDependents: 0,
+  allowedRelationships: [],
+  minMembershipDays: 0,
+  requiresCard: false,
+  requiresVerified: false,
+  gender: null,
+  minAge: null,
+  maxAge: null,
+  createdBy: 'officer-1',
+  updatedBy: null,
+  updatedAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+} as const;
+
 const CONTACTS_1001: readonly MemberContact[] = [
   {
     id: 'contact-1001-phone',
@@ -1531,6 +1557,11 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/ministries$/,
       handle: () => reply({ items: MINISTRIES }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/subscription-products$/,
+      handle: () => reply({ items: [SUBSCRIPTION_PRODUCT] }),
     },
     {
       method: 'GET',

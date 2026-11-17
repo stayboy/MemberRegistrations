@@ -13,7 +13,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { ChevronDownRegular, SettingsRegular } from '@fluentui/react-icons';
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DATE_STYLE_LABELS,
@@ -75,6 +75,13 @@ const useStyles = makeStyles({
  * icon button: click or right-click both open the full settings menu, and "Open
  * settings" routes to the panel. No inline dropdown lives in the sidebar.
  *
+ * The menu is controlled by `open` and deliberately does **not** set Fluent's
+ * `openOnContext`. That flag replaces the trigger's click handling with a
+ * context-menu handler only, so a left click does nothing (the defect this fixes);
+ * without it Fluent's own trigger wiring opens and closes on click, and the
+ * right-click path is an explicit `onContextMenu` below (ui-date-time-formatting
+ * spec: "Opening it - by click or right-click, as a context menu").
+ *
  * Call sites: `Sidebar` (both collapsed states). The option metadata lives in
  * `format/datetime` and is shared with the Settings page's radio list.
  */
@@ -89,6 +96,12 @@ export function DateTimeMenu({ collapsed }: { collapsed: boolean }) {
   }`;
   const menuLabel = `Date and time: ${currentLabel}`;
 
+  /** Right-click opens the same menu, anchored to the trigger (never the native menu). */
+  function openFromContextMenu(event: MouseEvent<HTMLButtonElement>): void {
+    event.preventDefault();
+    setOpen(true);
+  }
+
   const trigger = collapsed ? (
     <Tooltip content={menuLabel} relationship="description" withArrow>
       <Button
@@ -96,6 +109,7 @@ export function DateTimeMenu({ collapsed }: { collapsed: boolean }) {
         className={styles.collapsedButton}
         icon={<SettingsRegular />}
         aria-label={menuLabel}
+        onContextMenu={openFromContextMenu}
       />
     </Tooltip>
   ) : (
@@ -104,6 +118,7 @@ export function DateTimeMenu({ collapsed }: { collapsed: boolean }) {
       className={styles.trigger}
       icon={<SettingsRegular />}
       aria-label={menuLabel}
+      onContextMenu={openFromContextMenu}
     >
       <span className={styles.triggerLabel}>{currentLabel}</span>
       <ChevronDownRegular className={styles.chevron} aria-hidden="true" />
@@ -116,7 +131,6 @@ export function DateTimeMenu({ collapsed }: { collapsed: boolean }) {
       <Menu
         open={open}
         onOpenChange={(_, data) => setOpen(data.open)}
-        openOnContext
         checkedValues={{
           date: [preference.dateStyle],
           time: [preference.timeCycle],

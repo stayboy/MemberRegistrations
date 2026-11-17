@@ -1,5 +1,6 @@
 import {
   Button,
+  Combobox,
   Dialog,
   DialogActions,
   DialogBody,
@@ -15,12 +16,14 @@ import {
   Option,
   Spinner,
   Switch,
+  Tag,
+  TagGroup,
   Text,
   makeStyles,
   shorthands,
   tokens,
 } from '@fluentui/react-components';
-import { DismissRegular, SaveRegular } from '@fluentui/react-icons';
+import { DismissRegular, OpenRegular, SaveRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -28,11 +31,15 @@ import { isUnauthorized } from '../api/errors';
 import {
   createMember,
   fetchMemberDetail,
+  listMinistries,
+  subscribeMemberProduct,
   updateMember,
   type MemberDetailResult,
   type MemberInput,
   type MemberUpdateInput,
+  type SubscribeProductInput,
 } from '../api/members';
+import { listWelfareProducts, type WelfareProduct } from '../api/welfare';
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import {
@@ -44,8 +51,10 @@ import {
   memberNoConflictMessage,
   mergeKeptValues,
   toCreatePayload,
+  toSubscriptionInput,
   toUpdatePayload,
   validateMemberForm,
+  validateSubscriptionDraft,
   type MemberFormErrors,
   type MemberFormValues,
 } from '../format/member-form';
@@ -103,6 +112,11 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalM,
   },
+  chips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalXS,
+  },
 });
 
 function errorMessage(error: unknown): string {
@@ -137,9 +151,38 @@ function MemberFormView({
   const [conflictOpen, setConflictOpen] = useState(false);
   const [keptWarning, setKeptWarning] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  /** The member exists but its subscription call failed, so the form must not offer a create. */
+  const [createdMemberNo, setCreatedMemberNo] = useState<string | null>(null);
+  const [subscriptionFailure, setSubscriptionFailure] = useState<string | null>(null);
+
+  // FR-71: the ministries control needs the reference list before it can be used.
+  const ministriesQuery = useQuery({
+    queryKey: ['ministries', baseUrl],
+    queryFn: ({ signal }) => listMinistries(baseUrl, token, signal),
+    enabled: Boolean(token) && !isEdit,
+  });
+
+  // The product list is the only read a subscription needs before the member exists.
+  const productsQuery = useQuery({
+    queryKey: ['member-form', baseUrl, 'subscription-products'],
+    queryFn: ({ signal }) => listWelfareProducts(baseUrl, token, false, signal),
+    enabled: Boolean(token) && !isEdit,
+  });
+
+  useEffect(() => {
+    if (isUnauthorized(ministriesQuery.error) || isUnauthorized(productsQuery.error))
+      void signOut();
+  }, [ministriesQuery.error, productsQuery.error, signOut]);
 
   const createMutation = useMutation({
     mutationFn: (input: MemberInput) => createMember(baseUrl, token, input),
+  });
+
+  // FR-29a: the create contract carries no subscription, so it is a second call
+  // issued after the member exists and before the navigation happens.
+  const subscribeMutation = useMutation({
+    mutationFn: (variables: { memberNo: string; input: SubscribeProductInput }) =>
+      subscribeMemberProduct(baseUrl, token, variables.memberNo, variables.input),
   });
 
   const updateMutation = useMutation({
@@ -147,7 +190,8 @@ function MemberFormView({
       updateMember(baseUrl, token, memberNo, variables.input, variables.etag),
   });
 
-  const isSaving = createMutation.isPending || updateMutation.isPending || syncing;
+  const isSaving =
+    createMutation.isPending || updateMutation.isPending || subscribeMutation.isPending || syncing;
 
   function setField<Key extends keyof MemberFormValues>(
     key: Key,
@@ -163,20 +207,53 @@ function MemberFormView({
   }
 
   function submit(): void {
-    if (isSaving) return;
+    // A created member means the only remaining verb is "Open member record": a
+    // second create would 409 on the member number (FR-29a).
+    if (isSaving || createdMemberNo) return;
 
     setFormError(null);
     setKeptWarning(false);
 
-    const nextErrors = validateMemberForm(values);
+    const chosenProduct = products.find(
+      (product) => product.code === values.subscriptionProductCode,
+    );
+    const nextErrors = {
+      ...validateMemberForm(values),
+      ...validateSubscriptionDraft(values, chosenProduct?.paymentMode ?? null),
+    };
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     if (!isEdit) {
+      const subscription = toSubscriptionInput(values);
       createMutation.mutate(toCreatePayload(values), {
         onSuccess: (created) => {
           void queryClient.invalidateQueries({ queryKey: ['members', baseUrl] });
-          navigate(`/members/${encodeURIComponent(created.memberNo)}`);
+          if (!subscription) {
+            navigate(`/members/${encodeURIComponent(created.memberNo)}`);
+            return;
+          }
+          subscribeMutation.mutate(
+            { memberNo: created.memberNo, input: subscription },
+            {
+              onSuccess: () => {
+                void queryClient.invalidateQueries({
+                  queryKey: ['member', baseUrl, created.memberNo],
+                });
+                navigate(`/members/${encodeURIComponent(created.memberNo)}`);
+              },
+              onError: (error: unknown) => {
+                if (isUnauthorized(error)) {
+                  void signOut();
+                  return;
+                }
+                // The member exists; only the subscription failed. Name the failure,
+                // keep the member, and never claim the registration failed (AC-52).
+                setCreatedMemberNo(created.memberNo);
+                setSubscriptionFailure(errorMessage(error));
+              },
+            },
+          );
         },
         onError: (error: unknown) => {
           if (isUnauthorized(error)) {
@@ -280,7 +357,21 @@ function MemberFormView({
   const title = isEdit ? 'Edit member' : 'Add member';
   const description = isEdit
     ? 'Update the registration. Member number is permanent, and contacts are managed separately from the Contacts action.'
-    : 'Create a registration. The API returns 201 with a Location header for the new member. Contacts are entered here and travel in that one request; subscriptions are added from the member record after creation.';
+    : 'Create a registration. The API returns 201 with a Location header for the new member. Contacts and ministries travel in that one request; a chosen subscription is added by a second call once the member exists.';
+
+  const activeMinistries = (ministriesQuery.data ?? []).filter((ministry) => ministry.active);
+  const products = (productsQuery.data ?? []).filter((product) => product.active);
+  const selectedProduct: WelfareProduct | undefined = products.find(
+    (product) => product.code === values.subscriptionProductCode,
+  );
+  const ministryName = (code: string): string =>
+    activeMinistries.find((ministry) => ministry.code === code)?.name ?? code;
+  const paidByLabel =
+    values.subscriptionPaidBy === 'member'
+      ? 'Member'
+      : values.subscriptionPaidBy === 'church'
+        ? 'Church'
+        : 'Choose who pays';
 
   return (
     <PageFrame
@@ -289,14 +380,31 @@ function MemberFormView({
       submenu={isEdit ? 'Edit member' : 'Add member'}
       description={description}
       controls={
-        <>
-          <Button icon={<DismissRegular />} appearance="secondary" onClick={cancel}>
-            Cancel
+        createdMemberNo ? (
+          // AC-52: the member exists, so the only primary action is opening it. A second
+          // create would 409 on the member number that was just registered.
+          <Button
+            icon={<OpenRegular />}
+            appearance="primary"
+            onClick={() => navigate(`/members/${encodeURIComponent(createdMemberNo)}`)}
+          >
+            Open member record
           </Button>
-          <Button icon={<SaveRegular />} appearance="primary" onClick={submit} disabled={isSaving}>
-            {isEdit ? 'Save changes' : 'Create member'}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button icon={<DismissRegular />} appearance="secondary" onClick={cancel}>
+              Cancel
+            </Button>
+            <Button
+              icon={<SaveRegular />}
+              appearance="primary"
+              onClick={submit}
+              disabled={isSaving}
+            >
+              {isEdit ? 'Save changes' : 'Create member'}
+            </Button>
+          </>
+        )
       }
     >
       <form
@@ -312,6 +420,18 @@ function MemberFormView({
             <MessageBarBody>
               <MessageBarTitle>The member was not saved</MessageBarTitle>
               {formError}
+            </MessageBarBody>
+          </MessageBar>
+        ) : null}
+
+        {createdMemberNo && subscriptionFailure ? (
+          <MessageBar intent="warning">
+            <MessageBarBody>
+              <MessageBarTitle>
+                The member was created, but its subscription was not added
+              </MessageBarTitle>
+              {subscriptionFailure} The subscription can still be added from the member&apos;s
+              Subscriptions view.
             </MessageBarBody>
           </MessageBar>
         ) : null}
@@ -536,8 +656,9 @@ function MemberFormView({
               Church
             </h2>
             <Text size={200} className={styles.helper}>
-              Presbyter is a flag, not a ministry: it makes the member eligible to shepherd.
-              Ministries are assigned by code on the member record.
+              {isEdit
+                ? 'Presbyter is a flag, not a ministry: it makes the member eligible to shepherd. Ministries are assigned by code on the member record.'
+                : 'Presbyter is a flag, not a ministry: it makes the member eligible to shepherd. Chosen ministries travel in the same create request.'}
             </Text>
           </div>
 
@@ -564,12 +685,154 @@ function MemberFormView({
             </Field>
           </div>
 
+          {/* FR-71: ministries are collected on the create form and ride the same POST.
+              The edit form keeps its own Ministries surface on the member record (FR-29). */}
+          {isEdit ? null : (
+            <>
+              <div className={styles.grid}>
+                <Field
+                  label="Ministries"
+                  hint="Optional. Chosen codes are sent in the create request."
+                >
+                  <Combobox
+                    multiselect
+                    selectedOptions={[...values.ministries]}
+                    placeholder={
+                      ministriesQuery.isPending ? 'Loading ministries…' : 'Select ministries'
+                    }
+                    disabled={ministriesQuery.isPending || activeMinistries.length === 0}
+                    onOptionSelect={(_, data) => setField('ministries', data.selectedOptions)}
+                  >
+                    {activeMinistries.map((ministry) => (
+                      <Option
+                        key={ministry.code}
+                        value={ministry.code}
+                        text={`${ministry.code} · ${ministry.name}`}
+                      >
+                        {ministry.code} · {ministry.name}
+                      </Option>
+                    ))}
+                  </Combobox>
+                </Field>
+              </div>
+
+              {values.ministries.length > 0 ? (
+                <TagGroup aria-label="Chosen ministries" className={styles.chips}>
+                  {values.ministries.map((code) => (
+                    <Tag key={code} size="small" appearance="outline">
+                      {code} · {ministryName(code)}
+                    </Tag>
+                  ))}
+                </TagGroup>
+              ) : null}
+
+              {ministriesQuery.isError ? (
+                <MessageBar intent="warning">
+                  <MessageBarBody>
+                    <MessageBarTitle>The ministry list is unavailable</MessageBarTitle>
+                    The registration can still be created; ministries are assigned from the member
+                    record afterwards.
+                  </MessageBarBody>
+                </MessageBar>
+              ) : null}
+            </>
+          )}
+
           <Text size={200} className={styles.helper}>
             {isEdit
               ? "The API validates member-number and contact uniqueness. A duplicate member number returns 409 and is shown against the member-number field. Subscriptions are added from the member's Subscriptions view after creation."
-              : "The API validates member-number and contact uniqueness. A duplicate member number returns 409 and is shown against the member-number field; so does a contact value another member already owns, shown against that field. Subscriptions are added from the member's Subscriptions view after creation."}
+              : 'The API validates member-number and contact uniqueness. A duplicate member number returns 409 and is shown against the member-number field; so does a contact value another member already owns, shown against that field.'}
           </Text>
         </section>
+
+        {/* FR-29a: one optional subscription, added by a second call after the member
+            exists. The edit form has none - subscriptions are managed on the member
+            record's Subscriptions tab. */}
+        {isEdit ? null : (
+          <section className={styles.section} aria-labelledby="member-subscription-heading">
+            <div className={styles.sectionHeader}>
+              <h2 id="member-subscription-heading" className={styles.sectionTitle}>
+                Subscription
+              </h2>
+              <Text size={200} className={styles.helper}>
+                Optional, and at most one. The create request carries no subscription, so a chosen
+                one is added by a second call straight after the member exists. If that call fails
+                the member still exists, and the subscription can be added from the member&apos;s
+                Subscriptions view.
+              </Text>
+            </div>
+
+            <div className={styles.grid}>
+              <Field
+                label="Product"
+                hint="Add a subscription now, or leave it to the member record."
+              >
+                <Dropdown
+                  value={
+                    selectedProduct
+                      ? `${selectedProduct.code} · ${selectedProduct.name}`
+                      : 'No subscription'
+                  }
+                  selectedOptions={[values.subscriptionProductCode]}
+                  disabled={productsQuery.isPending}
+                  onOptionSelect={(_, data) => {
+                    setField('subscriptionProductCode', data.optionValue ?? '');
+                    setField('subscriptionPaidBy', '');
+                  }}
+                >
+                  <Option value="">No subscription</Option>
+                  {products.map((product) => (
+                    <Option
+                      key={product.code}
+                      value={product.code}
+                      text={`${product.code} · ${product.name}`}
+                    >
+                      {product.code} · {product.name}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
+
+              {selectedProduct?.paymentMode === 'either' ? (
+                <Field
+                  label="Paid by"
+                  required
+                  validationState={errors.subscriptionPaidBy ? 'error' : 'none'}
+                  validationMessage={errors.subscriptionPaidBy}
+                  hint="This product can be paid by the member or the church."
+                >
+                  <Dropdown
+                    value={paidByLabel}
+                    selectedOptions={values.subscriptionPaidBy ? [values.subscriptionPaidBy] : []}
+                    onOptionSelect={(_, data) => {
+                      const paidBy = data.optionValue;
+                      if (paidBy === 'member' || paidBy === 'church') {
+                        setField('subscriptionPaidBy', paidBy);
+                      }
+                    }}
+                  >
+                    <Option value="member" text="Member">
+                      Member
+                    </Option>
+                    <Option value="church" text="Church">
+                      Church
+                    </Option>
+                  </Dropdown>
+                </Field>
+              ) : null}
+            </div>
+
+            {productsQuery.isError ? (
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  <MessageBarTitle>The product list is unavailable</MessageBarTitle>
+                  The registration can still be created; a subscription can be added from the member
+                  record afterwards.
+                </MessageBarBody>
+              </MessageBar>
+            ) : null}
+          </section>
+        )}
       </form>
 
       <Dialog
