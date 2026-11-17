@@ -1,0 +1,59 @@
+{
+  "$comment": "Capability class to model mapping (owner, 2026-11-17). The protected policy names classes; this file names the models, so replacing a model that disappeared is one edit here instead of a protected-document review. Keep three candidates per class, the metered rungs last, and refresh that class's `probedAt` date when a round probes its first candidate. A candidate observed unavailable twice in a day is replaced at the round's end (policy: Seat health is probed once per round); two consecutive days makes that the owner's decision.",
+  "classes": {
+    "worker-flash": {
+      "outsideWindow": [
+        "ollama-cloud/deepseek-v4.1-flash:1017",
+        "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
+        "ollama-cloud/deepseek-v4.1-flash"
+      ],
+      "insideWindow": [
+        "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
+        "ollama-cloud/deepseek-v4.1-flash:1017",
+        "ollama-cloud/deepseek-v4.1-flash"
+      ]
+    },
+    "reviewer-pro": {
+      "outsideWindow": [
+        "ollama-cloud/deepseek-v4-pro:0813",
+        "ollama-cloud/mimo-v2.6-pro",
+        "cline-pass/cline-pass/mimo-v2.6-pro"
+      ],
+      "insideWindow": [
+        "ollama-cloud/mimo-v2.6-pro",
+        "cline-pass/cline-pass/mimo-v2.6-pro",
+        "ollama-cloud/deepseek-v4-pro:0813"
+      ]
+    },
+    "grill-flash": {
+      "outsideWindow": [
+        "ollama-cloud/deepseek-v4.1-flash:1017",
+        "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
+        "ollama-cloud/deepseek-v4.1-flash"
+      ],
+      "insideWindow": [
+        "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
+        "ollama-cloud/deepseek-v4.1-flash:1017",
+        "ollama-cloud/deepseek-v4.1-flash"
+      ]
+    },
+    "git-executor": {
+      "anyWindow": [
+        "opencode/beam-free",
+        "ollama-cloud/mimo-v2.6-flash",
+        "openrouter/deepseek/deepseek-v4.1-flash-1017"
+      ]
+    }
+  },
+  "notes": {
+    "git-executor": "Only one free candidate exists today (`opencode/beam-free`), so the second and third rungs are metered; that is the gap the 2026-11-17 ruling names - a free provider exhausted twice in a day is replaced at the round's end, not retried all day.",
+    "probe": "One dispatch per class per local day, at round open; the outcome is recorded in that round's Seats table and holds until the next day.",
+    "insideWindow": "12:00-18:00 local moves the worker, grill and reviewer classes; the git executor is not clocked."
+  },
+  "probedAt": {
+    "worker-flash": "2026-11-17",
+    "reviewer-pro": "2026-11-17",
+    "grill-flash": "2026-11-17",
+    "git-executor": "2026-11-17"
+  }
+}

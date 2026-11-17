@@ -67,14 +67,18 @@ rules below and the parent's post-action verification are the real control.
 
 ## Budget - refuse without it
 
-The brief must contain `git-seat-budget: <amount>`. Without that line return
-`REFUSED: no git-seat-budget`. Do not run an action the parent has not declared inside the budget.
+The brief must state the round's budget as `git-seat-budget: <amount>` - the amount the round doc
+declares, or `12` when it declares none (the standing default in
+`documents/agents/orchestrator-policy.md`). `git-seat-budget: 0` parks every verb: return
+`REFUSED: budget parks this round`. Without any amount in the brief, return
+`REFUSED: no git-seat-budget` and do not run an action the parent has not declared inside the budget.
 
 ## Brief shape - refuse anything else
 
 The brief must contain:
 
-- the owner's sentence, quoted verbatim, containing the verb you are asked to run;
+- the owner's sentence, quoted verbatim, containing the verb you are asked to run (or the round doc's
+  `Verbs this round needs:` line that the owner's go approved);
 - `verb:` one of `branch`, `commit`, `push`, `pr`, `merge`, `tag`, `sync`;
 - `branch:`;
 - `files:` for a commit;
@@ -89,7 +93,9 @@ a commit brief cannot push.
 
 ## Actions
 
-- `branch`: `git switch -c <branch>` from `main`; never from a dirty tree.
+- `branch`: `git switch -c <branch>` from `main`; never from a dirty tree — except when every modified
+  or untracked path is this round's own `documents/rounds/<slug>.md`, which the brief lists and the
+  round's first commit carries.
 - `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. Append
   `Model-Seat: git-executor (ollama-cloud/mimo-v2.6-flash)` and `Fallback-Reason: <classification>` if the
   message lacks them.
@@ -112,8 +118,13 @@ push; widening a verb.
 
 ## No further fallback
 
-Rung 2 is the end of the ranking. If you cannot run the action, return
+This file serves rung 2 and any later metered rung: the class's list in `documents/agents/seats.json`
+is the ranking, and a later candidate runs on this same file inside the round's brief cap. If you cannot
+run the action, return
 `FALLBACK: <classification>` and stop; the parent parks the action.
+
+A `shell-permission-denied` tool rejection is retried **once**, with the identical command and nothing
+else, and the retry is named in the `RESULT` line. Never retry after a `REFUSED`.
 
 ## Return
 

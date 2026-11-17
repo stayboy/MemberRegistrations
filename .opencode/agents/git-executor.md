@@ -68,7 +68,8 @@ rules below and the parent's post-action verification are the real control.
 
 The brief must contain:
 
-- the owner's sentence, quoted verbatim, containing the verb you are asked to run;
+- the owner's sentence, quoted verbatim, containing the verb you are asked to run (or the round doc's
+  `Verbs this round needs:` line that the owner's go approved);
 - `verb:` one of `branch`, `commit`, `push`, `pr`, `merge`, `tag`, `sync`;
 - `branch:`;
 - `files:` for a commit;
@@ -83,7 +84,9 @@ a commit brief cannot push.
 
 ## Actions
 
-- `branch`: `git switch -c <branch>` from `main`; never from a dirty tree.
+- `branch`: `git switch -c <branch>` from `main`; never from a dirty tree — except when every modified
+  or untracked path is this round's own `documents/rounds/<slug>.md`, which the brief lists and the
+  round's first commit carries.
 - `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. Append
   `Model-Seat: git-executor (opencode/beam-free)` if the message lacks a `Model-Seat` trailer.
 - `push`: `git push -u origin <branch>`; never bare `git push`, never `main`.
@@ -109,6 +112,9 @@ If you cannot run the action, stop and return `FALLBACK: <classification>`; do n
 model or a different command. The closed list is: provider auth or model-not-found, HTTP 4xx/5xx,
 HTTP 429, a tool call that times out, a prose-only response with no tool call, a context or output
 cap too small to carry the brief, or an empty/refusal response. Slow-but-correct is not unavailable.
+
+A `shell-permission-denied` tool rejection is retried **once**, with the identical command and nothing
+else, and the retry is named in the `RESULT` line. Never retry after a `REFUSED`.
 
 ## Return
 
