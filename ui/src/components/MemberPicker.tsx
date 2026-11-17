@@ -36,7 +36,7 @@ export interface MemberPickerProps {
 }
 
 /**
- * Call sites: the relationship add form (MemberRelationshipsTab), the add-coverage
+ * Call sites: the relationship add form (MemberRelationshipsSection), the add-coverage
  * dialog and the covered-members editor in the add-subscription dialog
  * (MemberSubscriptionsTab). This is a feature component: it owns the debounced
  * member search and its cache; the caller owns the selected member number.

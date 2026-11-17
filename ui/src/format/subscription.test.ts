@@ -32,6 +32,7 @@ describe('subscription labels', () => {
     expect(subscriptionRoleLabel('covered')).toBe('Covered');
     expect(subscriptionStatusLabel('active')).toBe('Active');
     expect(subscriptionStatusLabel('ended')).toBe('Ended');
+    expect(subscriptionStatusLabel('expired')).toBe('Expired');
   });
 
   it('falls back to an em dash for an unset choice', () => {

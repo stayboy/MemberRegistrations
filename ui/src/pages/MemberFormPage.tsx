@@ -676,6 +676,56 @@ function MemberFormView({
               />
             </Field>
 
+            {/* FR-29: the four membership facts, on create and edit. A blank field
+                sends `null`; the assembly join date has no default. */}
+            <Field
+              label="Assembly joined"
+              validationState={errors.assemblyJoinedOn ? 'error' : 'none'}
+              validationMessage={errors.assemblyJoinedOn}
+              hint="UTC calendar date"
+            >
+              <Input
+                type="date"
+                value={values.assemblyJoinedOn}
+                onChange={(_, data) => setField('assemblyJoinedOn', data.value)}
+              />
+            </Field>
+
+            <Field
+              label="Came from"
+              validationState={errors.cameFrom ? 'error' : 'none'}
+              validationMessage={errors.cameFrom}
+            >
+              <Input
+                value={values.cameFrom}
+                onChange={(_, data) => setField('cameFrom', data.value)}
+              />
+            </Field>
+
+            <Field
+              label="Moved out"
+              validationState={errors.movedOutOn ? 'error' : 'none'}
+              validationMessage={errors.movedOutOn}
+              hint="UTC calendar date"
+            >
+              <Input
+                type="date"
+                value={values.movedOutOn}
+                onChange={(_, data) => setField('movedOutOn', data.value)}
+              />
+            </Field>
+
+            <Field
+              label="Moved to"
+              validationState={errors.movedToAssembly ? 'error' : 'none'}
+              validationMessage={errors.movedToAssembly}
+            >
+              <Input
+                value={values.movedToAssembly}
+                onChange={(_, data) => setField('movedToAssembly', data.value)}
+              />
+            </Field>
+
             <Field label="Presbyter" hint="Eligible to hold a shepherding roster">
               <Switch
                 checked={values.isPresbyter}

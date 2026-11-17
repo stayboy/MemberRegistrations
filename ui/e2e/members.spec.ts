@@ -100,8 +100,7 @@ test('the Contacts action opens the flat contacts dialog', async ({ page }) => {
  */
 test('the member detail edits a contact value in place', async ({ page }) => {
   await open(page, '/members/M-1001');
-  await page.getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+  await page.getByRole('button', { name: 'View Contacts (2)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   await dialog.getByRole('button', { name: 'Edit phone +233 20 000 0001' }).click();
@@ -134,8 +133,7 @@ test('the member detail edits a contact value in place', async ({ page }) => {
  */
 test('a duplicate contact value offers the household link, then unlinks', async ({ page }) => {
   await open(page, '/members/M-1001');
-  await page.getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+  await page.getByRole('button', { name: 'View Contacts (2)' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Contacts' });
   // Owned by M-1002 in the fixture register.
@@ -205,9 +203,8 @@ test('the add-member route creates the member and lands on the detail', async ({
   await expect(page.getByRole('tab', { name: /Attendance/ })).toBeVisible();
 
   // AC-52's other half: the new member's detail shows them. The detail's own
-  // Contacts action opens the flat list, and the created value is read off a row.
-  await page.getByRole('button', { name: 'Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Contacts · 2' }).click();
+  // View Contacts button opens the flat list, and the created value is read off a row.
+  await page.getByRole('button', { name: 'View Contacts (2)' }).click();
 
   const contacts = page.getByRole('dialog', { name: 'Contacts' });
   await expect(contacts).toBeVisible();

@@ -1,10 +1,10 @@
 import { makeStyles, shorthands, tokens } from '@fluentui/react-components';
 
 /**
- * Styles shared by the member-detail shell and its six page-local tab files.
- * Tab names and their FRs: Overview (FR-29), Attendance (FR-30), Subscriptions
- * (FR-29/FR-72), Ministries (FR-29), Relationships (FR-29) and Shepherding
- * (FR-66).
+ * Styles shared by the member-detail shell and its page-local tab and section
+ * files. The tabs are Overview (FR-29), Attendance (FR-30), Subscriptions
+ * (FR-29/FR-72) and Shepherding (FR-66); Overview also carries the fixed
+ * Ministries and Relationships sections.
  */
 export const useMemberDetailStyles = makeStyles({
   page: {
@@ -19,11 +19,35 @@ export const useMemberDetailStyles = makeStyles({
     gap: tokens.spacingVerticalL,
     paddingTop: tokens.spacingVerticalM,
   },
-  // Six tabs do not fit the 360 px content column; wrapping keeps every tab
-  // visible and keeps the column's scrollWidth inside its clientWidth.
+  // The tab row is its own horizontal scroll area at narrow widths, so all four
+  // tabs stay reachable without widening the content column (the 360 px gate).
   tabs: {
     flexWrap: 'wrap',
     rowGap: tokens.spacingVerticalXS,
+  },
+  // FR-29: the contacts control holds the trailing edge of the tab row, so the
+  // tab strip and the button share one baseline.
+  tabRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'nowrap',
+    minWidth: 0,
+    maxWidth: '100%',
+    overflowX: 'auto',
+  },
+  tabRowTabs: {
+    flex: '1 1 auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    overflowX: 'auto',
+  },
+  tabRowEnd: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginInlineStart: 'auto',
   },
   state: {
     display: 'flex',
@@ -177,5 +201,130 @@ export const useMemberDetailStyles = makeStyles({
   purgeWarning: {
     color: tokens.colorPaletteRedForeground1,
     fontWeight: tokens.fontWeightSemibold,
+  },
+  // FR-29 overview: four cards across the top, then two columns at 1024 px and
+  // wider (identity and relationships left, ministries and subscriptions right).
+  overview: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalL,
+  },
+  statCards: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: tokens.spacingHorizontalL,
+  },
+  statCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+    minWidth: 0,
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderTopWidth: '2px',
+    borderTopStyle: 'solid',
+    borderTopColor: tokens.colorBrandStroke1,
+    borderRadius: tokens.borderRadiusLarge,
+    backgroundColor: tokens.colorBrandBackground2,
+  },
+  statLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+  },
+  statValues: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+  },
+  statValue: {
+    color: tokens.colorNeutralForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase400,
+    lineHeight: tokens.lineHeightBase400,
+  },
+  statEmpty: {
+    color: tokens.colorNeutralForeground3,
+    fontWeight: tokens.fontWeightRegular,
+  },
+  statCaption: {
+    color: tokens.colorNeutralForeground3,
+  },
+  overviewColumns: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr)',
+    gap: tokens.spacingHorizontalL,
+    alignItems: 'start',
+    '@media (min-width: 1024px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+  },
+  overviewColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalL,
+    minWidth: 0,
+  },
+  membershipBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalM,
+    paddingTop: tokens.spacingVerticalM,
+    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  shepherdLine: {
+    margin: 0,
+    paddingTop: tokens.spacingVerticalM,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    color: tokens.colorNeutralForeground2,
+  },
+  shepherdKey: {
+    color: tokens.colorNeutralForeground3,
+  },
+  sectionCount: {
+    color: tokens.colorNeutralForeground3,
+    fontWeight: tokens.fontWeightRegular,
+    fontSize: tokens.fontSizeBase300,
+  },
+  panelList: {
+    display: 'flex',
+    flexDirection: 'column',
+    margin: 0,
+    padding: 0,
+    listStyleType: 'none',
+  },
+  panelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalM,
+    minHeight: '40px',
+    paddingBlock: tokens.spacingVerticalS,
+    ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  panelRowMain: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    minWidth: 0,
+  },
+  panelRowInline: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+    minWidth: 0,
+  },
+  panelFoot: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+  panelAddRow: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
   },
 });
