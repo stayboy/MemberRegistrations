@@ -28,6 +28,10 @@ export const createMemberSchema = z.object({
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
+  assemblyJoinedOn: dateStringSchema.nullable().optional(),
+  cameFrom: z.string().max(200).nullable().optional(),
+  movedOutOn: dateStringSchema.nullable().optional(),
+  movedToAssembly: z.string().max(200).nullable().optional(),
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
   membershipCardNo: z.string().trim().max(32).nullable().optional(),
@@ -47,6 +51,10 @@ export const updateMemberSchema = z.object({
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
+  assemblyJoinedOn: dateStringSchema.nullable().optional(),
+  cameFrom: z.string().max(200).nullable().optional(),
+  movedOutOn: dateStringSchema.nullable().optional(),
+  movedToAssembly: z.string().max(200).nullable().optional(),
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
   titleCode: z.string().min(2).max(32).nullable().optional(),
@@ -188,15 +196,36 @@ const relationshipSchema = z.object({
   archived: z.boolean(),
 });
 
+/** The member's current shepherd, from the same projection `/shepherding` uses. */
+const detailShepherdSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  gender: z.enum(GENDERS),
+  age: z.number().int().nullable(),
+  assignedOn: z.string(),
+});
+
+/** All-time call counts for the member's shepherding history; null dates mean no such call. */
+const detailCallsSchema = z.object({
+  attempts: z.number().int(),
+  conversations: z.number().int(),
+  lastCalledOn: z.string().nullable(),
+  lastReachedOn: z.string().nullable(),
+});
+
 const attendanceEntrySchema = z.object({
   id: z.string(),
   date: z.string(),
   source: z.enum(['import', 'manual']),
+  /** The event instance the row belongs to, whichever series it came from. */
+  eventId: z.string(),
+  eventName: z.string(),
 });
 
 const attendanceSeriesSchema = z.object({
-  seriesId: z.string(),
-  seriesName: z.string(),
+  /** Null for a standalone event row: no series, grouped by `eventId` instead. */
+  seriesId: z.string().nullable(),
+  seriesName: z.string().nullable(),
   ministry: z.string().nullable(),
   attended: z.number().int(),
   expected: z.number().int(),
@@ -253,6 +282,12 @@ export const memberDetailSchema = memberSummarySchema.extend({
   alias: z.string().nullable(),
   dob: z.string().nullable(),
   addressLine: z.string().nullable(),
+  assemblyJoinedOn: z.string().nullable(),
+  cameFrom: z.string().nullable(),
+  movedOutOn: z.string().nullable(),
+  movedToAssembly: z.string().nullable(),
+  shepherd: detailShepherdSchema.nullable(),
+  calls: detailCallsSchema,
   purgedAt: z.string().nullable(),
   version: z.number().int(),
   createdAt: z.string(),

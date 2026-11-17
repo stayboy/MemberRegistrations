@@ -79,6 +79,14 @@ export const members = pgTable(
     placeOfResidence: text('place_of_residence'),
     addressLine: text('address_line'),
     joinedOn: date('joined_on'),
+    /** UTC date the member joined this assembly; distinct from `joinedOn`. */
+    assemblyJoinedOn: date('assembly_joined_on'),
+    /** Where the member came from, free text; null when not recorded. */
+    cameFrom: text('came_from'),
+    /** UTC date the member moved out; null while they are still here. */
+    movedOutOn: date('moved_out_on'),
+    /** The assembly the member moved to, free text; null when not recorded. */
+    movedToAssembly: text('moved_to_assembly'),
     isPresbyter: boolean('is_presbyter').notNull().default(false),
     presbyterRank: integer('presbyter_rank'),
     /** The member's office; nullable and independent of `isPresbyter` (O-4). */

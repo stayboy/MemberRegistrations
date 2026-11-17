@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
-import type { Db } from '../db/sql.js';
+import type { Db, Row } from '../db/sql.js';
 import { shepherdingCalls } from '../db/schema.js';
 import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
@@ -130,6 +130,36 @@ export interface MemberShepherdingDto {
   latestFeedback: string | null;
   latestIssue: string | null;
   recentCalls: Array<CallDto & { officerMemberNo: string }>;
+}
+
+/** The member detail's current shepherd: no assignment id, no history. */
+export interface OverviewShepherdDto {
+  memberNo: string;
+  name: string;
+  gender: Gender;
+  age: number | null;
+  assignedOn: string;
+}
+
+/** All-time counts for the member's shepherding history; a date is null when no such call exists. */
+export interface OverviewCallsDto {
+  attempts: number;
+  conversations: number;
+  lastCalledOn: string | null;
+  lastReachedOn: string | null;
+}
+
+interface AssignmentRow extends Row {
+  id: string;
+  assigned_on: string;
+  ended_on: string | null;
+  reason: string | null;
+  ended_reason: string | null;
+  officer_member_no: string;
+  first_name: string | null;
+  last_name: string | null;
+  gender: Gender;
+  dob: string | Date | null;
 }
 
 export interface ReportDto {
@@ -556,27 +586,7 @@ export class ShepherdingRepository {
   async forMember(memberNo: string): Promise<MemberShepherdingDto> {
     const member = await this.requireActiveMember(memberNo);
 
-    const assignments = await this.db.query<{
-      id: string;
-      assigned_on: string;
-      ended_on: string | null;
-      reason: string | null;
-      ended_reason: string | null;
-      officer_member_no: string;
-      first_name: string | null;
-      last_name: string | null;
-      gender: Gender;
-      dob: string | Date | null;
-    }>(
-      `select a.id, a.assigned_on, a.ended_on, a.reason, a.ended_reason,
-              o.member_no as officer_member_no, o.first_name, o.last_name, o.gender, o.dob
-       from shepherding_assignments a
-       join members o on o.id = a.officer_member_id
-       where a.member_id = $1
-       order by a.assigned_on desc, a.created_at desc`,
-      [member.id],
-    );
-
+    const assignments = await this.loadAssignments(member.id);
     const calls = await this.loadCallsForMember(member.id);
     const summary = summariseCalls(calls);
     const current = assignments.find((assignment) => assignment.ended_on === null);
@@ -626,7 +636,56 @@ export class ShepherdingRepository {
     };
   }
 
+  /**
+   * The member detail's projection of the same source `forMember` reads: the
+   * current assignment and the all-time call counts `/shepherding` reports. It
+   * takes the member id and skips the active-member gate so the detail can ask
+   * about an archived member through `includeArchived=true`; it never writes and
+   * adds no route.
+   */
+  async overviewForMember(memberId: string): Promise<{
+    shepherd: OverviewShepherdDto | null;
+    calls: OverviewCallsDto;
+  }> {
+    const [assignments, calls] = await Promise.all([
+      this.loadAssignments(memberId),
+      this.loadCallsForMember(memberId),
+    ]);
+    const current = assignments.find((assignment) => assignment.ended_on === null);
+
+    let lastReachedOn: string | null = null;
+    for (const call of calls) {
+      if (call.outcome !== 'reached') continue;
+      if (!lastReachedOn || call.calledOn > lastReachedOn) lastReachedOn = call.calledOn;
+    }
+
+    return {
+      shepherd: current
+        ? {
+            memberNo: current.officer_member_no,
+            name: fullName(current.first_name, current.last_name),
+            gender: current.gender,
+            age: ageInYears(iso(current.dob)),
+            assignedOn: iso(current.assigned_on)!,
+          }
+        : null,
+      calls: { ...summariseCalls(calls), lastReachedOn },
+    };
+  }
+
   // -- internals -----------------------------------------------------------
+
+  private async loadAssignments(memberId: string): Promise<AssignmentRow[]> {
+    return this.db.query<AssignmentRow>(
+      `select a.id, a.assigned_on, a.ended_on, a.reason, a.ended_reason,
+              o.member_no as officer_member_no, o.first_name, o.last_name, o.gender, o.dob
+       from shepherding_assignments a
+       join members o on o.id = a.officer_member_id
+       where a.member_id = $1
+       order by a.assigned_on desc, a.created_at desc`,
+      [memberId],
+    );
+  }
 
   private async officerRows(window?: WindowInput): Promise<OfficerDto[]> {
     const { from, to } = normalizeWindow(window);

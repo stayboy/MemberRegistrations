@@ -24,6 +24,11 @@ import {
 import { sqlConstraint, sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
 import {
+  ShepherdingRepository,
+  type OverviewCallsDto,
+  type OverviewShepherdDto,
+} from './shepherding.js';
+import {
   loadCalendar,
   resolveCalendarOccurrences,
   resolveSeriesOccurrences,
@@ -86,11 +91,15 @@ export interface AttendanceEntryDto {
   id: string;
   date: string;
   source: 'import' | 'manual';
+  /** The event instance this row belongs to, on both series and standalone rows. */
+  eventId: string;
+  eventName: string;
 }
 
 export interface AttendanceSeriesDto extends AttendanceCounts {
-  seriesId: string;
-  seriesName: string;
+  /** Null on a standalone event row, whose entries share one `eventId`. */
+  seriesId: string | null;
+  seriesName: string | null;
   ministry: string | null;
   entries: AttendanceEntryDto[];
 }
@@ -200,6 +209,16 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   alias: string | null;
   dob: string | null;
   addressLine: string | null;
+  /** UTC date the member joined this assembly; distinct from `joinedOn`. */
+  assemblyJoinedOn: string | null;
+  cameFrom: string | null;
+  /** UTC date the member moved out; null while they are still here. */
+  movedOutOn: string | null;
+  movedToAssembly: string | null;
+  /** The current shepherd, from the same projection `/shepherding` reads. */
+  shepherd: OverviewShepherdDto | null;
+  /** All-time call counts for the member's shepherding history; null dates mean no such call. */
+  calls: OverviewCallsDto;
   purgedAt: string | null;
   version: number;
   createdAt: string;
@@ -228,6 +247,10 @@ export interface CreateMemberInput {
   placeOfResidence?: string | null;
   addressLine?: string | null;
   joinedOn?: string | null;
+  assemblyJoinedOn?: string | null;
+  cameFrom?: string | null;
+  movedOutOn?: string | null;
+  movedToAssembly?: string | null;
   isPresbyter?: boolean;
   presbyterRank?: number | null;
   /** Trimmed, 1-32 characters, case-insensitively unique when present. */
@@ -294,6 +317,10 @@ interface MemberRow extends Row {
   place_of_residence: string | null;
   address_line: string | null;
   joined_on: string | null;
+  assembly_joined_on: string | null;
+  came_from: string | null;
+  moved_out_on: string | null;
+  moved_to_assembly: string | null;
   is_presbyter: boolean;
   presbyter_rank: number | null;
   title_code: string | null;
@@ -323,6 +350,10 @@ const memberColumns = {
   place_of_residence: members.placeOfResidence,
   address_line: members.addressLine,
   joined_on: members.joinedOn,
+  assembly_joined_on: members.assemblyJoinedOn,
+  came_from: members.cameFrom,
+  moved_out_on: members.movedOutOn,
+  moved_to_assembly: members.movedToAssembly,
   is_presbyter: members.isPresbyter,
   presbyter_rank: members.presbyterRank,
   title_code: members.titleCode,
@@ -839,6 +870,10 @@ export class MemberRepository {
     const gender = input.gender ?? 'undisclosed';
     if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
     const joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : todayIn('UTC');
+    const assemblyJoinedOn = input.assemblyJoinedOn
+      ? assertDate(input.assemblyJoinedOn, 'assemblyJoinedOn')
+      : null;
+    const movedOutOn = input.movedOutOn ? assertDate(input.movedOutOn, 'movedOutOn') : null;
     const dob = input.dob ? assertDate(input.dob, 'dob') : null;
     const isPresbyter = input.isPresbyter ?? false;
     const presbyterRank = input.presbyterRank ?? null;
@@ -866,6 +901,10 @@ export class MemberRepository {
           placeOfResidence: optionalText(input.placeOfResidence),
           addressLine: optionalText(input.addressLine),
           joinedOn,
+          assemblyJoinedOn,
+          cameFrom: optionalText(input.cameFrom),
+          movedOutOn,
+          movedToAssembly: optionalText(input.movedToAssembly),
           isPresbyter,
           presbyterRank,
           membershipCardNo,
@@ -943,6 +982,18 @@ export class MemberRepository {
     if (input.addressLine !== undefined) fields.addressLine = input.addressLine;
     if (input.joinedOn !== undefined) {
       fields.joinedOn = input.joinedOn ? assertDate(input.joinedOn, 'joinedOn') : null;
+    }
+    if (input.assemblyJoinedOn !== undefined) {
+      fields.assemblyJoinedOn = input.assemblyJoinedOn
+        ? assertDate(input.assemblyJoinedOn, 'assemblyJoinedOn')
+        : null;
+    }
+    if (input.cameFrom !== undefined) fields.cameFrom = optionalText(input.cameFrom);
+    if (input.movedOutOn !== undefined) {
+      fields.movedOutOn = input.movedOutOn ? assertDate(input.movedOutOn, 'movedOutOn') : null;
+    }
+    if (input.movedToAssembly !== undefined) {
+      fields.movedToAssembly = optionalText(input.movedToAssembly);
     }
     if (input.isPresbyter !== undefined) fields.isPresbyter = input.isPresbyter;
     if (input.membershipCardNo !== undefined) {
@@ -1130,6 +1181,10 @@ export class MemberRepository {
           dob: null,
           placeOfResidence: null,
           addressLine: null,
+          // Free text the member or an officer typed is PII, like the address;
+          // the two movement dates are not, and `joinedOn` stays for the same reason.
+          cameFrom: null,
+          movedToAssembly: null,
           gender: 'undisclosed',
           isPresbyter: false,
           presbyterRank: null,
@@ -1535,12 +1590,21 @@ export class MemberRepository {
         id: string;
         session_date: string;
         source: 'import' | 'manual';
+        event_name: string;
       }>(
-        'select id, session_date, source from attendance where member_id = $1 and event_instance_id = $2 and session_date = $3',
+        `select a.id, a.session_date, a.source, e.name as event_name
+           from attendance a join event_instances e on e.id = a.event_instance_id
+          where a.member_id = $1 and a.event_instance_id = $2 and a.session_date = $3`,
         [row.id, eventInstanceId, date],
       );
 
-      return { id: entry!.id, date: isoDate(entry!.session_date)!, source: entry!.source };
+      return {
+        id: entry!.id,
+        date: isoDate(entry!.session_date)!,
+        source: entry!.source,
+        eventId: eventInstanceId,
+        eventName: entry!.event_name,
+      };
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError(`Attendance for ${date} is already recorded`);
@@ -1678,7 +1742,7 @@ export class MemberRepository {
   }
 
   private async toDetail(row: MemberRow): Promise<MemberDetail> {
-    const [contacts, subscriptions, ministries, relationships, attendance, labels] =
+    const [contacts, subscriptions, ministries, relationships, attendance, labels, overview] =
       await Promise.all([
         this.contactsFor(row.id),
         this.subscriptionsFor(row.id),
@@ -1686,6 +1750,7 @@ export class MemberRepository {
         this.relationshipsFor(row.id),
         this.attendanceFor(row),
         this.titleLabels(row.title_code === null ? [] : [row.title_code]),
+        new ShepherdingRepository(this.db).overviewForMember(row.id),
       ]);
 
     return {
@@ -1698,6 +1763,12 @@ export class MemberRepository {
       alias: row.alias,
       dob: isoDate(row.dob),
       addressLine: row.address_line,
+      assemblyJoinedOn: isoDate(row.assembly_joined_on),
+      cameFrom: row.came_from,
+      movedOutOn: isoDate(row.moved_out_on),
+      movedToAssembly: row.moved_to_assembly,
+      shepherd: overview.shepherd,
+      calls: overview.calls,
       purgedAt: isoTimestamp(row.purged_at),
       version: row.version,
       createdAt: isoTimestamp(row.created_at)!,
@@ -1976,21 +2047,35 @@ export class MemberRepository {
 
     const attended = await this.db.query<{
       id: string;
-      series_id: string;
+      series_id: string | null;
+      event_id: string;
+      event_name: string;
       session_date: string;
       source: 'import' | 'manual';
     }>(
-      `select a.id, e.series_id, a.session_date, a.source
+      `select a.id, e.series_id, e.id as event_id, e.name as event_name,
+              a.session_date, a.source
          from attendance a join event_instances e on e.id = a.event_instance_id
         where a.member_id = $1`,
       [row.id],
     );
 
     const bySeries = new Map<string, AttendanceEntryDto[]>();
+    const byEvent = new Map<string, AttendanceEntryDto[]>();
     for (const entry of attended) {
-      const list = bySeries.get(entry.series_id) ?? [];
-      list.push({ id: entry.id, date: isoDate(entry.session_date)!, source: entry.source });
-      bySeries.set(entry.series_id, list);
+      // Recurring rows group by their series; a standalone row groups by its
+      // own event instance, which is the only parent it has.
+      const group = entry.series_id === null ? byEvent : bySeries;
+      const key = entry.series_id ?? entry.event_id;
+      const list = group.get(key) ?? [];
+      list.push({
+        id: entry.id,
+        date: isoDate(entry.session_date)!,
+        source: entry.source,
+        eventId: entry.event_id,
+        eventName: entry.event_name,
+      });
+      group.set(key, list);
     }
 
     const result: AttendanceSeriesDto[] = [];
@@ -2021,6 +2106,82 @@ export class MemberRepository {
         seriesId: item.id,
         seriesName: item.name,
         ministry: item.ministry,
+        ...counts,
+        entries,
+      });
+    }
+
+    // A standalone event has no series row, so its attendance would otherwise
+    // vanish from the detail and the list. One row per event instance, its
+    // entries grouped under that `eventId`, is the same shape a series row has
+    // with the series half null.
+    const standalone = await this.db.query<{
+      event_id: string;
+      event_name: string;
+      timezone: string;
+      start_date: string | Date;
+      end_date: string | Date;
+    }>(
+      `select e.id as event_id, e.name as event_name, e.timezone, e.start_date, e.end_date
+         from attendance a join event_instances e on e.id = a.event_instance_id
+        where a.member_id = $1 and e.series_id is null
+        group by e.id
+        order by lower(e.name), e.id`,
+      [row.id],
+    );
+
+    const standaloneSessions =
+      standalone.length === 0
+        ? []
+        : await this.db.query<{ event_id: string; session_date: string | Date }>(
+            `select e.id as event_id, (s->>'date')::date as session_date
+               from event_instances e
+               cross join lateral jsonb_array_elements(e.sessions) s
+              where e.id = any($1::uuid[])
+                and coalesce(s->>'status', 'scheduled') <> 'cancelled'
+              order by e.id, (s->>'date')::date`,
+            [standalone.map((event) => event.event_id)],
+          );
+
+    const sessionsByEvent = new Map<string, string[]>();
+    for (const session of standaloneSessions) {
+      const dates = sessionsByEvent.get(session.event_id) ?? [];
+      dates.push(isoDate(session.session_date)!);
+      sessionsByEvent.set(session.event_id, dates);
+    }
+
+    for (const event of standalone) {
+      const start = isoDate(event.start_date)!;
+      const endsOn = isoDate(event.end_date);
+      const today = todayIn(event.timezone);
+      const joinedOn = isoDate(row.joined_on) ?? isoDate(row.created_at);
+      const windowStart = joinedOn && joinedOn > start ? joinedOn : start;
+      const windowEnd = endsOn && endsOn < today ? endsOn : today;
+      if (windowStart > windowEnd) continue;
+
+      const entries = (byEvent.get(event.event_id) ?? []).sort((a, b) =>
+        a.date.localeCompare(b.date),
+      );
+      const occurrences = [
+        ...new Set(
+          (sessionsByEvent.get(event.event_id) ?? []).filter(
+            (date) => date >= windowStart && date <= windowEnd,
+          ),
+        ),
+      ].sort();
+      const counts = summariseAttendance({
+        occurrences,
+        attendedDates: entries
+          .map((entry) => entry.date)
+          .filter((date) => date >= windowStart && date <= windowEnd),
+        endsOn,
+        today,
+      });
+
+      result.push({
+        seriesId: null,
+        seriesName: null,
+        ministry: null,
         ...counts,
         entries,
       });
