@@ -168,13 +168,13 @@ Acceptance criteria:
 
 ## Verification
 
-| Gate                 | Command                                      | Result                     |
-| -------------------- | -------------------------------------------- | -------------------------- |
-| Full gate            | pm run verify                                | pass - 7/7                 |
-| UI unit              | pm --prefix ui run test                      | pass - 41 files, 456 tests |
-| UI DOM lane          | pm --prefix ui run test:dom                  | pass - 14 files, 96 tests  |
-| UI e2e               | px playwright test                           | pass - 74 tests            |
-| Mock catalogue guard | px vitest run tests/meta/mock-claims.test.ts | pass - 77 tests            |
+| Gate                 | Command                                       | Result                     |
+| -------------------- | --------------------------------------------- | -------------------------- |
+| Full gate            | npm run verify                                | pass - 7/7                 |
+| UI unit              | npm --prefix ui run test                      | pass - 41 files, 456 tests |
+| UI DOM lane          | npm --prefix ui run test:dom                  | pass - 14 files, 96 tests  |
+| UI e2e               | npx playwright test                           | pass - 74 tests            |
+| Mock catalogue guard | npx vitest run tests/meta/mock-claims.test.ts | pass - 77 tests            |
 
 gate-run 2026-11-17T18:05:37.842Z profile=full steps=7/7 lines=7 bytes=1165
 
