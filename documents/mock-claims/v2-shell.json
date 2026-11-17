@@ -306,6 +306,76 @@
         "sha256": "01a101922ccf495cdf2d86917bc32d52d74818803e6f8af8b0290f5fb3ca9f0f",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
       }
+    },
+    "19-member-overview-collapsed": {
+      "mock": {
+        "path": "mockups/v2-shell/19-member-overview-collapsed.png",
+        "sha256": "10fb130ff8e3d3f5da558c433552dca3e0c2ceb8aa2fd9fbfb7bc665d91a0385",
+        "source": "mockups/v2-shell/19-member-overview-collapsed.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-17",
+        "sha256": "10fb130ff8e3d3f5da558c433552dca3e0c2ceb8aa2fd9fbfb7bc665d91a0385"
+      }
+    },
+    "19-member-overview-subscriptions": {
+      "mock": {
+        "path": "mockups/v2-shell/19-member-overview-subscriptions.png",
+        "sha256": "b37dc1ac8c643a17795af428afa3c53571c55a47e55cb0ad4b108f8ee7c17a20",
+        "source": "mockups/v2-shell/19-member-overview-subscriptions.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-17",
+        "sha256": "b37dc1ac8c643a17795af428afa3c53571c55a47e55cb0ad4b108f8ee7c17a20"
+      }
+    },
+    "19-member-overview-empty": {
+      "mock": {
+        "path": "mockups/v2-shell/19-member-overview-empty.png",
+        "sha256": "241f8a4bf2a29a6b30816bec6c4f1f2c80aca552a6c64a3a4164794622c690c8",
+        "source": "mockups/v2-shell/19-member-overview-empty.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-17",
+        "sha256": "241f8a4bf2a29a6b30816bec6c4f1f2c80aca552a6c64a3a4164794622c690c8"
+      }
+    },
+    "19-member-overview-narrow": {
+      "mock": {
+        "path": "mockups/v2-shell/19-member-overview-narrow.png",
+        "sha256": "f0110ac43c495ce6a74cd15b267dd999dac5e42e4dd80c2234f7ff6e39dd6ceb",
+        "source": "mockups/v2-shell/19-member-overview-narrow.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-17",
+        "sha256": "f0110ac43c495ce6a74cd15b267dd999dac5e42e4dd80c2234f7ff6e39dd6ceb"
+      }
+    },
+    "19-member-overview-relationships": {
+      "mock": {
+        "path": "mockups/v2-shell/19-member-overview-relationships.png",
+        "sha256": "9703777555b0c769bad4775c6199f2d33d1a272d9b3a1fb129c2a73a02bbb22b",
+        "source": "mockups/v2-shell/19-member-overview-relationships.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-17",
+        "sha256": "9703777555b0c769bad4775c6199f2d33d1a272d9b3a1fb129c2a73a02bbb22b"
+      }
     }
   },
   "inventory": [
