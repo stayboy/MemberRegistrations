@@ -17,8 +17,10 @@ import {
   removeMemberMinistry,
   removeMemberRelationship,
   searchMembers,
+  subscribeMemberProduct,
   updateMember,
   type RelationshipInput,
+  type SubscribeProductInput,
   type SubscriptionInput,
 } from './members';
 
@@ -178,6 +180,21 @@ describe('addSubscription', () => {
       coveredMemberNos: ['M-1002', 'M-1003'],
     };
     await addSubscription('https://gateway.example', 'session-token', 'M 1/2', input);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/subscriptions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual(input);
+  });
+});
+
+describe('subscribeMemberProduct', () => {
+  it('posts the product body subscribeProductSchema parses and encodes the member number', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'sub-1', status: 'active' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const input: SubscribeProductInput = { productCode: 'FUNERAL', paidBy: 'church' };
+    await subscribeMemberProduct('https://gateway.example', 'session-token', 'M 1/2', input);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/subscriptions');

@@ -7,7 +7,9 @@ import type {
   MemberDetailResult,
   MemberInput,
   MemberUpdateInput,
+  SubscribeProductInput,
 } from '../api/members';
+import type { PaymentMode } from '../api/welfare';
 
 /**
  * Pure form helpers for the member create/edit screen. The constraints mirror
@@ -28,9 +30,15 @@ export type MemberFormField =
   | 'addressLine'
   | 'joinedOn'
   | 'isPresbyter'
-  | CreateContactField;
+  | CreateContactField
+  | 'ministries'
+  | 'subscriptionProductCode'
+  | 'subscriptionPaidBy';
 
 export type MemberFormErrors = Partial<Record<MemberFormField, string>>;
+
+/** Who pays for the one create-form subscription (FR-29a). */
+export type SubscriptionPaidBy = 'member' | 'church';
 
 /** The three optional contact fields the create form offers (FR-29a). */
 export type CreateContactField = 'phone' | 'email' | 'whatsapp';
@@ -67,6 +75,12 @@ export interface MemberFormValues {
   readonly phone: string;
   readonly email: string;
   readonly whatsapp: string;
+  /** Create only: FR-71's ministry codes, in the order the operator picked them. */
+  readonly ministries: readonly string[];
+  /** Create only: the one optional subscription (FR-29a); '' means none was chosen. */
+  readonly subscriptionProductCode: string;
+  /** Asked only for a product whose payment mode is `either`; '' means unchosen. */
+  readonly subscriptionPaidBy: SubscriptionPaidBy | '';
 }
 
 export const GENDER_OPTIONS: readonly { readonly value: Gender; readonly label: string }[] = [
@@ -213,13 +227,17 @@ export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberForm
     phone: '',
     email: '',
     whatsapp: '',
+    ministries: [],
+    subscriptionProductCode: '',
+    subscriptionPaidBy: '',
   };
 }
 
 /**
  * Prefills edit mode from the detail DTO (FR-25). The three contact fields stay
  * blank: contacts are managed on the member record (FR-29), not through the edit
- * form, so they can never ride an update body.
+ * form, so they can never ride an update body. Ministries and the subscription are
+ * create-form fields (FR-29a, FR-71) and stay empty here for the same reason.
  */
 export function fromMemberDetail(member: MemberDetail): MemberFormValues {
   return {
@@ -238,6 +256,9 @@ export function fromMemberDetail(member: MemberDetail): MemberFormValues {
     phone: '',
     email: '',
     whatsapp: '',
+    ministries: [],
+    subscriptionProductCode: '',
+    subscriptionPaidBy: '',
   };
 }
 
@@ -258,8 +279,10 @@ export function toContactInputs(values: MemberFormValues): ContactInput[] {
 
 /**
  * The create body: optional blanks become `null`, which the API treats as an
- * explicit clear rather than an omission. Contacts ride the same request
- * (FR-29a) and the key is absent entirely when no value was entered.
+ * explicit clear rather than an omission. Contacts and ministries ride the same
+ * request (FR-29a, FR-71) and each key is absent entirely when nothing was entered.
+ * The subscription never rides this body: the create contract carries none, so the
+ * form follows the create with `POST …/subscriptions` (FR-29a).
  */
 export function toCreatePayload(values: MemberFormValues): MemberInput {
   const payload: MemberInput = {
@@ -278,7 +301,46 @@ export function toCreatePayload(values: MemberFormValues): MemberInput {
   };
 
   const contacts = toContactInputs(values);
-  return contacts.length > 0 ? { ...payload, contacts } : payload;
+  const withContacts = contacts.length > 0 ? { ...payload, contacts } : payload;
+  const ministries = values.ministries.filter((code) => code.trim().length > 0);
+  return ministries.length > 0 ? { ...withContacts, ministries } : withContacts;
+}
+
+/**
+ * The create form's one optional subscription (FR-29a), or `null` when no product
+ * was chosen. `paidBy` is sent only when asked, because the API resolves it for a
+ * `member` or `church` product. Coverage is not offered here: a just-created member
+ * has no relationships yet, and `coveredMemberNos` is optional to the route.
+ */
+export function toSubscriptionInput(values: MemberFormValues): SubscribeProductInput | null {
+  const productCode = values.subscriptionProductCode.trim();
+  if (productCode.length === 0) return null;
+  return values.subscriptionPaidBy
+    ? { productCode, paidBy: values.subscriptionPaidBy }
+    : { productCode };
+}
+
+/**
+ * A product whose payment mode is `either` needs the payer named; the API rejects
+ * the body without it (`subscribeProductSchema` parses `paidBy` as optional, but the
+ * repository requires it for `either`). A `member` or `church` product resolves it.
+ */
+export function subscriptionPayerError(
+  paymentMode: PaymentMode | null,
+  paidBy: MemberFormValues['subscriptionPaidBy'],
+): string | null {
+  if (paymentMode !== 'either') return null;
+  return paidBy === '' ? 'Choose who pays for this product.' : null;
+}
+
+/** The field error for the subscription draft, empty when no product was chosen. */
+export function validateSubscriptionDraft(
+  values: MemberFormValues,
+  paymentMode: PaymentMode | null,
+): MemberFormErrors {
+  if (values.subscriptionProductCode.trim().length === 0) return {};
+  const message = subscriptionPayerError(paymentMode, values.subscriptionPaidBy);
+  return message ? { subscriptionPaidBy: message } : {};
 }
 
 /**
@@ -346,6 +408,9 @@ export function mergeKeptValues(
       phone: kept.phone ?? base.phone,
       email: kept.email ?? base.email,
       whatsapp: kept.whatsapp ?? base.whatsapp,
+      ministries: kept.ministries ?? base.ministries,
+      subscriptionProductCode: kept.subscriptionProductCode ?? base.subscriptionProductCode,
+      subscriptionPaidBy: kept.subscriptionPaidBy ?? base.subscriptionPaidBy,
     },
     etag: latest.etag,
   };

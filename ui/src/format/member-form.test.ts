@@ -8,10 +8,13 @@ import {
   isStaleConflictError,
   memberNoConflictMessage,
   mergeKeptValues,
+  subscriptionPayerError,
   toCreatePayload,
+  toSubscriptionInput,
   toUpdatePayload,
   utcToday,
   validateMemberForm,
+  validateSubscriptionDraft,
 } from './member-form';
 
 function detail(overrides: Partial<MemberDetail> = {}): MemberDetail {
@@ -203,6 +206,76 @@ describe('contacts on the create body (FR-29a)', () => {
     });
 
     expect(payload).not.toHaveProperty('contacts');
+  });
+});
+
+describe('ministries on the create body (FR-71)', () => {
+  it('sends the chosen ministry codes and omits the key when none is chosen', () => {
+    const withMinistries = toCreatePayload({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+      ministries: ['CHOIR', 'USHER'],
+    });
+    expect(withMinistries.ministries).toEqual(['CHOIR', 'USHER']);
+
+    const without = toCreatePayload({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+    });
+    expect(without).not.toHaveProperty('ministries');
+  });
+
+  it('keeps ministries off the update body', () => {
+    const original = fromMemberDetail(detail());
+    const changed = { ...original, ministries: ['CHOIR'] };
+    expect(toUpdatePayload(changed, original)).toEqual({});
+  });
+});
+
+describe('the create form subscription (FR-29a)', () => {
+  it('builds no follow-up body when no product was chosen', () => {
+    expect(toSubscriptionInput(createEmptyMemberForm('2026-11-04'))).toBeNull();
+  });
+
+  it('sends the product alone when the product names its payer', () => {
+    expect(
+      toSubscriptionInput({
+        ...createEmptyMemberForm('2026-11-04'),
+        subscriptionProductCode: 'FUNERAL',
+      }),
+    ).toEqual({ productCode: 'FUNERAL' });
+  });
+
+  it('sends the payer when the operator chose one', () => {
+    expect(
+      toSubscriptionInput({
+        ...createEmptyMemberForm('2026-11-04'),
+        subscriptionProductCode: 'HEALTH',
+        subscriptionPaidBy: 'church',
+      }),
+    ).toEqual({ productCode: 'HEALTH', paidBy: 'church' });
+  });
+
+  it('asks for a payer only when the product allows either, and blocks until it is chosen', () => {
+    expect(subscriptionPayerError('member', '')).toBeNull();
+    expect(subscriptionPayerError('church', '')).toBeNull();
+
+    const values = {
+      ...createEmptyMemberForm('2026-11-04'),
+      subscriptionProductCode: 'HEALTH',
+    };
+    expect(validateSubscriptionDraft(values, 'either')).toEqual({
+      subscriptionPaidBy: 'Choose who pays for this product.',
+    });
+    expect(
+      validateSubscriptionDraft({ ...values, subscriptionPaidBy: 'member' }, 'either'),
+    ).toEqual({});
+    // No product chosen means no subscription error at all.
+    expect(validateSubscriptionDraft(createEmptyMemberForm('2026-11-04'), 'either')).toEqual({});
   });
 });
 

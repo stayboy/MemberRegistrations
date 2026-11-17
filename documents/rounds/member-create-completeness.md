@@ -69,7 +69,7 @@ Acceptance criteria:
 | ---------------------------- | ------------- | ---------- |
 | Full gate (spec-only commit) | pm run verify | pass - 7/7 |
 
-gate-run 2026-11-17T15:47:39.329Z profile=full steps=7/7 lines=7 bytes=1025
+gate-run 2026-11-17T18:05:37.842Z profile=full steps=7/7 lines=7 bytes=1025
 
 ## Git writes
 
@@ -79,10 +79,13 @@ gate-run 2026-11-17T15:47:39.329Z profile=full steps=7/7 lines=7 bytes=1025
 
 ## Mock sign-off
 
-n/a — no drawing changes; the form's new controls are spec-derived and the surface already has a signed
-drawing that does not include them. Recorded rather than skipped.
+| Surface    | Mock                                 | Capture                          | sha256           | Signer | Date       | Verdict                                                               |
+| ---------- | ------------------------------------ | -------------------------------- | ---------------- | ------ | ---------- | --------------------------------------------------------------------- |
+| Add member | `mockups/v2-shell/11-add-member.png` | `ui/e2e/baseline/member-add.png` | `c204e606d49c5…` | owner  | 2026-11-16 | signed; build re-captured with the new controls, drift recorded below |
 
 ## Mock parity
+
+Mock coverage: claimed 7 · e2e-only 6 · deferred 1 · prose 2 (v2-shell; unchanged by this round).
 
 No mock is involved. The signed `11-add-member` drawing predates ministries and the subscription field;
 this round does not re-cut it (owner: "no more signing") and records the drift here instead.
@@ -100,4 +103,6 @@ Standards and Spec verdicts: pending.
 
 ## Deviations
 
-Pending.
+- The e2e fixtures gained the subscription-product stub the new form reads; without it the existing
+  create, 409 and responsive cases failed at teardown on an unstubbed gateway request. All 74 e2e cases
+  now pass.
