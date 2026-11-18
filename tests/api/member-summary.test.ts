@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let today: string;
@@ -93,15 +94,19 @@ beforeAll(async () => {
   harness = await createTestApp();
   today = new Date().toISOString().slice(0, 10);
 
-  const member = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'SUM-1001', firstName: 'Ama', lastName: 'Mensah' });
+  const member = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'SUM-1001',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    contacts: reachableContacts(),
+  });
   expect(member.status).toBe(201);
-  const empty = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'SUM-1002', firstName: 'Kojo', lastName: 'Owusu' });
+  const empty = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'SUM-1002',
+    firstName: 'Kojo',
+    lastName: 'Owusu',
+    contacts: reachableContacts(),
+  });
   expect(empty.status).toBe(201);
 
   const offering = await request(harness.app).post('/v1/offerings').set(writeHeaders).send({

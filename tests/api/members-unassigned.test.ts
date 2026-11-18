@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MemberRepository } from '../../src/repos/members.js';
 import { ShepherdingRepository } from '../../src/repos/shepherding.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -20,6 +21,7 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}): Pr
       firstName: 'Test',
       lastName: memberNo,
       joinedOn: '2026-01-01',
+      contacts: reachableContacts(),
       ...extra,
     });
   expect(response.status).toBe(201);

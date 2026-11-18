@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 /**
  * Attendance is a capture model (AC-32, AC-33, AC-33a): the server stamps
@@ -35,6 +36,7 @@ async function createMember(memberNo: string): Promise<void> {
       lastName: memberNo,
       gender: 'female',
       joinedOn: day(-90),
+      contacts: reachableContacts(),
     });
   expect(response.status).toBe(201);
 }

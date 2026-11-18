@@ -48,6 +48,13 @@ export function membersRouter(
 
   router.get('/', async (req, res) => {
     const query = listQuerySchema.parse(req.query);
+    if (query.guardianEligible) {
+      // MR-40: the guardian picker's own projection, not a member page.
+      const items = await repo.guardianCandidates(query.forMemberNo);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ items });
+      return;
+    }
     const page = await repo.list(query);
     res.setHeader('Cache-Control', 'no-store');
     res.json(page);

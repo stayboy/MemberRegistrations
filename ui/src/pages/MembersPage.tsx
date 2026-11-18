@@ -612,7 +612,7 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                         <TableHeaderCell>Member</TableHeaderCell>
                         <TableHeaderCell>Contacts</TableHeaderCell>
                         <TableHeaderCell>Ministries</TableHeaderCell>
-                        <TableHeaderCell>Subscriptions</TableHeaderCell>
+                        <TableHeaderCell>Welfare &amp; Services</TableHeaderCell>
                         <TableHeaderCell>Attendance</TableHeaderCell>
                         <TableHeaderCell>Status</TableHeaderCell>
                         <TableHeaderCell>

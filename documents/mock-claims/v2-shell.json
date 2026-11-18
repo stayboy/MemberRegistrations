@@ -209,20 +209,6 @@
       },
       "note": "The build is the decision: the page's single verb renders as a secondary button and this drawing paints a filled primary (owner, 2026-11-16, drifts cut). The filled primary was never approved, so the drawing is behind the build here, not the reverse."
     },
-    "11-add-member": {
-      "mock": {
-        "path": "mockups/v2-shell/11-add-member.png",
-        "sha256": "c204e606d49c53c8588a69ff8dd88c2b0f67c5016aea52f7fcc69a897c9deead",
-        "source": "mockups/v2-shell/11-add-member.html"
-      },
-      "baseline": "ui/e2e/baseline/member-add.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-16",
-        "sha256": "c204e606d49c53c8588a69ff8dd88c2b0f67c5016aea52f7fcc69a897c9deead"
-      }
-    },
     "12-subscriptions": {
       "mock": {
         "path": "mockups/v2-shell/12-subscriptions.png",
@@ -310,71 +296,169 @@
     "19-member-overview-collapsed": {
       "mock": {
         "path": "mockups/v2-shell/19-member-overview-collapsed.png",
-        "sha256": "10fb130ff8e3d3f5da558c433552dca3e0c2ceb8aa2fd9fbfb7bc665d91a0385",
+        "sha256": "ab2e955476169920757f483cc736580e1fae56c4d3b2c1256bd32f26df5487ae",
         "source": "mockups/v2-shell/19-member-overview-collapsed.html"
       },
       "baseline": "ui/e2e/baseline/member-detail-overview.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-17",
-        "sha256": "10fb130ff8e3d3f5da558c433552dca3e0c2ceb8aa2fd9fbfb7bc665d91a0385"
+        "at": "2026-11-18",
+        "sha256": "ab2e955476169920757f483cc736580e1fae56c4d3b2c1256bd32f26df5487ae"
       }
     },
     "19-member-overview-subscriptions": {
       "mock": {
         "path": "mockups/v2-shell/19-member-overview-subscriptions.png",
-        "sha256": "b37dc1ac8c643a17795af428afa3c53571c55a47e55cb0ad4b108f8ee7c17a20",
+        "sha256": "dddbad19e94ee3ec69ac78faef31a94021814b5761b8418bb0b5bbb0ca837b2c",
         "source": "mockups/v2-shell/19-member-overview-subscriptions.html"
       },
       "baseline": null,
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-17",
-        "sha256": "b37dc1ac8c643a17795af428afa3c53571c55a47e55cb0ad4b108f8ee7c17a20"
+        "at": "2026-11-18",
+        "sha256": "dddbad19e94ee3ec69ac78faef31a94021814b5761b8418bb0b5bbb0ca837b2c"
       }
     },
     "19-member-overview-empty": {
       "mock": {
         "path": "mockups/v2-shell/19-member-overview-empty.png",
-        "sha256": "241f8a4bf2a29a6b30816bec6c4f1f2c80aca552a6c64a3a4164794622c690c8",
+        "sha256": "e8be589b985c020377d1b369fe133e4dfd7ac19f3f15c177e4012fab2bf527c0",
         "source": "mockups/v2-shell/19-member-overview-empty.html"
       },
       "baseline": "ui/e2e/baseline/member-detail-overview-empty.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-17",
-        "sha256": "241f8a4bf2a29a6b30816bec6c4f1f2c80aca552a6c64a3a4164794622c690c8"
+        "at": "2026-11-18",
+        "sha256": "e8be589b985c020377d1b369fe133e4dfd7ac19f3f15c177e4012fab2bf527c0"
       }
     },
     "19-member-overview-narrow": {
       "mock": {
         "path": "mockups/v2-shell/19-member-overview-narrow.png",
-        "sha256": "f0110ac43c495ce6a74cd15b267dd999dac5e42e4dd80c2234f7ff6e39dd6ceb",
+        "sha256": "97cd90605e9d0ec73c1656751aacee49035847318cc0ec55bb6eb90a1ab2b44d",
         "source": "mockups/v2-shell/19-member-overview-narrow.html"
       },
       "baseline": "ui/e2e/baseline/member-detail-overview-narrow.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-17",
-        "sha256": "f0110ac43c495ce6a74cd15b267dd999dac5e42e4dd80c2234f7ff6e39dd6ceb"
+        "at": "2026-11-18",
+        "sha256": "97cd90605e9d0ec73c1656751aacee49035847318cc0ec55bb6eb90a1ab2b44d"
       }
     },
     "19-member-overview-relationships": {
       "mock": {
         "path": "mockups/v2-shell/19-member-overview-relationships.png",
-        "sha256": "9703777555b0c769bad4775c6199f2d33d1a272d9b3a1fb129c2a73a02bbb22b",
+        "sha256": "880c3e48d72d5c26188d9776d6d5e40b916da258e9cdeb7d4687dd3e583e1d8d",
         "source": "mockups/v2-shell/19-member-overview-relationships.html"
       },
       "baseline": null,
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-17",
-        "sha256": "9703777555b0c769bad4775c6199f2d33d1a272d9b3a1fb129c2a73a02bbb22b"
+        "at": "2026-11-18",
+        "sha256": "880c3e48d72d5c26188d9776d6d5e40b916da258e9cdeb7d4687dd3e583e1d8d"
+      }
+    },
+    "20-member-actions": {
+      "mock": {
+        "path": "mockups/v2-shell/20-member-actions.png",
+        "sha256": "3ce231d24e5f7b368a10e604e3522e2928cc38b49c6ee61daa70b653bd7d0189",
+        "source": "mockups/v2-shell/20-member-actions.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "3ce231d24e5f7b368a10e604e3522e2928cc38b49c6ee61daa70b653bd7d0189"
+      }
+    },
+    "21-add-person-contact": {
+      "mock": {
+        "path": "mockups/v2-shell/21-add-person-contact.png",
+        "sha256": "065efebcf438d9d9256771f8f7ac42df92c745f00ef30338a0738e723cd8a9df",
+        "source": "mockups/v2-shell/21-add-person-contact.html"
+      },
+      "baseline": "ui/e2e/baseline/member-add.png",
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "065efebcf438d9d9256771f8f7ac42df92c745f00ef30338a0738e723cd8a9df"
+      }
+    },
+    "21-add-church": {
+      "mock": {
+        "path": "mockups/v2-shell/21-add-church.png",
+        "sha256": "85c46f2eb79a071896d3b48256d2fa1022df70394ed0c11aed9f18f9429a831b",
+        "source": "mockups/v2-shell/21-add-church.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "85c46f2eb79a071896d3b48256d2fa1022df70394ed0c11aed9f18f9429a831b"
+      }
+    },
+    "21-add-relationships": {
+      "mock": {
+        "path": "mockups/v2-shell/21-add-relationships.png",
+        "sha256": "1f5da2d0a636323e26a578bccc758f11f1147685dc76f5c33b38928b4b9cdb31",
+        "source": "mockups/v2-shell/21-add-relationships.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "1f5da2d0a636323e26a578bccc758f11f1147685dc76f5c33b38928b4b9cdb31"
+      }
+    },
+    "21-add-review": {
+      "mock": {
+        "path": "mockups/v2-shell/21-add-review.png",
+        "sha256": "c7dc188571d5119cd84016e3c7ed5ff3250eb801864ca686e1a1be165a036f26",
+        "source": "mockups/v2-shell/21-add-review.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "c7dc188571d5119cd84016e3c7ed5ff3250eb801864ca686e1a1be165a036f26"
+      }
+    },
+    "21-edit-involvement": {
+      "mock": {
+        "path": "mockups/v2-shell/21-edit-involvement.png",
+        "sha256": "1802c25c3cd72f2d8b84cf57eba7c0277338a3c89c546d7b0a3b9c202bd31260",
+        "source": "mockups/v2-shell/21-edit-involvement.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "1802c25c3cd72f2d8b84cf57eba7c0277338a3c89c546d7b0a3b9c202bd31260"
+      }
+    },
+    "21-edit-review": {
+      "mock": {
+        "path": "mockups/v2-shell/21-edit-review.png",
+        "sha256": "357e82a2df13a1884d5aed34ef6c8053b23376910f1bed85efc2eaeec533746a",
+        "source": "mockups/v2-shell/21-edit-review.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-18",
+        "sha256": "357e82a2df13a1884d5aed34ef6c8053b23376910f1bed85efc2eaeec533746a"
       }
     }
   },
@@ -908,7 +992,7 @@
     {
       "id": "AM-SECTION",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "The create form draws a Contacts section between Residence and Church.",
       "expect": "PRESENT",
       "class": "spec-required",
@@ -924,7 +1008,7 @@
     {
       "id": "AM-FIELDS",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "The section offers exactly three optional fields: Phone, Email and WhatsApp.",
       "expect": "PRESENT",
       "class": "spec-required",
@@ -940,7 +1024,7 @@
     {
       "id": "AM-409-COPY",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "The section note says a value owned by another member is shown against that field.",
       "expect": "PRESENT",
       "class": "spec-required",
@@ -956,7 +1040,7 @@
     {
       "id": "AM-CREATE-REQUEST",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "Contact values are captured on the registration form, before the member exists.",
       "expect": "PRESENT",
       "class": "spec-required",
@@ -973,7 +1057,7 @@
     {
       "id": "AM-NO-KIND-DROPDOWN",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "A contact-kind dropdown (phone / email / whatsapp chooser) on the create form.",
       "expect": "ABSENT",
       "class": "spec-required",
@@ -989,7 +1073,7 @@
     {
       "id": "AM-NO-ADD-ROW",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "An add-another-contact row control (repeatable kind/value rows).",
       "expect": "ABSENT",
       "class": "spec-required",
@@ -1005,7 +1089,7 @@
     {
       "id": "AM-NO-CONTACT-OUTSIDE",
       "story": "AM-CONTACTS",
-      "state": "11-add-member",
+      "state": "21-add-person-contact",
       "claim": "A contact field outside the Contacts section, in identity, residence or church.",
       "expect": "ABSENT",
       "class": "spec-required",

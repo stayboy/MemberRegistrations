@@ -114,6 +114,18 @@ const MINISTRIES: readonly Ministry[] = [
 
 const CHOIR: MinistryRef = { code: 'CHR', name: 'Choir', position: null };
 
+/** The reference list the title picker reads (MR-12). */
+const PRESBYTER_TITLES = [
+  { code: 'pastor', label: 'Pastor', genderRestriction: null, active: true },
+  { code: 'elder', label: 'Elder', genderRestriction: 'male', active: true },
+  { code: 'deaconess', label: 'Deaconess', genderRestriction: 'female', active: true },
+];
+
+/** The adults the guardian picker offers (MR-40); each resolves to a masked contact. */
+const GUARDIAN_CANDIDATES = [
+  { memberNo: 'M-1002', name: 'Efua Boateng', contactMasked: '***02', via: [] },
+];
+
 /** One active product for the create form's optional subscription selector. */
 const SUBSCRIPTION_PRODUCT = {
   id: 'product-1',
@@ -321,6 +333,7 @@ const DETAILS = new Map<string, MemberDetail>([
         age: null,
         assignedOn: '2025-01-02',
       },
+      guardian: null,
       calls: {
         attempts: 6,
         conversations: 4,
@@ -366,6 +379,7 @@ const DETAILS = new Map<string, MemberDetail>([
       movedOutOn: null,
       movedToAssembly: null,
       shepherd: null,
+      guardian: null,
       calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
       isPresbyter: false,
       archivedAt: null,
@@ -1340,6 +1354,7 @@ function createdDetail(input: unknown): MemberDetail {
     movedOutOn: optionalText(body.movedOutOn),
     movedToAssembly: optionalText(body.movedToAssembly),
     shepherd: null,
+    guardian: null,
     calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     isPresbyter: body.isPresbyter === true,
     archivedAt: null,
@@ -1446,6 +1461,10 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/members$/,
       handle: (call) => {
+        // MR-40: the guardian picker's own projection, not a member page.
+        if (call.search.get('guardianEligible') === 'true') {
+          return reply({ items: GUARDIAN_CANDIDATES });
+        }
         // FR-79/FR-78: the explicit `contact` filter matches owners and linkers
         // alike; the `linked` flag is what tells them apart in the dialog.
         const contact = call.search.get('contact')?.trim();
@@ -1613,6 +1632,11 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/ministries$/,
       handle: () => reply({ items: MINISTRIES }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/presbyter-titles$/,
+      handle: () => reply({ items: PRESBYTER_TITLES }),
     },
     {
       method: 'GET',

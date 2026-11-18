@@ -165,15 +165,24 @@ test('a duplicate contact value offers the household link, then unlinks', async 
 
 test('the add-member route creates the member and lands on the detail', async ({ page }) => {
   await open(page, '/members/new');
-  await expect(page.getByRole('heading', { level: 1, name: 'Add member' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Person and contact' })).toBeVisible();
 
   await page.getByLabel('Member number').fill('M-1004');
   await page.getByLabel('First name').fill('Yaa');
-  await page.getByLabel('Last name').fill('Owusu');
+  await page.getByLabel('Other names').fill('Owusu');
   // FR-29a: the three contact fields ride the one create request; the blank WhatsApp field
   // contributes no row at all.
   await page.getByLabel('Phone').fill('+233 24 555 0104');
   await page.getByLabel('Email').fill('yaa.owusu@example.test');
+
+  // MR-48: the form is a step flow. A recorded contact hides the Relationships step,
+  // so Person and contact → Church and involvement → Review.
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Church and involvement' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible();
 
   const created = page.waitForResponse(
     (response) =>
@@ -220,11 +229,17 @@ test('a contact value another member owns returns 409 against its field and keep
 
   await page.getByLabel('Member number').fill('M-1007');
   await page.getByLabel('First name').fill('Akosua');
-  await page.getByLabel('Last name').fill('Boateng');
+  await page.getByLabel('Other names').fill('Boateng');
   await page.getByLabel('Place of residence').fill('Adenta');
   // Owned by M-1002 in the fixture register.
   await page.getByLabel('Phone').fill('+233 20 000 0002');
   await page.getByLabel('Email').fill('akosua.boateng@example.test');
+
+  // MR-48: the create runs from Review; a field error sends the operator back to the
+  // step that owns it.
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible();
 
   const rejected = page.waitForResponse(
     (response) =>
@@ -241,11 +256,13 @@ test('a contact value another member owns returns 409 against its field and keep
   ).toBeVisible();
   await expect(page.getByLabel('Phone')).toHaveAttribute('aria-invalid', 'true');
 
-  // …the create was atomic, so no member exists and the form stays open with every entered value…
-  await expect(page).toHaveURL(/#\/members\/new$/);
+  // …the create was atomic, so no member exists and the form stays open with every entered value.
+  // The step form keeps its step in the query, and a field error sends the operator back to
+  // the step that owns it (MR-48).
+  await expect(page).toHaveURL(/#\/members\/new\?step=person$/);
   await expect(page.getByLabel('Member number')).toHaveValue('M-1007');
   await expect(page.getByLabel('First name')).toHaveValue('Akosua');
-  await expect(page.getByLabel('Last name')).toHaveValue('Boateng');
+  await expect(page.getByLabel('Other names')).toHaveValue('Boateng');
   await expect(page.getByLabel('Place of residence')).toHaveValue('Adenta');
   await expect(page.getByLabel('Email')).toHaveValue('akosua.boateng@example.test');
 

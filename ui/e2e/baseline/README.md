@@ -20,8 +20,8 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `shell-mobile.png`                  | Shell, 390 px sections menu, collapsed rail      | 390 × 844   | `v2-shell/06-mobile.png`                    |
 | `shell-meadow.png`                  | Shell, Meadow accent, light                      | 1440 × 900  | `v2-shell/05-meadow-accent.png`             |
 | `members-list.png`                  | Members list, compact rows                       | 1440 × 900  | `v2-shell/10-members-refined.png`           |
-| `member-detail.png`                 | Member detail, Subscriptions tab                 | 1440 × 900  | `v2-shell/12-subscriptions.png`             |
-| `member-add.png`                    | Add member form                                  | 1440 × 1400 | `v2-shell/11-add-member.png`                |
+| `member-detail.png`                 | Member detail, Welfare & Services tab            | 1440 × 900  | `v2-shell/12-subscriptions.png`             |
+| `member-add.png`                    | Add member, step 1 of the step flow              | 1440 × 1123 | `v2-shell/21-add-person-contact.png`        |
 | `events-list.png`                   | Events list, venue and attendance columns        | 1440 × 900  | `v2-events/01-events-list.png`              |
 | `event-detail.png`                  | Event detail, sessions table                     | 1440 × 900  | `v2-events/02-event-detail.png`             |
 | `event-headcount-dialog.png`        | Event detail, the headcount capture dialog       | 1440 x 900  | `v2-events/06-record-headcount-dialog.png`  |
@@ -40,9 +40,15 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `member-detail-overview-empty.png`  | Member overview with no history or subscriptions | 1440 × 900  | `v2-shell/19-member-overview-empty.png`     |
 | `member-detail-overview-narrow.png` | Member overview in one column                    | 860 × 900   | `v2-shell/19-member-overview-narrow.png`    |
 
-`member-add` and `series-detail` use the mocks' real PNG dimensions (1400 px and 1000 px tall) rather
-than a rounded 900 px, because those screens scroll below the fold. `imports-batches` has no local
+`member-add` uses the step-flow entry's 1123 px and `series-detail` its 1000 px, rather than a
+rounded 900 px, because the form's first step and the series screen are taller than the fold. `imports-batches` has no local
 mock; its viewport follows the other 900 px screens.
+
+The 2026-11-18 capture moved **every** screen, because the `API connected` pill was removed from the
+page-title row on all of them (FR-10, owner 2026-11-18). `members-list` and `member-detail` also carry
+the `Welfare & Services` label in pixels, and the three `member-detail-overview` rows carry the
+rebuilt header and the four cards. A future capture that moves a screen with no member-detail or
+list content should be treated as a regression, not drift.
 
 `v2-shell/17-find-contact.png` has no capture: the UI ships a `Find by contact` control
 (`MembersPage.tsx`), but the capture suite has no case for that dialog yet, although FR-79/AC-48

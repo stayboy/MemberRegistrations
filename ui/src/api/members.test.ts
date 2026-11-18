@@ -8,7 +8,10 @@ import {
   addSubscription,
   createMember,
   getMemberShepherding,
+  guardianCandidatesPath,
+  listGuardianCandidates,
   listMinistries,
+  listPresbyterTitles,
   memberDetailPath,
   memberPickerPath,
   membersListPath,
@@ -426,5 +429,53 @@ describe('getMemberShepherding', () => {
     expect(url).toBe('https://gateway.example/gateway/v1/members/M%201%2F2/shepherding');
     expect(init.method).toBe('GET');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer session-token');
+  });
+});
+
+describe('titles and guardian candidates (MR-12, MR-40)', () => {
+  it('builds the guardian filter path and omits an empty member number', () => {
+    expect(guardianCandidatesPath('M-1001')).toBe(
+      '/gateway/v1/members?guardianEligible=true&forMemberNo=M-1001',
+    );
+    expect(guardianCandidatesPath()).toBe('/gateway/v1/members?guardianEligible=true');
+    expect(guardianCandidatesPath('  ')).toBe('/gateway/v1/members?guardianEligible=true');
+  });
+
+  it('reads the title list from the gateway', async () => {
+    vi.stubGlobal(
+      'fetch',
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          items: [{ code: 'elder', label: 'Elder', genderRestriction: 'male', active: true }],
+        }),
+      ),
+    );
+
+    const titles = await listPresbyterTitles('http://api.test', 'session-token');
+
+    expect(titles).toEqual([
+      { code: 'elder', label: 'Elder', genderRestriction: 'male', active: true },
+    ]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/gateway/v1/presbyter-titles');
+  });
+
+  it('reads the eligible guardians for a member', async () => {
+    vi.stubGlobal(
+      'fetch',
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          items: [{ memberNo: 'A-1', name: 'Adwoa', contactMasked: '***01', via: ['A-2'] }],
+        }),
+      ),
+    );
+
+    const candidates = await listGuardianCandidates('http://api.test', 'session-token', 'M-1');
+
+    expect(candidates).toEqual([
+      { memberNo: 'A-1', name: 'Adwoa', contactMasked: '***01', via: ['A-2'] },
+    ]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'http://api.test/gateway/v1/members?guardianEligible=true&forMemberNo=M-1',
+    );
   });
 });

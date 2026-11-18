@@ -1,5 +1,4 @@
-import { Avatar, Badge, Button, Text, Tooltip } from '@fluentui/react-components';
-import { CheckmarkCircleFilled } from '@fluentui/react-icons';
+import { Button, Text, Tooltip } from '@fluentui/react-components';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type {
   MemberDetail,
@@ -8,7 +7,7 @@ import type {
   MinistryRef,
   RelationshipInput,
 } from '../api/members';
-import { memberInitials, memberLabelFromName, memberName } from '../format/member';
+import { memberLabelFromName } from '../format/member';
 import { subscriptionKindLabel, subscriptionStatusLabel } from '../format/subscription';
 import { overviewCards } from '../overview/cards';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
@@ -52,8 +51,7 @@ export function MemberOverviewTab({
   onViewSubscriptions,
 }: MemberOverviewTabProps) {
   const styles = useMemberDetailStyles();
-  const { formatDate, formatInstant, formatInstantTitle } = useDateTimeFormat();
-  const isArchived = Boolean(member.archivedAt);
+  const { formatDate } = useDateTimeFormat();
   const cards = overviewCards(member, { formatDate });
 
   const title = member.title;
@@ -68,7 +66,6 @@ export function MemberOverviewTab({
   const shepherd = member.shepherd
     ? `${memberLabelFromName(member.shepherd.name, member.shepherd.gender, member.shepherd.age)} · assigned ${formatDate(member.shepherd.assignedOn)}`
     : 'No shepherd assigned';
-  const verifiedLabel = member.verifiedAt ? `Verified ${formatInstant(member.verifiedAt)}` : null;
 
   const activeSubscriptions = member.subscriptions.filter(
     (subscription) => subscription.status === 'active',
@@ -89,98 +86,67 @@ export function MemberOverviewTab({
   return (
     <div className={styles.overview}>
       <div className={styles.statCards} aria-label="Attendance and calls">
-        {cards.map((card) => (
-          <div
-            key={card.key}
-            role="group"
-            aria-label={card.copy}
-            className={styles.statCard}
-            data-testid={`overview-card-${card.key}`}
-          >
-            <Text className={styles.statLabel}>{card.label}</Text>
-            <div className={styles.statValues}>
-              {card.lines.map((line) => (
-                <Text
-                  key={line}
-                  className={
-                    card.empty ? `${styles.statValue} ${styles.statEmpty}` : styles.statValue
-                  }
-                >
-                  {line}
-                </Text>
-              ))}
+        {cards.map((card) => {
+          const cardElement = (
+            <div
+              key={card.key}
+              role="group"
+              aria-label={card.copy}
+              className={styles.statCard}
+              data-testid={`overview-card-${card.key}`}
+            >
+              <Text className={styles.statLabel}>{card.label}</Text>
+              <div className={styles.statValues}>
+                {card.cells.map((cell, index) => (
+                  <div
+                    key={`${card.key}-${index}`}
+                    className={styles.statCell}
+                    data-testid={`overview-card-${card.key}-cell-${index}`}
+                  >
+                    <Text
+                      className={
+                        cell.muted ? `${styles.statValue} ${styles.statMuted}` : styles.statValue
+                      }
+                    >
+                      {cell.value}
+                    </Text>
+                    {/* The slot is always rendered, even when empty, so a single-value
+                        card is never shorter than the card beside it (FR-29). */}
+                    <Text size={200} className={styles.statSubtext}>
+                      {cell.label || '\u00A0'}
+                    </Text>
+                  </div>
+                ))}
+              </div>
             </div>
-            <Text size={200} className={styles.statCaption}>
-              {card.caption}
-            </Text>
-          </div>
-        ))}
+          );
+
+          // FR-29: only `Attended` states the exact periods behind its counts, and it states
+          // them through Fluent's description tooltip rather than a native `title`, so the
+          // library owns the trigger's focus, dismissal and ARIA wiring. The other three
+          // cards carry no tooltip and render unwrapped.
+          return card.tooltip ? (
+            <Tooltip key={card.key} content={card.tooltip} relationship="description">
+              {cardElement}
+            </Tooltip>
+          ) : (
+            cardElement
+          );
+        })}
       </div>
 
       <div className={styles.overviewColumns}>
         <div className={styles.overviewColumn}>
           <section className={styles.section} aria-labelledby="member-identity-heading">
-            <div className={styles.identityHeader}>
-              <Avatar
-                name={memberName(member)}
-                initials={memberInitials(member)}
-                color="colorful"
-                size={56}
-              />
-              <div>
-                <div className={styles.nameRow}>
-                  <span className={styles.name}>{memberName(member)}</span>
-                  {verifiedLabel ? (
-                    <Tooltip content={verifiedLabel} relationship="description">
-                      <Badge
-                        appearance="filled"
-                        color="brand"
-                        icon={<CheckmarkCircleFilled aria-hidden />}
-                        aria-label={verifiedLabel}
-                        data-testid="member-verified"
-                      />
-                    </Tooltip>
-                  ) : null}
-                  {member.isPresbyter ? (
-                    <Badge appearance="tint" color="informative">
-                      Presbyter
-                    </Badge>
-                  ) : null}
-                  <Badge
-                    appearance="outline"
-                    color={isArchived ? 'warning' : 'success'}
-                    title={member.archivedAt ? formatInstantTitle(member.archivedAt) : undefined}
-                  >
-                    {isArchived ? 'Archived' : 'Active'}
-                  </Badge>
-                </div>
-                <Text size={200} className={styles.muted}>
-                  {member.memberNo}
-                  {member.archivedAt ? (
-                    <>
-                      {' · archived '}
-                      <span title={formatInstantTitle(member.archivedAt)}>
-                        {formatInstant(member.archivedAt)}
-                      </span>
-                    </>
-                  ) : (
-                    ''
-                  )}
-                </Text>
-              </div>
-            </div>
-
             <h2 id="member-identity-heading" className={styles.sectionTitle}>
               Identity
             </h2>
             <div className={styles.detailGrid}>
-              <DetailItem label="Member number" value={member.memberNo} />
               <DetailItem
                 label="Joined"
                 value={member.joinedOn ? formatDate(member.joinedOn) : '—'}
               />
               <DetailItem label="Date of birth" value={member.dob ? formatDate(member.dob) : '—'} />
-              <DetailItem label="Presbyter" value={member.isPresbyter ? 'Yes' : 'No'} />
               <DetailItem label="Place of residence" value={member.placeOfResidence ?? '—'} />
               <DetailItem label="Address line" value={member.addressLine ?? '—'} />
             </div>
@@ -211,6 +177,18 @@ export function MemberOverviewTab({
             <Text as="p" className={styles.shepherdLine}>
               <span className={styles.shepherdKey}>Shepherd</span>: {shepherd}
             </Text>
+
+            {/* MR-41 / AC-MR26: a guardian is shown with the contact its chain resolves to,
+                naming the members the chain passes when it is longer than one link. A member
+                with its own contacts keeps both lines (MR-45). */}
+            {member.guardian ? (
+              <Text as="p" className={styles.shepherdLine} data-testid="member-guardian-line">
+                <span className={styles.shepherdKey}>Guardian</span>: Via{' '}
+                {`${member.guardian.name} (${member.guardian.memberNo})`}
+                {member.guardian.contactMasked ? ` · ${member.guardian.contactMasked}` : ''}
+                {member.guardian.via.length > 0 ? ` · via ${member.guardian.via.join(' → ')}` : ''}
+              </Text>
+            ) : null}
           </section>
 
           <MemberRelationshipsSection
@@ -238,7 +216,7 @@ export function MemberOverviewTab({
           >
             <div className={styles.sectionHeader}>
               <h2 id="member-overview-subscriptions-heading" className={styles.sectionTitle}>
-                Subscriptions
+                Welfare &amp; Services
               </h2>
             </div>
 
@@ -249,7 +227,7 @@ export function MemberOverviewTab({
                 <Text size={200} className={styles.muted}>
                   {subscriptionSummary}
                 </Text>
-                <ul className={styles.panelList} aria-label="Subscriptions">
+                <ul className={styles.panelList} aria-label="Welfare & Services">
                   {member.subscriptions.map((subscription) => {
                     const kind = subscriptionKindLabel(subscription.kind);
                     const status = subscriptionStatusLabel(subscription.status);
@@ -286,7 +264,7 @@ export function MemberOverviewTab({
                 View all
               </Button>
               <Text size={200} className={styles.muted}>
-                Add and end from the Subscriptions tab.
+                Add and end from the Welfare &amp; Services tab.
               </Text>
             </div>
           </section>

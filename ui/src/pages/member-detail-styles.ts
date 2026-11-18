@@ -2,7 +2,7 @@ import { makeStyles, shorthands, tokens } from '@fluentui/react-components';
 
 /**
  * Styles shared by the member-detail shell and its page-local tab and section
- * files. The tabs are Overview (FR-29), Attendance (FR-30), Subscriptions
+ * files. The tabs are Overview (FR-29), Attendance (FR-30), Welfare & Services
  * (FR-29/FR-72) and Shepherding (FR-66); Overview also carries the fixed
  * Ministries and Relationships sections.
  */
@@ -78,28 +78,26 @@ export const useMemberDetailStyles = makeStyles({
     fontSize: tokens.fontSizeBase400,
     fontWeight: tokens.fontWeightSemibold,
   },
-  identityHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalM,
-  },
-  nameRow: {
+  // FR-29: the title row's trailing group keeps the verified badge, the Presbyter tag
+  // and the Active/Archived badge on one baseline, 8 px apart.
+  titleBadges: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
     flexWrap: 'wrap',
   },
-  name: {
-    fontSize: tokens.fontSizeBase500,
-    fontWeight: tokens.fontWeightSemibold,
-  },
   muted: {
     color: tokens.colorNeutralForeground3,
   },
+  // FR-29: the identity and membership fields keep the drawing's two columns at
+  // every width down to the narrow gate, then stack in one.
   detailGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: tokens.spacingHorizontalL,
+    '@media (max-width: 560px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
   },
   detailItem: {
     display: 'flex',
@@ -110,8 +108,6 @@ export const useMemberDetailStyles = makeStyles({
   detailLabel: {
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase200,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
   },
   detailValue: {
     wordBreak: 'break-word',
@@ -209,10 +205,19 @@ export const useMemberDetailStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalL,
   },
+  // FR-29: the drawing's row of four is fixed, not auto-fit - four tracks from
+  // 1280 px, a 2 x 2 block below it, and one column at 560 px and narrower so a
+  // long value such as a series name never overflows a 140 px card.
   statCards: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: tokens.spacingHorizontalL,
+    '@media (max-width: 1279px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+    '@media (max-width: 560px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
   },
   statCard: {
     display: 'flex',
@@ -233,20 +238,29 @@ export const useMemberDetailStyles = makeStyles({
   },
   statValues: {
     display: 'flex',
+    alignItems: 'flex-start',
+    gap: tokens.spacingHorizontalXL,
+    flexWrap: 'wrap',
+  },
+  statCell: {
+    display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXXS,
+    minWidth: 0,
   },
+  // FR-29: the value is the darkest ink at the regular weight and 20 px. Medium (500)
+  // resolves to the semibold face on the system stack, so 400 is the one step down that
+  // shows (owner, 2026-11-18).
   statValue: {
     color: tokens.colorNeutralForeground1,
-    fontWeight: tokens.fontWeightSemibold,
-    fontSize: tokens.fontSizeBase400,
-    lineHeight: tokens.lineHeightBase400,
-  },
-  statEmpty: {
-    color: tokens.colorNeutralForeground3,
     fontWeight: tokens.fontWeightRegular,
+    fontSize: tokens.fontSizeBase500,
+    lineHeight: tokens.lineHeightBase500,
   },
-  statCaption: {
+  statMuted: {
+    color: tokens.colorNeutralForeground3,
+  },
+  statSubtext: {
     color: tokens.colorNeutralForeground3,
   },
   overviewColumns: {

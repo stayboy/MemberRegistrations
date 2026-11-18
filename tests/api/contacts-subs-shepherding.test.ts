@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -24,6 +25,7 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
       lastName: memberNo,
       gender: 'undisclosed',
       joinedOn: '2026-01-01',
+      contacts: reachableContacts(),
       ...extra,
     });
   expect(response.status).toBe(201);
@@ -108,16 +110,19 @@ describe('contacts', () => {
     });
     const contactId = owner.body.contacts[0].id as string;
 
-    await request(app)
+    // MR-38: the only own contact of a member with no guardian cannot go, so the
+    // removal is refused until reachability has somewhere else to come from.
+    const refused = await request(app)
       .delete(`/v1/members/S-2101/contacts/${contactId}`)
-      .set(writeHeaders)
-      .expect(204);
+      .set(writeHeaders);
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('guardian_required');
 
-    const view = await request(app).get('/v1/members/S-2101').set(readHeaders).expect(200);
-    expect(view.body.contacts).toHaveLength(0);
+    const still = await request(app).get('/v1/members/S-2101').set(readHeaders).expect(200);
+    expect(still.body.contacts).toHaveLength(1);
 
     const missing = await request(app)
-      .delete(`/v1/members/S-2101/contacts/${contactId}`)
+      .delete(`/v1/members/S-2101/contacts/00000000-0000-4000-8000-000000000000`)
       .set(writeHeaders);
     expect(missing.status).toBe(404);
   });

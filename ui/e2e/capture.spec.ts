@@ -42,15 +42,10 @@ async function openScreen(page: Page, route: `/${string}`, options: ScreenOption
 /**
  * Waits for the fonts and for two paint frames instead of a sleep: Fluent
  * inserts its stylesheet at runtime, and a capture taken before that paint can
- * miss the theme entirely.
+ * miss the theme entirely. There is no connection pill to wait for any more
+ * (FR-10): the healthy state says nothing, so the paint frames are the gate.
  */
 async function capture(page: Page, name: string): Promise<void> {
-  // The shell probes `/health` after mount; the badge starts as "Checking API"
-  // and its colour transition continues after the text changes. Wait for the
-  // settled success state and every finite CSS animation so a shot never catches
-  // a half-painted badge.
-  await expect(page.getByRole('status').filter({ hasText: 'API connected' })).toBeVisible();
-
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise<void>((resolve) => {
@@ -133,7 +128,7 @@ test('member detail', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('tablist', { name: 'Member record sections' })).toBeVisible();
   // The member-detail mock shows the household-coverage surface.
-  await page.getByRole('tab', { name: 'Subscriptions' }).click();
+  await page.getByRole('tab', { name: 'Welfare & Services' }).click();
   await expect(page.getByText('POL-0001')).toBeVisible();
   await capture(page, 'member-detail');
 });
@@ -161,8 +156,8 @@ test('member detail overview narrow', async ({ page }) => {
 });
 
 test('add member', async ({ page }) => {
-  await openScreen(page, '/members/new', { width: 1440, height: 1400 });
-  await expect(page.getByRole('heading', { level: 1, name: 'Add member' })).toBeVisible();
+  await openScreen(page, '/members/new', { width: 1440, height: 1123 });
+  await expect(page.getByRole('heading', { level: 1, name: 'Person and contact' })).toBeVisible();
   await expect(page.getByLabel('Member number')).toBeVisible();
   await capture(page, 'member-add');
 });

@@ -132,6 +132,15 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
   doc's per-write table. The budget, its default, the retry, the probe and the ranking are
   `documents/agents/orchestrator-policy.md`'s; the model ids are
   `documents/agents/seats.json`'s.
+- **`publish` is a seat, and it runs on clean `main` after the merge.** Dispatch the
+  `publish-executor` seat (`.opencode/agents/publish-executor.md`; class `publish-executor` in
+  `documents/agents/seats.json`) with a brief quoting the owner’s `publish`. It rebuilds the
+  Compose stack from `main` (`docker compose build`, then `docker compose up -d`), runs its
+  migrations and reports each service’s health and the local URLs. It refuses unless the merge
+  chain has finished, `HEAD` is `main` at the merged commit and `git status --porcelain` is empty.
+  It never commits, pushes, opens a PR or deploys to Vercel, never stages, stashes or discards the
+  tree, and takes no `git-executor` brief, so draws nothing from `git-seat-budget:`. Only the owner
+  dispatches it, and `go unattended` never pre-authorises it.
 - Before committing, show the change set (`git status --short` + `git diff --stat`) unless the owner
   already named it.
 - `main` is protected in process: work on `feat/`, `fix/` or `chore/` branches, open a PR, wait for

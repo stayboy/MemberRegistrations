@@ -12,11 +12,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { renderWithProviders } from '../test/render';
+import { probeGateway } from '../api/gateway';
 import { PageFrame } from './PageFrame';
 import type { PageAction } from './PageActions';
 
 /**
  * FR-9a / D12 / AC-50: the action row's one-or-many rule and its surface utilities.
+ * FR-10 / FR-29: the title row carries no connection pill and may carry identity addons.
  *
  * - one verb renders as a visible Fluent `Button` (icon + label) and no `Actions` menu;
  * - two or more verbs render in one `Actions` menu and no standalone verb button;
@@ -24,7 +26,9 @@ import type { PageAction } from './PageActions';
  *   the row — before `Back`, before the verb, before the menu — so it never interrupts a run of
  *   buttons, is never a menu item, and is never counted towards the two-or-more rule — so a page
  *   whose only control is a utility shows the icon and renders no menu;
- * - verbs keep their disabling condition in either shape.
+ * - verbs keep their disabling condition in either shape;
+ * - no health or connection pill renders in the title row, and `titleAddon.leading`/`trailing`
+ *   bracket the `h1` in document order.
  */
 
 vi.mock('../api/gateway', async (importOriginal) => {
@@ -51,7 +55,6 @@ function renderFrame(actions: readonly PageAction[], controls?: ReactNode) {
           submenu="All members"
           actions={actions}
           controls={controls}
-          hideBadge
         >
           <div>body</div>
         </PageFrame>
@@ -264,5 +267,62 @@ describe('PageFrame action row (FR-9a)', () => {
 
     const item = await screen.findByRole('menuitem', { name: 'Add member' });
     expect(item).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('PageFrame title row (FR-10, FR-29)', () => {
+  it('renders no status or connection pill in the header', () => {
+    renderFrame([addMember()]);
+
+    // The healthy probe used to render "API connected" as a status badge; the message bar
+    // is now the only connection state and says nothing when the API is reachable.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/API connected/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the failure message bar as the only health surface', async () => {
+    vi.mocked(probeGateway).mockRejectedValueOnce(new Error('down'));
+    renderFrame([addMember()]);
+
+    // AC-29: an unreachable API is the message bar's story alone - no status pill and no
+    // "API connected" text reappears beside it.
+    await screen.findByText(/Can't reach the API/);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/API connected/i)).not.toBeInTheDocument();
+  });
+
+  it('brackets the h1 with the leading and trailing addons in document order', () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/members/M-1001']}>
+        <ThemeProvider>
+          <PageFrame
+            sectionId="members"
+            title="Kwame Asante (Male, 41y)"
+            submenu="M-1001"
+            titleAddon={{
+              leading: <span data-testid="title-addon-leading">KA</span>,
+              trailing: <span data-testid="title-addon-trailing">Active</span>,
+            }}
+          >
+            <div>body</div>
+          </PageFrame>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const leading = screen.getByTestId('title-addon-leading');
+    const heading = screen.getByRole('heading', { level: 1, name: 'Kwame Asante (Male, 41y)' });
+    const trailing = screen.getByTestId('title-addon-trailing');
+
+    expect(precedes(leading, heading)).toBe(true);
+    expect(precedes(heading, trailing)).toBe(true);
+  });
+
+  it('renders the title row alone when no addon is passed', () => {
+    renderFrame([]);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Members' })).toBeVisible();
+    expect(screen.queryByTestId('title-addon-leading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('title-addon-trailing')).not.toBeInTheDocument();
   });
 });

@@ -14,6 +14,7 @@ import {
   writeHeaders,
   type TestApp,
 } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 const TEST_PAYMENT_SECRET = 'test-payment-gateway-secret-16';
 
@@ -187,17 +188,20 @@ beforeAll(async () => {
     paymentGatewaySecret: TEST_PAYMENT_SECRET,
   });
 
-  const presbyter = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PG-9001', firstName: 'Grace', lastName: 'Okafor', isPresbyter: true });
+  const presbyter = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PG-9001',
+    firstName: 'Grace',
+    lastName: 'Okafor',
+    isPresbyter: true,
+    contacts: reachableContacts(),
+  });
   expect(presbyter.status).toBe(201);
 
   for (const memberNo of ['PG-1001', 'PG-1002']) {
     const member = await request(harness.app)
       .post('/v1/members')
       .set(writeHeaders)
-      .send({ memberNo, firstName: 'Member', lastName: memberNo });
+      .send({ memberNo, firstName: 'Member', lastName: memberNo, contacts: reachableContacts() });
     expect(member.status).toBe(201);
   }
 

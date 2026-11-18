@@ -4,6 +4,7 @@ import { DEFAULT_USSD_CODE_PEPPER } from '../../src/config/env.js';
 import { AttendanceCodeRepository } from '../../src/repos/attendance-codes.js';
 import type { RegistrationRequestItem } from '../../src/repos/registration-requests.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -12,6 +13,7 @@ let eventId: string;
 let sessionDate: string;
 let eventNo = 0;
 let phone = 0;
+let guardianNo = 0;
 
 function day(offset: number): string {
   const now = new Date();
@@ -40,6 +42,26 @@ async function createEvent(dates: string[]): Promise<string> {
     });
   expect(response.status).toBe(201);
   return response.body.id as string;
+}
+
+/** An adult with an own contact, so it can guard an approved request (MR-50). */
+async function guardianMember(options: { underAge?: boolean } = {}): Promise<string> {
+  guardianNo += 1;
+  const memberNo = `REQ-GUARDIAN-${guardianNo}`;
+  const year = new Date().getUTCFullYear();
+  const dob = options.underAge ? `${year - 10}-01-15` : '1980-01-15';
+  const created = await request(app)
+    .post('/v1/members')
+    .set(writeHeaders)
+    .send({
+      memberNo,
+      firstName: 'Adwoa',
+      lastName: `Guardian ${guardianNo}`,
+      dob,
+      contacts: reachableContacts(),
+    });
+  expect(created.status).toBe(201);
+  return memberNo;
 }
 
 async function pendingRequest(
@@ -124,13 +146,14 @@ describe('registration request list', () => {
 });
 
 describe('approval', () => {
-  it('creates the member, marks the request approved and links it', async () => {
+  it('creates the member with its guardian, marks the request approved and links it', async () => {
     const requestItem = await pendingRequest('Akosua', 'Boateng');
+    const guardianMemberNo = await guardianMember();
 
     const approved = await request(app)
       .post(`/v1/registration-requests/${requestItem.id}/approve`)
       .set(writeHeaders)
-      .send({ memberNo: 'REQ-APPROVED-1' })
+      .send({ memberNo: 'REQ-APPROVED-1', guardianMemberNo })
       .expect(200);
 
     expect(approved.body.status).toBe('approved');
@@ -138,6 +161,8 @@ describe('approval', () => {
     expect(approved.body.decidedBy).toBe('test-admin');
     expect(approved.body.decidedAt).toBeTruthy();
 
+    // AC-MR40: the member, its guardian link and the approval are one unit, and the
+    // approved member is reachable through the guardian's own contact.
     const member = await request(app)
       .get('/v1/members/REQ-APPROVED-1')
       .set(readHeaders)
@@ -148,24 +173,29 @@ describe('approval', () => {
       gender: 'undisclosed',
       joinedOn: today(),
       contacts: [],
+      guardian: { memberNo: guardianMemberNo },
     });
+    expect(member.body.guardian.contactMasked).toBeTruthy();
+
+    const [link] = await harness.db.query<{ type: string }>(
+      `select r.type
+         from member_relationships r
+         join members m on m.id = r.member_id
+        where m.member_no = $1`,
+      ['REQ-APPROVED-1'],
+    );
+    expect(link!.type).toBe('guardian');
 
     const twice = await request(app)
       .post(`/v1/registration-requests/${requestItem.id}/approve`)
       .set(writeHeaders)
-      .send({ memberNo: 'REQ-APPROVED-2' });
+      .send({ memberNo: 'REQ-APPROVED-2', guardianMemberNo });
     expect(twice.status).toBe(409);
     expect(twice.body.code).toBe('registration_not_pending');
   });
 
-  it('does not mark a request approved when the member number is taken', async () => {
-    await request(app)
-      .post('/v1/members')
-      .set(writeHeaders)
-      .send({ memberNo: 'REQ-TAKEN', firstName: 'Existing', lastName: 'Member' })
-      .expect(201);
-
-    const requestItem = await pendingRequest('Yaa', 'Asante');
+  it('refuses an approval without a guardian and leaves the request pending', async () => {
+    const requestItem = await pendingRequest('Efua', 'Owusu');
     const [before] = await harness.db.query<{ count: number }>(
       'select count(*)::int as count from members',
     );
@@ -173,7 +203,78 @@ describe('approval', () => {
     const response = await request(app)
       .post(`/v1/registration-requests/${requestItem.id}/approve`)
       .set(writeHeaders)
-      .send({ memberNo: 'REQ-TAKEN' });
+      .send({ memberNo: 'REQ-NO-GUARDIAN' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+
+    const [row] = await harness.db.query<{ status: string; member_id: string | null }>(
+      'select status, member_id from registration_requests where id = $1',
+      [requestItem.id],
+    );
+    expect(row!.status).toBe('pending');
+    expect(row!.member_id).toBeNull();
+
+    const [after] = await harness.db.query<{ count: number }>(
+      'select count(*)::int as count from members',
+    );
+    expect(after!.count).toBe(before!.count);
+  });
+
+  it('refuses an under-age guardian and writes nothing', async () => {
+    const requestItem = await pendingRequest('Adjoa', 'Mensah');
+    const guardianMemberNo = await guardianMember({ underAge: true });
+    const [before] = await harness.db.query<{ count: number }>(
+      'select count(*)::int as count from members',
+    );
+
+    const response = await request(app)
+      .post(`/v1/registration-requests/${requestItem.id}/approve`)
+      .set(writeHeaders)
+      .send({ memberNo: 'REQ-UNDERAGE', guardianMemberNo });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('guardian_not_eligible');
+
+    const [row] = await harness.db.query<{ status: string; member_id: string | null }>(
+      'select status, member_id from registration_requests where id = $1',
+      [requestItem.id],
+    );
+    expect(row!.status).toBe('pending');
+    expect(row!.member_id).toBeNull();
+
+    const [approved] = await harness.db.query<{ count: number }>(
+      `select count(*)::int as count from members where member_no = 'REQ-UNDERAGE'`,
+    );
+    expect(approved!.count).toBe(0);
+    const [after] = await harness.db.query<{ count: number }>(
+      'select count(*)::int as count from members',
+    );
+    expect(after!.count).toBe(before!.count);
+  });
+
+  it('does not mark a request approved when the member number is taken', async () => {
+    await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({
+        memberNo: 'REQ-TAKEN',
+        firstName: 'Existing',
+        lastName: 'Member',
+        contacts: reachableContacts(),
+      })
+      .expect(201);
+
+    const requestItem = await pendingRequest('Yaa', 'Asante');
+    const guardianMemberNo = await guardianMember();
+    const [before] = await harness.db.query<{ count: number }>(
+      'select count(*)::int as count from members',
+    );
+
+    const response = await request(app)
+      .post(`/v1/registration-requests/${requestItem.id}/approve`)
+      .set(writeHeaders)
+      .send({ memberNo: 'REQ-TAKEN', guardianMemberNo });
 
     expect(response.status).toBe(409);
 

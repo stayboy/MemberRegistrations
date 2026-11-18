@@ -166,17 +166,27 @@ export async function listRegistrationRequests(
   return [...(page.items ?? [])];
 }
 
-/** `POST /v1/registration-requests/:id/approve` with the immutable member number. */
+/**
+ * `POST /v1/registration-requests/:id/approve` with the immutable member number and the
+ * guardian the approved member is reached through (MR-50).
+ */
 export async function approveRegistrationRequest(
   baseUrl: string,
   sessionToken: string,
   id: string,
-  memberNo: string,
+  input: { readonly memberNo: string; readonly guardianMemberNo: string },
 ): Promise<RegistrationRequest> {
   const item = await gatewayRequest<RegistrationRequest>(
     baseUrl,
     registrationDecisionPath(id, 'approve'),
-    { method: 'POST', body: { memberNo: memberNo.trim() }, sessionToken },
+    {
+      method: 'POST',
+      body: {
+        memberNo: input.memberNo.trim(),
+        guardianMemberNo: input.guardianMemberNo.trim(),
+      },
+      sessionToken,
+    },
   );
   if (!item) throw new ApiError(500, 'The approved registration response was empty.');
   return item;

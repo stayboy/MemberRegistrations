@@ -1,4 +1,6 @@
 import {
+  Avatar,
+  Badge,
   Button,
   Dialog,
   DialogActions,
@@ -14,12 +16,19 @@ import {
   Tab,
   TabList,
   Text,
+  Tooltip,
 } from '@fluentui/react-components';
 import {
+  AddRegular,
   ArchiveRegular,
   ArrowUndoRegular,
+  CheckmarkCircleFilled,
+  ContactCardRegular,
   DeleteRegular,
   EditRegular,
+  MoneyRegular,
+  PeopleAddRegular,
+  PeopleRegular,
 } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
@@ -50,9 +59,10 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { PageFrame } from '../components/PageFrame';
 import type { PageAction } from '../components/PageActions';
-import { memberLabel, memberLabelFromName } from '../format/member';
+import { memberInitials, memberLabel, memberLabelFromName, memberName } from '../format/member';
 import { isNotFoundError } from '../format/member-form';
 import { contactsAction } from '../overview/cards';
+import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { MemberAttendanceTab } from './MemberAttendanceTab';
 import { errorMessage } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
@@ -69,6 +79,7 @@ type MemberTab = 'overview' | 'attendance' | 'subscriptions' | 'shepherding';
  */
 export function MemberDetailPage() {
   const styles = useMemberDetailStyles();
+  const { formatDate, formatInstantTitle } = useDateTimeFormat();
   const { memberNo: routeMemberNo } = useParams<{ memberNo: string }>();
   const memberNo = routeMemberNo ?? '';
   const navigate = useNavigate();
@@ -84,6 +95,7 @@ export function MemberDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [endAssignmentOpen, setEndAssignmentOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** MR-3: a menu action that owns its surface focuses that surface's own add control. */
 
   const detailQuery = useQuery({
     queryKey: ['member', baseUrl, memberNo],
@@ -113,6 +125,20 @@ export function MemberDetailPage() {
       void signOut();
     }
   }, [detailQuery.error, ministriesQuery.error, shepherdingQuery.error, signOut]);
+
+  /** MR-3: the menu switches to the tab that owns the mutation and focuses its own
+   * Add control, so the menu never duplicates a form. The focus runs after the tab
+   * switch has committed. */
+  function focusAddControl(target: 'ministries' | 'relationships' | 'subscription'): void {
+    const ids = {
+      ministries: 'member-ministries-add',
+      relationships: 'member-relationships-add',
+      subscription: 'member-subscription-add',
+    } as const;
+    window.requestAnimationFrame(() => {
+      document.getElementById(ids[target])?.focus();
+    });
+  }
 
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['member', baseUrl, memberNo] });
@@ -287,6 +313,45 @@ export function MemberDetailPage() {
   }
 
   const contacts = contactsAction(member.contactCount);
+  const verifiedLabel = member.verifiedAt ? `Verified · ${formatDate(member.verifiedAt)}` : null;
+  const titleAddon = {
+    leading: (
+      <Avatar
+        name={memberName(member)}
+        initials={memberInitials(member)}
+        color="colorful"
+        size={32}
+        data-testid="member-header-avatar"
+      />
+    ),
+    trailing: (
+      <span className={styles.titleBadges}>
+        {verifiedLabel ? (
+          <Tooltip content={verifiedLabel} relationship="description">
+            <Badge
+              appearance="filled"
+              color="brand"
+              icon={<CheckmarkCircleFilled aria-hidden />}
+              aria-label={verifiedLabel}
+              data-testid="member-verified"
+            />
+          </Tooltip>
+        ) : null}
+        {member.isPresbyter ? (
+          <Badge appearance="tint" color="informative">
+            Presbyter
+          </Badge>
+        ) : null}
+        <Badge
+          appearance="outline"
+          color={isArchived ? 'warning' : 'success'}
+          title={member.archivedAt ? formatInstantTitle(member.archivedAt) : undefined}
+        >
+          {isArchived ? 'Archived' : 'Active'}
+        </Badge>
+      </span>
+    ),
+  };
 
   const actions: PageAction[] = [
     {
@@ -294,8 +359,59 @@ export function MemberDetailPage() {
       kind: 'verb',
       label: 'Edit',
       icon: <EditRegular />,
+      primary: true,
       onSelect: () => {
         navigate(`/members/${encodeURIComponent(memberNo)}/edit`);
+      },
+    },
+    {
+      id: 'contacts',
+      kind: 'verb',
+      label: 'View contacts',
+      icon: <ContactCardRegular />,
+      onSelect: () => {
+        setActionError(null);
+        setContactsOpen(true);
+      },
+    },
+    {
+      id: 'assign-shepherd',
+      kind: 'verb',
+      label: 'Assign shepherd',
+      icon: <PeopleAddRegular />,
+      onSelect: () => {
+        setActionError(null);
+        setAssignOpen(true);
+      },
+    },
+    {
+      id: 'add-ministry',
+      kind: 'verb',
+      label: 'Add ministry',
+      icon: <AddRegular />,
+      onSelect: () => {
+        setActiveTab('overview');
+        focusAddControl('ministries');
+      },
+    },
+    {
+      id: 'add-relationship',
+      kind: 'verb',
+      label: 'Add relationship',
+      icon: <PeopleRegular />,
+      onSelect: () => {
+        setActiveTab('overview');
+        focusAddControl('relationships');
+      },
+    },
+    {
+      id: 'add-subscription',
+      kind: 'verb',
+      label: 'Add subscription',
+      icon: <MoneyRegular />,
+      onSelect: () => {
+        setActiveTab('subscriptions');
+        focusAddControl('subscription');
       },
     },
     isArchived
@@ -334,6 +450,7 @@ export function MemberDetailPage() {
       submenu={member.memberNo}
       description="Review the registration, attendance, ministries and coverage."
       actions={actions}
+      titleAddon={titleAddon}
     >
       <div className={styles.page}>
         {actionError ? (
@@ -355,7 +472,7 @@ export function MemberDetailPage() {
           >
             <Tab value="overview">Overview</Tab>
             <Tab value="attendance">Attendance</Tab>
-            <Tab value="subscriptions">Subscriptions</Tab>
+            <Tab value="subscriptions">Welfare &amp; Services</Tab>
             <Tab value="shepherding">Shepherding</Tab>
           </TabList>
           <div className={styles.tabRowEnd}>

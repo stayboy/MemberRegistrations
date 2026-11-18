@@ -7,6 +7,7 @@ import type {
   MemberDetailResult,
   MemberInput,
   MemberUpdateInput,
+  PresbyterTitleOption,
   SubscribeProductInput,
 } from '../api/members';
 import type { PaymentMode } from '../api/welfare';
@@ -21,7 +22,6 @@ export type MemberFormField =
   | 'memberNo'
   | 'firstName'
   | 'lastName'
-  | 'otherNames'
   | 'maidenName'
   | 'alias'
   | 'dob'
@@ -34,6 +34,12 @@ export type MemberFormField =
   | 'movedOutOn'
   | 'movedToAssembly'
   | 'isPresbyter'
+  | 'membershipCardNo'
+  | 'titleCode'
+  | 'titledOn'
+  | 'guardianMemberNo'
+  | 'shepherdMemberNo'
+  | 'shepherdAssignedOn'
   | CreateContactField
   | 'ministries'
   | 'subscriptionProductCode'
@@ -66,7 +72,6 @@ export interface MemberFormValues {
   readonly memberNo: string;
   readonly firstName: string;
   readonly lastName: string;
-  readonly otherNames: string;
   readonly maidenName: string;
   readonly alias: string;
   readonly dob: string;
@@ -74,13 +79,26 @@ export interface MemberFormValues {
   readonly placeOfResidence: string;
   readonly addressLine: string;
   readonly joinedOn: string;
-  /** FR-29 membership facts; `assemblyJoinedOn` has no default. Blank becomes `null`. */
+  /**
+   * FR-29 membership facts. `assemblyJoinedOn` has no input any more (MR-5) but stays in
+   * the model so an edit leaves an existing value untouched; blank becomes `null`.
+   */
   readonly assemblyJoinedOn: string;
   readonly cameFrom: string;
   readonly movedOutOn: string;
   readonly movedToAssembly: string;
   readonly isPresbyter: boolean;
-  /** Create only: the edit form has no contact fields (FR-29a). */
+  /** MR-6: the back-office card number; blank becomes `null`. */
+  readonly membershipCardNo: string;
+  /** MR-11: the presbyter office and the UTC date it began; cleared with the title. */
+  readonly titleCode: string;
+  readonly titledOn: string;
+  /** Create only: the guardian that supplies reachability (MR-38). */
+  readonly guardianMemberNo: string;
+  /** Create only: the shepherd chosen before the member exists (MR-9). */
+  readonly shepherdMemberNo: string;
+  readonly shepherdAssignedOn: string;
+  /** The three optional contact fields; the create form offers them, the edit form reads them. */
   readonly phone: string;
   readonly email: string;
   readonly whatsapp: string;
@@ -186,11 +204,8 @@ export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   const firstName = requiredText(values.firstName, 'First name', 100);
   if (firstName) errors.firstName = firstName;
 
-  const lastName = requiredText(values.lastName, 'Last name', 100);
+  const lastName = requiredText(values.lastName, 'Other names', 100);
   if (lastName) errors.lastName = lastName;
-
-  const otherNames = optionalText(values.otherNames, 'Other names', 200);
-  if (otherNames) errors.otherNames = otherNames;
 
   const maidenName = optionalText(values.maidenName, 'Maiden name', 100);
   if (maidenName) errors.maidenName = maidenName;
@@ -222,6 +237,24 @@ export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   const movedToAssembly = optionalText(values.movedToAssembly, 'Moved to', 200);
   if (movedToAssembly) errors.movedToAssembly = movedToAssembly;
 
+  const membershipCardNo = optionalText(values.membershipCardNo, 'Membership card number', 32);
+  if (membershipCardNo) errors.membershipCardNo = membershipCardNo;
+
+  const titledOn = optionalDate(values.titledOn, 'Titled on');
+  if (titledOn) {
+    errors.titledOn = titledOn;
+  } else if (values.titledOn.trim().length > 0) {
+    // MR-11: the date is the office's, so it cannot stand without the office.
+    if (values.titleCode.trim().length === 0) {
+      errors.titledOn = 'Choose a presbyter title before the date it began.';
+    } else if (values.titledOn.trim() > utcToday()) {
+      errors.titledOn = 'Titled on cannot be in the future.';
+    }
+  }
+
+  const shepherdAssignedOn = optionalDate(values.shepherdAssignedOn, 'Shepherd assigned on');
+  if (shepherdAssignedOn) errors.shepherdAssignedOn = shepherdAssignedOn;
+
   for (const { field, kind, label } of CREATE_CONTACT_FIELDS) {
     const contact = optionalContact(kind, values[field], label);
     if (contact) errors[field] = contact;
@@ -230,13 +263,108 @@ export function validateMemberForm(values: MemberFormValues): MemberFormErrors {
   return errors;
 }
 
+/**
+ * MR-38: a create with neither an own contact nor a guardian is refused by the API
+ * with `422 no_contact_or_guardian`, and AC-MR24 wants the guardian field named, so
+ * the browser answers first. The edit form cannot remove a contact, so the rule is
+ * the API's there.
+ */
+export function validateReachability(values: MemberFormValues): MemberFormErrors {
+  const hasContact = CREATE_CONTACT_FIELDS.some(({ field }) => values[field].trim().length > 0);
+  if (hasContact || values.guardianMemberNo.trim().length > 0) return {};
+  return {
+    guardianMemberNo: 'Record a phone, email or WhatsApp number, or choose a guardian.',
+  };
+}
+
+/** The three content steps and the final Review (MR-48). */
+export const MEMBER_FORM_STEP_IDS = ['person', 'church', 'relationships', 'review'] as const;
+export type MemberFormStep = (typeof MEMBER_FORM_STEP_IDS)[number];
+
+export const MEMBER_FORM_STEP_LABELS: Record<MemberFormStep, string> = {
+  person: 'Person and contact',
+  church: 'Church and involvement',
+  relationships: 'Relationships',
+  review: 'Review',
+};
+
+/** The fields each step owns; Review owns everything through `validateMemberForm`. */
+const STEP_FIELDS: Record<'person' | 'church', readonly MemberFormField[]> = {
+  person: [
+    'memberNo',
+    'firstName',
+    'lastName',
+    'maidenName',
+    'alias',
+    'dob',
+    'gender',
+    'placeOfResidence',
+    'addressLine',
+    'phone',
+    'email',
+    'whatsapp',
+  ],
+  church: [
+    'joinedOn',
+    'cameFrom',
+    'movedOutOn',
+    'movedToAssembly',
+    'membershipCardNo',
+    'titleCode',
+    'titledOn',
+    'shepherdAssignedOn',
+  ],
+};
+
+/**
+ * MR-48: `Next` validates only the step it leaves, and `Review` validates every
+ * step. The reachability rule belongs to the Relationships step, where the caller
+ * composes it because only a create enforces it.
+ */
+export function validateMemberStep(
+  step: Exclude<MemberFormStep, 'relationships'>,
+  values: MemberFormValues,
+): MemberFormErrors {
+  const all = validateMemberForm(values);
+  if (step === 'review') return all;
+
+  const errors: MemberFormErrors = {};
+  for (const field of STEP_FIELDS[step]) {
+    if (all[field]) errors[field] = all[field];
+  }
+  return errors;
+}
+
+/** MR-12: the picker offers the active titles the selected gender allows. */
+export function titleOptionsForGender(
+  titles: readonly PresbyterTitleOption[],
+  gender: Gender,
+): PresbyterTitleOption[] {
+  return titles.filter(
+    (title) =>
+      title.active && (title.genderRestriction === null || title.genderRestriction === gender),
+  );
+}
+
+/** MR-13: a held title the edited gender no longer allows is cleared, with a note. */
+export function titleForbiddenByGender(
+  titles: readonly PresbyterTitleOption[],
+  titleCode: string,
+  gender: Gender,
+): PresbyterTitleOption | null {
+  const trimmed = titleCode.trim();
+  if (trimmed.length === 0) return null;
+  const title = titles.find((option) => option.code === trimmed);
+  if (!title) return null;
+  return title.genderRestriction !== null && title.genderRestriction !== gender ? title : null;
+}
+
 /** A fresh add-mode form; `joinedOn` defaults to today in UTC. */
 export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberFormValues {
   return {
     memberNo: '',
     firstName: '',
     lastName: '',
-    otherNames: '',
     maidenName: '',
     alias: '',
     dob: '',
@@ -249,6 +377,13 @@ export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberForm
     movedOutOn: '',
     movedToAssembly: '',
     isPresbyter: false,
+    membershipCardNo: '',
+    titleCode: '',
+    titledOn: '',
+    guardianMemberNo: '',
+    shepherdMemberNo: '',
+    // MR-9: the assignment defaults to today in UTC.
+    shepherdAssignedOn: joinedOn,
     phone: '',
     email: '',
     whatsapp: '',
@@ -260,16 +395,15 @@ export function createEmptyMemberForm(joinedOn: string = utcToday()): MemberForm
 
 /**
  * Prefills edit mode from the detail DTO (FR-25). The three contact fields stay
- * blank: contacts are managed on the member record (FR-29), not through the edit
- * form, so they can never ride an update body. Ministries and the subscription are
- * create-form fields (FR-29a, FR-71) and stay empty here for the same reason.
+ * blank: contacts are managed through the record's own dialog (FR-29), never by
+ * an update body. Ministries, the guardian and the shepherd are immediate
+ * mutations on edit, so they stay empty here too.
  */
 export function fromMemberDetail(member: MemberDetail): MemberFormValues {
   return {
     memberNo: member.memberNo,
     firstName: member.firstName,
     lastName: member.lastName,
-    otherNames: member.otherNames ?? '',
     maidenName: member.maidenName ?? '',
     alias: member.alias ?? '',
     dob: member.dob ?? '',
@@ -282,6 +416,12 @@ export function fromMemberDetail(member: MemberDetail): MemberFormValues {
     movedOutOn: member.movedOutOn ?? '',
     movedToAssembly: member.movedToAssembly ?? '',
     isPresbyter: member.isPresbyter,
+    membershipCardNo: member.membershipCardNo ?? '',
+    titleCode: member.title?.code ?? '',
+    titledOn: member.title?.titledOn ?? '',
+    guardianMemberNo: member.guardian?.memberNo ?? '',
+    shepherdMemberNo: member.shepherd?.memberNo ?? '',
+    shepherdAssignedOn: member.shepherd?.assignedOn ?? '',
     phone: '',
     email: '',
     whatsapp: '',
@@ -318,7 +458,6 @@ export function toCreatePayload(values: MemberFormValues): MemberInput {
     memberNo: values.memberNo.trim(),
     firstName: values.firstName.trim(),
     lastName: values.lastName.trim(),
-    otherNames: blankToNull(values.otherNames),
     maidenName: blankToNull(values.maidenName),
     alias: blankToNull(values.alias),
     dob: blankToNull(values.dob),
@@ -331,12 +470,28 @@ export function toCreatePayload(values: MemberFormValues): MemberInput {
     movedOutOn: blankToNull(values.movedOutOn),
     movedToAssembly: blankToNull(values.movedToAssembly),
     isPresbyter: values.isPresbyter,
+    membershipCardNo: blankToNull(values.membershipCardNo),
+    titleCode: blankToNull(values.titleCode),
+    titledOn: blankToNull(values.titledOn),
+    guardianMemberNo: blankToNull(values.guardianMemberNo),
   };
 
   const contacts = toContactInputs(values);
   const withContacts = contacts.length > 0 ? { ...payload, contacts } : payload;
   const ministries = values.ministries.filter((code) => code.trim().length > 0);
   return ministries.length > 0 ? { ...withContacts, ministries } : withContacts;
+}
+
+/** The create form's one optional shepherd assignment (MR-9), or null when none was chosen. */
+export function toShepherdInput(
+  values: MemberFormValues,
+): { officerMemberNo: string; assignedOn: string } | null {
+  const officerMemberNo = values.shepherdMemberNo.trim();
+  if (officerMemberNo.length === 0) return null;
+  return {
+    officerMemberNo,
+    assignedOn: values.shepherdAssignedOn.trim() || utcToday(),
+  };
 }
 
 /**
@@ -390,7 +545,6 @@ export function toUpdatePayload(
 
   if (next.firstName !== base.firstName) payload.firstName = next.firstName;
   if (next.lastName !== base.lastName) payload.lastName = next.lastName;
-  if (next.otherNames !== base.otherNames) payload.otherNames = next.otherNames;
   if (next.maidenName !== base.maidenName) payload.maidenName = next.maidenName;
   if (next.alias !== base.alias) payload.alias = next.alias;
   if (next.dob !== base.dob) payload.dob = next.dob;
@@ -409,6 +563,21 @@ export function toUpdatePayload(
     payload.movedToAssembly = next.movedToAssembly;
   }
   if (next.isPresbyter !== base.isPresbyter) payload.isPresbyter = next.isPresbyter;
+  if (next.membershipCardNo !== base.membershipCardNo) {
+    payload.membershipCardNo = next.membershipCardNo;
+  }
+
+  // MR-11/MR-13: a cleared title clears its date server-side, so only the title rides the
+  // body then. A changed title that is kept carries the date too when the date moved, so a
+  // title and a date edited together are not silently split.
+  if (next.titleCode !== base.titleCode) {
+    payload.titleCode = next.titleCode;
+    if ((next.titleCode ?? '').trim().length > 0 && next.titledOn !== base.titledOn) {
+      payload.titledOn = next.titledOn;
+    }
+  } else if (next.titledOn !== base.titledOn) {
+    payload.titledOn = next.titledOn;
+  }
 
   return payload;
 }
@@ -437,7 +606,6 @@ export function mergeKeptValues(
       memberNo: base.memberNo,
       firstName: kept.firstName ?? base.firstName,
       lastName: kept.lastName ?? base.lastName,
-      otherNames: kept.otherNames ?? base.otherNames,
       maidenName: kept.maidenName ?? base.maidenName,
       alias: kept.alias ?? base.alias,
       dob: kept.dob ?? base.dob,
@@ -450,6 +618,12 @@ export function mergeKeptValues(
       movedOutOn: kept.movedOutOn ?? base.movedOutOn,
       movedToAssembly: kept.movedToAssembly ?? base.movedToAssembly,
       isPresbyter: kept.isPresbyter ?? base.isPresbyter,
+      membershipCardNo: kept.membershipCardNo ?? base.membershipCardNo,
+      titleCode: kept.titleCode ?? base.titleCode,
+      titledOn: kept.titledOn ?? base.titledOn,
+      guardianMemberNo: kept.guardianMemberNo ?? base.guardianMemberNo,
+      shepherdMemberNo: kept.shepherdMemberNo ?? base.shepherdMemberNo,
+      shepherdAssignedOn: kept.shepherdAssignedOn ?? base.shepherdAssignedOn,
       phone: kept.phone ?? base.phone,
       email: kept.email ?? base.email,
       whatsapp: kept.whatsapp ?? base.whatsapp,

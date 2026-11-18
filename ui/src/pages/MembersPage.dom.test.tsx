@@ -83,4 +83,19 @@ describe('MembersPage single-verb action row', () => {
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
+
+  it('names the subscriptions column Welfare & Services (FR-29, AC-41)', async () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/members']}>
+        <ThemeProvider>
+          <DateTimeProvider>
+            <MembersPage />
+          </DateTimeProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('columnheader', { name: 'Welfare & Services' })).toBeVisible();
+    expect(screen.queryByRole('columnheader', { name: 'Subscriptions' })).not.toBeInTheDocument();
+  });
 });

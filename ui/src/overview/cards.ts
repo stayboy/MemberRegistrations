@@ -23,14 +23,27 @@ const UTC_MONTHS = [
 
 export type OverviewCardKey = 'attended' | 'last-attended' | 'shepherd-calls' | 'most-attended';
 
+/**
+ * One value over its muted label. A single-value card still carries one cell so
+ * the subtext slot is reserved, never omitted (FR-29); its `label` is then empty
+ * and the component renders a blank line in that slot.
+ */
+export interface OverviewCardCell {
+  readonly value: string;
+  readonly label: string;
+  /** Absence or nothing-to-count reads in muted ink; a live count does not. */
+  readonly muted?: boolean;
+}
+
 export interface OverviewCard {
   readonly key: OverviewCardKey;
   readonly label: string;
-  /** One entry per visible value line. */
-  readonly lines: readonly string[];
-  readonly caption: string;
+  /** One cell per visible value; `Attended` has three and `Shepherd calls` two. */
+  readonly cells: readonly OverviewCardCell[];
   /** The whole card as one sentence - `Label: value` - and the card's accessible name. */
   readonly copy: string;
+  /** Exact periods for the browser tooltip; only `Attended` names them. */
+  readonly tooltip?: string;
   /** True when the card shows its stated empty copy instead of a value. */
   readonly empty: boolean;
 }
@@ -42,12 +55,12 @@ export interface OverviewCardOptions {
 }
 
 export interface QuarterMonthCounts {
+  readonly yearLabel: string;
+  readonly yearCount: number;
   readonly quarterLabel: string;
   readonly quarterCount: number;
   readonly monthLabel: string;
   readonly monthCount: number;
-  /** The number of attendance rows the counts were read from, series and standalone. */
-  readonly seriesRows: number;
 }
 
 interface CalendarDate {
@@ -89,9 +102,9 @@ function* entriesOf(
 }
 
 /**
- * The first card's two counts: entries whose UTC calendar date falls in the
- * current UTC quarter and in the current UTC month. A date outside the current
- * year cannot match either count.
+ * The first card's three counts: entries whose UTC calendar date falls in the
+ * current UTC year, quarter and month. The periods nest, so one entry counts in
+ * every period it falls in and nothing is de-duplicated across the cells.
  */
 export function quarterMonthCounts(
   attendance: readonly MemberAttendanceSeries[],
@@ -101,21 +114,24 @@ export function quarterMonthCounts(
   const month = now.getUTCMonth() + 1;
   const quarter = quarterOf(month);
 
+  let yearCount = 0;
   let quarterCount = 0;
   let monthCount = 0;
   for (const { entry } of entriesOf(attendance)) {
     const date = parseUtcDate(entry.date);
     if (!date || date.year !== year) continue;
+    yearCount += 1;
     if (quarterOf(date.month) === quarter) quarterCount += 1;
     if (date.month === month) monthCount += 1;
   }
 
   return {
+    yearLabel: `${year}`,
+    yearCount,
     quarterLabel: `Q${quarter} ${year}`,
     quarterCount,
-    monthLabel: UTC_MONTHS[month - 1]!,
+    monthLabel: `${UTC_MONTHS[month - 1]} ${year}`,
     monthCount,
-    seriesRows: attendance.length,
   };
 }
 
@@ -195,17 +211,17 @@ export function mostAttended(
 
 export interface ShepherdCallsCard {
   readonly label: 'Shepherd calls';
-  /** The visible value: the drawing's `<n> · last reached <date>` branch. */
-  readonly value: string;
-  /** `Label: value`; the prefix stays in every branch (FR-29). */
+  /** `<attempts>×` over `Number of calls`, then the last reached date over `Last reached`. */
+  readonly cells: readonly [OverviewCardCell, OverviewCardCell];
+  /** The card's accessible name; the visible `×` is spelled as `times` (FR-29). */
   readonly copy: string;
   readonly empty: boolean;
 }
 
 /**
- * `calls` is the current assignment's all-time projection. The `Shepherd calls:`
- * prefix is part of every branch - `No calls logged`, `<n> attempts · no one
- * reached`, or `<n> · last reached <date>` (FR-29).
+ * `calls` is the current assignment's all-time projection. The accessible name
+ * keeps the `Shepherd calls:` prefix in every branch - `No calls logged`,
+ * `<n> times · no one reached`, or `<n> times · last reached <date>` (FR-29).
  */
 export function shepherdCallsCard(
   calls: MemberCalls,
@@ -213,18 +229,25 @@ export function shepherdCallsCard(
 ): ShepherdCallsCard {
   const attempts = Number.isFinite(calls.attempts) ? Math.max(0, Math.trunc(calls.attempts)) : 0;
 
-  if (attempts === 0)
+  if (attempts === 0) {
     return {
       label: 'Shepherd calls',
-      value: 'No calls logged',
+      cells: [
+        { value: '0', label: 'Number of calls', muted: true },
+        { value: '—', label: 'Last reached', muted: true },
+      ],
       copy: 'Shepherd calls: No calls logged',
       empty: true,
     };
+  }
   if (!calls.lastReachedOn) {
     return {
       label: 'Shepherd calls',
-      value: `${attempts} attempts · no one reached`,
-      copy: `Shepherd calls: ${attempts} attempts · no one reached`,
+      cells: [
+        { value: `${attempts}×`, label: 'Number of calls' },
+        { value: 'No one reached', label: 'Last reached', muted: true },
+      ],
+      copy: `Shepherd calls: ${attempts} times · no one reached`,
       empty: false,
     };
   }
@@ -232,8 +255,11 @@ export function shepherdCallsCard(
   const reached = formatDate(calls.lastReachedOn);
   return {
     label: 'Shepherd calls',
-    value: `${attempts} · last reached ${reached}`,
-    copy: `Shepherd calls: ${attempts} · last reached ${reached}`,
+    cells: [
+      { value: `${attempts}×`, label: 'Number of calls' },
+      { value: reached, label: 'Last reached' },
+    ],
+    copy: `Shepherd calls: ${attempts} times · last reached ${reached}`,
     empty: false,
   };
 }
@@ -252,19 +278,23 @@ export function overviewCards(
     {
       key: 'attended',
       label: 'Attended',
-      lines: [
-        `${counts.quarterLabel} · ${counts.quarterCount}`,
-        `${counts.monthLabel} · ${counts.monthCount}`,
+      cells: [
+        { value: `${counts.yearCount}`, label: 'This year' },
+        { value: `${counts.quarterCount}`, label: 'This quarter' },
+        { value: `${counts.monthCount}`, label: 'This month' },
       ],
-      caption: `UTC calendar dates across ${counts.seriesRows} series rows`,
-      copy: `Attended: ${counts.quarterLabel} · ${counts.quarterCount} · ${counts.monthLabel} · ${counts.monthCount}`,
+      // FR-29: the accessible name carries the exact periods each count covers, in the
+      // same order and with the same separator as the visible cells.
+      copy: `Attended: ${counts.yearCount} this year (${counts.yearLabel}) · ${counts.quarterCount} this quarter (${counts.quarterLabel}) · ${counts.monthCount} this month (${counts.monthLabel})`,
+      tooltip: `${counts.yearLabel} · ${counts.quarterLabel} · ${counts.monthLabel}`,
       empty: false,
     },
     {
       key: 'last-attended',
       label: 'Last attended',
-      lines: last ? [last.eventName, formatDate(last.date)] : ['No attendance recorded'],
-      caption: 'Latest entry; ties by event name',
+      cells: last
+        ? [{ value: last.eventName, label: formatDate(last.date) }]
+        : [{ value: 'No attendance recorded', label: '', muted: true }],
       copy: last
         ? `Last attended: ${last.eventName} · ${formatDate(last.date)}`
         : 'Last attended: No attendance recorded',
@@ -273,20 +303,18 @@ export function overviewCards(
     {
       key: 'shepherd-calls',
       label: calls.label,
-      lines: [calls.value],
-      caption: 'Current assignment, all-time',
+      cells: calls.cells,
       copy: calls.copy,
       empty: calls.empty,
     },
     {
       key: 'most-attended',
       label: 'Most attended',
-      lines: most
-        ? [`${most.label} · ${most.count} ${most.count === 1 ? 'time' : 'times'}`]
-        : ['No attendance recorded'],
-      caption: 'Grouped by series; standalone by event',
+      cells: most
+        ? [{ value: `${most.label} (${most.count}×)`, label: '' }]
+        : [{ value: 'No attendance recorded', label: '', muted: true }],
       copy: most
-        ? `Most attended: ${most.label} · ${most.count} ${most.count === 1 ? 'time' : 'times'}`
+        ? `Most attended: ${most.label}, ${most.count} times`
         : 'Most attended: No attendance recorded',
       empty: most === null,
     },

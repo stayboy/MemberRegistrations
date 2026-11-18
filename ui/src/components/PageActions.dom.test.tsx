@@ -157,4 +157,37 @@ describe('PageActions', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it('renders a primary verb as a visible button beside the menu, never as an item', async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    render(
+      <PageActions
+        actions={[
+          { ...verb(onEdit), primary: true },
+          { id: 'contacts', kind: 'verb', label: 'View contacts', onSelect: vi.fn() },
+          { id: 'archive', kind: 'verb', label: 'Archive', onSelect: vi.fn(), destructive: true },
+        ]}
+      />,
+    );
+
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit).toBeVisible();
+    await user.click(edit);
+    expect(onEdit).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual(['View contacts', 'Archive']);
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument();
+    // The destructive group still starts after the divider.
+    expect(divider().nextElementSibling).toBe(items[1]);
+  });
+
+  it('renders only the button when every verb is primary', () => {
+    render(<PageActions actions={[{ ...verb(), primary: true }]} />);
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+  });
 });

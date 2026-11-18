@@ -14,7 +14,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { probeGateway, requestMagicLink } from '../api/gateway';
 import { useSession } from '../auth/SessionProvider';
 import { GATEWAY_URL } from '../auth/session';
-import { connectionErrorDetail } from '../shell/ConnectionBadge';
+import { connectionErrorDetail } from '../shell/gatewayHealth';
 
 type Phase = 'idle' | 'checking' | 'sending' | 'sent' | 'exchanging' | 'error';
 

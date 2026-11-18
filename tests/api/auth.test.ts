@@ -332,7 +332,12 @@ describe('gateway', () => {
       .post('/gateway/v1/members')
       .set('Authorization', `Bearer ${session}`)
       .set('X-Actor-Id', 'attacker')
-      .send({ memberNo: 'M-GATEWAY', firstName: 'Gateway', lastName: 'Member' });
+      .send({
+        memberNo: 'M-GATEWAY',
+        firstName: 'Gateway',
+        lastName: 'Member',
+        contacts: [{ kind: 'phone', value: '0801 555 9001' }],
+      });
 
     expect(response.status).toBe(201);
     const [row] = await harness.db.query<{ created_by: string }>(

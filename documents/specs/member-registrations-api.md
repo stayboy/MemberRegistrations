@@ -355,24 +355,25 @@ deployed to Vercel as a single function.
 
 ### Member
 
-| Field                             | Notes                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                         |
-| `firstName`, `lastName`           | Required.                                                                                        |
-| `otherNames`                      | Single free-text field.                                                                          |
-| `maidenName`, `alias`             | Optional free text.                                                                              |
-| `dob`                             | Date, nullable.                                                                                  |
-| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                  |
-| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.          |
-| `ageMonths` (derived)             | Completed months at today (UTC), same null rule; lets a picker say `8m` rather than `0y`.        |
-| `placeOfResidence`, `addressLine` | Free text.                                                                                       |
-| `joinedOn`                        | Date; defaults to the registration date when omitted.                                            |
-| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                   |
-| `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior. |
-| `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.           |
-| `verifiedAt`                      | Timestamp, nullable; null means unverified, no expiry, refreshed on re-verification.             |
-| `archivedAt`                      | Set by archive, cleared by restore.                                                              |
-| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                   |
+| Field                             | Notes                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                               |
+| `firstName`, `lastName`           | Required.                                                                                              |
+| `otherNames`                      | Single free-text field.                                                                                |
+| `maidenName`, `alias`             | Optional free text.                                                                                    |
+| `dob`                             | Date, nullable.                                                                                        |
+| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                        |
+| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.                |
+| `ageMonths` (derived)             | Completed months at today (UTC), same null rule; lets a picker say `8m` rather than `0y`.              |
+| `placeOfResidence`, `addressLine` | Free text.                                                                                             |
+| `joinedOn`                        | Date; defaults to the registration date when omitted.                                                  |
+| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                         |
+| `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior.       |
+| `title`                           | Presbyter title and its optional `titledOn`; codes from `/v1/presbyter-titles`; see the officers spec. |
+| `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.                 |
+| `verifiedAt`                      | Timestamp, nullable; null means unverified, no expiry, refreshed on re-verification.                   |
+| `archivedAt`                      | Set by archive, cleared by restore.                                                                    |
+| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                         |
 
 Invariants: `memberNo` never changes; a purged member is read-only and invisible; an archived member
 is invisible to default reads but readable with `includeArchived=true`.
@@ -646,7 +647,7 @@ and are `no-store` on read.
 | `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                                    |
 | `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                                  |
 | `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                                  |
-| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo }`; creates the member through the member create path                   |
+| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo, guardianMemberNo }`; member + guardian in one transaction              |
 | `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                                |
 | `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`)                |
 | `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                               |
@@ -673,10 +674,13 @@ and are `no-store` on read.
   seams are issuance/void/list, request list/approve/reject, delegation, headcounts, the
   attendance summary and the profile.
 - **Registration requests.** A request is `pending | approved | rejected`. `POST
-/v1/registration-requests/{id}/approve` takes only the immutable `memberNo`; the request's first and
+/v1/registration-requests/{id}/approve` takes the immutable `memberNo` and a required `guardianMemberNo`; the request's first and
   last name seed the member, gender defaults to `undisclosed`, `joinedOn` defaults to the approval date,
-  and the member starts with **no contacts** because the stored value is a one-way phone hash. The
-  ordinary member create path runs (duplicate numbers, validation and audit unchanged). The request
+  and the member starts with **no own contacts** because the stored value is a one-way phone hash. The
+  guardian is validated by MR-40's rules (18+, reachable, chain) and the member and the guardian link
+  are written in one transaction; the ordinary create validation and audit still run. A missing
+  `guardianMemberNo` is `422 validation_error` naming the field, and an ineligible guardian is refused
+  with MR-40's codes; any refusal leaves the request `pending`. The request
   becomes `approved` with `decidedBy`/`decidedAt` and links the created member. `reject` takes a reason
   and creates nothing. A request is decided once; a second decision is `409
 registration_not_pending`. The request carries only `phoneHash`, never the raw phone.
@@ -902,46 +906,46 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 
 ### Members
 
-| Method   | Path                                                | Result                                                                                     |
-| -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET`    | `/v1/members`                                       | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `limit`, `cursor`)    |
-| `POST`   | `/v1/members`                                       | `201` + `Location`; `409` duplicate member number                                          |
-| `GET`    | `/v1/members/{memberNo}`                            | Full DTO + `ETag`; `404` unknown/archived unless flagged                                   |
-| `PUT`    | `/v1/members/{memberNo}`                            | Update; stale `If-Match` → `409`                                                           |
-| `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                             |
-| `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                        |
-| `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                        |
-| `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                   |
-| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                  | ticket 24b |
-| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                    | ticket 24a |
-| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                               | ticket 24b |
-| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                     | ticket 24c |
-| `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held or headcount-only |
-| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                            |
-| `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                      |
-| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`       | Update kind/value/order                                                                    |
-| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`       | Remove contact                                                                             |
-| `POST`   | `/v1/members/{memberNo}/contacts/link`              | Link another member's contact (dependent sharing)                                          |
-| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}`  | Unlink                                                                                     |
-| `POST`   | `/v1/members/{memberNo}/subscriptions`              | Create subscription (optional coverage)                                                    |
-| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                           |
-| `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                       |
-| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                    |
-| `POST`   | `/v1/subscriptions/{id}/renew`                      | Renew one period from `max(periodEnd, today)`                                              |
-| `GET`    | `/v1/subscriptions/{id}/payments`                   | List recorded member-paid periods (`no-store`)                                             |
-| `POST`   | `/v1/subscriptions/{id}/payments`                   | Record one member-paid period (idempotent)                                                 |
-| `GET`    | `/v1/subscriptions/{id}/claims`                     | List claims (`no-store`)                                                                   |
-| `POST`   | `/v1/subscriptions/{id}/claims`                     | Record a claim                                                                             |
-| `POST`   | `/v1/subscriptions/{id}/claims/{claimId}/decide`    | Decide a claim (`approved`/`rejected`/`paid`)                                              |
-| `GET`    | `/v1/subscription-products`                         | List products; active only unless `?includeInactive=true`                                  |
-| `GET`    | `/v1/subscription-products/{code}`                  | Product detail                                                                             |
-| `POST`   | `/v1/subscription-products`                         | Create a product; `201` + `Location`                                                       |
-| `PUT`    | `/v1/subscription-products/{code}`                  | Set `active` only                                                                          |
-| `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                                  |
-| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                   |
-| `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                              |
-| `POST`   | `/v1/members/{memberNo}/relationships`              | `{ relatedMemberNo, type, isDependent }`                                                   |
-| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`         | Remove the edge                                                                            |
+| Method   | Path                                                | Result                                                                                                                     |
+| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/v1/members`                                       | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `guardianEligible`, `forMemberNo`, `limit`, `cursor`) |
+| `POST`   | `/v1/members`                                       | `201` + `Location`; `409` duplicate member number                                                                          |
+| `GET`    | `/v1/members/{memberNo}`                            | Full DTO + `ETag`; `404` unknown/archived unless flagged                                                                   |
+| `PUT`    | `/v1/members/{memberNo}`                            | Update; stale `If-Match` → `409`                                                                                           |
+| `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                                                             |
+| `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                                                        |
+| `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                                                        |
+| `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                                                   |
+| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                                                  | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                                                    | ticket 24a |
+| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                                                               | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                                                     | ticket 24c |
+| `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held or headcount-only                                 |
+| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                                                            |
+| `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                                                      |
+| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`       | Update kind/value/order                                                                                                    |
+| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`       | Remove contact                                                                                                             |
+| `POST`   | `/v1/members/{memberNo}/contacts/link`              | Link another member's contact (dependent sharing)                                                                          |
+| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}`  | Unlink                                                                                                                     |
+| `POST`   | `/v1/members/{memberNo}/subscriptions`              | Create subscription (optional coverage)                                                                                    |
+| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                                                           |
+| `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                                                       |
+| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                                                    |
+| `POST`   | `/v1/subscriptions/{id}/renew`                      | Renew one period from `max(periodEnd, today)`                                                                              |
+| `GET`    | `/v1/subscriptions/{id}/payments`                   | List recorded member-paid periods (`no-store`)                                                                             |
+| `POST`   | `/v1/subscriptions/{id}/payments`                   | Record one member-paid period (idempotent)                                                                                 |
+| `GET`    | `/v1/subscriptions/{id}/claims`                     | List claims (`no-store`)                                                                                                   |
+| `POST`   | `/v1/subscriptions/{id}/claims`                     | Record a claim                                                                                                             |
+| `POST`   | `/v1/subscriptions/{id}/claims/{claimId}/decide`    | Decide a claim (`approved`/`rejected`/`paid`)                                                                              |
+| `GET`    | `/v1/subscription-products`                         | List products; active only unless `?includeInactive=true`                                                                  |
+| `GET`    | `/v1/subscription-products/{code}`                  | Product detail                                                                                                             |
+| `POST`   | `/v1/subscription-products`                         | Create a product; `201` + `Location`                                                                                       |
+| `PUT`    | `/v1/subscription-products/{code}`                  | Set `active` only                                                                                                          |
+| `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                                                                  |
+| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                                                   |
+| `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                                                              |
+| `POST`   | `/v1/members/{memberNo}/relationships`              | `{ relatedMemberNo, type, isDependent }`                                                                                   |
+| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`         | Remove the edge                                                                                                            |
 
 **Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
 `archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
@@ -955,6 +959,18 @@ same `age` and `ageMonths`.
 remaining, status, lastAttendedOn }`, computed for the page in one aggregate (FR-8).
 - `include=subscriptions` adds `subscriptions: [{ id, kind, scope, status, role,
 policyholderMemberNo, coveredCount }]`, computed for the page in one query.
+
+**Member record and reachability (Phase 1).** A member MUST be reachable through at least one own
+contact (phone, email or WhatsApp) or at least one active `guardian` relationship to a reachable
+member. Create and update refuse a member with neither with `422 no_contact_or_guardian`; a guardian
+link must set `isDependent: true` and is refused with `422 guardian_not_eligible`,
+`422 guardian_chain_cycle`, `422 guardian_chain_unreachable` or `422 guardian_chain_too_long`; the last
+guardian of a member with no own contact cannot be removed (`409 guardian_required`).
+`GET /v1/members?guardianEligible=true&forMemberNo=<no>` lists eligible guardians (18+, reachable,
+excluding the member and its descendants) with `memberNo`, `name`, `contactMasked` and `via`; the
+detail projects `guardian` in the same shape. The create contract accepts `titleCode` and `titledOn`;
+`GET /v1/presbyter-titles` lists the active reference titles. See
+`member-registrations-member-record.md`.
 
 ### Subscriptions, payments and claims (24c)
 
@@ -1058,18 +1074,25 @@ Call body: `{ calledOn?, outcome, stillInChurch?, feedback?, issue? }`.
 
 There is deliberately no `DELETE` for a call.
 
+**Registration approval (member-record Phase 1).** `POST /v1/registration-requests/:id/approve`
+requires `{ memberNo, guardianMemberNo }`; the guardian is validated (18+, reachable, chain rules) and
+the member and the guardian link are written in one transaction. A missing guardian is
+`422 validation_error` naming the field; an ineligible guardian uses MR-40's codes; any refusal leaves
+the request `pending`. See `member-registrations-member-record.md` MR-50.
+
 ### Reference data
 
-| Method       | Path                                | Result                                             |
-| ------------ | ----------------------------------- | -------------------------------------------------- |
-| `GET`/`POST` | `/v1/ministries`                    | List / create (`code`, `name`, …)                  |
-| `GET`/`PUT`  | `/v1/ministries/{code}`             | Read / rename (code immutable)                     |
-| `DELETE`     | `/v1/ministries/{code}`             | Deactivate, or `409` while referenced              |
-| `GET`/`POST` | `/v1/series`                        | List / create                                      |
-| `GET`/`PUT`  | `/v1/series/{id}`                   | Read / update name, ministry, description, archive |
-| `POST`       | `/v1/series/{id}/schedule`          | Add a schedule version                             |
-| `POST`       | `/v1/series/{id}/exceptions`        | Cancel or add a date                               |
-| `DELETE`     | `/v1/series/{id}/exceptions/{date}` | Remove an exception                                |
+| Method       | Path                                | Result                                                        |
+| ------------ | ----------------------------------- | ------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/ministries`                    | List / create (`code`, `name`, …)                             |
+| `GET`/`PUT`  | `/v1/ministries/{code}`             | Read / rename (code immutable)                                |
+| `DELETE`     | `/v1/ministries/{code}`             | Deactivate, or `409` while referenced                         |
+| `GET`        | `/v1/presbyter-titles`              | Active titles: `code`, `label`, `genderRestriction`, `active` |
+| `GET`/`POST` | `/v1/series`                        | List / create                                                 |
+| `GET`/`PUT`  | `/v1/series/{id}`                   | Read / update name, ministry, description, archive            |
+| `POST`       | `/v1/series/{id}/schedule`          | Add a schedule version                                        |
+| `POST`       | `/v1/series/{id}/exceptions`        | Cancel or add a date                                          |
+| `DELETE`     | `/v1/series/{id}/exceptions/{date}` | Remove an exception                                           |
 
 ### Events
 

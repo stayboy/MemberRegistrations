@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 
@@ -119,34 +120,46 @@ async function makePledge(overrides: Record<string, unknown> = {}) {
 beforeAll(async () => {
   harness = await createTestApp();
 
-  const presbyter = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PL-9001', firstName: 'Grace', lastName: 'Okafor', isPresbyter: true });
+  const presbyter = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PL-9001',
+    firstName: 'Grace',
+    lastName: 'Okafor',
+    isPresbyter: true,
+    contacts: reachableContacts(),
+  });
   expect(presbyter.status).toBe(201);
 
-  const secondPresbyter = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PL-9002', firstName: 'Daniel', lastName: 'Adjei', isPresbyter: true });
+  const secondPresbyter = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PL-9002',
+    firstName: 'Daniel',
+    lastName: 'Adjei',
+    isPresbyter: true,
+    contacts: reachableContacts(),
+  });
   expect(secondPresbyter.status).toBe(201);
 
-  const member = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PL-1001', firstName: 'Ama', lastName: 'Mensah' });
+  const member = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PL-1001',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    contacts: reachableContacts(),
+  });
   expect(member.status).toBe(201);
 
-  const unassigned = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PL-1002', firstName: 'Kofi', lastName: 'Boateng' });
+  const unassigned = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PL-1002',
+    firstName: 'Kofi',
+    lastName: 'Boateng',
+    contacts: reachableContacts(),
+  });
   expect(unassigned.status).toBe(201);
 
-  const archived = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'PL-3003', firstName: 'Yaa', lastName: 'Owusu' });
+  const archived = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'PL-3003',
+    firstName: 'Yaa',
+    lastName: 'Owusu',
+    contacts: reachableContacts(),
+  });
   expect(archived.status).toBe(201);
   expect(
     (await request(harness.app).delete('/v1/members/PL-3003').set(writeHeaders).send()).status,

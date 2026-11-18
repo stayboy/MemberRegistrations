@@ -42,3 +42,23 @@ export function normalizeContactValue(kind: ContactKind, value: string): string 
   }
   return digits;
 }
+
+/**
+ * The value as a reader may see it when it belongs to someone else: an email
+ * keeps its first letter and its domain, a phone or WhatsApp number keeps its
+ * last two digits. The full value is only ever shown after an explicit
+ * `Contacts` action (FR-78), so a guardian's resolved contact is masked here.
+ */
+export function maskContactValue(kind: ContactKind, value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return '';
+
+  if (kind === 'email') {
+    const at = trimmed.lastIndexOf('@');
+    if (at <= 0) return '***';
+    return `${trimmed.slice(0, 1)}***${trimmed.slice(at)}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  return digits.length >= 2 ? `***${digits.slice(-2)}` : '***';
+}

@@ -50,13 +50,21 @@
         "ollama-cloud/deepseek-v4.1-flash:1017",
         "opencode/deepseek-v4.1-flash-free"
       ]
+    },
+    "publish-executor": {
+      "anyWindow": [
+        "opencode/beam-free",
+        "ollama-cloud/mimo-v2.6-flash",
+        "openrouter/deepseek/deepseek-v4.1-flash-1017"
+      ]
     }
   },
   "notes": {
     "git-executor": "Only one free candidate exists today (`opencode/beam-free`), so the second and third rungs are metered; that is the gap the 2026-11-17 ruling names - a free provider exhausted twice in a day is replaced at the round's end, not retried all day.",
     "mock-builder": "Default `deepseek-v4.1-flash-1017` (owner, 2026-11-17) for building and re-cutting mocks under `mockups/`; it sits in `anyWindow` because a mock cut is not clock-sensitive.",
-    "probe": "One dispatch per class per local day, at round open; the outcome is recorded in that round's Seats table and holds until the next day.",
-    "insideWindow": "12:00-18:00 local moves the worker, grill and reviewer classes; the git executor is not clocked."
+    "probe": "One dispatch per class per local day, at round open; the outcome is recorded in that round's Seats table and holds until the next day. The `publish-executor` is the exception: it is probed at its first post-merge dispatch (see its note).",
+    "insideWindow": "12:00-18:00 local moves the worker, grill and reviewer classes; the git and publish executors are not clocked.",
+    "publish-executor": "Runs only on clean `main` after a merge (owner, 2026-11-18). Like the git executor it is unclocked, so probe it on first use after a merge rather than at round open. `opencode/beam-free` is the only free candidate today, so the second and third rungs are metered and a free provider exhausted twice in a day is replaced at the round’s end."
   },
   "probedAt": {
     "worker-flash": "2026-11-17",
