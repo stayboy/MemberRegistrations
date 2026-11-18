@@ -61,6 +61,7 @@ const DETAIL: MemberDetail = {
   joinedOn: '2019-03-03',
   title: { code: 'ELD', label: 'Elder', titledOn: '2021-02-01' },
   membershipCardNo: 'MC-1001',
+  photoUpdatedAt: null,
   verifiedAt: '2026-11-05T09:00:00.000Z',
   assemblyJoinedOn: '2019-03-03',
   cameFrom: 'Accra Central',

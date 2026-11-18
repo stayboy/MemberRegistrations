@@ -18,6 +18,8 @@ export interface OfficerSummary {
   readonly name: string;
   readonly gender: Gender;
   readonly age: number | null;
+  /** The instant the officer's profile photo was stored, or null (MR-19). */
+  readonly photoUpdatedAt: string | null;
   readonly assignedMembers: number;
   readonly attempts: number;
   readonly conversations: number;
@@ -35,6 +37,8 @@ export interface RosterEntry {
   readonly placeOfResidence: string | null;
   /** Owned plus linked contacts; the roster renders the count, never their values (Q5). */
   readonly contactCount: number;
+  /** The instant the member's profile photo was stored, or null (MR-19). */
+  readonly photoUpdatedAt: string | null;
   readonly attempts: number;
   readonly conversations: number;
   readonly lastCalledOn: string | null;

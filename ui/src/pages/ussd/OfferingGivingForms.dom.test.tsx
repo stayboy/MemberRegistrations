@@ -93,6 +93,7 @@ function summary(memberNo: string, name: string, isPresbyter: boolean): MemberSu
     placeOfResidence: null,
     joinedOn: null,
     isPresbyter,
+    photoUpdatedAt: null,
     archivedAt: null,
     contactCount: 0,
     ministries: [],

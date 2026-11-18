@@ -6,6 +6,7 @@ import {
   ImportError,
   NotFoundError,
   PaymentFailedError,
+  PhotoTooLargeError,
   ReassignmentRequiredError,
   TooManyTriesError,
   UnauthorizedError,
@@ -108,6 +109,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof TooManyTriesError) {
     sendProblem(res, 429, 'Too Many Requests', error.message, 'too_many_tries');
+    return;
+  }
+
+  if (error instanceof PhotoTooLargeError) {
+    sendProblem(res, 413, 'Payload too large', error.message, error.code);
     return;
   }
 

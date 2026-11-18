@@ -61,6 +61,61 @@ for (const screen of SCREENS) {
 }
 
 /**
+ * MR-15: below 560 px the identity row stacks. The portrait column sits above
+ * the field grid rather than beside it, the grid takes the whole row width, and
+ * the square drops to its 96 px mobile size. The no-horizontal-scroll cases
+ * above cover the overflow half of the same breakpoint.
+ */
+test('the member form stacks the photo column above the fields at 360 px', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await open(page, '/members/new');
+  await expect(page.getByLabel('Member number')).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const column = document.querySelector<HTMLElement>(
+      '[data-testid="member-photo-control-column"]',
+    );
+    const fields = document.querySelector<HTMLElement>('[data-testid="member-identity-fields"]');
+    const square = document.querySelector<HTMLElement>(
+      '[data-testid="member-photo-control-square"]',
+    );
+    if (!column || !fields || !square) return null;
+
+    const columnRect = column.getBoundingClientRect();
+    const fieldsRect = fields.getBoundingClientRect();
+    const squareRect = square.getBoundingClientRect();
+    return {
+      columnTop: Math.round(columnRect.top),
+      columnBottom: Math.round(columnRect.bottom),
+      fieldsTop: Math.round(fieldsRect.top),
+      fieldsWidth: Math.round(fieldsRect.width),
+      rowWidth: Math.round(fields.parentElement?.getBoundingClientRect().width ?? 0),
+      squareWidth: Math.round(squareRect.width),
+      squareHeight: Math.round(squareRect.height),
+    };
+  });
+
+  expect(layout, 'the identity row did not render its photo column and fields').not.toBeNull();
+  const { columnTop, columnBottom, fieldsTop, fieldsWidth, rowWidth, squareWidth, squareHeight } =
+    layout!;
+
+  expect(
+    columnTop,
+    `the photo column did not start above the grid: ${JSON.stringify(layout)}`,
+  ).toBeLessThan(fieldsTop);
+  expect(
+    columnBottom,
+    `the photo column overlaps the grid instead of stacking above it: ${JSON.stringify(layout)}`,
+  ).toBeLessThanOrEqual(fieldsTop + 1);
+  expect(
+    fieldsWidth,
+    `the field grid is not full width at 360 px: ${JSON.stringify(layout)}`,
+  ).toBeGreaterThanOrEqual(rowWidth - 1);
+  expect(squareWidth, `the photo square is not 96 px wide: ${JSON.stringify(layout)}`).toBe(96);
+  expect(squareHeight, `the photo square is not 96 px tall: ${JSON.stringify(layout)}`).toBe(96);
+});
+
+/**
  * FR-29: the drawing fixes the overview's card row - four across from 1280 px and
  * a 2 x 2 block below it. The auto-fit grid used to fit three tracks at 860 px and
  * stretch `Shepherd calls` tall as its two cells wrapped, so this reads the cards'

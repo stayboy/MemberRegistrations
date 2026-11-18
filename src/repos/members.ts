@@ -21,6 +21,7 @@ import {
   type ContactKind,
 } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
+import type { PhotoContentType } from '../domain/photos.js';
 import { sessionIsClosed } from './captures.js';
 import type { Db, DbClient, OrmClient, Row } from '../db/sql.js';
 import {
@@ -144,6 +145,14 @@ export interface MemberSubscriptionSummary {
   coveredCount: number;
 }
 
+export interface MemberPhoto {
+  /** The stored number, in the row's own casing; the ETag is derived from it. */
+  memberNo: string;
+  bytes: Buffer;
+  contentType: PhotoContentType;
+  updatedAt: string;
+}
+
 export interface MemberContributionWindow {
   from: string;
   to: string;
@@ -210,6 +219,11 @@ export interface MemberSummary {
   isPresbyter: boolean;
   /** Null when the member holds no office; never a missing key. */
   title: PresbyterTitleDto | null;
+  /**
+   * The instant the current profile photo was stored, or null when there is
+   * none (MR-18). The list and detail carry the timestamp, never a URL.
+   */
+  photoUpdatedAt: string | null;
   archivedAt: string | null;
   /** Count only; the list never carries contact values. */
   contactCount: number;
@@ -376,6 +390,7 @@ interface MemberRow extends Row {
   title_code: string | null;
   titled_on: string | null;
   membership_card_no: string | null;
+  photo_updated_at: Date | string | null;
   verified_at: Date | string | null;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
@@ -409,6 +424,7 @@ const memberColumns = {
   title_code: members.titleCode,
   titled_on: members.titledOn,
   membership_card_no: members.membershipCardNo,
+  photo_updated_at: members.photoUpdatedAt,
   verified_at: members.verifiedAt,
   archived_at: members.archivedAt,
   purged_at: members.purgedAt,
@@ -416,6 +432,17 @@ const memberColumns = {
   created_at: members.createdAt,
   updated_at: members.updatedAt,
 } as const;
+
+/**
+ * The list reads the member row without `photo`: the bytes stay behind the
+ * photo endpoint, while `photo_updated_at` tells the client whether one exists.
+ */
+const MEMBER_ROW_COLUMNS = `m.id, m.member_no, m.first_name, m.last_name, m.other_names,
+  m.maiden_name, m.alias, m.dob, m.gender, m.place_of_residence, m.address_line,
+  m.joined_on, m.assembly_joined_on, m.came_from, m.moved_out_on, m.moved_to_assembly,
+  m.is_presbyter, m.presbyter_rank, m.title_code, m.titled_on, m.membership_card_no,
+  m.photo_updated_at, m.verified_at, m.archived_at, m.purged_at, m.version,
+  m.created_at, m.updated_at`;
 
 type Statement = ReturnType<typeof sql>;
 
@@ -581,7 +608,7 @@ export class MemberRepository {
 
     params.push(limit + 1);
     const rows = await this.db.query<MemberRow>(
-      `select m.* from members m
+      `select ${MEMBER_ROW_COLUMNS} from members m
        ${where.length ? `where ${where.join(' and ')}` : ''}
        order by lower(m.member_no) asc
        limit $${params.length}`,
@@ -605,6 +632,67 @@ export class MemberRepository {
   async get(memberNo: string, includeArchived = false): Promise<MemberDetail | null> {
     const row = await this.findRow(memberNo, includeArchived);
     return row ? this.toDetail(row) : null;
+  }
+
+  // -- photo ---------------------------------------------------------------
+
+  /**
+   * The stored bytes and the instant they were written (MR-14, MR-17). The
+   * member row is found even when archived; a purged member has no photo.
+   */
+  async getPhoto(memberNo: string): Promise<MemberPhoto | null> {
+    const [row] = await this.db.orm
+      .select({
+        memberNo: members.memberNo,
+        photo: members.photo,
+        contentType: members.photoContentType,
+        updatedAt: members.photoUpdatedAt,
+      })
+      .from(members)
+      .where(and(sql`lower(${members.memberNo}) = lower(${memberNo})`, isNull(members.purgedAt)))
+      .limit(1);
+    if (!row) throw new NotFoundError(`Member ${memberNo} was not found`);
+    if (!row.photo || !row.contentType || !row.updatedAt) return null;
+    return {
+      memberNo: row.memberNo,
+      bytes: Buffer.from(row.photo),
+      contentType: row.contentType as PhotoContentType,
+      updatedAt: isoTimestamp(row.updatedAt)!,
+    };
+  }
+
+  /**
+   * Stores one photo, replacing any previous bytes (MR-14). The photo has its
+   * own endpoint, so it does not bump the member's optimistic-concurrency
+   * version; an open edit form stays valid while its dialog uploads.
+   *
+   * Archived members are read-only here: `requireRow` excludes them, so the
+   * route answers 404 while `getPhoto` above still serves the stored bytes.
+   */
+  async setPhoto(memberNo: string, bytes: Buffer, contentType: PhotoContentType): Promise<string> {
+    const row = await this.requireRow(memberNo);
+    const [updated] = await this.db.orm
+      .update(members)
+      .set({
+        photo: bytes,
+        photoContentType: contentType,
+        photoUpdatedAt: sql`now()`,
+      })
+      .where(eq(members.id, row.id))
+      .returning({ photoUpdatedAt: members.photoUpdatedAt });
+    return isoTimestamp(updated!.photoUpdatedAt)!;
+  }
+
+  /**
+   * Removes the photo; initials become the avatar again (MR-17). Archived
+   * members are read-only like {@link setPhoto}, so the route answers 404.
+   */
+  async clearPhoto(memberNo: string): Promise<void> {
+    const row = await this.requireRow(memberNo);
+    await this.db.orm
+      .update(members)
+      .set({ photo: null, photoContentType: null, photoUpdatedAt: null })
+      .where(eq(members.id, row.id));
   }
 
   /**
@@ -1278,6 +1366,10 @@ export class MemberRepository {
           titleCode: null,
           titledOn: null,
           membershipCardNo: null,
+          // A face is PII like a name; purge erases it with the rest.
+          photo: null,
+          photoContentType: null,
+          photoUpdatedAt: null,
           verifiedAt: null,
           archivedAt: sql`now()`,
           purgedAt: sql`now()`,
@@ -2100,6 +2192,7 @@ export class MemberRepository {
       joinedOn: isoDate(row.joined_on),
       isPresbyter: row.is_presbyter,
       title,
+      photoUpdatedAt: isoTimestamp(row.photo_updated_at),
       archivedAt: isoTimestamp(row.archived_at),
       contactCount,
       ministries,

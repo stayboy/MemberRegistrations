@@ -1220,4 +1220,17 @@ alter table members add column moved_out_on date;
 alter table members add column moved_to_assembly text;
 `,
   },
+  {
+    version: '0024_member_photo',
+    sql: `
+-- One square photograph per member, stored in the register (MR-14). The bytes
+-- are re-encoded by the client, so no filename, EXIF or original file ever
+-- reaches the column (MR-15, MR-21). All three columns are additive and
+-- nullable: an existing member simply has no photo until one is uploaded.
+alter table members add column photo bytea;
+alter table members add column photo_content_type text
+  check (photo_content_type in ('image/webp', 'image/jpeg', 'image/png'));
+alter table members add column photo_updated_at timestamptz;
+`,
+  },
 ];

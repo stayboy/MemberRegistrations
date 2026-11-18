@@ -50,6 +50,7 @@ function detail(overrides: Partial<MemberDetail> = {}): MemberDetail {
     guardian: null,
     calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     isPresbyter: true,
+    photoUpdatedAt: null,
     archivedAt: null,
     purgedAt: null,
     contactCount: 1,

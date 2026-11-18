@@ -1,5 +1,5 @@
 import { ApiError } from './errors';
-import { gatewayRequest, gatewayRequestWithMeta } from './gateway';
+import { gatewayRequest, gatewayRequestRaw, gatewayRequestWithMeta } from './gateway';
 
 /** Wire types mirror the UI spec's §9.2 DTOs and the ticket-13a list contract. */
 
@@ -72,6 +72,8 @@ export interface MemberSummary {
   readonly placeOfResidence: string | null;
   readonly joinedOn: string | null;
   readonly isPresbyter: boolean;
+  /** The instant the profile photo was stored, or null when there is none (MR-18). */
+  readonly photoUpdatedAt: string | null;
   readonly archivedAt: string | null;
   /** Count only; the list never returns contact values (FR-78). */
   readonly contactCount: number;
@@ -510,6 +512,64 @@ export async function getMember(
   signal?: AbortSignal,
 ): Promise<MemberDetail> {
   return (await fetchMemberDetail(baseUrl, sessionToken, memberNo, signal)).member;
+}
+
+/** The one photo path; the browser builds it from `photoUpdatedAt`, never a URL (MR-18). */
+export function memberPhotoPath(memberNo: string): string {
+  return `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/photo`;
+}
+
+/** The `PUT` response: the instant the new bytes were stored. */
+export interface MemberPhotoUpload {
+  readonly photoUpdatedAt: string;
+}
+
+/**
+ * `GET /v1/members/:memberNo/photo` as an authenticated blob. The session rides
+ * the header, so an `<img src>` cannot be used; the caller owns the object URL
+ * and must revoke it (MR-18).
+ */
+export async function fetchMemberPhoto(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response = await gatewayRequestRaw(baseUrl, memberPhotoPath(memberNo), {
+    sessionToken,
+    signal,
+    accept: 'image/webp,image/jpeg,image/png',
+  });
+  return response.blob();
+}
+
+/** `PUT /v1/members/:memberNo/photo` with the already re-encoded square (MR-15). */
+export async function uploadMemberPhoto(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  photo: Blob,
+): Promise<MemberPhotoUpload> {
+  const response = await gatewayRequestRaw(baseUrl, memberPhotoPath(memberNo), {
+    method: 'PUT',
+    body: photo,
+    contentType: photo.type,
+    sessionToken,
+    accept: 'application/json',
+  });
+  return (await response.json()) as MemberPhotoUpload;
+}
+
+/** `DELETE /v1/members/:memberNo/photo`; initials return on every avatar. */
+export async function deleteMemberPhoto(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequestRaw(baseUrl, memberPhotoPath(memberNo), {
+    method: 'DELETE',
+    sessionToken,
+  });
 }
 
 /** Parses the member number out of the API's `Location` header. */

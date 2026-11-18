@@ -305,6 +305,22 @@ export class ClaimNotPendingError extends ConflictError {
   }
 }
 
+/** A photo payload is empty or its magic bytes do not match a supported image (MR-16). */
+export class UnsupportedPhotoError extends BadRequestError {
+  constructor(
+    message = 'The photo must be a WebP, JPEG or PNG image whose content type matches its bytes',
+  ) {
+    super(message, 'unsupported_photo');
+  }
+}
+
+/** A photo payload exceeds the 2 MiB wire ceiling (MR-16). */
+export class PhotoTooLargeError extends DomainError {
+  constructor(message = 'The photo exceeds the 2 MiB limit') {
+    super(message, 'photo_too_large');
+  }
+}
+
 /** A membership card number already belongs to another member. */
 export class CardInUseError extends ConflictError {
   constructor(message: string) {

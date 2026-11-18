@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Button,
   Dialog,
   DialogActions,
@@ -31,6 +30,7 @@ import { ApiError, isUnauthorized } from '../api/errors';
 import { listMembers, type MemberSummary } from '../api/members';
 import { useSession } from '../auth/SessionProvider';
 import { ContactsDialog } from '../components/ContactsDialog';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { contactLabel, memberInitials, memberLabel, memberName } from '../format/member';
 
 const MIN_CONTACT_LENGTH = 3;
@@ -240,10 +240,11 @@ export function FindByContactDialog({
                           <TableRow key={member.memberNo}>
                             <TableCell>
                               <div className={styles.identity}>
-                                <Avatar
+                                <MemberAvatar
+                                  memberNo={member.memberNo}
+                                  photoUpdatedAt={member.photoUpdatedAt}
                                   name={name}
                                   initials={memberInitials(member)}
-                                  color="colorful"
                                   size={28}
                                 />
                                 <Text weight="semibold">{label}</Text>

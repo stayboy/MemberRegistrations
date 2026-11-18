@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -16,6 +17,20 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+/**
+ * `bytea` has no first-class Drizzle column. The photo is the only binary value
+ * in the register; both drivers (pg and PGlite) hand back a `Uint8Array`, so the
+ * custom type normalises it to a Buffer behind the repository (MR-14).
+ */
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType() {
+    return 'bytea';
+  },
+  fromDriver(value) {
+    return Buffer.from(value);
+  },
+});
 
 /**
  * Drizzle mirror of the Ministries slice of `0001_init`. The embedded SQL
@@ -94,6 +109,12 @@ export const members = pgTable(
     /** UTC calendar date the office was taken; cleared with the title. */
     titledOn: date('titled_on'),
     membershipCardNo: text('membership_card_no'),
+    /** One square photograph per member; null when none is stored (MR-14). */
+    photo: bytea('photo'),
+    /** The stored media type; null exactly when `photo` is null. */
+    photoContentType: text('photo_content_type'),
+    /** The instant the current bytes were stored; drives the wire ETag. */
+    photoUpdatedAt: timestamp('photo_updated_at', { withTimezone: true }),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     purgedAt: timestamp('purged_at', { withTimezone: true }),
@@ -111,6 +132,10 @@ export const members = pgTable(
     index('members_title')
       .on(table.titleCode)
       .where(sql`${table.titleCode} is not null`),
+    check(
+      'members_photo_content_type_check',
+      sql`${table.photoContentType} in ('image/webp','image/jpeg','image/png')`,
+    ),
   ],
 );
 

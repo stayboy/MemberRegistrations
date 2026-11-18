@@ -27,7 +27,7 @@ import {
 } from '@fluentui/react-components';
 import { CheckmarkRegular, OpenRegular, SaveRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
@@ -52,6 +52,7 @@ import { useSession } from '../auth/SessionProvider';
 import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { MemberPhotoControl } from '../components/MemberPhotoDialog';
 import { PageFrame } from '../components/PageFrame';
 import { memberLabelFromName } from '../format/member';
 import {
@@ -109,9 +110,28 @@ const useStyles = makeStyles({
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    // `min(240px, 100%)`: a single track never exceeds the panel, so a 360 px
+    // viewport cannot acquire a horizontal scrollbar from the field grid.
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))',
     gap: tokens.spacingHorizontalL,
     alignItems: 'start',
+  },
+  /** MR-15: the square portrait and the field stack share the identity row. */
+  identityRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: tokens.spacingHorizontalL,
+    '@media (max-width: 560px)': {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+    },
+  },
+  identityGrid: {
+    flex: '1 1 auto',
+    minWidth: 0,
+    '@media (max-width: 560px)': {
+      width: '100%',
+    },
   },
   note: {
     display: 'flex',
@@ -450,6 +470,46 @@ function MemberFormView({
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [removeMinistryCode, setRemoveMinistryCode] = useState<string | null>(null);
   const [addMinistryCode, setAddMinistryCode] = useState('');
+  /**
+   * MR-15: the portrait's side follows the input stack's height. CSS cannot
+   * derive a flex item's width from a sibling's height, so the field grid is
+   * measured and the result is pinned on the row as a custom property; the
+   * photo column then reserves exactly that width in normal flow.
+   */
+  const identityFields = useRef<HTMLDivElement>(null);
+  const [photoSize, setPhotoSize] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const fields = identityFields.current;
+    if (!fields || typeof ResizeObserver === 'undefined') return;
+
+    const measure = () => {
+      if (window.matchMedia?.('(max-width: 560px)')?.matches) return;
+      const controls = [...fields.querySelectorAll<HTMLElement>('input, [role="combobox"]')].filter(
+        (control) => control.getBoundingClientRect().height > 0,
+      );
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) return;
+      const span = Math.round(
+        last.getBoundingClientRect().bottom - first.getBoundingClientRect().top,
+      );
+      if (span <= 0) return;
+      // Never let the portrait take more than half the row: a tall stack at a
+      // tablet width must not crowd the field grid out of its own column.
+      const rowWidth = fields.parentElement?.getBoundingClientRect().width ?? 0;
+      const capped = rowWidth > 0 ? Math.max(96, Math.round(rowWidth / 2)) : span;
+      setPhotoSize(Math.min(span, capped));
+    };
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(fields);
+    const frame = window.requestAnimationFrame(measure);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
 
   // FR-71: the ministries control needs the reference list before it can be used.
   const ministriesQuery = useQuery({
@@ -1060,105 +1120,128 @@ function MemberFormView({
                   </Text>
                 </div>
 
-                <div className={styles.grid}>
-                  <Field
-                    label="Member number"
-                    required
-                    validationState={errors.memberNo ? 'error' : 'none'}
-                    validationMessage={errors.memberNo}
-                    hint={isEdit ? undefined : '1–32 letters, digits, hyphens or underscores.'}
+                <div
+                  className={styles.identityRow}
+                  style={
+                    photoSize === null
+                      ? undefined
+                      : ({ '--identity-photo-size': `${photoSize}px` } as CSSProperties)
+                  }
+                >
+                  <MemberPhotoControl
+                    memberNo={isEdit ? memberNo : ''}
+                    memberName={
+                      [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(' ') ||
+                      'Member'
+                    }
+                    photoUpdatedAt={member?.photoUpdatedAt ?? null}
+                    disabled={!isEdit}
+                    disabledHint="Save the member first, then add a photo from its record."
+                  />
+                  <div
+                    ref={identityFields}
+                    className={mergeClasses(styles.grid, styles.identityGrid)}
+                    data-testid="member-identity-fields"
                   >
-                    <Input
-                      value={values.memberNo}
-                      disabled={isEdit}
-                      onChange={(_, data) => setField('memberNo', data.value)}
-                      onBlur={() => setCommittedMemberNo(values.memberNo.trim())}
-                    />
-                  </Field>
+                    <Field
+                      label="Member number"
+                      required
+                      validationState={errors.memberNo ? 'error' : 'none'}
+                      validationMessage={errors.memberNo}
+                      hint={isEdit ? undefined : '1–32 letters, digits, hyphens or underscores.'}
+                    >
+                      <Input
+                        value={values.memberNo}
+                        disabled={isEdit}
+                        onChange={(_, data) => setField('memberNo', data.value)}
+                        onBlur={() => setCommittedMemberNo(values.memberNo.trim())}
+                      />
+                    </Field>
 
-                  <Field
-                    label="First name"
-                    required
-                    validationState={errors.firstName ? 'error' : 'none'}
-                    validationMessage={errors.firstName}
-                  >
-                    <Input
-                      value={values.firstName}
-                      onChange={(_, data) => setField('firstName', data.value)}
-                    />
-                  </Field>
+                    <Field
+                      label="First name"
+                      required
+                      validationState={errors.firstName ? 'error' : 'none'}
+                      validationMessage={errors.firstName}
+                    >
+                      <Input
+                        value={values.firstName}
+                        onChange={(_, data) => setField('firstName', data.value)}
+                      />
+                    </Field>
 
-                  {/* MR-49: the second required name field is labelled Other names and
+                    {/* MR-49: the second required name field is labelled Other names and
                         writes lastName; there is no separate other-names input, so an
                         existing otherNames value is never touched by this form. */}
-                  <Field
-                    label="Other names"
-                    required
-                    validationState={errors.lastName ? 'error' : 'none'}
-                    validationMessage={errors.lastName}
-                  >
-                    <Input
-                      value={values.lastName}
-                      onChange={(_, data) => setField('lastName', data.value)}
-                    />
-                  </Field>
-
-                  <Field label="Gender">
-                    <Dropdown
-                      value={
-                        GENDER_OPTIONS.find((option) => option.value === values.gender)?.label ??
-                        'Undisclosed'
-                      }
-                      selectedOptions={[values.gender]}
-                      onOptionSelect={(_, data) => {
-                        const option = GENDER_OPTIONS.find(
-                          (candidate) => candidate.value === data.optionValue,
-                        );
-                        if (option) changeGender(option.value);
-                      }}
+                    <Field
+                      label="Other names"
+                      required
+                      validationState={errors.lastName ? 'error' : 'none'}
+                      validationMessage={errors.lastName}
                     >
-                      {GENDER_OPTIONS.map((option) => (
-                        <Option key={option.value} value={option.value}>
-                          {option.label}
-                        </Option>
-                      ))}
-                    </Dropdown>
-                  </Field>
+                      <Input
+                        value={values.lastName}
+                        onChange={(_, data) => setField('lastName', data.value)}
+                      />
+                    </Field>
 
-                  <Field
-                    label="Date of birth"
-                    validationState={errors.dob ? 'error' : 'none'}
-                    validationMessage={errors.dob}
-                    hint="UTC calendar date"
-                  >
-                    <Input
-                      type="date"
-                      value={values.dob}
-                      onChange={(_, data) => setField('dob', data.value)}
-                    />
-                  </Field>
+                    <Field label="Gender">
+                      <Dropdown
+                        value={
+                          GENDER_OPTIONS.find((option) => option.value === values.gender)?.label ??
+                          'Undisclosed'
+                        }
+                        selectedOptions={[values.gender]}
+                        onOptionSelect={(_, data) => {
+                          const option = GENDER_OPTIONS.find(
+                            (candidate) => candidate.value === data.optionValue,
+                          );
+                          if (option) changeGender(option.value);
+                        }}
+                      >
+                        {GENDER_OPTIONS.map((option) => (
+                          <Option key={option.value} value={option.value}>
+                            {option.label}
+                          </Option>
+                        ))}
+                      </Dropdown>
+                    </Field>
 
-                  <Field
-                    label="Maiden name"
-                    validationState={errors.maidenName ? 'error' : 'none'}
-                    validationMessage={errors.maidenName}
-                  >
-                    <Input
-                      value={values.maidenName}
-                      onChange={(_, data) => setField('maidenName', data.value)}
-                    />
-                  </Field>
+                    <Field
+                      label="Date of birth"
+                      validationState={errors.dob ? 'error' : 'none'}
+                      validationMessage={errors.dob}
+                      hint="UTC calendar date"
+                    >
+                      <Input
+                        type="date"
+                        value={values.dob}
+                        onChange={(_, data) => setField('dob', data.value)}
+                      />
+                    </Field>
 
-                  <Field
-                    label="Alias"
-                    validationState={errors.alias ? 'error' : 'none'}
-                    validationMessage={errors.alias}
-                  >
-                    <Input
-                      value={values.alias}
-                      onChange={(_, data) => setField('alias', data.value)}
-                    />
-                  </Field>
+                    <Field
+                      label="Maiden name"
+                      validationState={errors.maidenName ? 'error' : 'none'}
+                      validationMessage={errors.maidenName}
+                    >
+                      <Input
+                        value={values.maidenName}
+                        onChange={(_, data) => setField('maidenName', data.value)}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Alias"
+                      validationState={errors.alias ? 'error' : 'none'}
+                      validationMessage={errors.alias}
+                    >
+                      <Input
+                        value={values.alias}
+                        onChange={(_, data) => setField('alias', data.value)}
+                      />
+                    </Field>
+                  </div>
                 </div>
               </section>
 

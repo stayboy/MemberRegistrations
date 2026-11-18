@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Badge,
   Button,
   Dialog,
@@ -57,6 +56,7 @@ import { useSession } from '../auth/SessionProvider';
 import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog } from '../components/ContactsDialog';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { PageFrame } from '../components/PageFrame';
 import type { PageAction } from '../components/PageActions';
 import { memberInitials, memberLabel, memberLabelFromName, memberName } from '../format/member';
@@ -316,10 +316,11 @@ export function MemberDetailPage() {
   const verifiedLabel = member.verifiedAt ? `Verified · ${formatDate(member.verifiedAt)}` : null;
   const titleAddon = {
     leading: (
-      <Avatar
+      <MemberAvatar
+        memberNo={member.memberNo}
+        photoUpdatedAt={member.photoUpdatedAt}
         name={memberName(member)}
         initials={memberInitials(member)}
-        color="colorful"
         size={32}
         data-testid="member-header-avatar"
       />

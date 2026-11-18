@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Badge,
   Button,
   Dialog,
@@ -46,6 +45,7 @@ import {
 } from '../api/members';
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from './ConfirmDialog';
+import { MemberAvatar } from './MemberAvatar';
 import { contactValueKey } from '../format/member-form';
 import { memberInitials, memberLabel } from '../format/member';
 
@@ -229,6 +229,8 @@ export interface ContactsDialogMember {
   /** A caller-composed label (for example the roster's `memberLabel`) wins. */
   displayName?: string | null;
   isPresbyter?: boolean;
+  /** The photo timestamp when the caller's projection carries it (MR-19). */
+  photoUpdatedAt?: string | null;
 }
 
 function contactDisplayName(member: ContactsDialogMember): string {
@@ -748,10 +750,11 @@ export function ContactsDialog({
               <>
                 <DialogContent className={styles.dialogContent}>
                   <div className={styles.dialogMember}>
-                    <Avatar
+                    <MemberAvatar
+                      memberNo={member.memberNo}
+                      photoUpdatedAt={member.photoUpdatedAt ?? null}
                       name={contactDisplayName(member)}
                       initials={contactInitials(member)}
-                      color="colorful"
                       size={40}
                     />
                     <div>

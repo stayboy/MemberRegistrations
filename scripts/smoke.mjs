@@ -70,6 +70,7 @@ async function runScenario() {
       lastName: 'Okafor',
       joinedOn: '2026-01-01',
       isPresbyter: true,
+      contacts: [{ kind: 'phone', value: '0800 123 4567' }],
     }),
   });
   check('presbyter created', presbyter.status === 201 && presbyter.body.isPresbyter === true);

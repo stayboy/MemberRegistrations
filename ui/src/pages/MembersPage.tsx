@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Badge,
   Button,
   Dropdown,
@@ -51,6 +50,7 @@ import {
 import { listSeries } from '../api/series';
 import { useSession } from '../auth/SessionProvider';
 import { ContactsDialog } from '../components/ContactsDialog';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { PageFrame } from '../components/PageFrame';
 import {
   attendanceDescription,
@@ -628,11 +628,13 @@ export function MembersPage({ defaultStatus = 'active' }: { defaultStatus?: Memb
                           <TableRow key={member.memberNo}>
                             <TableCell>
                               <div className={styles.memberCell}>
-                                <Avatar
+                                <MemberAvatar
+                                  memberNo={member.memberNo}
+                                  photoUpdatedAt={member.photoUpdatedAt}
                                   name={name}
                                   initials={memberInitials(member)}
-                                  color="colorful"
                                   size={32}
+                                  data-testid={`member-avatar-${member.memberNo}`}
                                 />
                                 <div>
                                   <div className={styles.nameRow}>

@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Badge,
   Button,
   Dropdown,
@@ -51,6 +50,7 @@ import { useSession } from '../auth/SessionProvider';
 import { AssignShepherdDialog } from '../components/AssignShepherdDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ContactsDialog, type ContactsDialogMember } from '../components/ContactsDialog';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { PageFrame } from '../components/PageFrame';
 import { contactLabel, memberLabelFromName } from '../format/member';
 import { genderLabel } from '../format/member-form';
@@ -89,6 +89,18 @@ const useRosterStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalXXS,
     minWidth: 0,
+  },
+  /** A member's avatar and identity sit side by side in the roster row (MR-19). */
+  memberRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    minWidth: 0,
+  },
+  optionRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
   },
   identityNameRow: {
     display: 'flex',
@@ -232,6 +244,7 @@ function OfficerPicker({
   value: string;
   onChange: (memberNo: string) => void;
 }) {
+  const rosterStyles = useRosterStyles();
   const selected = officers.find((officer) => officer.memberNo === value);
   const selectedLabel = selected
     ? memberLabelFromName(selected.name || selected.memberNo, selected.gender, selected.age)
@@ -260,7 +273,16 @@ function OfficerPicker({
               value={officer.memberNo}
               text={`${label} · ${officer.memberNo}`}
             >
-              {label} · {officer.memberNo}
+              <span className={rosterStyles.optionRow}>
+                <MemberAvatar
+                  memberNo={officer.memberNo}
+                  photoUpdatedAt={officer.photoUpdatedAt}
+                  name={officer.name || officer.memberNo}
+                  size={20}
+                  aria-hidden
+                />
+                {label} · {officer.memberNo}
+              </span>
             </Option>
           );
         })}
@@ -421,6 +443,7 @@ export function ShepherdingRosterPage() {
         lastName: '',
         gender: contactsFor.gender,
         age: contactsFor.age,
+        photoUpdatedAt: contactsFor.photoUpdatedAt,
         displayName: memberLabelFromName(
           contactsFor.name || contactsFor.memberNo,
           contactsFor.gender,
@@ -542,12 +565,13 @@ export function ShepherdingRosterPage() {
         {rosterReady ? (
           <>
             <section className={rosterStyles.identityCard} aria-label="Officer">
-              <Avatar
+              <MemberAvatar
+                memberNo={selectedOfficer?.memberNo ?? officerParam}
+                photoUpdatedAt={selectedOfficer?.photoUpdatedAt ?? null}
                 name={officerName}
                 initials={initialsOf(officerName)}
-                color="colorful"
                 size={56}
-                aria-hidden="true"
+                aria-hidden
               />
               <div className={rosterStyles.identityBody}>
                 <div className={rosterStyles.identityNameRow}>
@@ -690,23 +714,32 @@ export function ShepherdingRosterPage() {
                               return (
                                 <TableRow key={entry.assignmentId}>
                                   <TableCell>
-                                    <div className={styles.identity}>
-                                      <Link
-                                        className={styles.link}
-                                        to={`/members/${encodeURIComponent(entry.memberNo)}`}
-                                      >
-                                        {label}
-                                      </Link>
-                                      <Text size={200} className={styles.muted}>
-                                        {entry.memberNo}
-                                      </Text>
-                                      {badge ? (
-                                        <div className={rosterStyles.rowBadges}>
-                                          <Badge appearance="tint" color="warning" size="small">
-                                            {badge}
-                                          </Badge>
-                                        </div>
-                                      ) : null}
+                                    <div className={rosterStyles.memberRow}>
+                                      <MemberAvatar
+                                        memberNo={entry.memberNo}
+                                        photoUpdatedAt={entry.photoUpdatedAt}
+                                        name={entry.name || entry.memberNo}
+                                        size={28}
+                                        aria-hidden
+                                      />
+                                      <div className={styles.identity}>
+                                        <Link
+                                          className={styles.link}
+                                          to={`/members/${encodeURIComponent(entry.memberNo)}`}
+                                        >
+                                          {label}
+                                        </Link>
+                                        <Text size={200} className={styles.muted}>
+                                          {entry.memberNo}
+                                        </Text>
+                                        {badge ? (
+                                          <div className={rosterStyles.rowBadges}>
+                                            <Badge appearance="tint" color="warning" size="small">
+                                              {badge}
+                                            </Badge>
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   </TableCell>
                                   <TableCell>
