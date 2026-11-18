@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/errors';
 import type { MemberDetail, MemberDetailResult } from '../api/members';
 import {
+  MEMBER_FORM_STEP_IDS,
   contactConflictErrors,
   createEmptyMemberForm,
   fromMemberDetail,
@@ -9,11 +10,16 @@ import {
   memberNoConflictMessage,
   mergeKeptValues,
   subscriptionPayerError,
+  titleForbiddenByGender,
+  titleOptionsForGender,
   toCreatePayload,
+  toShepherdInput,
   toSubscriptionInput,
   toUpdatePayload,
   utcToday,
   validateMemberForm,
+  validateMemberStep,
+  validateReachability,
   validateSubscriptionDraft,
 } from './member-form';
 
@@ -41,6 +47,7 @@ function detail(overrides: Partial<MemberDetail> = {}): MemberDetail {
     movedOutOn: null,
     movedToAssembly: null,
     shepherd: null,
+    guardian: null,
     calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     isPresbyter: true,
     archivedAt: null,
@@ -100,11 +107,9 @@ describe('validateMemberForm', () => {
       memberNo: 'M-1009',
       firstName: 'Kofi',
       lastName: 'Mensah',
-      otherNames: 'x'.repeat(201),
       addressLine: 'x'.repeat(301),
     });
 
-    expect(errors.otherNames).toBeDefined();
     expect(errors.addressLine).toBeDefined();
   });
 
@@ -146,7 +151,6 @@ describe('toCreatePayload', () => {
       memberNo: ' M-1009 ',
       firstName: ' Kofi ',
       lastName: ' Mensah ',
-      otherNames: ' ',
       alias: 'K',
       dob: '',
       placeOfResidence: ' Adenta ',
@@ -155,7 +159,6 @@ describe('toCreatePayload', () => {
     expect(payload.memberNo).toBe('M-1009');
     expect(payload.firstName).toBe('Kofi');
     expect(payload.lastName).toBe('Mensah');
-    expect(payload.otherNames).toBeNull();
     expect(payload.alias).toBe('K');
     expect(payload.dob).toBeNull();
     expect(payload.placeOfResidence).toBe('Adenta');
@@ -423,7 +426,6 @@ describe('fromMemberDetail', () => {
     expect(form.memberNo).toBe('M-1001');
     expect(form.firstName).toBe('Ama');
     expect(form.lastName).toBe('Mensah');
-    expect(form.otherNames).toBe('Kwame');
     expect(form.maidenName).toBe('Owusu');
     expect(form.alias).toBe('Ama');
     expect(form.dob).toBe('1990-02-03');
@@ -463,5 +465,183 @@ describe('isStaleConflictError', () => {
       ),
     ).toBe(false);
     expect(isStaleConflictError(new ApiError(500, 'Server error'))).toBe(false);
+  });
+});
+
+/** A form with a valid member number, for the reachability and title cases. */
+function form(overrides: Record<string, unknown> = {}) {
+  return { ...createEmptyMemberForm('2026-11-04'), memberNo: 'M-1009', ...overrides };
+}
+
+describe('reachability and the guardian on the form (MR-38, MR-48)', () => {
+  it('accepts an own contact or a guardian, and names the guardian field when neither is set', () => {
+    expect(validateReachability(form())).toEqual({
+      guardianMemberNo: 'Record a phone, email or WhatsApp number, or choose a guardian.',
+    });
+    expect(validateReachability(form({ phone: '+233 24 555 0109' }))).toEqual({});
+    expect(validateReachability(form({ guardianMemberNo: 'A-1001' }))).toEqual({});
+  });
+
+  it('sends the guardian with the create body and never with the update body', () => {
+    const values = form({ guardianMemberNo: 'A-1001' });
+    expect(toCreatePayload(values)).toMatchObject({ guardianMemberNo: 'A-1001' });
+
+    const original = fromMemberDetail(detail({ guardian: null }));
+    expect(toUpdatePayload({ ...original, guardianMemberNo: 'A-1001' }, original)).toEqual({});
+  });
+
+  it('builds the post-create shepherd assignment, or none', () => {
+    expect(toShepherdInput(form())).toBeNull();
+    expect(toShepherdInput(form({ shepherdMemberNo: 'O-2001' }))).toEqual({
+      officerMemberNo: 'O-2001',
+      assignedOn: '2026-11-04',
+    });
+    expect(
+      toShepherdInput(form({ shepherdMemberNo: 'O-2001', shepherdAssignedOn: '2026-01-02' })),
+    ).toEqual({ officerMemberNo: 'O-2001', assignedOn: '2026-01-02' });
+  });
+});
+
+describe('titles on the form (MR-11..MR-13)', () => {
+  const titles = [
+    { code: 'elder', label: 'Elder', genderRestriction: 'male' as const, active: true },
+    { code: 'deaconess', label: 'Deaconess', genderRestriction: 'female' as const, active: true },
+    { code: 'pastor', label: 'Pastor', genderRestriction: null, active: true },
+    { code: 'retired', label: 'Retired', genderRestriction: null, active: false },
+  ];
+
+  it('offers the active titles the gender allows', () => {
+    expect(titleOptionsForGender(titles, 'female').map((title) => title.code)).toEqual([
+      'deaconess',
+      'pastor',
+    ]);
+    expect(titleOptionsForGender(titles, 'male').map((title) => title.code)).toEqual([
+      'elder',
+      'pastor',
+    ]);
+    expect(titleOptionsForGender(titles, 'undisclosed').map((title) => title.code)).toEqual([
+      'pastor',
+    ]);
+  });
+
+  it('clears a held title the edited gender forbids', () => {
+    expect(titleForbiddenByGender(titles, 'elder', 'female')?.label).toBe('Elder');
+    expect(titleForbiddenByGender(titles, 'elder', 'male')).toBeNull();
+    expect(titleForbiddenByGender(titles, 'pastor', 'female')).toBeNull();
+    expect(titleForbiddenByGender(titles, '', 'female')).toBeNull();
+  });
+
+  it('sends the title and date on create, and only the changed one on edit', () => {
+    const created = toCreatePayload(form({ titleCode: 'pastor', titledOn: '2020-02-03' }));
+    expect(created).toMatchObject({ titleCode: 'pastor', titledOn: '2020-02-03' });
+
+    const original = fromMemberDetail(
+      detail({ title: { code: 'pastor', label: 'Pastor', titledOn: '2020-02-03' } }),
+    );
+    expect(toUpdatePayload({ ...original }, original)).toEqual({});
+    expect(toUpdatePayload({ ...original, titledOn: '2021-01-01' }, original)).toEqual({
+      titledOn: '2021-01-01',
+    });
+    // A cleared title rides alone: the API clears the date with it.
+    expect(toUpdatePayload({ ...original, titleCode: '', titledOn: '' }, original)).toEqual({
+      titleCode: null,
+    });
+  });
+
+  it('sends a changed title and a changed date together', () => {
+    const original = fromMemberDetail(
+      detail({ title: { code: 'elder', label: 'Elder', titledOn: '2020-02-03' } }),
+    );
+
+    expect(
+      toUpdatePayload({ ...original, titleCode: 'pastor', titledOn: '2021-01-01' }, original),
+    ).toEqual({ titleCode: 'pastor', titledOn: '2021-01-01' });
+    // A changed title alone still sends only the title.
+    expect(toUpdatePayload({ ...original, titleCode: 'pastor' }, original)).toEqual({
+      titleCode: 'pastor',
+    });
+  });
+
+  it('rejects a future office date and a date without a title', () => {
+    const future = new Date();
+    future.setUTCFullYear(future.getUTCFullYear() + 1);
+    const futureError = validateMemberForm(
+      form({ titleCode: 'pastor', titledOn: future.toISOString().slice(0, 10) }),
+    );
+    expect(futureError.titledOn).toBe('Titled on cannot be in the future.');
+
+    expect(validateMemberForm(form({ titledOn: '2020-02-03' })).titledOn).toBe(
+      'Choose a presbyter title before the date it began.',
+    );
+    expect(
+      validateMemberForm(form({ titleCode: 'pastor', titledOn: '2020-02-03' })).titledOn,
+    ).toBeUndefined();
+  });
+
+  it('carries the membership card and turns a blank one into null', () => {
+    expect(toCreatePayload(form({ membershipCardNo: ' MC-1001 ' })).membershipCardNo).toBe(
+      'MC-1001',
+    );
+    expect(toCreatePayload(form()).membershipCardNo).toBeNull();
+    expect(validateMemberForm(form({ membershipCardNo: 'X'.repeat(33) })).membershipCardNo).toBe(
+      'Membership card number must be 32 characters or fewer.',
+    );
+  });
+});
+
+describe('step validation (MR-48)', () => {
+  it('knows the four steps and validates only the fields a step owns', () => {
+    expect(MEMBER_FORM_STEP_IDS).toEqual(['person', 'church', 'relationships', 'review']);
+
+    const personOnly = validateMemberStep('person', createEmptyMemberForm('2026-11-04'));
+    expect(personOnly.memberNo).toBe('Member number is required.');
+    expect(personOnly.firstName).toBe('First name is required.');
+    expect(personOnly.titledOn).toBeUndefined();
+
+    const churchOnly = validateMemberStep('church', createEmptyMemberForm('2026-11-04'));
+    expect(churchOnly.memberNo).toBeUndefined();
+    expect(churchOnly.titledOn).toBeUndefined();
+  });
+
+  it('validates everything on Review', () => {
+    const errors = validateMemberStep('review', {
+      ...createEmptyMemberForm('2026-11-04'),
+      titledOn: '2020-02-03',
+    });
+    expect(errors.memberNo).toBe('Member number is required.');
+    expect(errors.titledOn).toBe('Choose a presbyter title before the date it began.');
+  });
+});
+
+describe('the second name field (MR-49)', () => {
+  it('writes lastName and never sends otherNames', () => {
+    const payload = toCreatePayload({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+      lastName: 'Mensah',
+    });
+
+    expect(payload).toMatchObject({ firstName: 'Kofi', lastName: 'Mensah' });
+    expect(payload).not.toHaveProperty('otherNames');
+  });
+
+  it('leaves an existing otherNames untouched on edit', () => {
+    const original = fromMemberDetail(detail({ otherNames: 'Kwame' }));
+
+    expect(toUpdatePayload({ ...original, lastName: 'Owusu' }, original)).toEqual({
+      lastName: 'Owusu',
+    });
+    expect(toUpdatePayload({ ...original, alias: 'K' }, original)).toEqual({ alias: 'K' });
+  });
+
+  it('names the second required field Other names in its message', () => {
+    const errors = validateMemberForm({
+      ...createEmptyMemberForm('2026-11-04'),
+      memberNo: 'M-1009',
+      firstName: 'Kofi',
+    });
+
+    expect(errors.lastName).toBe('Other names is required.');
   });
 });

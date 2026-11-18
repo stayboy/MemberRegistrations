@@ -32,6 +32,7 @@ import { OfferingCountRepository } from './repos/offering-counts.js';
 import { OfferingRepository } from './repos/offerings.js';
 import { PaymentGroupRepository } from './repos/payment-groups.js';
 import { PledgeRepository } from './repos/pledges.js';
+import { PresbyterTitleRepository } from './repos/presbyter-titles.js';
 import { SeriesRepository } from './repos/series.js';
 import { ShepherdingRepository } from './repos/shepherding.js';
 import { SubscriptionProductRepository } from './repos/subscription-products.js';
@@ -47,6 +48,7 @@ import { offeringsRouter } from './routes/offerings.js';
 import { paymentGroupsRouter } from './routes/payment-groups.js';
 import { paymentsRouter } from './routes/payments.js';
 import { pledgesRouter } from './routes/pledges.js';
+import { presbyterTitlesRouter } from './routes/presbyter-titles.js';
 import { registrationRequestsRouter } from './routes/registration-requests.js';
 import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
@@ -92,6 +94,7 @@ export function createApp(options: AppOptions): Express {
 
   const members = new MemberRepository(options.db);
   const ministries = new MinistryRepository(options.db);
+  const presbyterTitles = new PresbyterTitleRepository(options.db);
   const series = new SeriesRepository(options.db);
   const imports = new ImportRepository(options.db);
   const shepherding = new ShepherdingRepository(options.db);
@@ -276,6 +279,7 @@ export function createApp(options: AppOptions): Express {
   v1.use('/subscriptions', subscriptionsRouter(subscriptions));
   v1.use('/subscription-products', subscriptionProductsRouter(subscriptionProducts));
   v1.use('/ministries', ministriesRouter(ministries));
+  v1.use('/presbyter-titles', presbyterTitlesRouter(presbyterTitles));
   v1.use('/series', seriesRouter(series));
   v1.use('/imports', importsRouter(imports));
   // Registered before /events so /events/:eventId/codes reaches this router.

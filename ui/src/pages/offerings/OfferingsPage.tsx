@@ -141,7 +141,6 @@ export function OfferingsPage() {
       sectionId="events"
       title="Offerings"
       submenu="Offerings"
-      hideBadge
       controls={
         <div className={styles.headerActions}>
           <div className={styles.quickRanges} role="group" aria-label="Quick ranges">

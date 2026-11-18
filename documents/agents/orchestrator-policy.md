@@ -52,6 +52,7 @@ round doc records it.
 | Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | `reviewer-pro` — windowed, and **its first candidate is pinned by name in `AGENTS.md` section 10a**; three candidates, the metered rungs last              |
 | Grill-me (every round that opens one)                                                               | `grill-flash` — windowed: inside the window the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last         |
 | Git executor (all git writes)                                                                       | `git-executor` — a free provider first, then the metered rungs; every metered brief draws on the round's brief cap                                         |
+| Publish executor (the post-merge local rebuild; not a git write)                                    | `publish-executor` - unclocked: a free provider first, then the metered rungs; draws nothing from `git-seat-budget:`                                       |
 
 **Capability classes (owner, 2026-11-17).** The table names classes; the class-to-model mapping lives in
 `documents/agents/seats.json`, which is not review-gated, so refreshing a candidate that disappeared is
@@ -64,7 +65,9 @@ class, the metered rungs last, and one `probedAt` date per class.
 class's first candidate once - a one-line dispatch - and records the outcome in the round doc's Seats
 table; that result holds for the local day, so a candidate that answered `model not found`, or a free
 provider that answered "Free usage limit reached", is not retried all day, and a recovered one is used
-again tomorrow. The probe is the day's first observation. A candidate whose **real dispatch** then fails
+again tomorrow. The probe is the day's first observation. The publish executor is the one exception:
+it cannot run before a merge, so its class is probed at the first post-merge dispatch and recorded
+in that round's Seats table. A candidate whose **real dispatch** then fails
 in the same day - two observations in all - is replaced in `documents/agents/seats.json` at the round's
 end, with the substitution recorded in the round doc; two consecutive days of the same failure make the
 replacement the owner's decision rather than the round's.

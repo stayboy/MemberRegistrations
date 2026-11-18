@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_USSD_CODE_PEPPER } from '../../src/config/env.js';
 import { AttendanceCodeRepository } from '../../src/repos/attendance-codes.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -41,10 +42,13 @@ async function createEvent(dates: string[]): Promise<string> {
 }
 
 async function createMember(memberNo: string): Promise<string> {
-  const response = await request(app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo, firstName: 'Ama', lastName: 'Mensah', gender: 'female' });
+  const response = await request(app).post('/v1/members').set(writeHeaders).send({
+    memberNo,
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    gender: 'female',
+    contacts: reachableContacts(),
+  });
   expect(response.status).toBe(201);
   return response.body.id as string;
 }

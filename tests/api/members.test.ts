@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -24,6 +25,7 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
       lastName: 'Mensah',
       gender: 'female',
       joinedOn: '2026-01-01',
+      contacts: reachableContacts(),
       ...extra,
     });
   expect(response.status).toBe(201);
@@ -267,8 +269,10 @@ describe('contacts', () => {
   it('links a dependent to the guardian contact instead of copying it', async () => {
     const guardian = await create('M-2003', {
       contacts: [{ kind: 'phone', value: '0802 000 0003' }],
+      dob: '1980-01-01',
     });
-    await create('M-2004');
+    // MR-38: a member with no own contact is created with its guardian link.
+    await create('M-2004', { guardianMemberNo: 'M-2003', contacts: [] });
     const contactId = guardian.body.contacts[0].id as string;
 
     const linked = await request(app)
@@ -476,6 +480,7 @@ describe('member card and verification', () => {
       firstName: 'Card',
       lastName: 'Reissue',
       membershipCardNo: 'CARD-ONE',
+      contacts: reachableContacts(),
     });
     expect(reissued.status).toBe(201);
     expect(reissued.body.membershipCardNo).toBe('CARD-ONE');

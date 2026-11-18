@@ -15,6 +15,8 @@ import {
   contactInputSchema,
   contactResponseSchema,
   createMemberSchema,
+  guardianCandidateListSchema,
+  guardianSchema,
   memberAttendanceWindowSchema,
   memberContributionsSummarySchema,
   memberDetailSchema,
@@ -23,6 +25,8 @@ import {
   memberProfileSchema,
   memberSummarySchema,
   ministryPositionInputSchema,
+  presbyterTitleListSchema,
+  presbyterTitleOptionSchema,
   purgeSchema,
   relationshipInputSchema,
   relationshipResponseSchema,
@@ -288,6 +292,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         AttendanceList: toSchema(attendanceListSchema, 'output'),
         Ministry: toSchema(ministrySchema, 'output'),
         MemberMinistry: toSchema(memberMinistrySchema, 'output'),
+        PresbyterTitleOption: toSchema(presbyterTitleOptionSchema, 'output'),
+        PresbyterTitleList: toSchema(presbyterTitleListSchema, 'output'),
+        Guardian: toSchema(guardianSchema, 'output'),
+        GuardianCandidateList: toSchema(guardianCandidateListSchema, 'output'),
         MinistryPositionInput: toSchema(ministryPositionInputSchema, 'input'),
         MinistryInput: toSchema(ministryInputSchema, 'input'),
         MinistryUpdate: toSchema(ministryUpdateSchema, 'input'),
@@ -613,6 +621,20 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               schema: { type: 'string', enum: ['true'] },
             },
             {
+              name: 'guardianEligible',
+              in: 'query',
+              description:
+                'Only `true`: answer the guardian candidates instead of a member page — members aged 18 or over that are reachable through an own contact or a chain of at most three links (Phase 1).',
+              schema: { type: 'string', enum: ['true'] },
+            },
+            {
+              name: 'forMemberNo',
+              in: 'query',
+              description:
+                'With guardianEligible: the member whose guardian is being chosen. It and its descendants are excluded; an unknown number excludes nothing.',
+              schema: { type: 'string' },
+            },
+            {
               name: 'include',
               in: 'query',
               description: 'Comma-separated aggregates: attendance, subscriptions.',
@@ -646,6 +668,16 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             409: conflict,
             422: validation,
+          },
+        },
+      },
+
+      '/v1/presbyter-titles': {
+        get: {
+          summary: 'List the active presbyter titles',
+          responses: {
+            200: json('The active reference titles, ordered by label.', 'PresbyterTitleList'),
+            401: unauthorized,
           },
         },
       },
@@ -2586,7 +2618,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Approve a request and create the member',
           description:
-            'The request names seed the ordinary member create path; gender is undisclosed, joinedOn is today in UTC and no contacts are written. A decided request, including a second approval, is 409 registration_not_pending.',
+            'The request names seed the ordinary member create path; gender is undisclosed, joinedOn is today in UTC and no contacts are written. MR-50 requires guardianMemberNo: the guardian is validated like any other (18+, reachable, chain rules) and the member, the guardian link and the approval are one transaction, so an ineligible guardian is 422 guardian_not_eligible and the request stays pending. A decided request, including a second approval, is 409 registration_not_pending.',
           parameters: [actorHeader],
           requestBody: {
             required: true,

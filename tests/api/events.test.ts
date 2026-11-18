@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 interface StoredSession {
   date: string;
@@ -111,6 +112,7 @@ beforeAll(async () => {
       firstName: 'Event',
       lastName: memberNo,
       gender: 'undisclosed',
+      contacts: reachableContacts(),
     });
     expect(created.status).toBe(201);
   }

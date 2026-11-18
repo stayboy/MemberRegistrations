@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ClockingRepository } from '../../src/repos/clocking.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let today: string;
@@ -27,6 +28,7 @@ async function createMember(
     gender: 'male',
     joinedOn,
     isPresbyter,
+    contacts: reachableContacts(),
   });
   expect(response.status).toBe(201);
 }

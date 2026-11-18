@@ -35,9 +35,17 @@ export const createMemberSchema = z.object({
   isPresbyter: z.boolean().optional(),
   presbyterRank: z.number().int().min(1).nullable().optional(),
   membershipCardNo: z.string().trim().max(32).nullable().optional(),
+  /** The presbyter title, with the same rules the update contract already applies (MR-11). */
+  titleCode: z.string().min(2).max(32).nullable().optional(),
+  titledOn: dateStringSchema.nullable().optional(),
   verified: z.boolean().optional(),
   contacts: z.array(contactInputSchema).max(20).optional(),
   ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
+  /**
+   * Create only: the guardian of a member who records no own contact. Linked in
+   * the same transaction as the member and its contacts (MR-38).
+   */
+  guardianMemberNo: memberNoParamSchema.nullable().optional(),
 });
 
 export const updateMemberSchema = z.object({
@@ -100,6 +108,12 @@ export const listQuerySchema = z
       .enum(['true'])
       .optional()
       .transform((value) => value === 'true'),
+    /** Phase 1 (MR-40): list the adults who may become `forMemberNo`'s guardian. */
+    guardianEligible: z
+      .enum(['true'])
+      .optional()
+      .transform((value) => value === 'true'),
+    forMemberNo: memberNoParamSchema.optional(),
     include: z
       .string()
       .optional()
@@ -273,6 +287,32 @@ export const memberSummarySchema = z.object({
   subscriptions: z.array(memberSubscriptionSummarySchema).optional(),
 });
 
+/** The immediate guardian a member's chain starts at, with the contact it resolves to (MR-41). */
+export const guardianSchema = z.object({
+  memberNo: z.string(),
+  name: z.string(),
+  /** Masked: an email keeps its first letter and domain, a number its last two digits. */
+  contactMasked: z.string(),
+  /** The members the chain passes after the guardian, ending at the contact holder. */
+  via: z.array(z.string()),
+});
+
+export const guardianCandidateListSchema = z.object({
+  items: z.array(guardianSchema),
+});
+
+/** `GET /v1/presbyter-titles`: the reference rows a title picker offers (MR-12). */
+export const presbyterTitleOptionSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  genderRestriction: z.enum(['male', 'female']).nullable(),
+  active: z.boolean(),
+});
+
+export const presbyterTitleListSchema = z.object({
+  items: z.array(presbyterTitleOptionSchema),
+});
+
 export const memberDetailSchema = memberSummarySchema.extend({
   id: z.string(),
   presbyterRank: z.number().int().nullable(),
@@ -287,6 +327,8 @@ export const memberDetailSchema = memberSummarySchema.extend({
   movedOutOn: z.string().nullable(),
   movedToAssembly: z.string().nullable(),
   shepherd: detailShepherdSchema.nullable(),
+  /** The immediate guardian and the contact the chain resolves to (MR-41). */
+  guardian: guardianSchema.nullable(),
   calls: detailCallsSchema,
   purgedAt: z.string().nullable(),
   version: z.number().int(),

@@ -28,6 +28,12 @@ export interface PageAction {
   kind: 'verb' | 'utility';
   /** A member of the trailing destructive group: the item is rendered after the separator. */
   destructive?: boolean;
+  /**
+   * MR-1: an action marked primary renders as a visible Fluent `Button` beside the
+   * menu instead of a menu item, so a page's main verb is never hidden. A page that
+   * marks nothing keeps the one-or-many rule.
+   */
+  primary?: boolean;
 }
 
 /**
@@ -69,10 +75,28 @@ export function PageActions({ actions }: { actions: readonly PageAction[] }) {
   // FR-9a: a page with no verb action renders no menu and leaves the slot empty.
   if (verbs.length === 0) return null;
 
-  const dividerAt = dividerIndex(verbs);
+  // MR-1: a primary verb is a visible button beside the menu; the rest stay items.
+  const primary = verbs.filter((action) => action.primary);
+  const menuVerbs = verbs.filter((action) => !action.primary);
+  const dividerAt = dividerIndex(menuVerbs);
+
+  const primaryButtons = primary.map((action) => (
+    <Button
+      key={action.id}
+      appearance="primary"
+      icon={action.icon}
+      disabled={action.disabled}
+      onClick={action.onSelect}
+    >
+      {action.label}
+    </Button>
+  ));
+
+  // Every verb is primary: there is nothing left for the menu to hold.
+  if (menuVerbs.length === 0) return <>{primaryButtons}</>;
 
   const items: ReactNode[] = [];
-  verbs.forEach((action, index) => {
+  menuVerbs.forEach((action, index) => {
     if (index === dividerAt) items.push(<MenuDivider key={`${action.id}-divider`} />);
     items.push(
       <MenuItem
@@ -87,15 +111,18 @@ export function PageActions({ actions }: { actions: readonly PageAction[] }) {
   });
 
   return (
-    <Menu>
-      <MenuTrigger disableButtonEnhancement>
-        <Button icon={<ChevronDownRegular aria-hidden="true" />} iconPosition="after">
-          Actions
-        </Button>
-      </MenuTrigger>
-      <MenuPopover>
-        <MenuList>{items}</MenuList>
-      </MenuPopover>
-    </Menu>
+    <>
+      {primaryButtons}
+      <Menu>
+        <MenuTrigger disableButtonEnhancement>
+          <Button icon={<ChevronDownRegular aria-hidden="true" />} iconPosition="after">
+            Actions
+          </Button>
+        </MenuTrigger>
+        <MenuPopover>
+          <MenuList>{items}</MenuList>
+        </MenuPopover>
+      </Menu>
+    </>
   );
 }

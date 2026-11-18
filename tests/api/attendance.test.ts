@@ -2,6 +2,7 @@ import request from 'supertest';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -99,6 +100,7 @@ beforeAll(async () => {
       gender: 'female',
       dob: dobYearsAgo(30),
       joinedOn: '2026-01-01',
+      contacts: reachableContacts(),
     });
   expect(created.status).toBe(201);
 
@@ -333,6 +335,7 @@ describe('imports', () => {
         dob: dobYearsAgo(30),
         // After the October conference, so the register counts there are unchanged.
         joinedOn: '2026-10-20',
+        contacts: reachableContacts(),
       })
       .expect(201);
 
@@ -777,8 +780,20 @@ describe('imports', () => {
 describe('generation backfill', () => {
   it('assigns an event number to an instance created by manual attendance', async () => {
     for (const member of [
-      { memberNo: 'M-5101', firstName: 'Manual', lastName: 'First', joinedOn: '2026-12-01' },
-      { memberNo: 'M-5102', firstName: 'Imported', lastName: 'Second', joinedOn: '2026-12-01' },
+      {
+        memberNo: 'M-5101',
+        firstName: 'Manual',
+        lastName: 'First',
+        joinedOn: '2026-12-01',
+        contacts: reachableContacts(),
+      },
+      {
+        memberNo: 'M-5102',
+        firstName: 'Imported',
+        lastName: 'Second',
+        joinedOn: '2026-12-01',
+        contacts: reachableContacts(),
+      },
     ]) {
       await request(app).post('/v1/members').set(writeHeaders).send(member).expect(201);
     }
@@ -1083,7 +1098,10 @@ describe('event attendance per session', () => {
       { memberNo: 'M-7003', firstName: 'Bisi', lastName: 'Adeyemi', joinedOn: '2026-10-20' },
     ];
     for (const member of members) {
-      const created = await request(app).post('/v1/members').set(writeHeaders).send(member);
+      const created = await request(app)
+        .post('/v1/members')
+        .set(writeHeaders)
+        .send({ ...member, contacts: reachableContacts() });
       expect(created.status).toBe(201);
     }
 
@@ -1095,6 +1113,7 @@ describe('event attendance per session', () => {
         firstName: 'Archived',
         lastName: 'Member',
         joinedOn: '2026-01-01',
+        contacts: reachableContacts(),
       })
       .expect(201);
     await request(app).delete('/v1/members/M-7004').set(writeHeaders).expect(204);

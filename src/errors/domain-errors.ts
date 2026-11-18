@@ -311,3 +311,47 @@ export class CardInUseError extends ConflictError {
     super(message, 'card_in_use');
   }
 }
+
+/** A member would end with no own contact and no guardian, so nobody can reach them (MR-38). */
+export class NoContactOrGuardianError extends ValidationError {
+  constructor(message = 'A member needs an own contact or a guardian; record one of the two') {
+    super(message, 'no_contact_or_guardian');
+  }
+}
+
+/** The last guardian of an unreachable member, or a link a dependant relies on, cannot go (MR-39). */
+export class GuardianRequiredError extends ConflictError {
+  constructor(
+    message = 'This guardian is the member’s only route to an own contact; record a contact or another guardian first',
+  ) {
+    super(message, 'guardian_required');
+  }
+}
+
+/** A guardian must be an adult who is not the member and not one of its descendants (MR-40). */
+export class GuardianNotEligibleError extends ValidationError {
+  constructor(message: string) {
+    super(message, 'guardian_not_eligible');
+  }
+}
+
+/** A guardian chain that loops back on itself is refused (MR-40). */
+export class GuardianChainCycleError extends ValidationError {
+  constructor(message = 'The guardian chain would cycle') {
+    super(message, 'guardian_chain_cycle');
+  }
+}
+
+/** A guardian chain that ends at no own contact is refused (MR-40). */
+export class GuardianChainUnreachableError extends ValidationError {
+  constructor(message = 'The guardian chain ends at no own contact') {
+    super(message, 'guardian_chain_unreachable');
+  }
+}
+
+/** A guardian chain longer than three links is refused (MR-40). */
+export class GuardianChainTooLongError extends ValidationError {
+  constructor(message = 'The guardian chain is longer than three links') {
+    super(message, 'guardian_chain_too_long');
+  }
+}

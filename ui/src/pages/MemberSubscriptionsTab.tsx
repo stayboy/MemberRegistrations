@@ -70,7 +70,7 @@ export interface MemberSubscriptionsTabProps {
 }
 
 /**
- * Member-detail **Subscriptions** tab (FR-29, FR-72): the existing list, add and
+ * Member-detail **Welfare & Services** tab (FR-29, FR-72): the existing list, add and
  * end actions, and household coverage. MemberDetailPage owns every query and
  * mutation; this tab owns only its dialogs and form state. Coverage members are
  * picked from `MemberPicker`, never derived from relationships.
@@ -257,13 +257,13 @@ export function MemberSubscriptionsTab({
     <section className={styles.section} aria-labelledby="member-subscriptions-heading">
       <div className={styles.sectionHeader}>
         <h2 id="member-subscriptions-heading" className={styles.sectionTitle}>
-          Subscriptions
+          Welfare &amp; Services
         </h2>
         <div className={styles.pills}>
           <Text size={200} className={styles.muted}>
             Ending keeps history; coverage is household-only.
           </Text>
-          <Button icon={<AddRegular />} onClick={openAddSubscription}>
+          <Button icon={<AddRegular />} onClick={openAddSubscription} id="member-subscription-add">
             Add subscription
           </Button>
         </div>

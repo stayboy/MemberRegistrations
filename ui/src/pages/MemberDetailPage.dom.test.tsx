@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -73,6 +73,7 @@ const DETAIL: MemberDetail = {
     age: 44,
     assignedOn: '2025-01-02',
   },
+  guardian: null,
   calls: { attempts: 6, conversations: 4, lastCalledOn: '2026-11-14', lastReachedOn: '2026-11-14' },
   isPresbyter: true,
   archivedAt: null,
@@ -224,6 +225,7 @@ const EMPTY: MemberDetail = {
   movedOutOn: null,
   movedToAssembly: null,
   shepherd: null,
+  guardian: null,
   calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
   isPresbyter: false,
   contactCount: 0,
@@ -285,48 +287,77 @@ function renderDetail(memberNo = DETAIL.memberNo): void {
 }
 
 describe('MemberDetailPage overview (FR-29, AC-12)', () => {
-  it('renders the four cards with their values, captions and the empty copies', async () => {
+  it('renders the four cards with their values, labels and accessible names', async () => {
     renderDetail();
 
     const attended = await screen.findByTestId('overview-card-attended');
-    expect(attended).toHaveTextContent('Q4 2026 · 5');
-    expect(attended).toHaveTextContent('November · 4');
-    expect(attended).toHaveTextContent('UTC calendar dates across 2 series rows');
-    expect(attended).toHaveAccessibleName('Attended: Q4 2026 · 5 · November · 4');
+    expect(screen.getByTestId('overview-card-attended-cell-0')).toHaveTextContent('5');
+    expect(within(attended).getByText('This year')).toBeVisible();
+    expect(screen.getByTestId('overview-card-attended-cell-1')).toHaveTextContent('5');
+    expect(within(attended).getByText('This quarter')).toBeVisible();
+    expect(screen.getByTestId('overview-card-attended-cell-2')).toHaveTextContent('4');
+    expect(within(attended).getByText('This month')).toBeVisible();
+    expect(attended).toHaveAccessibleName(
+      'Attended: 5 this year (2026) · 5 this quarter (Q4 2026) · 4 this month (November 2026)',
+    );
+    // The exact periods live in the tooltip; the visible labels stay short.
+    const user = userEvent.setup();
+    expect(
+      screen.queryByRole('tooltip', { name: /Q4 2026/ }),
+      'the tooltip rendered before any hover',
+    ).not.toBeInTheDocument();
+    await user.hover(attended);
+    const tooltip = await screen.findByRole('tooltip', {
+      name: '2026 · Q4 2026 · November 2026',
+    });
+    expect(tooltip).toHaveTextContent('2026 · Q4 2026 · November 2026');
+    // No card carries a caption of its own.
+    expect(attended).not.toHaveTextContent(/series rows|Ties by|all-time|ties by event name/i);
 
     const last = screen.getByTestId('overview-card-last-attended');
-    expect(last).toHaveTextContent('Sunday Service');
-    expect(last).toHaveTextContent('22 November 2026');
-    expect(last).toHaveTextContent('Latest entry; ties by event name');
+    expect(within(last).getByText('Sunday Service')).toBeVisible();
+    expect(within(last).getByText('22 November 2026')).toBeVisible();
+    expect(last).toHaveAccessibleName('Last attended: Sunday Service · 22 November 2026');
 
     const calls = screen.getByTestId('overview-card-shepherd-calls');
-    expect(calls).toHaveTextContent('6 · last reached 14 November 2026');
-    expect(calls).toHaveTextContent('Current assignment, all-time');
-    expect(calls).toHaveAccessibleName('Shepherd calls: 6 · last reached 14 November 2026');
+    expect(within(calls).getByText('6×')).toBeVisible();
+    expect(within(calls).getByText('Number of calls')).toBeVisible();
+    expect(within(calls).getByText('14 November 2026')).toBeVisible();
+    expect(within(calls).getByText('Last reached')).toBeVisible();
+    expect(calls).toHaveAccessibleName('Shepherd calls: 6 times · last reached 14 November 2026');
 
     const most = screen.getByTestId('overview-card-most-attended');
-    expect(most).toHaveTextContent('Sunday Service · 4 times');
-    expect(most).toHaveTextContent('Grouped by series; standalone by event');
+    expect(within(most).getByText('Sunday Service (4×)')).toBeVisible();
+    expect(most).toHaveAccessibleName('Most attended: Sunday Service, 4 times');
   });
 
-  it('states the empty copies and zero counts for a member with no attendance or calls', async () => {
+  it('states the empty copies, three zeros and the no-calls branch for a member with nothing', async () => {
     renderDetail(EMPTY.memberNo);
 
     const attended = await screen.findByTestId('overview-card-attended');
-    expect(attended).toHaveTextContent('Q4 2026 · 0');
-    expect(attended).toHaveTextContent('November · 0');
-    expect(attended).toHaveTextContent('UTC calendar dates across 0 series rows');
+    for (const index of [0, 1, 2]) {
+      expect(screen.getByTestId(`overview-card-attended-cell-${index}`)).toHaveTextContent('0');
+    }
+    expect(within(attended).getByText('This year')).toBeVisible();
+    expect(within(attended).getByText('This quarter')).toBeVisible();
+    expect(within(attended).getByText('This month')).toBeVisible();
+    expect(attended).toHaveAccessibleName(
+      'Attended: 0 this year (2026) · 0 this quarter (Q4 2026) · 0 this month (November 2026)',
+    );
 
     const last = screen.getByTestId('overview-card-last-attended');
-    expect(last).toHaveTextContent('No attendance recorded');
+    expect(within(last).getByText('No attendance recorded')).toBeVisible();
     expect(last).toHaveAccessibleName('Last attended: No attendance recorded');
 
     const calls = screen.getByTestId('overview-card-shepherd-calls');
-    expect(calls).toHaveTextContent('No calls logged');
+    expect(within(calls).getByText('0')).toBeVisible();
+    expect(within(calls).getByText('—')).toBeVisible();
+    expect(within(calls).getByText('Number of calls')).toBeVisible();
+    expect(within(calls).getByText('Last reached')).toBeVisible();
     expect(calls).toHaveAccessibleName('Shepherd calls: No calls logged');
 
     const most = screen.getByTestId('overview-card-most-attended');
-    expect(most).toHaveTextContent('No attendance recorded');
+    expect(within(most).getByText('No attendance recorded')).toBeVisible();
     expect(most).toHaveAccessibleName('Most attended: No attendance recorded');
   });
 
@@ -336,9 +367,10 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
 
     const tabs = await screen.findAllByRole('tab');
     expect(tabs).toHaveLength(4);
-    for (const name of ['Overview', 'Attendance', 'Subscriptions', 'Shepherding']) {
+    for (const name of ['Overview', 'Attendance', 'Welfare & Services', 'Shepherding']) {
       expect(screen.getByRole('tab', { name })).toBeVisible();
     }
+    expect(screen.queryByRole('tab', { name: 'Subscriptions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ministries' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Relationships' })).not.toBeInTheDocument();
 
@@ -352,12 +384,59 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     expect(within(dialog).getByText('+233 20 000 0001')).toBeVisible();
   });
 
-  it('shows the identity and membership grids, the verified badge and the shepherd line', async () => {
+  it('moves the avatar and badges into the page header, on either side of the h1', async () => {
     renderDetail();
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Identity' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Membership' })).toBeVisible();
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: 'Kwame Asante (Male, 41y)',
+    });
+    const avatar = screen.getByTestId('member-header-avatar');
+    const verified = screen.getByTestId('member-verified');
 
+    // The avatar leads the heading; the checked badge, the Presbyter tag and the status
+    // badge follow it (FR-29, AC-12).
+    expect(avatar.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(heading.compareDocumentPosition(verified) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(verified).toHaveAccessibleName('Verified · 5 November 2026');
+    expect(screen.getByText('Presbyter')).toBeVisible();
+    expect(screen.getByText('Active')).toBeVisible();
+  });
+
+  it('leaves the header badgeless for a member without verifiedAt, with the status badge only', async () => {
+    renderDetail(EMPTY.memberNo);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Ama Mensah (Female)' }),
+    ).toBeVisible();
+    expect(screen.getByTestId('member-header-avatar')).toBeVisible();
+    expect(screen.queryByTestId('member-verified')).not.toBeInTheDocument();
+    expect(screen.queryByText('Presbyter')).not.toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeVisible();
+  });
+
+  it('shows the four-cell Identity grid, the membership grid and the shepherd line', async () => {
+    renderDetail();
+
+    const identityHeading = await screen.findByRole('heading', { level: 2, name: 'Identity' });
+    const identity = identityHeading.closest('section');
+    expect(identity).not.toBeNull();
+    if (!identity) return;
+
+    for (const label of ['Joined', 'Date of birth', 'Place of residence', 'Address line']) {
+      expect(within(identity).getByText(label)).toBeVisible();
+    }
+    // The header now states the member, so the overview keeps no duplicate identity
+    // block and no member-number or Presbyter yes/no field.
+    expect(within(identity).queryByText('Member number')).not.toBeInTheDocument();
+    expect(within(identity).queryByText('Presbyter')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kwame Asante')).not.toBeInTheDocument();
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Membership' })).toBeVisible();
     for (const label of [
       'Membership card',
       'Presbyter title',
@@ -374,17 +453,13 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     // A populated record's absent membership field is an em dash.
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
 
-    const verified = screen.getByTestId('member-verified');
-    expect(verified).toHaveAccessibleName(/^Verified /);
-    expect(verified).toHaveAccessibleName(/2026/);
-
     expect(
       screen.getByText(/Efua Boateng \(Female, 44y\) · assigned 2 January 2025/),
     ).toBeVisible();
     expect(screen.queryByText(/presbyter rank/i)).not.toBeInTheDocument();
   });
 
-  it('shows ministries with roles, every subscription row and the fixed relationship rows', async () => {
+  it('names the fixed surface Welfare & Services in its heading, list and foot copy', async () => {
     const user = userEvent.setup();
     renderDetail();
 
@@ -394,12 +469,16 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     expect(ministries).toHaveTextContent('Ushering · USH · No role recorded');
     expect(screen.getByRole('button', { name: 'Remove Choir' })).toBeVisible();
 
-    expect(screen.getByRole('heading', { level: 2, name: /Subscriptions/ })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 2, name: 'Welfare & Services' })).toBeVisible();
     expect(screen.getByText('1 active · 1 ended or expired')).toBeVisible();
+    expect(screen.getByRole('list', { name: 'Welfare & Services' })).toHaveTextContent(
+      'POL-0001 · Life insurance',
+    );
     expect(screen.getByText('POL-0001 · Life insurance')).toBeVisible();
     expect(screen.getByText('Active · no end date')).toBeVisible();
     expect(screen.getByText('POL-0003 · Credit union')).toBeVisible();
     expect(screen.getByText('Expired · ended 30 September 2025')).toBeVisible();
+    expect(screen.getByText('Add and end from the Welfare & Services tab.')).toBeVisible();
 
     expect(screen.getByRole('heading', { level: 2, name: /Relationships 2/ })).toBeVisible();
     expect(screen.getByText('Spouse · M-1003')).toBeVisible();
@@ -407,10 +486,11 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
 
     await user.click(screen.getByRole('button', { name: 'View all' }));
     expect(await screen.findByRole('button', { name: 'Add subscription' })).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Subscriptions' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Welfare & Services' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
+    expect(screen.getByRole('heading', { level: 2, name: 'Welfare & Services' })).toBeVisible();
   });
 
   it('expands the ministry and relationship add rows in place', async () => {
@@ -440,5 +520,157 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     expect(screen.getByText('No contacts')).toBeVisible();
     expect(screen.queryByRole('button', { name: /View Contacts/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId('member-verified')).not.toBeInTheDocument();
+  });
+});
+
+describe('MemberDetailPage action row (MR-1..MR-4, AC-MR1..AC-MR3)', () => {
+  it('keeps Edit visible and puts the page actions before the destructive group', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Edit is a primary button, never a menu item.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    expect(edit).toBeVisible();
+    expect(edit).toHaveClass(/fui-Button/);
+    expect(edit.closest('[role="menu"]')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
+    expect(items).toEqual([
+      'View contacts',
+      'Assign shepherd',
+      'Add ministry',
+      'Add relationship',
+      'Add subscription',
+      'Archive',
+      'Purge',
+    ]);
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument();
+
+    // The destructive group starts after the divider.
+    const dividers = [...document.querySelectorAll<HTMLElement>('.fui-MenuDivider')];
+    expect(dividers).toHaveLength(1);
+    const archive = screen.getByRole('menuitem', { name: 'Archive' });
+    expect(dividers[0]!.nextElementSibling).toBe(archive);
+  });
+
+  it('offers Restore instead of Archive for an archived member and always keeps Purge', async () => {
+    const user = userEvent.setup();
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: { ...EMPTY, archivedAt: '2026-02-01T00:00:00.000Z' },
+      etag: '"v4"',
+    });
+    renderDetail(EMPTY.memberNo);
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+
+    expect(screen.getByRole('menuitem', { name: 'Restore' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Archive' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Purge' })).toBeInTheDocument();
+  });
+
+  it('opens the contacts dialog from the menu', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'View contacts' }));
+
+    expect(
+      await screen.findByText(/Contact values are shown only after this explicit action/),
+    ).toBeVisible();
+  });
+
+  it('switches to Overview and focuses the ministry add control', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add ministry' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('member-ministries-add')).toHaveFocus();
+    });
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('switches to Welfare & Services and focuses the subscription add control', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add subscription' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('member-subscription-add')).toHaveFocus();
+    });
+    expect(screen.getByRole('tab', { name: /Welfare & Services/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+});
+
+describe('MemberDetailPage guardian projection (MR-41, AC-MR26)', () => {
+  it('shows the guardian and the resolved contact when the member has no own contact', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...EMPTY,
+        guardian: {
+          memberNo: 'A-1001',
+          name: 'Adwoa Mensah',
+          contactMasked: '***01',
+          via: [],
+        },
+      },
+      etag: '"v4"',
+    });
+    renderDetail(EMPTY.memberNo);
+
+    const line = await screen.findByTestId('member-guardian-line');
+    expect(line).toHaveTextContent('Via Adwoa Mensah (A-1001) · ***01');
+    expect(screen.getByText('No contacts')).toBeVisible();
+  });
+
+  it('names the intermediate member when the chain is longer than one link', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...EMPTY,
+        guardian: {
+          memberNo: 'A-1001',
+          name: 'Adwoa Mensah',
+          contactMasked: '***01',
+          via: ['Kojo Boateng'],
+        },
+      },
+      etag: '"v4"',
+    });
+    renderDetail(EMPTY.memberNo);
+
+    expect(await screen.findByTestId('member-guardian-line')).toHaveTextContent(
+      'Via Adwoa Mensah (A-1001) · ***01 · via Kojo Boateng',
+    );
+  });
+
+  it('keeps both a contact and a guardian on the record', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...DETAIL,
+        guardian: {
+          memberNo: 'A-1001',
+          name: 'Adwoa Mensah',
+          contactMasked: '***01',
+          via: [],
+        },
+      },
+      etag: '"v3"',
+    });
+    renderDetail();
+
+    expect(await screen.findByTestId('member-guardian-line')).toHaveTextContent(
+      'Via Adwoa Mensah (A-1001)',
+    );
+    expect(screen.getByRole('button', { name: /View Contacts/ })).toBeVisible();
   });
 });

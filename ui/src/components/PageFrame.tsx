@@ -4,11 +4,12 @@ import {
   MessageBarBody,
   MessageBarTitle,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { ConnectionBadge, connectionErrorDetail, useGatewayHealth } from '../shell/ConnectionBadge';
+import { connectionErrorDetail, useGatewayHealth } from '../shell/gatewayHealth';
 import { SECTIONS, firstItemOf, type SectionId } from '../shell/navigation';
 import { PageActions, isVerb, type PageAction } from './PageActions';
 
@@ -68,6 +69,14 @@ const useStyles = makeStyles({
     lineHeight: tokens.lineHeightHero700,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground1,
+  },
+  // MR-48: the step form moves focus to the title on every step change. The heading is not
+  // an interactive control, so the programmatic focus must not paint a ring around it; the
+  // `tabIndex` stays so assistive tech still lands on the new step.
+  titleFocused: {
+    ':focus': {
+      outlineStyle: 'none',
+    },
   },
   description: {
     margin: 0,
@@ -133,24 +142,41 @@ export function PageFrame({
   submenu,
   description,
   actions,
+  stepper,
   controls,
-  hideBadge = false,
+  titleAddon,
+  titleId,
   children,
 }: {
   sectionId: SectionId;
   title: string;
   submenu?: string;
   description?: string;
+  /**
+   * The id applied to the page `<h1>`, which also becomes programmatically focusable. The
+   * step form renames its title on every step and points this at the step heading so the
+   * focus call has a stable target (MR-48). Other pages leave it unset.
+   */
+  titleId?: string;
   /** The page's action row: verbs and `Refresh`-class utilities (FR-9a). */
   actions?: readonly PageAction[];
   /**
+   * A page-level stepper rendered directly under the breadcrumb row, before the title. The
+   * add/edit member form is its one caller (MR-48); a page without one renders nothing.
+   */
+  stepper?: ReactNode;
+  /**
    * Header controls that stay visible outside the action row: filters, date windows and view
-   * switches, plus a form's commit/cancel pair and a `Back` navigation control. They are
-   * laid out on the breadcrumb row, after the utilities and left of the verb or menu (FR-9a).
+   * switches, plus a form's commit/cancel pair. They are laid out on the breadcrumb row,
+   * after the utilities and left of the verb or menu (FR-9a).
    */
   controls?: ReactNode;
-  /** The landing drops the API-connected pill; the operator pages keep it. */
-  hideBadge?: boolean;
+  /**
+   * The identity affordances in the title row (FR-29/4.2 rule 1): `leading` renders before the
+   * `h1` and `trailing` after it, so a page can state who it is on every tab. Only the member
+   * detail uses it.
+   */
+  titleAddon?: { readonly leading?: ReactNode; readonly trailing?: ReactNode };
   children?: ReactNode;
 }) {
   const styles = useStyles();
@@ -162,6 +188,9 @@ export function PageFrame({
   const verbs = (actions ?? []).filter(isVerb);
   const utilities = (actions ?? []).filter((action) => action.kind === 'utility');
   const [soleVerb] = verbs;
+  // MR-1: a page that marks one verb primary always renders it visibly, so the menu
+  // appears alongside it whenever there is another verb to hold.
+  const hasPrimary = verbs.some((verb) => verb.primary);
   const hasUtilities = utilities.length > 0;
   const hasActions = verbs.length > 0 || hasUtilities;
 
@@ -209,21 +238,33 @@ export function PageFrame({
               hasUtilities ? styles.actions : `${styles.actions} ${styles.actionsTrailing}`
             }
           >
-            {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. */}
-            {verbs.length === 1 && soleVerb ? (
+            {/* FR-9a: exactly one verb renders visibly; two or more group into the menu. MR-1:
+                a primary verb renders visibly even when the menu holds the rest. */}
+            {verbs.length === 1 && soleVerb && !soleVerb.primary ? (
               <Button icon={soleVerb.icon} disabled={soleVerb.disabled} onClick={soleVerb.onSelect}>
                 {soleVerb.label}
               </Button>
             ) : null}
-            {verbs.length >= 2 ? <PageActions actions={verbs} /> : null}
+            {verbs.length >= 2 || hasPrimary ? <PageActions actions={verbs} /> : null}
           </div>
         ) : null}
       </div>
 
+      {/* MR-48: a page-level stepper sits directly under the breadcrumb, spanning the
+          content column, before the page title. */}
+      {stepper}
+
       <div className={styles.headingBlock}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>{title}</h1>
-          {hideBadge ? null : <ConnectionBadge />}
+          {titleAddon?.leading}
+          <h1
+            id={titleId}
+            tabIndex={titleId ? -1 : undefined}
+            className={mergeClasses(styles.title, titleId ? styles.titleFocused : undefined)}
+          >
+            {title}
+          </h1>
+          {titleAddon?.trailing}
         </div>
         {description ? <p className={styles.description}>{description}</p> : null}
       </div>

@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 
@@ -91,22 +92,28 @@ function baseBody(overrides: Record<string, unknown> = {}): Record<string, unkno
 beforeAll(async () => {
   harness = await createTestApp();
 
-  const member = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'C-1001', firstName: 'Ama', lastName: 'Mensah' });
+  const member = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'C-1001',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    contacts: reachableContacts(),
+  });
   expect(member.status).toBe(201);
 
-  const secondMember = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'C-2002', firstName: 'Kofi', lastName: 'Boateng' });
+  const secondMember = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'C-2002',
+    firstName: 'Kofi',
+    lastName: 'Boateng',
+    contacts: reachableContacts(),
+  });
   expect(secondMember.status).toBe(201);
 
-  const archivedMember = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'C-3003', firstName: 'Yaa', lastName: 'Owusu' });
+  const archivedMember = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'C-3003',
+    firstName: 'Yaa',
+    lastName: 'Owusu',
+    contacts: reachableContacts(),
+  });
   expect(archivedMember.status).toBe(201);
   const archive = await request(harness.app).delete('/v1/members/C-3003').set(writeHeaders).send();
   expect(archive.status).toBe(204);
@@ -704,7 +711,7 @@ describe('idempotency outranks later state changes', () => {
       const member = await request(harness.app)
         .post('/v1/members')
         .set(writeHeaders)
-        .send({ memberNo, firstName: 'Retry', lastName: memberNo });
+        .send({ memberNo, firstName: 'Retry', lastName: memberNo, contacts: reachableContacts() });
       expect(member.status).toBe(201);
     }
 

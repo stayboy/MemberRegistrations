@@ -201,6 +201,7 @@ export function MemberMinistriesSection({
             appearance="secondary"
             onClick={() => setAddOpen(true)}
             disabled={ministriesLoading}
+            id="member-ministries-add"
           >
             Add
           </Button>

@@ -120,6 +120,7 @@ function detail(overrides: Partial<MemberDetail>): MemberDetail {
     movedOutOn: null,
     movedToAssembly: null,
     shepherd: null,
+    guardian: null,
     calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
     purgedAt: null,
     version: 1,

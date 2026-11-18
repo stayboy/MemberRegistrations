@@ -2,16 +2,27 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   CardInUseError,
   ConflictError,
+  GuardianChainCycleError,
+  GuardianChainTooLongError,
+  GuardianChainUnreachableError,
+  GuardianNotEligibleError,
+  GuardianRequiredError,
+  NoContactOrGuardianError,
   NotFoundError,
   SessionClosedError,
   ValidationError,
 } from '../errors/domain-errors.js';
 import { ageInMonths, ageInYears } from '../domain/age.js';
 import { summariseAttendance, type AttendanceCounts } from '../domain/attendance.js';
-import { assertDate, normalizeContactValue, type ContactKind } from '../domain/contacts.js';
+import {
+  assertDate,
+  maskContactValue,
+  normalizeContactValue,
+  type ContactKind,
+} from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
 import { sessionIsClosed } from './captures.js';
-import type { Db, DbClient, Row } from '../db/sql.js';
+import type { Db, DbClient, OrmClient, Row } from '../db/sql.js';
 import {
   memberContactLinks,
   memberContacts,
@@ -74,6 +85,18 @@ export interface PresbyterTitleDto {
   code: string;
   label: string;
   titledOn: string | null;
+}
+
+/**
+ * The immediate guardian a member's chain starts at, plus the contact the chain
+ * resolves to (MR-41). `via` names the members passed after the guardian, so a
+ * direct guardian carries an empty list and a two-link chain names its end.
+ */
+export interface GuardianDto {
+  memberNo: string;
+  name: string;
+  contactMasked: string;
+  via: string[];
 }
 
 export interface RelationshipDto {
@@ -217,6 +240,8 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   movedToAssembly: string | null;
   /** The current shepherd, from the same projection `/shepherding` reads. */
   shepherd: OverviewShepherdDto | null;
+  /** The active guardian and the contact its chain resolves to; null when there is none. */
+  guardian: GuardianDto | null;
   /** All-time call counts for the member's shepherding history; null dates mean no such call. */
   calls: OverviewCallsDto;
   purgedAt: string | null;
@@ -255,23 +280,24 @@ export interface CreateMemberInput {
   presbyterRank?: number | null;
   /** Trimmed, 1-32 characters, case-insensitively unique when present. */
   membershipCardNo?: string | null;
+  /** The presbyter office; a retired title is never assignable (O-6, MR-11). */
+  titleCode?: string | null;
+  /** UTC calendar date the office was taken; never in the future, and cleared with the title. */
+  titledOn?: string | null;
   /** Sets (true) or clears (false) the officer verification timestamp. */
   verified?: boolean;
   contacts?: ContactInput[];
   ministries?: string[];
+  /**
+   * Create only: the guardian of a member who records no own contact. The link
+   * is written in the same transaction as the member and its contacts (MR-38).
+   */
+  guardianMemberNo?: string | null;
 }
 
 export type UpdateMemberInput = Partial<
-  Omit<CreateMemberInput, 'memberNo' | 'contacts' | 'ministries'>
-> & {
-  /**
-   * The office, or null to clear it. Independent of `isPresbyter`: writing or clearing a title never
-   * changes the flag, and changing the flag never changes the title (O-4).
-   */
-  titleCode?: string | null;
-  /** UTC calendar date the office was taken; cleared with the title. */
-  titledOn?: string | null;
-};
+  Omit<CreateMemberInput, 'memberNo' | 'contacts' | 'ministries' | 'guardianMemberNo'>
+>;
 
 export const LIST_INCLUDES = ['attendance', 'subscriptions'] as const;
 export type ListInclude = (typeof LIST_INCLUDES)[number];
@@ -302,6 +328,30 @@ export interface SubscriptionInput {
   reference?: string | null;
   startedOn?: string;
   coveredMemberNos?: string[];
+}
+
+/** The guardian link cap from MR-40: a member reaches an own contact in three links or fewer. */
+const GUARDIAN_CHAIN_LIMIT = 3;
+
+/** A member as the guardian walk sees it. */
+interface GuardianMemberRow extends Row {
+  id: string;
+  member_no: string;
+  first_name: string | null;
+  last_name: string | null;
+  other_names: string | null;
+  dob: string | Date | null;
+}
+
+/** The outcome of walking a member's guardian chain (MR-40, MR-41). */
+interface GuardianChain {
+  reachable: boolean;
+  failure: 'none' | 'cycle' | 'unreachable' | 'too_long';
+  /** Guardian links used from the start member. */
+  steps: number;
+  /** The members passed after the immediate guardian, ending at the contact holder. */
+  via: string[];
+  contact: { kind: ContactKind; value: string } | null;
 }
 
 interface MemberRow extends Row {
@@ -856,7 +906,14 @@ export class MemberRepository {
   }
 
   async create(input: CreateMemberInput, actor: string): Promise<MemberDetail> {
-    const id = await this.db.transaction((tx) => this.createWithin(tx, input, actor));
+    const id = await this.db.transaction(async (tx) => {
+      const createdId = await this.createWithin(tx, input, actor);
+      // MR-38: a member must be reachable. The guardian link and the contacts are
+      // written by `createWithin`, so the whole aggregate is judged together and a
+      // refusal rolls every row back.
+      await this.assertReachable(tx, createdId);
+      return createdId;
+    });
     const detail = await this.findById(id);
     return detail!;
   }
@@ -886,6 +943,23 @@ export class MemberRepository {
     const membershipCardNo = normalizeCardNo(input.membershipCardNo);
     const verifiedAt = input.verified === true ? new Date() : null;
 
+    // MR-11: the create contract accepts the same title rules the update applies.
+    let titleCode: string | null = null;
+    let titledOn: string | null = null;
+    if (input.titleCode !== undefined && input.titleCode !== null) {
+      const title = await this.requireAssignableTitle(input.titleCode, db);
+      assertTitleGender(title, gender);
+      titleCode = title.code;
+    }
+    if (input.titledOn !== undefined && input.titledOn !== null) {
+      if (titleCode === null) throw new ValidationError('titledOn requires a title');
+      const dated = assertDate(input.titledOn, 'titledOn');
+      if (dated > todayIn('UTC')) {
+        throw new ValidationError('titledOn must not be in the future');
+      }
+      titledOn = dated;
+    }
+
     try {
       const [row] = await db.orm
         .insert(members)
@@ -907,6 +981,8 @@ export class MemberRepository {
           movedToAssembly: optionalText(input.movedToAssembly),
           isPresbyter,
           presbyterRank,
+          titleCode,
+          titledOn,
           membershipCardNo,
           verifiedAt,
           createdBy: actor,
@@ -919,6 +995,12 @@ export class MemberRepository {
       }
       for (const code of input.ministries ?? []) {
         await this.assignMinistryTx(db, row!.id, code);
+      }
+      // MR-38: the guardian link rides the same transaction, so a member with no
+      // own contact either arrives with its guardian or writes nothing at all.
+      if (input.guardianMemberNo) {
+        const guardian = await this.assertGuardianEligible(db, row!.id, input.guardianMemberNo);
+        await this.insertGuardianLink(db, row!.id, guardian.id, actor);
       }
       return row!.id;
     } catch (error) {
@@ -1052,6 +1134,11 @@ export class MemberRepository {
     }
 
     if (Object.keys(fields).length === 0) throw new ValidationError('No fields to update');
+
+    // MR-38: an update may not leave a member with neither an own contact nor a
+    // guardian. Contacts and guardian links have their own endpoints, so the
+    // state that decides is the one already on the row.
+    await this.assertReachable(this.db, row.id);
 
     const set: MemberSet = {
       ...fields,
@@ -1271,6 +1358,9 @@ export class MemberRepository {
       if (deleted.length === 0) {
         throw new NotFoundError(`Contact ${contactId} was not found on member ${memberNo}`);
       }
+      // MR-38: removing the last own contact of a member with no guardian would
+      // make them unreachable, so the delete is rolled back with a 409.
+      await this.assertRemovalKeepsReachable(tx, row.id);
       await touch(tx, row.id, actor);
     });
   }
@@ -1320,6 +1410,9 @@ export class MemberRepository {
         )
         .returning({ id: memberContactLinks.id });
       if (deleted.length === 0) throw new NotFoundError('This contact is not linked to the member');
+      // MR-38: the same refusal as a removal. A link is not an own contact, so
+      // unlinking cannot rescue an unreachable member either.
+      await this.assertRemovalKeepsReachable(tx, row.id);
       await touch(tx, row.id, actor);
     });
   }
@@ -1468,14 +1561,25 @@ export class MemberRepository {
       throw new ValidationError('relationship type is not recognised');
     }
     const related = await this.requireRow(input.relatedMemberNo);
-    if (related.id === row.id) throw new ValidationError('A member cannot be related to itself');
+    const isGuardian = input.type === 'guardian';
+    // A guardian link to the member itself is the eligibility rule's own case, so
+    // it answers `guardian_not_eligible` rather than the generic self-link refusal.
+    if (related.id === row.id && !isGuardian) {
+      throw new ValidationError('A member cannot be related to itself');
+    }
 
     try {
       await this.db.transaction(async (tx) => {
+        if (isGuardian) {
+          // MR-40 and MR-42: a guardian is an eligible adult reached through an
+          // own contact or a chain of at most three links, and the edge is always
+          // marked dependent whatever the caller sent.
+          await this.assertGuardianEligible(tx, row.id, input.relatedMemberNo);
+        }
         await tx.query(
           `insert into member_relationships (member_id, related_member_id, type, is_dependent, created_by)
            values ($1,$2,$3,$4,$5)`,
-          [row.id, related.id, input.type, input.isDependent ?? false, actor],
+          [row.id, related.id, input.type, isGuardian ? true : (input.isDependent ?? false), actor],
         );
         await touch(tx, row.id, actor);
         await touch(tx, related.id, actor);
@@ -1496,16 +1600,277 @@ export class MemberRepository {
   async removeRelationship(memberNo: string, relationshipId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
-      const deleted = await tx.query<{ member_id: string; related_member_id: string }>(
-        `delete from member_relationships
-         where id = $1 and (member_id = $2 or related_member_id = $2)
-         returning member_id, related_member_id`,
+      const [edge] = await tx.query<{
+        member_id: string;
+        related_member_id: string;
+        type: RelationshipType;
+      }>(
+        `select member_id, related_member_id, type from member_relationships
+          where id = $1 and (member_id = $2 or related_member_id = $2)`,
         [relationshipId, row.id],
       );
-      if (deleted.length === 0) throw new NotFoundError('Relationship was not found');
-      await touch(tx, deleted[0]!.member_id, actor);
-      await touch(tx, deleted[0]!.related_member_id, actor);
+      if (!edge) throw new NotFoundError('Relationship was not found');
+
+      await tx.query('delete from member_relationships where id = $1', [relationshipId]);
+
+      if (edge.type === 'guardian') {
+        // MR-39: the link may only go when the member it anchored and every
+        // dependant whose chain passed through it stay reachable without it. The
+        // delete is inside the transaction, so a refusal leaves the link in place.
+        const dependant = edge.member_id;
+        const affected = [dependant, ...(await this.descendantIds(tx, dependant))];
+        for (const memberId of affected) {
+          const chain = await this.resolveChain(tx, memberId, GUARDIAN_CHAIN_LIMIT);
+          if (!chain.reachable) {
+            throw new GuardianRequiredError(
+              'This guardian is the only route from a member to an own contact; record a contact or another guardian first',
+            );
+          }
+        }
+      }
+
+      await touch(tx, edge.member_id, actor);
+      await touch(tx, edge.related_member_id, actor);
     });
+  }
+
+  // -- guardians and reachability ------------------------------------------
+
+  /**
+   * The adults who may become `forMemberNo`'s guardian (MR-40): 18 or over, not
+   * the member and not one of its descendants, and reachable through an own
+   * contact or a chain that ends at one. `via` names the members the chain
+   * passes after the guardian, ending at the contact holder.
+   */
+  async guardianCandidates(forMemberNo?: string): Promise<GuardianDto[]> {
+    const subject = forMemberNo ? await this.findRow(forMemberNo, false) : null;
+    const excluded = new Set<string>();
+    if (subject) {
+      excluded.add(subject.id);
+      for (const id of await this.descendantIds(this.db, subject.id)) excluded.add(id);
+    }
+
+    const rows = await this.db.query<GuardianMemberRow>(
+      `select id, member_no, first_name, last_name, other_names, dob
+         from members
+        where archived_at is null and purged_at is null and dob is not null
+        order by lower(member_no)`,
+    );
+
+    const candidates: GuardianDto[] = [];
+    for (const row of rows) {
+      if (excluded.has(row.id)) continue;
+      const age = ageInYears(isoDate(row.dob));
+      if (age === null || age < 18) continue;
+
+      const chain = await this.resolveChain(this.db, row.id, GUARDIAN_CHAIN_LIMIT - 1);
+      if (!chain.reachable) continue;
+
+      candidates.push({
+        memberNo: row.member_no,
+        name: displayName(row.first_name, row.last_name, row.other_names),
+        contactMasked: chain.contact
+          ? maskContactValue(chain.contact.kind, chain.contact.value)
+          : '',
+        via: chain.via,
+      });
+    }
+    return candidates;
+  }
+
+  /** The member's own contacts in resolution order: WhatsApp, email, then phone. */
+  private async primaryOwnContact(
+    client: DbClient,
+    memberId: string,
+  ): Promise<{ kind: ContactKind; value: string } | null> {
+    const [row] = await client.query<{ kind: ContactKind; value: string }>(
+      `select kind, value from member_contacts
+        where member_id = $1
+        order by case kind when 'whatsapp' then 0 when 'email' then 1 else 2 end,
+                 display_order, created_at
+        limit 1`,
+      [memberId],
+    );
+    return row ?? null;
+  }
+
+  /**
+   * A member's first guardian by creation order. The row's `member_id` is the
+   * dependent and `related_member_id` the guardian, whoever opened the link.
+   */
+  private async guardianRow(client: DbClient, memberId: string): Promise<GuardianMemberRow | null> {
+    const [row] = await client.query<GuardianMemberRow>(
+      `select g.id, g.member_no, g.first_name, g.last_name, g.other_names, g.dob
+         from member_relationships r
+         join members g on g.id = r.related_member_id
+        where r.member_id = $1 and r.type = 'guardian'
+        order by r.created_at, r.id
+        limit 1`,
+      [memberId],
+    );
+    return row ?? null;
+  }
+
+  /** Every member whose guardian chain runs through this one, transitively. */
+  private async descendantIds(client: DbClient, ancestorId: string): Promise<string[]> {
+    const rows = await client.query<{ id: string }>(
+      `with recursive descendants as (
+         select r.member_id as id
+           from member_relationships r
+          where r.type = 'guardian' and r.related_member_id = $1
+         union
+         select r.member_id
+           from member_relationships r
+           join descendants d on r.related_member_id = d.id
+          where r.type = 'guardian'
+       )
+       select id from descendants`,
+      [ancestorId],
+    );
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Walks from a member to the own contact that reaches them: the member itself
+   * when it holds one, otherwise its guardians in order of creation. `limit` is
+   * the number of guardian links the walk may use, so a caller asking about a
+   * candidate passes one fewer than the member's total allowance.
+   */
+  private async resolveChain(
+    client: DbClient,
+    startId: string,
+    limit: number,
+  ): Promise<GuardianChain> {
+    const visited = new Set<string>([startId]);
+    const via: string[] = [];
+    let currentId = startId;
+    let steps = 0;
+
+    for (;;) {
+      const contact = await this.primaryOwnContact(client, currentId);
+      if (contact) return { reachable: true, failure: 'none', steps, via, contact };
+
+      const guardian = await this.guardianRow(client, currentId);
+      if (!guardian) {
+        return { reachable: false, failure: 'unreachable', steps, via, contact: null };
+      }
+      if (visited.has(guardian.id)) {
+        return { reachable: false, failure: 'cycle', steps, via, contact: null };
+      }
+
+      steps += 1;
+      if (steps > limit) {
+        return { reachable: false, failure: 'too_long', steps, via, contact: null };
+      }
+
+      visited.add(guardian.id);
+      via.push(displayName(guardian.first_name, guardian.last_name, guardian.other_names));
+      currentId = guardian.id;
+    }
+  }
+
+  /** MR-38: the member must have an own contact or a guardian chain that ends at one. */
+  /**
+   * MR-38: the member plus its contacts and guardian link form one aggregate, and the
+   * aggregate must be reachable. `create` calls this after `createWithin`; the
+   * registration-request approval builds its own transaction, so it calls this too.
+   */
+  async assertReachable(client: DbClient, memberId: string): Promise<void> {
+    const chain = await this.resolveChain(client, memberId, GUARDIAN_CHAIN_LIMIT);
+    if (!chain.reachable) throw new NoContactOrGuardianError();
+  }
+
+  /**
+   * MR-38's removal rule: taking the last own contact of a member with no
+   * guardian is a conflict, not a validation failure, because the request is
+   * well formed and the record is what cannot hold it.
+   */
+  private async assertRemovalKeepsReachable(client: DbClient, memberId: string): Promise<void> {
+    const chain = await this.resolveChain(client, memberId, GUARDIAN_CHAIN_LIMIT);
+    if (!chain.reachable) throw new GuardianRequiredError();
+  }
+
+  /**
+   * MR-40's eligibility rules, in the order the contract names them: an existing
+   * active member, aged 18 or over, not the member itself, not a descendant, and
+   * reachable through a chain that neither cycles nor exceeds the link cap.
+   */
+  private async assertGuardianEligible(
+    client: DbClient,
+    dependentId: string,
+    guardianMemberNo: string,
+  ): Promise<GuardianMemberRow> {
+    const [guardian] = await client.query<GuardianMemberRow>(
+      `select id, member_no, first_name, last_name, other_names, dob
+         from members
+        where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
+      [guardianMemberNo],
+    );
+    if (!guardian) throw new NotFoundError(`Member ${guardianMemberNo} was not found`);
+
+    if (guardian.id === dependentId) {
+      throw new GuardianNotEligibleError('A member cannot be their own guardian');
+    }
+
+    const age = ageInYears(isoDate(guardian.dob));
+    if (age === null || age < 18) {
+      throw new GuardianNotEligibleError(
+        `Member ${guardian.member_no} is under 18 and cannot be a guardian`,
+      );
+    }
+
+    const descendants = await this.descendantIds(client, dependentId);
+    if (descendants.includes(guardian.id)) {
+      throw new GuardianNotEligibleError(
+        `Member ${guardian.member_no} already depends on this member and cannot be its guardian`,
+      );
+    }
+
+    const chain = await this.resolveChain(client, guardian.id, GUARDIAN_CHAIN_LIMIT - 1);
+    if (chain.failure === 'cycle') throw new GuardianChainCycleError();
+    if (chain.failure === 'too_long') throw new GuardianChainTooLongError();
+    if (!chain.reachable) throw new GuardianChainUnreachableError();
+
+    return guardian;
+  }
+
+  /** The guardian edge, always dependent (MR-42), written inside the caller's transaction. */
+  private async insertGuardianLink(
+    client: DbClient,
+    dependentId: string,
+    guardianId: string,
+    actor: string,
+  ): Promise<void> {
+    try {
+      await client.query(
+        `insert into member_relationships (member_id, related_member_id, type, is_dependent, created_by)
+         values ($1,$2,'guardian',true,$3)`,
+        [dependentId, guardianId, actor],
+      );
+    } catch (error) {
+      if (sqlState(error) === '23505') {
+        throw new ConflictError('This relationship already exists');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The detail's `guardian` projection (MR-41): the immediate guardian, the
+   * masked contact the chain resolves to, and the members it passes after the
+   * guardian. Null when the member has no guardian.
+   */
+  private async guardianFor(client: DbClient, memberId: string): Promise<GuardianDto | null> {
+    const guardian = await this.guardianRow(client, memberId);
+    if (!guardian) return null;
+
+    const chain = await this.resolveChain(client, guardian.id, GUARDIAN_CHAIN_LIMIT);
+    return {
+      memberNo: guardian.member_no,
+      name: displayName(guardian.first_name, guardian.last_name, guardian.other_names),
+      contactMasked: chain.contact ? maskContactValue(chain.contact.kind, chain.contact.value) : '',
+      via: chain.via,
+    };
   }
 
   // -- attendance ----------------------------------------------------------
@@ -1742,16 +2107,25 @@ export class MemberRepository {
   }
 
   private async toDetail(row: MemberRow): Promise<MemberDetail> {
-    const [contacts, subscriptions, ministries, relationships, attendance, labels, overview] =
-      await Promise.all([
-        this.contactsFor(row.id),
-        this.subscriptionsFor(row.id),
-        this.ministriesFor(row.id),
-        this.relationshipsFor(row.id),
-        this.attendanceFor(row),
-        this.titleLabels(row.title_code === null ? [] : [row.title_code]),
-        new ShepherdingRepository(this.db).overviewForMember(row.id),
-      ]);
+    const [
+      contacts,
+      subscriptions,
+      ministries,
+      relationships,
+      attendance,
+      labels,
+      overview,
+      guardian,
+    ] = await Promise.all([
+      this.contactsFor(row.id),
+      this.subscriptionsFor(row.id),
+      this.ministriesFor(row.id),
+      this.relationshipsFor(row.id),
+      this.attendanceFor(row),
+      this.titleLabels(row.title_code === null ? [] : [row.title_code]),
+      new ShepherdingRepository(this.db).overviewForMember(row.id),
+      this.guardianFor(this.db, row.id),
+    ]);
 
     return {
       ...this.toSummary(row, contacts.length, ministries, this.titleFor(row, labels)),
@@ -1768,6 +2142,7 @@ export class MemberRepository {
       movedOutOn: isoDate(row.moved_out_on),
       movedToAssembly: row.moved_to_assembly,
       shepherd: overview.shepherd,
+      guardian,
       calls: overview.calls,
       purgedAt: isoTimestamp(row.purged_at),
       version: row.version,
@@ -2251,12 +2626,15 @@ export class MemberRepository {
    * An assignable title must exist and be active. A retired title keeps
    * rendering on its holder but is never offered for a new assignment (O-6).
    */
-  private async requireAssignableTitle(code: string): Promise<{
+  private async requireAssignableTitle(
+    code: string,
+    client: OrmClient = this.db,
+  ): Promise<{
     code: string;
     label: string;
     genderRestriction: string | null;
   }> {
-    const [title] = await this.db.orm
+    const [title] = await client.orm
       .select({
         code: presbyterTitles.code,
         label: presbyterTitles.label,

@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ClockingRepository } from '../../src/repos/clocking.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -26,7 +27,14 @@ async function createMember(memberNo: string, extra: Record<string, unknown> = {
   await request(app)
     .post('/v1/members')
     .set(writeHeaders)
-    .send({ memberNo, firstName: 'Member', lastName: memberNo, gender: 'male', ...extra })
+    .send({
+      memberNo,
+      firstName: 'Member',
+      lastName: memberNo,
+      gender: 'male',
+      contacts: reachableContacts(),
+      ...extra,
+    })
     .expect(201);
 }
 

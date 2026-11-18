@@ -5,6 +5,7 @@ import type { Db } from '../../src/db/sql.js';
 import { OfferingCountRepository } from '../../src/repos/offering-counts.js';
 import { OfferingRepository } from '../../src/repos/offerings.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 import { createScratchPgDb } from '../helpers/scratch-db.js';
 
 let harness: TestApp;
@@ -619,6 +620,7 @@ async function ensureMember(): Promise<string> {
     lastName: 'Member',
     gender: 'female',
     joinedOn: '2020-01-01',
+    contacts: reachableContacts(),
   });
   expect(response.status).toBe(201);
   cachedMemberNo = 'OC-MEMBER';

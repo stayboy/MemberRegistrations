@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -18,7 +19,13 @@ async function createMember(memberNo: string, extra: Record<string, unknown> = {
   const response = await request(app)
     .post('/v1/members')
     .set(writeHeaders)
-    .send({ memberNo, firstName: 'Member', lastName: memberNo, ...extra });
+    .send({
+      memberNo,
+      firstName: 'Member',
+      lastName: memberNo,
+      contacts: reachableContacts(),
+      ...extra,
+    });
   expect(response.status).toBe(201);
 }
 

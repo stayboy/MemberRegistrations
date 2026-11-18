@@ -217,6 +217,22 @@ export interface MemberAttendanceSeries {
   readonly entries: readonly AttendanceEntry[];
 }
 
+/** The immediate guardian a member's chain starts at, with the contact it resolves to (MR-41). */
+export interface MemberGuardian {
+  readonly memberNo: string;
+  readonly name: string;
+  readonly contactMasked: string;
+  readonly via: readonly string[];
+}
+
+/** A row of `GET /v1/presbyter-titles` (MR-12). */
+export interface PresbyterTitleOption {
+  readonly code: string;
+  readonly label: string;
+  readonly genderRestriction: 'male' | 'female' | null;
+  readonly active: boolean;
+}
+
 export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscriptions'> {
   readonly id: string;
   /** The presbyter title, when the member holds one (FR-25a). */
@@ -239,6 +255,8 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   readonly movedOutOn: string | null;
   readonly movedToAssembly: string | null;
   readonly shepherd: MemberShepherd | null;
+  /** The active guardian and the contact its chain resolves to (MR-41). */
+  readonly guardian: MemberGuardian | null;
   readonly calls: MemberCalls;
   readonly purgedAt: string | null;
   readonly version: number;
@@ -274,6 +292,13 @@ export interface MemberInput {
   readonly movedOutOn?: string | null;
   readonly movedToAssembly?: string | null;
   readonly isPresbyter?: boolean;
+  /** Entered on both forms (MR-6); a blank field sends `null`. */
+  readonly membershipCardNo?: string | null;
+  /** The presbyter office and its date (MR-11, MR-12); blank becomes `null`. */
+  readonly titleCode?: string | null;
+  readonly titledOn?: string | null;
+  /** Create only: the guardian linked atomically with the member (MR-38). */
+  readonly guardianMemberNo?: string | null;
   /** Entered on the create form (FR-29a); a blank field sends no row. */
   readonly contacts?: readonly ContactInput[];
   /** Ministry codes chosen on the create form (FR-71); absent when none is chosen. */
@@ -349,6 +374,47 @@ export interface ListMembersOptions {
 const MEMBERS_PATH = '/gateway/v1/members';
 const SUBSCRIPTIONS_PATH = '/gateway/v1/subscriptions';
 const MINISTRIES_PATH = '/gateway/v1/ministries';
+const PRESBYTER_TITLES_PATH = '/gateway/v1/presbyter-titles';
+
+/** `GET /v1/presbyter-titles`: the active reference titles, ordered by label (MR-12). */
+export async function listPresbyterTitles(
+  baseUrl: string,
+  sessionToken: string,
+  signal?: AbortSignal,
+): Promise<PresbyterTitleOption[]> {
+  const result = await gatewayRequest<{ readonly items: readonly PresbyterTitleOption[] }>(
+    baseUrl,
+    PRESBYTER_TITLES_PATH,
+    { sessionToken, signal },
+  );
+  return [...(result?.items ?? [])];
+}
+
+/**
+ * `GET /v1/members?guardianEligible=true&forMemberNo=…` (MR-40): the adults who
+ * may become this member's guardian, with the contact each resolves to. On the
+ * create form the member does not exist yet, so the typed number excludes
+ * nothing and the server answers with the eligible adults alone.
+ */
+export function guardianCandidatesPath(forMemberNo?: string): string {
+  const params = new URLSearchParams({ guardianEligible: 'true' });
+  if (forMemberNo?.trim()) params.set('forMemberNo', forMemberNo.trim());
+  return `${MEMBERS_PATH}?${params.toString()}`;
+}
+
+export async function listGuardianCandidates(
+  baseUrl: string,
+  sessionToken: string,
+  forMemberNo: string | undefined,
+  signal?: AbortSignal,
+): Promise<MemberGuardian[]> {
+  const result = await gatewayRequest<{ readonly items: readonly MemberGuardian[] }>(
+    baseUrl,
+    guardianCandidatesPath(forMemberNo),
+    { sessionToken, signal },
+  );
+  return [...(result?.items ?? [])];
+}
 
 /** Builds the members list query in the order the API documents it. */
 export function membersListPath(options: ListMembersOptions = {}): string {

@@ -28,8 +28,8 @@ export function registrationRequestsRouter(repo: RegistrationRequestRepository):
 
   router.post('/:id/approve', async (req, res) => {
     const id = idSchema.parse(req.params.id);
-    const { memberNo } = registrationApproveSchema.parse(req.body);
-    const item = await repo.approve(id, memberNo, actorOf(req));
+    const { memberNo, guardianMemberNo } = registrationApproveSchema.parse(req.body);
+    const item = await repo.approve(id, memberNo, guardianMemberNo, actorOf(req));
     res.setHeader('Cache-Control', 'no-store');
     res.json(item);
   });

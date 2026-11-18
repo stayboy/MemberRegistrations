@@ -7,11 +7,13 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
+  Dropdown,
   Field,
   Input,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
+  Option,
   Spinner,
   Table,
   TableBody,
@@ -26,6 +28,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useEffect, useMemo, useState } from 'react';
 import { isUnauthorized } from '../../api/errors';
 import { getEvent } from '../../api/events';
+import { listGuardianCandidates } from '../../api/members';
 import {
   approveRegistrationRequest,
   listRegistrationRequests,
@@ -47,9 +50,9 @@ function errorMessage(error: unknown): string {
 
 /**
  * USSD → Registrations. Pending anonymous requests list their event, session,
- * name and reference. Approval supplies the immutable member number through the
- * ordinary member create path; rejection requires a reason. Nothing is created
- * before approval.
+ * name and reference. Approval supplies the immutable member number and the
+ * guardian the member is reached through (MR-50); rejection requires a reason.
+ * Nothing is created before approval.
  */
 export function UssdRegistrationsPage() {
   const styles = useUssdStyles();
@@ -61,6 +64,8 @@ export function UssdRegistrationsPage() {
   const [approveTarget, setApproveTarget] = useState<RegistrationRequest | null>(null);
   const [memberNo, setMemberNo] = useState('');
   const [memberNoTouched, setMemberNoTouched] = useState(false);
+  const [guardianMemberNo, setGuardianMemberNo] = useState('');
+  const [guardianTouched, setGuardianTouched] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<RegistrationRequest | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -71,11 +76,26 @@ export function UssdRegistrationsPage() {
     enabled: Boolean(token),
   });
 
+  // MR-50: the approved member has no own contact, so approval names the guardian. The
+  // approved member does not exist yet, so the candidate list is asked without `forMemberNo`.
+  const guardianCandidatesQuery = useQuery({
+    queryKey: ['ussd', baseUrl, 'registrations', 'guardians'],
+    queryFn: ({ signal }) => listGuardianCandidates(baseUrl, token, undefined, signal),
+    enabled: Boolean(token) && approveTarget !== null,
+  });
+
   useEffect(() => {
-    if (isUnauthorized(requestsQuery.error)) void signOut();
-  }, [requestsQuery.error, signOut]);
+    if (isUnauthorized(requestsQuery.error) || isUnauthorized(guardianCandidatesQuery.error)) {
+      void signOut();
+    }
+  }, [requestsQuery.error, guardianCandidatesQuery.error, signOut]);
 
   const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
+  const guardians = useMemo(
+    () => guardianCandidatesQuery.data ?? [],
+    [guardianCandidatesQuery.data],
+  );
+  const selectedGuardian = guardians.find((candidate) => candidate.memberNo === guardianMemberNo);
   const eventIds = useMemo(
     () => [...new Set(requests.map((request) => request.eventId))],
     [requests],
@@ -97,13 +117,23 @@ export function UssdRegistrationsPage() {
     return names;
   }, [eventQueries]);
 
+  /** Closes the approval dialog and clears both inputs, so the next request starts blank. */
+  function closeApprove(): void {
+    setApproveTarget(null);
+    setMemberNo('');
+    setMemberNoTouched(false);
+    setGuardianMemberNo('');
+    setGuardianTouched(false);
+  }
+
   const approveMutation = useMutation({
-    mutationFn: (input: { id: string; memberNo: string }) =>
-      approveRegistrationRequest(baseUrl, token, input.id, input.memberNo),
+    mutationFn: (input: { id: string; memberNo: string; guardianMemberNo: string }) =>
+      approveRegistrationRequest(baseUrl, token, input.id, {
+        memberNo: input.memberNo,
+        guardianMemberNo: input.guardianMemberNo,
+      }),
     onSuccess: () => {
-      setApproveTarget(null);
-      setMemberNo('');
-      setMemberNoTouched(false);
+      closeApprove();
       setActionError(null);
       void queryClient.invalidateQueries({ queryKey: ['ussd', baseUrl, 'registrations'] });
       void queryClient.invalidateQueries({ queryKey: ['members', baseUrl] });
@@ -136,13 +166,14 @@ export function UssdRegistrationsPage() {
   });
 
   const memberNoValid = MEMBER_NO_PATTERN.test(memberNo.trim());
+  const canApprove = memberNoValid && guardianMemberNo.length > 0;
 
   return (
     <PageFrame
       sectionId="ussd"
       title="USSD registrations"
       submenu="Registrations"
-      description="Pending handset registration requests. Approval creates the member through the ordinary create path with the member number you supply; rejection needs a reason."
+      description="Pending handset registration requests. Approval creates the member through the ordinary create path with the member number you supply and the guardian who makes them reachable; rejection needs a reason."
       actions={[
         {
           id: 'refresh',
@@ -231,6 +262,8 @@ export function UssdRegistrationsPage() {
                               setActionError(null);
                               setMemberNo('');
                               setMemberNoTouched(false);
+                              setGuardianMemberNo('');
+                              setGuardianTouched(false);
                               setApproveTarget(request);
                             }}
                           >
@@ -260,11 +293,7 @@ export function UssdRegistrationsPage() {
       <Dialog
         open={approveTarget !== null}
         onOpenChange={(_, data) => {
-          if (!data.open) {
-            setApproveTarget(null);
-            setMemberNo('');
-            setMemberNoTouched(false);
-          }
+          if (!data.open) closeApprove();
         }}
       >
         <DialogSurface>
@@ -296,28 +325,79 @@ export function UssdRegistrationsPage() {
                     }}
                   />
                 </Field>
+
+                <Field
+                  label="Guardian"
+                  required
+                  hint="The request stores no contact, so this adult is how the register reaches the member. Only reachable adults are offered."
+                  validationState={guardianTouched && !guardianMemberNo ? 'error' : 'none'}
+                  validationMessage={
+                    guardianTouched && !guardianMemberNo
+                      ? 'Choose the guardian this member is reached through.'
+                      : undefined
+                  }
+                >
+                  <Dropdown
+                    placeholder="Choose a guardian"
+                    value={
+                      selectedGuardian
+                        ? `${selectedGuardian.memberNo} · ${selectedGuardian.name} · ${selectedGuardian.contactMasked}`
+                        : guardianMemberNo || 'No guardian'
+                    }
+                    selectedOptions={guardianMemberNo ? [guardianMemberNo] : []}
+                    disabled={guardianCandidatesQuery.isPending}
+                    onOpenChange={(_, data) => {
+                      if (data.open) setGuardianTouched(true);
+                    }}
+                    onOptionSelect={(_, data) => {
+                      setGuardianMemberNo(data.optionValue ?? '');
+                      setGuardianTouched(true);
+                    }}
+                  >
+                    {guardians.map((guardian) => (
+                      <Option
+                        key={guardian.memberNo}
+                        value={guardian.memberNo}
+                        text={`${guardian.memberNo} · ${guardian.name}`}
+                      >
+                        {guardian.memberNo} · {guardian.name} · {guardian.contactMasked}
+                      </Option>
+                    ))}
+                  </Dropdown>
+                </Field>
+
+                {guardianCandidatesQuery.isError ? (
+                  <MessageBar intent="warning">
+                    <MessageBarBody>
+                      <MessageBarTitle>The guardian list is unavailable</MessageBarTitle>
+                      The request cannot be approved until an eligible adult can be chosen. Check
+                      the API connection and try again.
+                    </MessageBarBody>
+                  </MessageBar>
+                ) : null}
               </div>
             </DialogContent>
             <DialogActions>
               <Button
                 appearance="secondary"
                 disabled={approveMutation.isPending}
-                onClick={() => {
-                  setApproveTarget(null);
-                  setMemberNo('');
-                  setMemberNoTouched(false);
-                }}
+                onClick={closeApprove}
               >
                 Cancel
               </Button>
               <Button
                 appearance="primary"
-                disabled={approveMutation.isPending || !memberNoValid}
+                disabled={approveMutation.isPending || !canApprove}
                 onClick={() => {
                   if (!approveTarget) return;
                   setMemberNoTouched(true);
-                  if (!memberNoValid) return;
-                  approveMutation.mutate({ id: approveTarget.id, memberNo });
+                  setGuardianTouched(true);
+                  if (!canApprove) return;
+                  approveMutation.mutate({
+                    id: approveTarget.id,
+                    memberNo,
+                    guardianMemberNo,
+                  });
                 }}
               >
                 {approveMutation.isPending ? 'Approving…' : 'Approve and create member'}

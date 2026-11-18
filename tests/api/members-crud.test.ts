@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -24,6 +25,7 @@ async function create(memberNo: string, extra: Record<string, unknown> = {}) {
       lastName: 'Mensah',
       gender: 'female',
       joinedOn: '2026-01-01',
+      contacts: reachableContacts(),
       ...extra,
     });
   expect(response.status).toBe(201);
@@ -689,7 +691,7 @@ describe('members list contract', () => {
       expect(page.status).toBe(200);
       expect(page.body.items).toHaveLength(25);
       expect(
-        page.body.items.every((item: { contactCount: number }) => item.contactCount === 0),
+        page.body.items.every((item: { contactCount: number }) => item.contactCount === 1),
       ).toBe(true);
       expect(calls).toBe(singleCalls);
     } finally {

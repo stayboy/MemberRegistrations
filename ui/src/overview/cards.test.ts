@@ -49,7 +49,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 describe('quarterMonthCounts (FR-29, UTC)', () => {
-  it('counts only the current UTC quarter and month, across series and standalone rows', () => {
+  it('counts the current UTC year, quarter and month across series and standalone rows', () => {
     const attendance = [
       row('series-1', 'Sunday Service', [
         entry('a1', '2026-10-04', 'event-1', 'Sunday Service'),
@@ -62,12 +62,24 @@ describe('quarterMonthCounts (FR-29, UTC)', () => {
     ];
 
     expect(quarterMonthCounts(attendance, NOW)).toEqual({
+      yearLabel: '2026',
+      yearCount: 5,
       quarterLabel: 'Q4 2026',
       quarterCount: 4,
-      monthLabel: 'November',
+      monthLabel: 'November 2026',
       monthCount: 3,
-      seriesRows: 3,
     });
+  });
+
+  it('counts one entry in every period it falls in - the periods nest, nothing is de-duplicated', () => {
+    const attendance = [
+      row('series-1', 'Sunday Service', [entry('a1', '2026-11-22', 'event-1', 'Sunday Service')]),
+    ];
+
+    const counts = quarterMonthCounts(attendance, NOW);
+    expect(counts.yearCount).toBe(1);
+    expect(counts.quarterCount).toBe(1);
+    expect(counts.monthCount).toBe(1);
   });
 
   it('reads a UTC quarter boundary from the month, not the local date', () => {
@@ -80,17 +92,19 @@ describe('quarterMonthCounts (FR-29, UTC)', () => {
     ];
 
     const counts = quarterMonthCounts(attendance, NOW);
+    expect(counts.yearCount).toBe(2);
     expect(counts.quarterCount).toBe(1);
     expect(counts.monthCount).toBe(0);
   });
 
-  it('reports zeroes and no rows for a member with no attendance', () => {
-    expect(quarterMonthCounts([], NOW)).toMatchObject({
-      quarterCount: 0,
-      monthCount: 0,
+  it('reports zeroes and the exact period labels for a member with no attendance', () => {
+    expect(quarterMonthCounts([], NOW)).toEqual({
+      yearLabel: '2026',
+      yearCount: 0,
       quarterLabel: 'Q4 2026',
-      monthLabel: 'November',
-      seriesRows: 0,
+      quarterCount: 0,
+      monthLabel: 'November 2026',
+      monthCount: 0,
     });
   });
 });
@@ -161,24 +175,30 @@ describe('mostAttended (FR-29)', () => {
 });
 
 describe('shepherdCallsCard (FR-29)', () => {
-  it('keeps the Shepherd calls prefix and states no calls', () => {
+  it('reads a muted zero over Number of calls and a muted dash over Last reached', () => {
     const card = shepherdCallsCard(NO_CALLS, formatDate);
-    expect(card.value).toBe('No calls logged');
+    expect(card.cells).toEqual([
+      { value: '0', label: 'Number of calls', muted: true },
+      { value: '—', label: 'Last reached', muted: true },
+    ]);
     expect(card.copy).toBe('Shepherd calls: No calls logged');
     expect(card.empty).toBe(true);
   });
 
-  it('keeps the prefix when nobody was reached', () => {
+  it('spells the attempts as times and says when nobody was reached', () => {
     const card = shepherdCallsCard(
       { attempts: 4, conversations: 0, lastCalledOn: '2026-11-10', lastReachedOn: null },
       formatDate,
     );
-    expect(card.value).toBe('4 attempts · no one reached');
-    expect(card.copy).toBe('Shepherd calls: 4 attempts · no one reached');
+    expect(card.cells).toEqual([
+      { value: '4×', label: 'Number of calls' },
+      { value: 'No one reached', label: 'Last reached', muted: true },
+    ]);
+    expect(card.copy).toBe('Shepherd calls: 4 times · no one reached');
     expect(card.empty).toBe(false);
   });
 
-  it('keeps the prefix and names the last reached date', () => {
+  it('spells the attempts as times and names the last reached date', () => {
     const card = shepherdCallsCard(
       {
         attempts: 6,
@@ -188,8 +208,11 @@ describe('shepherdCallsCard (FR-29)', () => {
       },
       formatDate,
     );
-    expect(card.value).toBe('6 · last reached 14 Nov 2026');
-    expect(card.copy).toBe('Shepherd calls: 6 · last reached 14 Nov 2026');
+    expect(card.cells).toEqual([
+      { value: '6×', label: 'Number of calls' },
+      { value: '14 Nov 2026', label: 'Last reached' },
+    ]);
+    expect(card.copy).toBe('Shepherd calls: 6 times · last reached 14 Nov 2026');
     expect(card.empty).toBe(false);
   });
 });
@@ -218,7 +241,7 @@ describe('overviewCards (FR-29)', () => {
     ]),
   ];
 
-  it('renders the drawing values and captions', () => {
+  it('renders the drawing values with one shape for all four cards', () => {
     const cards = overviewCards(
       {
         attendance: populated,
@@ -238,25 +261,68 @@ describe('overviewCards (FR-29)', () => {
       'shepherd-calls',
       'most-attended',
     ]);
-    expect(cards[0]?.lines).toEqual(['Q4 2026 · 3', 'November · 2']);
-    expect(cards[0]?.caption).toBe('UTC calendar dates across 1 series rows');
-    expect(cards[1]?.lines).toEqual(['Sunday Service', '22 Nov 2026']);
-    expect(cards[1]?.caption).toBe('Latest entry; ties by event name');
-    expect(cards[2]?.copy).toBe('Shepherd calls: 6 · last reached 14 Nov 2026');
-    expect(cards[3]?.lines).toEqual(['Sunday Service · 3 times']);
-    expect(cards[3]?.caption).toBe('Grouped by series; standalone by event');
+    expect(cards.map((card) => card.label)).toEqual([
+      'Attended',
+      'Last attended',
+      'Shepherd calls',
+      'Most attended',
+    ]);
+
+    expect(cards[0]?.cells).toEqual([
+      { value: '3', label: 'This year' },
+      { value: '3', label: 'This quarter' },
+      { value: '2', label: 'This month' },
+    ]);
+    expect(cards[0]?.copy).toBe(
+      'Attended: 3 this year (2026) · 3 this quarter (Q4 2026) · 2 this month (November 2026)',
+    );
+    expect(cards[0]?.tooltip).toBe('2026 · Q4 2026 · November 2026');
+
+    expect(cards[1]?.cells).toEqual([{ value: 'Sunday Service', label: '22 Nov 2026' }]);
+    expect(cards[1]?.copy).toBe('Last attended: Sunday Service · 22 Nov 2026');
+
+    expect(cards[2]?.cells).toEqual([
+      { value: '6×', label: 'Number of calls' },
+      { value: '14 Nov 2026', label: 'Last reached' },
+    ]);
+    expect(cards[2]?.copy).toBe('Shepherd calls: 6 times · last reached 14 Nov 2026');
+
+    expect(cards[3]?.cells).toEqual([{ value: 'Sunday Service (3×)', label: '' }]);
+    expect(cards[3]?.copy).toBe('Most attended: Sunday Service, 3 times');
   });
 
-  it('states the empty copies and zero counts', () => {
+  it('states the empty copies, three zeros and the no-calls branch', () => {
     const cards = overviewCards({ attendance: [], calls: NO_CALLS }, { formatDate, now: NOW });
 
-    expect(cards[0]?.lines).toEqual(['Q4 2026 · 0', 'November · 0']);
-    expect(cards[0]?.caption).toBe('UTC calendar dates across 0 series rows');
-    expect(cards[1]?.lines).toEqual(['No attendance recorded']);
+    expect(cards[0]?.cells).toEqual([
+      { value: '0', label: 'This year' },
+      { value: '0', label: 'This quarter' },
+      { value: '0', label: 'This month' },
+    ]);
+    expect(cards[0]?.copy).toBe(
+      'Attended: 0 this year (2026) · 0 this quarter (Q4 2026) · 0 this month (November 2026)',
+    );
+    expect(cards[1]?.cells).toEqual([{ value: 'No attendance recorded', label: '', muted: true }]);
     expect(cards[1]?.empty).toBe(true);
-    expect(cards[2]?.lines).toEqual(['No calls logged']);
+    expect(cards[2]?.copy).toBe('Shepherd calls: No calls logged');
     expect(cards[2]?.empty).toBe(true);
-    expect(cards[3]?.lines).toEqual(['No attendance recorded']);
+    expect(cards[3]?.cells).toEqual([{ value: 'No attendance recorded', label: '', muted: true }]);
     expect(cards[3]?.empty).toBe(true);
+  });
+
+  it('keeps the subtext slot on every card, so a single-value card is never shorter', () => {
+    const populatedCards = overviewCards(
+      { attendance: populated, calls: NO_CALLS },
+      { formatDate, now: NOW },
+    );
+
+    for (const card of populatedCards) {
+      // One cell carries one value and one label slot; `Last attended` uses it for the
+      // date, `Most attended` leaves it empty rather than dropping it.
+      expect(card.cells.length).toBeGreaterThan(0);
+      for (const cell of card.cells) {
+        expect(typeof cell.label).toBe('string');
+      }
+    }
   });
 });

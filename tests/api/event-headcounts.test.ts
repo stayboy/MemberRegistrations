@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 import { HeadcountRepository } from '../../src/repos/headcounts.js';
 import { ValidationError } from '../../src/errors/domain-errors.js';
 import type { Db, DbClient, Row } from '../../src/db/sql.js';
@@ -23,6 +24,7 @@ async function createMember(value: string): Promise<void> {
     lastName: value,
     gender: 'female',
     joinedOn: '2020-01-01',
+    contacts: reachableContacts(),
   });
   expect(response.status).toBe(201);
 }

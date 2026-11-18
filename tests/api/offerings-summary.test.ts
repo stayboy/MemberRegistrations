@@ -5,6 +5,7 @@ import type { Db } from '../../src/db/sql.js';
 import { OfferingRepository } from '../../src/repos/offerings.js';
 import { PledgeRepository } from '../../src/repos/pledges.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 import { createScratchPgDb } from '../helpers/scratch-db.js';
 
 let harness: TestApp;
@@ -161,6 +162,7 @@ async function seedDataset(db: Db): Promise<void> {
         firstName: index === 0 ? 'Ama' : `Member${index + 1}`,
         lastName: index === 0 ? 'Mensah' : 'Seed',
         isPresbyter: memberNo === 'S-1002',
+        contacts: reachableContacts(),
       });
     expect(response.status).toBe(201);
     const [row] = await db.query<{ id: string }>('select id from members where member_no = $1', [

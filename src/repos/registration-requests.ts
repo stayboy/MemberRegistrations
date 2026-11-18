@@ -96,12 +96,18 @@ export class RegistrationRequestRepository {
 
   /**
    * One transaction: lock the request, re-check `pending`, create the member
-   * through the ordinary create path and mark the request approved. Two
-   * concurrent approvals therefore cannot both create a member, and a
-   * duplicate member number rolls the whole unit back with the request still
-   * pending.
+   * through the ordinary create path, assert the member is reachable and mark the
+   * request approved. An approved request carries no own contact, so MR-50 makes the
+   * guardian required: the member and its guardian link are written together or not
+   * at all, and an ineligible guardian rolls the whole unit back with the request
+   * still pending. Two concurrent approvals therefore cannot both create a member.
    */
-  async approve(id: string, memberNo: string, actor: string): Promise<RegistrationRequestItem> {
+  async approve(
+    id: string,
+    memberNo: string,
+    guardianMemberNo: string,
+    actor: string,
+  ): Promise<RegistrationRequestItem> {
     await this.db.transaction(async (tx) => {
       const [request] = await tx.query<{
         id: string;
@@ -126,9 +132,13 @@ export class RegistrationRequestRepository {
           lastName: request.last_name,
           gender: 'undisclosed',
           joinedOn: todayIn('UTC'),
+          guardianMemberNo,
         },
         actor,
       );
+      // The ordinary `create` wrapper asserts reachability; approval calls `createWithin`
+      // directly, so it must judge the new aggregate itself, inside the same transaction.
+      await this.members.assertReachable(tx, memberId);
 
       const updated = await tx.query<{ id: string }>(
         `update registration_requests

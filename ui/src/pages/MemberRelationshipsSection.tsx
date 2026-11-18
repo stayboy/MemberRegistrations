@@ -230,7 +230,12 @@ export function MemberRelationshipsSection({
         </div>
       ) : (
         <div className={styles.panelFoot}>
-          <Button icon={<AddRegular />} appearance="secondary" onClick={() => setAddOpen(true)}>
+          <Button
+            icon={<AddRegular />}
+            appearance="secondary"
+            onClick={() => setAddOpen(true)}
+            id="member-relationships-add"
+          >
             Add relationship
           </Button>
         </div>

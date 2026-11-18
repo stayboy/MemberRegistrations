@@ -9,6 +9,7 @@ import {
   writeHeaders,
   type TestApp,
 } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 const USSD_SECRET = 'test-ussd-gateway-secret-16';
 const USSD_PHONE_PEPPER = 'test-ussd-phone-pepper-16';
@@ -229,10 +230,13 @@ beforeAll(async () => {
 
   today = new Date().toISOString().slice(0, 10);
 
-  const presbyter = await request(harness.app)
-    .post('/v1/members')
-    .set(writeHeaders)
-    .send({ memberNo: 'USSD-9001', firstName: 'Grace', lastName: 'Okafor', isPresbyter: true });
+  const presbyter = await request(harness.app).post('/v1/members').set(writeHeaders).send({
+    memberNo: 'USSD-9001',
+    firstName: 'Grace',
+    lastName: 'Okafor',
+    isPresbyter: true,
+    contacts: reachableContacts(),
+  });
   expect(presbyter.status).toBe(201);
 
   await createMember('USSD-1001', '0801 234 5678');
@@ -247,8 +251,8 @@ beforeAll(async () => {
     await assignShepherd(memberNo);
   }
 
-  const owner = await createMember('USSD-OWN', '0890 000 0001');
-  await createMember('USSD-LINK', null);
+  const owner = await createMember('USSD-OWN', '0890 000 0001', { dob: '1990-01-01' });
+  await createMember('USSD-LINK', null, { guardianMemberNo: 'USSD-OWN' });
   const linkedContact = owner.contacts[0]!;
   const link = await request(harness.app)
     .post('/v1/members/USSD-LINK/contacts/link')

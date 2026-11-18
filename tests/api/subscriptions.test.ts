@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
@@ -35,6 +36,7 @@ async function createMember(memberNo: string, extra: Record<string, unknown> = {
       memberNo,
       firstName: 'Member',
       lastName: memberNo,
+      contacts: reachableContacts(),
       gender: 'male',
       joinedOn: '2020-01-01',
       ...extra,
@@ -273,7 +275,7 @@ describe('household cover', () => {
     await createMember('H-1001');
     await createMember('H-1002');
     await createMember('H-1003');
-    await createMember('H-1004');
+    await createMember('H-1004', { dob: '1990-01-01' });
     await relate('H-1001', 'H-1002', 'spouse');
     await relate('H-1001', 'H-1003', 'child');
     await relate('H-1001', 'H-1004', 'guardian');
@@ -323,7 +325,7 @@ describe('household cover', () => {
     });
     await createMember('H-2001');
     await createMember('H-2002');
-    await createMember('H-2003');
+    await createMember('H-2003', { dob: '1990-01-01' });
     await relate('H-2001', 'H-2002', 'spouse');
     await relate('H-2001', 'H-2003', 'guardian');
 

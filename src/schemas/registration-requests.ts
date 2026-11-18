@@ -11,6 +11,12 @@ export const registrationRequestListQuerySchema = z.object({
 
 export const registrationApproveSchema = z.object({
   memberNo: memberNoParamSchema,
+  /**
+   * MR-50: an approved request carries no own contact (only a one-way phone hash), so the
+   * member's reachability is the guardian's. The guardian is validated like any other and
+   * written with the member in the same transaction.
+   */
+  guardianMemberNo: memberNoParamSchema,
 });
 
 export const registrationRejectSchema = z.object({
