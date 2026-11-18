@@ -41,6 +41,17 @@ export interface GatewayResult<T> {
   readonly headers: Headers;
 }
 
+/** A binary request: the photo body and its response are not JSON (MR-16, MR-18). */
+export interface RawRequestOptions {
+  readonly method?: 'GET' | 'PUT' | 'DELETE';
+  readonly body?: Blob;
+  readonly contentType?: string;
+  readonly accept?: string;
+  readonly sessionToken?: string;
+  readonly signal?: AbortSignal;
+  readonly headers?: Record<string, string>;
+}
+
 const JSON_HEADERS = { Accept: 'application/json', 'Content-Type': 'application/json' };
 
 /**
@@ -81,6 +92,36 @@ export async function gatewayRequest<T>(
 ): Promise<T | null> {
   const { data } = await gatewayRequestWithMeta<T>(baseUrl, path, options);
   return data;
+}
+
+/**
+ * The same session-bearing request for bytes. The photo PUT carries the encoded
+ * Blob as its whole body and the GET returns the stored image, so neither side
+ * may go through `JSON.stringify` or `response.json()` (MR-18). Failures still
+ * throw the shared `ApiError`, so problem+json keeps working.
+ */
+export async function gatewayRequestRaw(
+  baseUrl: string,
+  path: string,
+  options: RawRequestOptions = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (options.accept) headers.Accept = options.accept;
+  if (options.contentType) headers['Content-Type'] = options.contentType;
+  if (options.sessionToken) headers.Authorization = `Bearer ${options.sessionToken}`;
+  if (options.headers) Object.assign(headers, options.headers);
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body,
+    signal: options.signal,
+    cache: 'no-store',
+    credentials: 'omit',
+  });
+
+  if (!response.ok) throw await toApiError(response);
+  return response;
 }
 
 export async function probeGateway(baseUrl: string, signal?: AbortSignal): Promise<boolean> {

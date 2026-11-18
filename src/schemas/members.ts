@@ -280,6 +280,8 @@ export const memberSummarySchema = z.object({
   joinedOn: z.string().nullable(),
   isPresbyter: z.boolean(),
   title: presbyterTitleSchema.nullable(),
+  /** The instant the profile photo was stored, or null when there is none (MR-18). */
+  photoUpdatedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   contactCount: z.number().int(),
   ministries: z.array(memberMinistrySchema),
@@ -343,6 +345,11 @@ export const memberDetailSchema = memberSummarySchema.extend({
 export const memberListSchema = z.object({
   items: z.array(memberSummarySchema),
   nextCursor: z.string().optional(),
+});
+
+/** `PUT /v1/members/:memberNo/photo` (MR-16). */
+export const photoUploadSchema = z.object({
+  photoUpdatedAt: z.string(),
 });
 
 export const memberContributionWindowSchema = z.object({

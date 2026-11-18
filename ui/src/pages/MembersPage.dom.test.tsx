@@ -1,7 +1,7 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { MemberSummary } from '../api/members';
+import { fetchMemberPhoto, type MemberSummary } from '../api/members';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { renderWithProviders } from '../test/render';
@@ -26,15 +26,36 @@ const MEMBERS: readonly MemberSummary[] = [
     placeOfResidence: 'Tema',
     joinedOn: '2019-03-03',
     isPresbyter: true,
+    photoUpdatedAt: null,
     archivedAt: null,
     contactCount: 2,
+    ministries: [],
+  },
+  {
+    memberNo: 'M-2002',
+    firstName: 'Adwoa',
+    lastName: 'Mensah',
+    otherNames: null,
+    gender: 'female',
+    age: 33,
+    ageMonths: 396,
+    placeOfResidence: 'Accra',
+    joinedOn: '2021-06-12',
+    isPresbyter: false,
+    photoUpdatedAt: '2026-11-18T10:00:00.000Z',
+    archivedAt: null,
+    contactCount: 1,
     ministries: [],
   },
 ];
 
 vi.mock('../api/members', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/members')>();
-  return { ...actual, listMembers: vi.fn(async () => ({ items: MEMBERS })) };
+  return {
+    ...actual,
+    listMembers: vi.fn(async () => ({ items: MEMBERS })),
+    fetchMemberPhoto: vi.fn(async () => new Blob(['photo'], { type: 'image/webp' })),
+  };
 });
 
 vi.mock('../api/series', async (importOriginal) => {
@@ -97,5 +118,34 @@ describe('MembersPage single-verb action row', () => {
 
     expect(await screen.findByRole('columnheader', { name: 'Welfare & Services' })).toBeVisible();
     expect(screen.queryByRole('columnheader', { name: 'Subscriptions' })).not.toBeInTheDocument();
+  });
+
+  it('shows initials without a photo and the fetched blob when one exists (MR-19)', async () => {
+    const createObjectURL = vi.fn(() => 'blob:member-photo');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/members']}>
+        <ThemeProvider>
+          <DateTimeProvider>
+            <MembersPage />
+          </DateTimeProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const initialsAvatar = await screen.findByTestId('member-avatar-M-1001');
+    expect(initialsAvatar).toHaveTextContent('KA');
+    expect(initialsAvatar.querySelector('img')).toBeNull();
+
+    const photoAvatar = await screen.findByTestId('member-avatar-M-2002');
+    await waitFor(() => expect(photoAvatar.querySelector('img')).not.toBeNull());
+    expect(photoAvatar.querySelector('img')?.getAttribute('src')).toBe('blob:member-photo');
+    expect(vi.mocked(fetchMemberPhoto).mock.calls[0]?.slice(0, 3)).toEqual([
+      expect.any(String),
+      expect.any(String),
+      'M-2002',
+    ]);
   });
 });

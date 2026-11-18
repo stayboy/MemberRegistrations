@@ -25,6 +25,7 @@ import {
   memberProfileSchema,
   memberSummarySchema,
   ministryPositionInputSchema,
+  photoUploadSchema,
   presbyterTitleListSchema,
   presbyterTitleOptionSchema,
   purgeSchema,
@@ -260,6 +261,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         MemberSummary: toSchema(memberSummarySchema, 'output'),
         MemberDetail: toSchema(memberDetailSchema, 'output'),
         MemberList: toSchema(memberListSchema, 'output'),
+        PhotoUpload: toSchema(photoUploadSchema, 'output'),
         MemberContributionsSummary: toSchema(memberContributionsSummarySchema, 'output'),
         MemberAttendanceWindow: toSchema(memberAttendanceWindowSchema, 'output'),
         MemberProfile: toSchema(memberProfileSchema, 'output'),
@@ -713,6 +715,64 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           parameters: [actorHeader],
           responses: {
             204: noContent('Member archived.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/photo': {
+        parameters: [memberNoParam],
+        put: {
+          summary: 'Store the member profile photo',
+          description:
+            'Raw image bytes (1 byte to 2 MiB) whose Content-Type is image/webp, image/jpeg or image/png. The magic bytes must agree with the header, so a renamed text file is refused. The client re-encodes to a 512-square WebP or JPEG before upload; no filename or EXIF value is stored or logged.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'image/webp': { schema: { type: 'string', format: 'binary' } },
+              'image/jpeg': { schema: { type: 'string', format: 'binary' } },
+              'image/png': { schema: { type: 'string', format: 'binary' } },
+            },
+          },
+          responses: {
+            200: json('The new photo timestamp with Cache-Control: no-store.', 'PhotoUpload'),
+            400: problem(
+              'The body is empty, the content type is unsupported, or the bytes do not match it (unsupported_photo).',
+            ),
+            401: unauthorized,
+            404: notFound,
+            413: problem('The body exceeds 2 MiB (photo_too_large).'),
+          },
+        },
+        get: {
+          summary: 'Read the member profile photo',
+          description:
+            'The stored bytes with their own ETag (`"<memberNo>-<epoch ms>-<byte length>"`), Cache-Control: private, max-age=300, Content-Disposition: inline and nosniff. A matching If-None-Match is 304; a member with no photo is 404 (photo_not_found).',
+          responses: {
+            200: {
+              description: 'The stored image.',
+              headers: {
+                ETag: { schema: { type: 'string' } },
+                'Cache-Control': { schema: { type: 'string' } },
+              },
+              content: {
+                'image/webp': { schema: { type: 'string', format: 'binary' } },
+                'image/jpeg': { schema: { type: 'string', format: 'binary' } },
+                'image/png': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+            304: noContent('If-None-Match matched the current ETag.'),
+            401: unauthorized,
+            404: problem('The member was not found, or has no photo (photo_not_found).'),
+          },
+        },
+        delete: {
+          summary: 'Remove the member profile photo',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('The photo columns are cleared; avatars fall back to initials.'),
             401: unauthorized,
             404: notFound,
           },

@@ -1,7 +1,7 @@
 # Member registrations - member record actions, add/edit form, photo and membership verification
 
 **Status:** approved by the owner, 2026-11-18; independent spec review ACCEPT, 2026-11-18, and
-re-reviewed for the approval-guardian amendment the same day. Three
+re-reviewed for the approval-guardian amendment and the ETag byte-length amendment the same day. Three
 phases: **Phase 1** is a wire-contract gate: a small additive surface (a titles read endpoint, the
 title create fields, a guardian eligibility filter and a guardian projection) plus new refusals on
 the existing member and relationship endpoints (reachability); **Phase 2** (photo) adds a migration,
@@ -9,6 +9,10 @@ a wire endpoint and PII handling; **Phase 3** (OTP verification and the USSD gat
 a wire change, new outbound WhatsApp and SMS dependencies, an email sender, authentication behaviour
 and a USSD behaviour change. Phases 1, 2 and 3 are hard gates under `AGENTS.md` §17: each parks
 until the owner authorises that round and that gate by name.
+
+**Amendments (2026-11-18, during the Phase 2 build):** the `PUT` photo response is `200` with the
+body; the endpoint block had said `204`, which cannot carry one. The photo `ETag` includes the byte
+length (MR-17), so a replacement in the same millisecond differs when its length differs.
 
 **Provenance:** the owner's requests of 2026-11-18, synthesised with the `to-spec` skill into this
 repo's spec format. It supersedes FR-29a's "The edit form MUST NOT gain contact fields", FR-71's
@@ -313,12 +317,14 @@ and involvement` (the membership facts, title, card, ministries, shepherd), `Rel
 - **The client normalises the image.** The form centre-crops to a square, scales to 512 x 512 and
   re-encodes to WebP at quality 0.85 (JPEG where WebP encoding is unavailable) on a canvas. The
   re-encode strips EXIF and the original filename. The client rejects a source over 10 MiB before
-  decoding.
+  decoding. The form control sits on the **left of the Identity panel**: a square photo whose height matches
+  the bottom of the last input in the right-hand field column, sized to that column rather than
+  stretching the panel; the dialog is where the 512 crop is previewed before the upload.
 - **One photo endpoint.** `PUT /v1/members/:memberNo/photo` accepts raw bytes with an image content
   type, sniffs the magic bytes (`RIFF....WEBP`, `FF D8 FF`, `89 50 4E 47`), rejects a mismatch, an
   empty body or more than 2 MiB, stores the bytes and returns the new `photoUpdatedAt`.
-  `GET /v1/members/:memberNo/photo` returns the bytes with an `ETag` derived from the member number
-  and `photoUpdatedAt`, honours `If-None-Match` with 304, and 404s when there is no photo.
+  `GET /v1/members/:memberNo/photo` returns the bytes with an `ETag` derived from the member number,
+  `photoUpdatedAt` and the byte length, honours `If-None-Match` with 304, and 404s when there is no photo.
   `DELETE` clears the three columns and returns 204. All three sit behind the bearer like every other
   `/v1` route; the browser reaches them through the session gateway.
 - **The photo is private and short-lived in caches.** `Cache-Control: private, max-age=300`,
@@ -447,13 +453,13 @@ type PhotoContentType = 'image/webp' | 'image/jpeg' | 'image/png';
 
 // PUT /v1/members/:memberNo/photo
 // request  Content-Type: PhotoContentType; body: raw bytes (1..2 MiB)
-// 204      { photoUpdatedAt: string }
+// 200      { photoUpdatedAt: string }
 // 400      unsupported_photo
 // 404      not_found
 // 413      photo_too_large
 
 // GET /v1/members/:memberNo/photo
-// 200      the stored bytes; ETag: "<memberNo>-<photoUpdatedAt epoch ms>"
+// 200      the stored bytes; ETag: "<memberNo>-<photoUpdatedAt epoch ms>-<byte length>"
 //          Cache-Control: private, max-age=300
 // 304      If-None-Match matched; 404 when absent
 
@@ -535,7 +541,8 @@ OTP logging), and MR-36 constrains all three. Where a requirement names a later 
   reject a source over 10 MiB.
 - MR-16: The photo endpoint MUST accept only WebP, JPEG or PNG, verified by magic bytes, at most
   2 MiB, with the bearer required.
-- MR-17: The photo response MUST be `Cache-Control: private`, MUST carry an `ETag`, MUST answer 304 to
+- MR-17: The photo response MUST be `Cache-Control: private`, MUST carry an `ETag` that includes the
+  byte length (so two uploads inside one millisecond differ when their lengths differ), MUST answer 304 to
   a matching `If-None-Match`, and MUST 404 when the member has no photo.
 - MR-18: `MemberDetail` and `MemberListItem` MUST carry `photoUpdatedAt`; the client MUST fetch the
   bytes as an authenticated blob and MUST revoke the object URL.

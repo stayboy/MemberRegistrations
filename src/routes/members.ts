@@ -1,6 +1,15 @@
-import { Router, type Request, type Response } from 'express';
+import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { actorOf } from '../actor.js';
+import { sendProblem } from '../errors/problem.js';
+import { PhotoTooLargeError, UnsupportedPhotoError } from '../errors/domain-errors.js';
+import {
+  isPhotoContentType,
+  mediaTypeOf,
+  PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_BYTES,
+  sniffPhotoType,
+} from '../domain/photos.js';
 import { memberNoParamSchema } from '../schemas/common.js';
 import {
   attendanceInputSchema,
@@ -38,6 +47,41 @@ function sendMember(res: Response, member: MemberDetail, status = 200): void {
   res.setHeader('ETag', etag(member.version));
   res.setHeader('Cache-Control', 'no-store');
   res.status(status).json(member);
+}
+
+/**
+ * Raw image bodies, capped at 2 MiB (MR-16). `express.raw` raises
+ * `entity.too.large`; the wrapper turns it into the photo contract's 413 code
+ * rather than the JSON parser's generic `payload_too_large`.
+ */
+const photoParser = express.raw({ type: [...PHOTO_CONTENT_TYPES], limit: PHOTO_MAX_BYTES });
+
+function parsePhotoBody(req: Request, res: Response, next: NextFunction): void {
+  photoParser(req, res, (error?: unknown) => {
+    if ((error as { type?: string } | undefined)?.type === 'entity.too.large') {
+      next(new PhotoTooLargeError());
+      return;
+    }
+    next(error);
+  });
+}
+
+/** A comma-separated `If-None-Match` matches the current tag, weak or exact. */
+function matchesEtag(header: string | undefined, current: string): boolean {
+  if (!header) return false;
+  return header
+    .split(',')
+    .map((value) => value.trim())
+    .some((value) => value === '*' || value === current || value === `W/${current}`);
+}
+
+/**
+ * `<memberNo>-<photoUpdatedAt epoch ms>-<byte length>`, quoted as HTTP requires.
+ * The length is part of the tag so two uploads that share a millisecond differ
+ * when their byte lengths differ.
+ */
+function photoEtag(memberNo: string, updatedAt: string, byteLength: number): string {
+  return `"${memberNo}-${new Date(updatedAt).getTime()}-${byteLength}"`;
 }
 
 export function membersRouter(
@@ -84,6 +128,66 @@ export function membersRouter(
       return;
     }
     sendMember(res, member);
+  });
+
+  // -- photo (MR-14..MR-18) ------------------------------------------------
+
+  router.put('/:memberNo/photo', parsePhotoBody, async (req, res) => {
+    const no = memberNo(req);
+    const contentType = mediaTypeOf(req.header('content-type'));
+    if (!isPhotoContentType(contentType)) throw new UnsupportedPhotoError();
+    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (bytes.length === 0) {
+      throw new UnsupportedPhotoError('The photo body is empty');
+    }
+    const sniffed = sniffPhotoType(bytes);
+    if (sniffed === null || sniffed !== contentType) {
+      throw new UnsupportedPhotoError(
+        'The photo bytes are not a WebP, JPEG or PNG image matching the request content type',
+      );
+    }
+
+    const photoUpdatedAt = await repo.setPhoto(no, bytes, sniffed);
+    // MR-21: the log carries the member number and byte length, never the
+    // bytes, the source filename or an EXIF value.
+    const logger = req.app.locals.logger as
+      { info: (fields: Record<string, unknown>, message: string) => void } | undefined;
+    logger?.info({ memberNo: no, byteLength: bytes.length }, 'member photo stored');
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json({ photoUpdatedAt });
+  });
+
+  router.get('/:memberNo/photo', async (req, res) => {
+    const photo = await repo.getPhoto(memberNo(req));
+    if (!photo) {
+      sendProblem(
+        res,
+        404,
+        'Not Found',
+        `Member ${req.params.memberNo} has no photo`,
+        'photo_not_found',
+      );
+      return;
+    }
+
+    const tag = photoEtag(photo.memberNo, photo.updatedAt, photo.bytes.length);
+    res.setHeader('ETag', tag);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Content-Type', photo.contentType);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    if (matchesEtag(req.header('if-none-match'), tag)) {
+      res.status(304).end();
+      return;
+    }
+    res.status(200).end(photo.bytes);
+  });
+
+  router.delete('/:memberNo/photo', async (req, res) => {
+    await repo.clearPhoto(memberNo(req));
+    res.status(204).end();
   });
 
   router.put('/:memberNo', async (req, res) => {

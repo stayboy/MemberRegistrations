@@ -107,6 +107,7 @@ const DETAIL: MemberDetail = {
   guardian: null,
   calls: { attempts: 0, conversations: 0, lastCalledOn: null, lastReachedOn: null },
   isPresbyter: true,
+  photoUpdatedAt: null,
   archivedAt: null,
   purgedAt: null,
   contactCount: 1,
@@ -166,6 +167,7 @@ const OFFICERS: OfficerSummary[] = [
     name: 'Efua Boateng',
     gender: 'female',
     age: 44,
+    photoUpdatedAt: null,
     assignedMembers: 0,
     attempts: 0,
     conversations: 0,
@@ -187,6 +189,7 @@ const PICKER_MEMBERS = [
     placeOfResidence: null,
     joinedOn: null,
     isPresbyter: true,
+    photoUpdatedAt: null,
     archivedAt: null,
     contactCount: 1,
     ministries: [],
@@ -202,6 +205,7 @@ const PICKER_MEMBERS = [
     placeOfResidence: null,
     joinedOn: null,
     isPresbyter: true,
+    photoUpdatedAt: null,
     archivedAt: null,
     contactCount: 1,
     ministries: [],
@@ -875,6 +879,40 @@ describe('MemberFormPage fields and sections', () => {
     expect(await screen.findByRole('button', { name: 'Manage contacts' })).toBeVisible();
     expect(screen.getByText('+233 20 000 0001')).toBeVisible();
     expect(screen.getByText('Saved as you go')).toBeVisible();
+  });
+
+  it('renders the left portrait column at the field stack height, not a 512 image (MR-15)', async () => {
+    renderForm('/members/M-1001');
+    await waitForForm();
+
+    const identity = screen.getByRole('region', { name: 'Identity' });
+    const column = within(identity).getByTestId('member-photo-control-column');
+    const fields = within(identity).getByTestId('member-identity-fields');
+
+    // Left placement: the portrait column precedes the field stack in DOM order.
+    expect(column.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    // Both are columns of the same identity row, so the square can follow the
+    // field stack's height instead of stretching the panel.
+    expect(column.parentElement).toBe(fields.parentElement);
+
+    // The portrait is the square sized from the field column's height, and Change
+    // is its compact action; neither is the dialog's 512 crop preview.
+    const square = within(column).getByTestId('member-photo-control-square');
+    expect(within(square).getByTestId('member-photo-control-avatar')).toBeVisible();
+    // The label line (`Photo` + `Change`) sits above the square, so the portrait
+    // starts at the field inputs' top rather than adding a separate row height.
+    const head = within(column).getByText('Photo').parentElement;
+    expect(head).not.toBeNull();
+    expect(head!.nextElementSibling).toBe(square);
+    const change = within(column).getByRole('button', { name: /Change/ });
+    expect(change).toBeVisible();
+    expect(change).toBeEnabled();
+
+    expect(screen.queryByTestId('member-photo-preview')).not.toBeInTheDocument();
+    expect(document.querySelector('img[width="512"], img[height="512"]')).toBeNull();
+    expect(within(identity).queryByRole('img', { name: 'Selected profile' })).toBeNull();
   });
 
   it('refetches the shown contacts after the contacts dialog closes', async () => {

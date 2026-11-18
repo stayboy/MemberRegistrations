@@ -82,9 +82,18 @@ type PurgedRow = {
   address_line: string | null;
   gender: string;
   is_presbyter: boolean;
+  photo: Buffer | null;
+  photo_content_type: string | null;
+  photo_updated_at: Date | string | null;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
 };
+
+/** The smallest valid PNG magic-byte prefix the photo route accepts. */
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from('rest-of-a-png', 'ascii'),
+]);
 
 describe('member row operations', () => {
   it('creates, reads and updates through an ETag round-trip', async () => {
@@ -140,6 +149,13 @@ describe('member row operations', () => {
   it('purges PII, reserves the number and conflicts on a second purge', async () => {
     await create('C-3001', { alias: 'Kofi', placeOfResidence: 'Kumasi', otherNames: 'Kojo' });
 
+    // A stored photo is PII like a name, so purge has to erase it too.
+    await request(app)
+      .put('/v1/members/C-3001/photo')
+      .set({ ...writeHeaders, 'Content-Type': 'image/png' })
+      .send(PNG)
+      .expect(200);
+
     await request(app)
       .post('/v1/members/C-3001/purge')
       .set(writeHeaders)
@@ -148,7 +164,8 @@ describe('member row operations', () => {
 
     const [row] = await harness.db.query<PurgedRow>(
       `select first_name, last_name, other_names, maiden_name, alias, dob,
-              place_of_residence, address_line, gender, is_presbyter, archived_at, purged_at
+              place_of_residence, address_line, gender, is_presbyter,
+              photo, photo_content_type, photo_updated_at, archived_at, purged_at
          from members where member_no = $1`,
       ['C-3001'],
     );
@@ -163,6 +180,9 @@ describe('member row operations', () => {
     expect(row!.address_line).toBeNull();
     expect(row!.gender).toBe('undisclosed');
     expect(row!.is_presbyter).toBe(false);
+    expect(row!.photo).toBeNull();
+    expect(row!.photo_content_type).toBeNull();
+    expect(row!.photo_updated_at).toBeNull();
     expect(row!.archived_at).toBeTruthy();
     expect(row!.purged_at).toBeTruthy();
 

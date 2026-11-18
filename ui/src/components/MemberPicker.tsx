@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { isUnauthorized } from '../api/errors';
 import { searchMembers } from '../api/members';
 import { useSession } from '../auth/SessionProvider';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { toMemberPickerOptions, type MemberPickerOption } from '../format/member-picker';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
@@ -13,6 +14,11 @@ const useStyles = makeStyles({
   },
   error: {
     color: tokens.colorPaletteRedForeground1,
+  },
+  option: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
   },
 });
 
@@ -122,7 +128,16 @@ export function MemberPicker({
       >
         {options.map((option) => (
           <Option key={option.memberNo} value={option.memberNo} text={option.label}>
-            {option.label}
+            <span className={styles.option}>
+              <MemberAvatar
+                memberNo={option.memberNo}
+                photoUpdatedAt={option.photoUpdatedAt ?? null}
+                name={option.name}
+                size={20}
+                aria-hidden
+              />
+              {option.label}
+            </span>
           </Option>
         ))}
       </Combobox>

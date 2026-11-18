@@ -460,6 +460,66 @@
         "at": "2026-11-18",
         "sha256": "357e82a2df13a1884d5aed34ef6c8053b23376910f1bed85efc2eaeec533746a"
       }
+    },
+    "22-member-photo-form": {
+      "mock": {
+        "path": "mockups/v2-shell/22-member-photo-form.png",
+        "sha256": "cc92205028d1e2ffaff0c630ff1b96ad73ee41c7e971b44b8f296231899525b1",
+        "source": "mockups/v2-shell/22-member-photo-form.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-18",
+        "sha256": "cc92205028d1e2ffaff0c630ff1b96ad73ee41c7e971b44b8f296231899525b1",
+        "basis": "Owner pre-authorisation for the unattended member-photo round (2026-11-18); the cut is listed for the owner review at the end of the unattended work."
+      }
+    },
+    "22-member-photo-dialog": {
+      "mock": {
+        "path": "mockups/v2-shell/22-member-photo-dialog.png",
+        "sha256": "46e25789114df7bfd0e83973671ed06cf3535e855d9d2c4619d80fa687d2135d",
+        "source": "mockups/v2-shell/22-member-photo-dialog.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-18",
+        "sha256": "46e25789114df7bfd0e83973671ed06cf3535e855d9d2c4619d80fa687d2135d",
+        "basis": "Owner pre-authorisation for the unattended member-photo round (2026-11-18); the cut is listed for the owner review at the end of the unattended work."
+      }
+    },
+    "22-member-photo-camera": {
+      "mock": {
+        "path": "mockups/v2-shell/22-member-photo-camera.png",
+        "sha256": "eb4845b0b67ddfb909ba4cc22826383648ed914c7958e46c288d0a9601de5f73",
+        "source": "mockups/v2-shell/22-member-photo-camera.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-18",
+        "sha256": "eb4845b0b67ddfb909ba4cc22826383648ed914c7958e46c288d0a9601de5f73",
+        "basis": "Owner pre-authorisation for the unattended member-photo round (2026-11-18); the cut is listed for the owner review at the end of the unattended work."
+      }
+    },
+    "22-members-list-photos": {
+      "mock": {
+        "path": "mockups/v2-shell/22-members-list-photos.png",
+        "sha256": "bf9c4679b38ee6fe9b39231dd00222e4cc650e786dd9e0bb407a1b161b3888b1",
+        "source": "mockups/v2-shell/22-members-list-photos.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-18",
+        "sha256": "bf9c4679b38ee6fe9b39231dd00222e4cc650e786dd9e0bb407a1b161b3888b1",
+        "basis": "Owner pre-authorisation for the unattended member-photo round (2026-11-18); the cut is listed for the owner review at the end of the unattended work."
+      }
     }
   },
   "inventory": [

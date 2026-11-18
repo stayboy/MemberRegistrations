@@ -80,6 +80,8 @@ export interface RosterEntryDto {
   placeOfResidence: string | null;
   /** Owned plus linked contacts, never the contact values (Q5). */
   contactCount: number;
+  /** The instant the profile photo was stored, or null when there is none (MR-19). */
+  photoUpdatedAt: string | null;
   attempts: number;
   conversations: number;
   lastCalledOn: string | null;
@@ -94,6 +96,8 @@ export interface OfficerDto {
   name: string;
   gender: Gender;
   age: number | null;
+  /** The instant the officer's profile photo was stored, or null (MR-19). */
+  photoUpdatedAt: string | null;
   assignedMembers: number;
   attempts: number;
   conversations: number;
@@ -208,6 +212,10 @@ function iso(value: unknown): string | null {
 
 function isoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function isoTimestampOrNull(value: unknown): string | null {
+  return value === null || value === undefined ? null : isoTimestamp(value);
 }
 
 function fullName(first: string | null, last: string | null): string {
@@ -430,6 +438,7 @@ export class ShepherdingRepository {
       dob: string | Date | null;
       place_of_residence: string | null;
       contact_count: number;
+      photo_updated_at: Date | string | null;
       attempts: number;
       conversations: number;
       last_called_on: string | null;
@@ -441,6 +450,7 @@ export class ShepherdingRepository {
       `select a.id as assignment_id, a.assigned_on,
               m.member_no, m.first_name, m.last_name,
               m.gender, m.dob, m.place_of_residence, cc.contact_count,
+              m.photo_updated_at,
               w.attempts, w.conversations, w.last_called_on,
               l.outcome as last_outcome,
               k.still_in_church,
@@ -513,6 +523,7 @@ export class ShepherdingRepository {
       age: ageInYears(iso(row.dob)),
       placeOfResidence: row.place_of_residence,
       contactCount: row.contact_count,
+      photoUpdatedAt: isoTimestampOrNull(row.photo_updated_at),
       attempts: row.attempts,
       conversations: row.conversations,
       lastCalledOn: iso(row.last_called_on),
@@ -696,6 +707,7 @@ export class ShepherdingRepository {
       last_name: string | null;
       gender: Gender;
       dob: string | Date | null;
+      photo_updated_at: Date | string | null;
       assigned_members: number;
       attempts: number;
       conversations: number;
@@ -703,6 +715,7 @@ export class ShepherdingRepository {
       members_never_called: number;
     }>(
       `select o.member_no as officer_member_no, o.first_name, o.last_name, o.gender, o.dob,
+              o.photo_updated_at,
               count(a.id) filter (where m.id is not null)::int as assigned_members,
               coalesce(sum(w.attempts) filter (where m.id is not null), 0)::int as attempts,
               coalesce(sum(w.conversations) filter (where m.id is not null), 0)::int as conversations,
@@ -735,6 +748,7 @@ export class ShepherdingRepository {
       name: fullName(row.first_name, row.last_name),
       gender: row.gender,
       age: ageInYears(iso(row.dob)),
+      photoUpdatedAt: isoTimestampOrNull(row.photo_updated_at),
       assignedMembers: row.assigned_members,
       attempts: row.attempts,
       conversations: row.conversations,

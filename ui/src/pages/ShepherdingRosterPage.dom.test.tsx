@@ -36,6 +36,7 @@ function rosterEntry(
     age: 30,
     placeOfResidence: null,
     contactCount: 1,
+    photoUpdatedAt: null,
     attempts: 0,
     conversations: 0,
     lastCalledOn: null,

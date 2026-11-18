@@ -15,6 +15,8 @@ export interface MemberPickerCandidate {
   readonly otherNames?: string | null;
   readonly gender?: Gender;
   readonly ageMonths?: number | null;
+  /** The photo timestamp when the list projection carries it (MR-19). */
+  readonly photoUpdatedAt?: string | null;
 }
 
 export interface MemberPickerOption {
@@ -22,6 +24,7 @@ export interface MemberPickerOption {
   readonly name: string;
   /** The visible and accessible `memberNo · FullName (code, age)` label. */
   readonly label: string;
+  readonly photoUpdatedAt?: string | null;
 }
 
 const GENDER_CODES: Record<Gender, string> = {
@@ -65,6 +68,7 @@ export function toMemberPickerOptions(
         memberNo: member.memberNo,
         name,
         label: name ? `${member.memberNo} · ${name} (${identity})` : member.memberNo,
+        photoUpdatedAt: member.photoUpdatedAt,
       };
     });
 }

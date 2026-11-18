@@ -1,4 +1,5 @@
 import pino from 'pino';
+import type { Logger } from 'pino';
 import type { Express } from 'express';
 import { createApp } from '../../src/create-app.js';
 import type { Mailer } from '../../src/authn/mailer.js';
@@ -19,6 +20,8 @@ export interface TestApp {
 
 export interface TestAppOptions {
   mailer?: Mailer;
+  /** A test that inspects a log line injects its own sink; the default is silent. */
+  logger?: Logger;
   authConfig?: Partial<AuthConfig>;
   corsOrigins?: string[];
   paymentGateway?: PaymentGateway;
@@ -43,7 +46,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   const app = createApp({
     db,
     bearerToken: TOKEN,
-    logger: pino({ level: 'silent' }),
+    logger: options.logger ?? pino({ level: 'silent' }),
     mailer: options.mailer ?? new NullMailer(),
     ...rest,
     // USSD and the payment callback are on for tests unless a test asks for
