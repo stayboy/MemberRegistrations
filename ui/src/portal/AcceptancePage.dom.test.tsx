@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { acceptMemberVerification } from '../api/members';
 import { ApiError } from '../api/errors';
+import { resolveGatewayOrigin } from '../auth/gatewayOrigin';
 import { renderWithProviders } from '../test/render';
 import { AcceptancePage, tokenFromHash } from './AcceptancePage';
 
@@ -67,9 +68,10 @@ describe('the member acceptance page (FR-25b, MR-51)', () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
 
-    await waitFor(() =>
-      expect(acceptMock).toHaveBeenCalledWith('http://localhost:3000', 'tok-123', '123456'),
-    );
+    // The origin is resolved from the build's `VITE_GATEWAY_URL`, which differs
+    // per environment; the token and the code are what this test pins.
+    const origin = resolveGatewayOrigin(import.meta.env.VITE_GATEWAY_URL, import.meta.env.MODE);
+    await waitFor(() => expect(acceptMock).toHaveBeenCalledWith(origin, 'tok-123', '123456'));
     expect(await screen.findByText('Your contact is verified')).toBeVisible();
     expect(screen.getByText(/register now treats \+233 \*\*\* 01 as proven/)).toBeVisible();
     expect(screen.queryByText(/tok-123/)).not.toBeInTheDocument();

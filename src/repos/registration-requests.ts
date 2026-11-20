@@ -186,6 +186,8 @@ export class RegistrationRequestRepository {
             ...(phoneOwnership === 'borrowed' ? { guardianMemberNo: guardianMemberNo! } : {}),
           },
           actor,
+          // MR-53: a number another approval bound first is `contact_in_use`.
+          'contact_in_use',
         );
         // The ordinary `create` wrapper asserts reachability; approval calls
         // `createWithin` directly, so it judges the new aggregate itself.
@@ -204,11 +206,10 @@ export class RegistrationRequestRepository {
 
       return await this.get(id);
     } catch (error) {
-      // The pre-check above closes the usual window; two approvals of the same
-      // number can still collide on `member_contacts_value`. That race maps to
-      // the same `409 contact_in_use` (and the transaction rolled back, so the
-      // request is still pending with its ciphertext intact), never to a 500 or
-      // to the member-number duplicate conflict (MR-53).
+      // The contact mapping lives with the insert (`MemberRepository`), so this
+      // is a backstop: a raw `member_contacts_value` violation inside approval is
+      // still a 409, never a 500. The transaction has rolled back, so the request
+      // stays pending with its ciphertext intact (MR-53).
       if (sqlState(error) === '23505' && sqlConstraint(error) === 'member_contacts_value') {
         throw new ContactInUseError('This number already belongs to another member');
       }

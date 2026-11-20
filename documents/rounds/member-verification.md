@@ -7,7 +7,7 @@
 | Mode                   | `attended`                                                                                                                                                                                                                                  |
 | Base                   | `c35919d` (the branch carries the abandoned first 3a draft; it is reworked, not extended)                                                                                                                                                   |
 | Review rounds          | 4                                                                                                                                                                                                                                           |
-| Gate runs in parent    | 6                                                                                                                                                                                                                                           |
+| Gate runs in parent    | 7                                                                                                                                                                                                                                           |
 | Spec                   | `documents/specs/member-registrations-member-record.md` - Phase 3: MR-22..MR-37, MR-43, MR-44, MR-46, MR-47, MR-51..MR-55; AC-MR15..AC-MR23, AC-MR28, AC-MR32, AC-MR35, AC-MR37, AC-MR41..AC-MR46; plus `member-verification-initiation.md` |
 | Workers                | `single`                                                                                                                                                                                                                                    |
 | Implementer            | `worker ollama-cloud/deepseek-v4.1-flash:1017 (3a rework, outside window); parent opencode/deepseek-v4.1-flash-free (specs, record)`                                                                                                        |
@@ -118,13 +118,13 @@ merge on its own; the USSD spec and its handset mock set carry no verification c
 
 ## Verification
 
-- **Fast gate:** `npm run verify:fast` PASS, 4/4 steps at 06:23:23Z; `npm test` **962 passed, 20 skipped**
+- **Fast gate:** `npm run verify:fast` PASS, 4/4 steps at 06:23:23Z; `npm test` **964 passed, 20 skipped**
   (982 tests); `npm run build` PASS. The `event-instances` 0005 replay now runs in `beforeAll` and the
   full suite was green twice (Q4); the section-8 park is resolved.
 
 ```
 gate-run 2026-11-20T06:23:23.389Z profile=fast steps=4/4 lines=4 bytes=686
-gate-run 2026-11-20T06:25:16.727Z profile=full steps=7/7 lines=7 bytes=961
+gate-run 2026-11-20T06:41:57.276Z profile=full steps=7/7 lines=7 bytes=960
 ```
 
 - **UI:** 504 node tests, 184 DOM tests (20 files); `npm run ui:e2e` 76 passed; `npm run ui:capture`

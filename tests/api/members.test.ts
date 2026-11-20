@@ -133,6 +133,32 @@ describe('member lifecycle', () => {
     expect(response.body.code).toBe('conflict');
   });
 
+  it('rejects a contact value another member owns with the generic conflict (MR-53)', async () => {
+    // The member API documents a plain `conflict` here; only registration
+    // approval names `contact_in_use`, so this pins that the create path keeps
+    // its own code while sharing the uniqueness index.
+    await create('M-1015', { contacts: [{ kind: 'phone', value: '0809 900 0015' }] });
+
+    const duplicate = await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({
+        memberNo: 'M-1016',
+        firstName: 'Other',
+        lastName: 'Holder',
+        contacts: [{ kind: 'phone', value: '08099000015' }],
+      });
+
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.code).toBe('conflict');
+    expect(duplicate.body.detail).toContain('already belongs');
+
+    const [created] = await harness.db.query<{ count: number }>(
+      `select count(*)::int as count from members where member_no = 'M-1016'`,
+    );
+    expect(created!.count).toBe(0);
+  });
+
   it('finds a member by a shared contact value', async () => {
     await create('M-1002', { contacts: [{ kind: 'phone', value: '+234 801 234 5678' }] });
 

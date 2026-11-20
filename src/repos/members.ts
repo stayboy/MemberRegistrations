@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   CardInUseError,
   ConflictError,
+  ContactInUseError,
   GuardianChainCycleError,
   GuardianChainTooLongError,
   GuardianChainUnreachableError,
@@ -351,6 +352,15 @@ export interface SubscriptionInput {
 
 /** The guardian link cap from MR-40: a member reaches an own contact in three links or fewer. */
 const GUARDIAN_CHAIN_LIMIT = 3;
+
+/**
+ * How a duplicate contact value is reported. Member create and the direct
+ * contact endpoints document the generic `conflict`; registration approval
+ * documents `contact_in_use`, because the number being bound is the caller's
+ * own and a race with another approval must not read as a member-number clash
+ * (MR-53).
+ */
+type DuplicateContactCode = 'conflict' | 'contact_in_use';
 
 /** A member as the guardian walk sees it. */
 interface GuardianMemberRow extends Row {
@@ -1019,8 +1029,16 @@ export class MemberRepository {
   /**
    * The member create path inside a caller-owned transaction, so approval can
    * create the member and mark its request in one unit of work.
+   *
+   * `duplicateContact` names the error a duplicate contact value raises: the
+   * member API documents `conflict`, approval documents `contact_in_use` (MR-53).
    */
-  async createWithin(db: DbClient, input: CreateMemberInput, actor: string): Promise<string> {
+  async createWithin(
+    db: DbClient,
+    input: CreateMemberInput,
+    actor: string,
+    duplicateContact: DuplicateContactCode = 'conflict',
+  ): Promise<string> {
     const memberNo = assertMemberNo(requiredText(input.memberNo, 'memberNo'));
     const gender = input.gender ?? 'undisclosed';
     if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
@@ -1090,7 +1108,7 @@ export class MemberRepository {
         .returning({ id: members.id });
 
       for (const [index, contact] of (input.contacts ?? []).entries()) {
-        await this.insertContact(db, row!.id, contact, index);
+        await this.insertContact(db, row!.id, contact, index, duplicateContact);
       }
       for (const code of input.ministries ?? []) {
         await this.assignMinistryTx(db, row!.id, code);
@@ -2693,6 +2711,7 @@ export class MemberRepository {
     memberId: string,
     input: ContactInput,
     fallbackOrder?: number,
+    duplicateContact: DuplicateContactCode = 'conflict',
   ): Promise<{ id: string }> {
     const normalized = normalizeContactValue(input.kind, input.value);
     const order =
@@ -2718,10 +2737,18 @@ export class MemberRepository {
         .returning({ id: memberContacts.id });
       return row!;
     } catch (error) {
-      if (sqlState(error) === '23505') {
-        throw new ConflictError(`Contact value "${input.value}" already belongs to a member`);
+      if (sqlState(error) !== '23505') throw error;
+      const message = `Contact value "${input.value}" already belongs to a member`;
+      // MR-53: on the approval path a value another member already owns is
+      // `contact_in_use` (the pre-check names the owner; this is the race's
+      // generic refusal). Every other caller documents the plain `conflict`.
+      if (
+        duplicateContact === 'contact_in_use' &&
+        sqlConstraint(error) === 'member_contacts_value'
+      ) {
+        throw new ContactInUseError(message);
       }
-      throw error;
+      throw new ConflictError(message);
     }
   }
 
