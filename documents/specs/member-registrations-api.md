@@ -14,6 +14,30 @@
 
 ## Change log
 
+- 2026-11-19: USSD verification is retired. Every channel (email, WhatsApp, phone) sends the code
+  and a short link to the member acceptance page; the issue response is `{ destination, expiresAt }` (no
+  `entry`) and the public accept route handles any channel's token. The earlier 2026-11-19 entry is
+  superseded on that point.
+
+- 2026-11-19: Phase 3 is reshaped to contact verification. A registered number is identified, not gated;
+  `MemberDetail` gains `verifiedContacts` (the proven email/WhatsApp/phone contacts, each with a masked
+  value and instant) and `confirmedAt` (the officer confirmation, audited), and loses
+  `verifiedNumberMasked`. `POST .../verification/otp` returns the resolved destination, the entry route
+  (`ussd` or `acceptance-page`) and the expiry; `DELETE .../verification` withdraws every proof and the
+  confirmation; `POST`/`DELETE .../confirmation` record and withdraw the officer attestation. The phone
+  code is accepted at the public `POST /portal/verification/accept` with a token and the code. Approval
+  carries `phoneOwnership` and the pending request keeps the number encrypted until the decision. The
+  2026-11-18 entry is superseded.
+
+- 2026-11-18: Phase 3 of the member-record spec adds OTP verification. `verifiedAt` becomes
+  read-only, set only by the verification service and bound to `members.verified_number_hash` and
+  `members.verified_number_masked`; `MemberDetail` gains `verifiedNumberMasked`;
+  `POST /v1/members/{memberNo}/verification/otp` starts a code (`202` with masked destinations and expiry,
+  `409 no_own_contact`, `429 too_many_requests`, `503 delivery_unavailable`) and
+  `DELETE /v1/members/{memberNo}/verification` revokes (`204`). `createMemberSchema` and
+  `updateMemberSchema` drop `verified`. Migration `0025` adds the two columns and
+  `member_verification_codes`.
+
 - 2026-11-13: `officerReason` on `POST /v1/pledges` becomes an **optional note**, not a requirement (owner,
   2026-11-13: "Reason should be an instruction note and optional. Not a required field"). The API accepted it
   only alongside an explicit officer and rejected an officer without one, which made every pledge that named
@@ -115,9 +139,9 @@
 - 2026-11-05: presbyter ranks, membership cards and verification are settled. `presbyterRank` is an
   admin-set integer (1 = most senior) valid only with `isPresbyter`; any non-null rank is a senior
   presbyter for clocking, ties are allowed, and clearing the flag clears the rank. `membershipCardNo`
-  is 1–32 trimmed characters, unique case-insensitively when present. `verifiedAt` is a nullable
-  officer-set timestamp with no expiry, refreshed on re-verification; the write payload takes
-  `verified: boolean`. All three are on `MemberDetail` only; card and verification are independent.
+  is 1–32 trimmed characters, unique case-insensitively when present. `confirmedAt` is a nullable timestamp with no expiry, set only by the officer confirmation service and
+  audited; the write payload no longer accepts `verified`. `verifiedContacts` lists the proven contacts.
+  Both are on `MemberDetail` only; card and verification are independent.
 - 2026-11-17: `MemberDetail` gains `shepherd: { memberNo, name, gender, age, assignedOn } | null` and `calls: { attempts, conversations, lastCalledOn: string | null, lastReachedOn: string | null }`, reusing the projection behind `GET /v1/members/{memberNo}/shepherding` for the **current assignment, all-time** (no window). `lastCalledOn` is the latest called date over all outcomes; `lastReachedOn` is the latest over `outcome = reached`; both are null when no such call exists. The overview therefore makes no second read. Each `AttendanceSeries.entries[]` row gains `eventId` (the event instance for that row) and `eventName`; recurring series group by the parent row's `seriesId`. `MemberDetail`, `createMemberSchema` and `updateMemberSchema` gain four nullable membership fields: `assemblyJoinedOn` (UTC date of joining this assembly, distinct from the pre-existing `joinedOn`), `cameFrom`, `movedOutOn` (UTC date) and `movedToAssembly`. They are plain strings/dates, not a history table or a new route. The ministry rows on the detail also carry `position: { code: string, label: string } | null` - the duty assigned by
   `POST /v1/members/{memberNo}/ministries` - so the overview can show the member's role alongside the
   ministry name. The same additive fields appear on `GET /v1/members/{memberNo}/attendance`, which returns the same series shape. Non-series attendance is returned as a row with `seriesId: null` and `seriesName: null`, its entries grouped by `eventId`; the detail projection must include those rows rather than dropping them. 2026-11-17 clarification: the role field is `position: { code, label } | null`, not the write-side `positionCode`; Dates remain UTC calendar dates, append-only calls gain no mutation path, and `Cache-Control: no-store` applies.
@@ -371,7 +395,8 @@ deployed to Vercel as a single function.
 | `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior.       |
 | `title`                           | Presbyter title and its optional `titledOn`; codes from `/v1/presbyter-titles`; see the officers spec. |
 | `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.                 |
-| `verifiedAt`                      | Timestamp, nullable; null means unverified, no expiry, refreshed on re-verification.                   |
+| `confirmedAt`                     | Timestamp, nullable; the officer confirmation, audited; read-only.                                     |
+| `verifiedContacts`                | The proven contacts: `{ id, channel, masked, verifiedAt }[]`; read-only.                               |
 | `archivedAt`                      | Set by archive, cleared by restore.                                                                    |
 | `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                         |
 
@@ -384,17 +409,23 @@ historical record's date. The members list carries `age` and `ageMonths` but not
 three. `ageMonths` is the same derivation in months, and the picker uses it only to distinguish an infant from
 a year-old (`8m` against `0y`).
 
-`presbyterRank`, `membershipCardNo` and `verifiedAt` are **detail-only** back-office fields; the list
-stays lean. A rank is valid only with `isPresbyter = true` (otherwise `422 validation_error`), must be a
-positive integer (0 and negatives are `422`), and clearing the flag clears the rank in the same update.
-Ranks need not be unique: a tie is allowed, and
-any non-null rank counts as a senior presbyter for clocking. `membershipCardNo` is trimmed, 1–32
-characters, and unique case-insensitively when present (a partial unique index), so a second member
-claiming the same card is `409 card_in_use`; reissuing a card is two
-edits (clear, then set). `verifiedAt` is set by an officer: the write payload takes `verified: boolean`,
-which sets the timestamp to now or clears it; a repeated verification refreshes the timestamp. Card and
-verification are independent, and neither is required for the other. `requires_card` and
-`requires_verified` (welfare products) test only that the card is present and the timestamp is non-null.
+`presbyterRank`, `membershipCardNo`, `confirmedAt` and `verifiedContacts` are **detail-only**
+back-office fields; the list stays lean. A rank is valid only with `isPresbyter = true` (otherwise `422
+validation_error`), must be a positive integer (0 and negatives are `422`), and clearing the flag clears
+the rank in the same update. Ranks need not be unique: a tie is allowed, and any non-null rank counts as
+a senior presbyter for clocking. `membershipCardNo` is trimmed, 1–32 characters, and unique
+case-insensitively when present (a partial unique index), so a second member claiming the same card is
+`409 card_in_use`; reissuing a card is two edits (clear, then set). `confirmedAt` and `verifiedContacts`
+were **read-only**: the officer confirmation sets `confirmedAt` from the latest non-withdrawn
+`member_confirmations` row and the code service sets a contact's `verifiedAt`; `DELETE …/verification` withdraws both. `createMemberSchema` and
+`updateMemberSchema` no longer accept `verified`. Card and verification are independent, and neither is
+required for the other. The member can start the same code from USSD (`My Profile > Verify contact`); the pipeline calls the
+verification `issue` in-process, so no new HTTP route is added. `requires_card` and `requires_verified`
+(welfare products) test that the card is present and, for `requires_verified`, that an **email or
+WhatsApp** contact proof or an officer
+confirmation exists; a phone proven on the member acceptance page alone does not qualify, because
+possession of the number is
+already the identification and adds no second-channel fact.
 
 ### Contact
 
@@ -641,20 +672,20 @@ Extras count when held; cancellations do not.
 The USSD session owns the menu; these are the bearer seams behind it. All writes require `X-Actor-Id`
 and are `no-store` on read.
 
-| Method       | Path                                                   | Result                                                                              |
-| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once                    |
-| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                                    |
-| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                                  |
-| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                                  |
-| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo, guardianMemberNo }`; member + guardian in one transaction              |
-| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                                |
-| `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`)                |
-| `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                               |
-| `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation (`ended?` closes the session); `201` the observation |
-| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                                |
-| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                                |
-| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity                            |
+| Method       | Path                                                   | Result                                                                                                    |
+| ------------ | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `POST`       | `/v1/events/{eventId}/codes`                           | Issue a six-digit code for one session; plain code returned once                                          |
+| `GET`        | `/v1/events/{eventId}/codes?sessionDate&status`        | List the session's codes without the plain value                                                          |
+| `POST`       | `/v1/codes/{id}/void`                                  | Void an unused code; `{ reason? }`                                                                        |
+| `GET`        | `/v1/registration-requests?status&eventId&sessionDate` | Pending/decided anonymous requests                                                                        |
+| `POST`       | `/v1/registration-requests/{id}/approve`               | `{ memberNo, guardianMemberNo?, phoneOwnership }`; member, phone and optional guardian in one transaction |
+| `POST`       | `/v1/registration-requests/{id}/reject`                | `{ reason }`; never creates a member                                                                      |
+| `GET`        | `/v1/events/{eventId}/headcounts?sessionDate`          | List the session's headcount observations, newest first (`no-store`)                                      |
+| `GET`        | `/v1/events/{eventId}/headcounts/{headcountId}`        | Read one observation named by `Location` (`no-store`)                                                     |
+| `POST`       | `/v1/events/{eventId}/headcounts`                      | Record a headcount observation (`ended?` closes the session); `201` the observation                       |
+| `GET`/`POST` | `/v1/events/{eventId}/delegations?sessionDate`         | List or create a clocking delegation                                                                      |
+| `GET`        | `/v1/members/{memberNo}/attendance/summary?from&to`    | Windowed attended counts and the attended event rows                                                      |
+| `GET`        | `/v1/members/{memberNo}/profile`                       | Identity, ministries, shepherd and attendance regularity                                                  |
 
 - **Codes.** `POST` body `{ purpose: 'attendance_punch' | 'registration', sessionDate }`. The code is
   six digits from a CSPRNG, valid for 15 minutes, single use, bound to that event session and stored
@@ -674,16 +705,20 @@ and are `no-store` on read.
   seams are issuance/void/list, request list/approve/reject, delegation, headcounts, the
   attendance summary and the profile.
 - **Registration requests.** A request is `pending | approved | rejected`. `POST
-/v1/registration-requests/{id}/approve` takes the immutable `memberNo` and a required `guardianMemberNo`; the request's first and
-  last name seed the member, gender defaults to `undisclosed`, `joinedOn` defaults to the approval date,
-  and the member starts with **no own contacts** because the stored value is a one-way phone hash. The
-  guardian is validated by MR-40's rules (18+, reachable, chain) and the member and the guardian link
-  are written in one transaction; the ordinary create validation and audit still run. A missing
-  `guardianMemberNo` is `422 validation_error` naming the field, and an ineligible guardian is refused
-  with MR-40's codes; any refusal leaves the request `pending`. The request
-  becomes `approved` with `decidedBy`/`decidedAt` and links the created member. `reject` takes a reason
-  and creates nothing. A request is decided once; a second decision is `409
-registration_not_pending`. The request carries only `phoneHash`, never the raw phone.
+/v1/registration-requests/{id}/approve` takes the immutable `memberNo`, a `phoneOwnership` of `own` or
+  `borrowed`, and a `guardianMemberNo` when the number is borrowed (or the member has no own contact).
+  The request's first and last name seed the member, gender defaults to `undisclosed`, `joinedOn`
+  defaults to the approval date. The pending request keeps the caller's number encrypted under
+  `REGISTRATION_PHONE_KEY`; approval decrypts it, writes it as an owned phone contact when
+  `phoneOwnership = own`, or links it to the guardian when `borrowed` (the member then has no own
+  contact and the guardian is validated by MR-40's rules, 18+, reachable, chain). The member, its
+  contact and the guardian link are written in one transaction; the ordinary create validation and
+  audit still run. A missing guardian where one is required is `422 validation_error` naming the field,
+  and an ineligible guardian is refused with MR-40's codes; any refusal leaves the request `pending`.
+  The request becomes `approved` with `decidedBy`/`decidedAt` and links the created member, and the
+  encrypted number is erased (`reject` and `purge` erase it too). A request is decided once; a second
+  decision is `409 registration_not_pending`. The request carries a hash and the encrypted value, never
+  the raw phone in a response.
 - **Clocking.** The existing `POST /v1/events/{eventId}/attendance` remains the write; the USSD layer
   enforces the actor rules before calling it. A per-member write is accepted only for a session dated
   **today in the event timezone** and before that session is closed (`409 session_closed`); the session's
@@ -893,11 +928,15 @@ idempotency_conflict`. An unknown event or offering is `404`; an inactive offeri
 
 ## API Contracts
 
-Business routes are under `/v1`, with the public `/auth/*` sign-in routes and the USSD entries
-(`/ussd/session`, `/ussd/nalo`) outside it; `/health`, `/openapi.json` and the development-only
+Business routes are under `/v1`, with the public `/auth/*` sign-in routes, the USSD entries
+(`/ussd/session`, `/ussd/nalo`) and the public verification acceptance route
+(`/portal/verification/accept`) outside it; `/health`, `/openapi.json` and the development-only
 `/dev/ussd/session` are unversioned too. Bearer auth guards `/v1` except the signature-verified
 `/v1/payments/callback`, which exists only when `PAYMENTS_ENABLED=true`; `/gateway/v1` uses the
-gateway token; the USSD entries authenticate with the HMAC signature or the Nalo `USERID`. Every
+gateway token; the USSD entries authenticate with the HMAC signature or the Nalo `USERID`. The member acceptance
+route is unauthenticated by design: the single-use token and the six-digit code are its credential, it
+answers no member data, and it is rate-limited per token and per address. The route keeps `/portal`
+as a stable wire namespace, but the surface is the member acceptance page, never the officer Portal. Every
 bearer write requires `X-Actor-Id`.
 
 The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
@@ -915,6 +954,11 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 | `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                                                             |
 | `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                                                        |
 | `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                                                        |
+| `POST`   | `/v1/members/{memberNo}/verification/otp`           | Start a code; `202` destination + expiry; `409 no_own_contact`; `429 too_many_requests`; `503 delivery_unavailable`        |
+| `DELETE` | `/v1/members/{memberNo}/verification`               | Withdraw every contact proof and the confirmation, audited; `204`                                                          |
+| `POST`   | `/v1/members/{memberNo}/confirmation`               | Officer confirmation `{ reason }`; `201` + `confirmedAt`                                                                   |
+| `DELETE` | `/v1/members/{memberNo}/confirmation`               | Withdraw the confirmation, audited; `204`                                                                                  |
+| `POST`   | `/portal/verification/accept`                       | Public; `{ token, code }` -> `200` `{ channel, masked }`; `400` code errors; `429`                                         |
 | `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                                                   |
 | `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                                                  | ticket 24b |
 | `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                                                    | ticket 24a |
@@ -1074,11 +1118,13 @@ Call body: `{ calledOn?, outcome, stillInChurch?, feedback?, issue? }`.
 
 There is deliberately no `DELETE` for a call.
 
-**Registration approval (member-record Phase 1).** `POST /v1/registration-requests/:id/approve`
-requires `{ memberNo, guardianMemberNo }`; the guardian is validated (18+, reachable, chain rules) and
-the member and the guardian link are written in one transaction. A missing guardian is
-`422 validation_error` naming the field; an ineligible guardian uses MR-40's codes; any refusal leaves
-the request `pending`. See `member-registrations-member-record.md` MR-50.
+**Registration approval (member-record Phase 1/3).** `POST /v1/registration-requests/:id/approve`
+requires `{ memberNo, phoneOwnership }` and a `guardianMemberNo` when the caller's number is borrowed;
+the guardian is validated (18+, reachable, chain rules) and the member, its phone and the guardian link
+are written in one transaction. A missing required guardian is `422 validation_error` naming the field;
+an ineligible guardian uses MR-40's codes; any refusal leaves the request `pending`. The encrypted
+number is erased on the decision, and a purge erases the member's confirmation rows (or nulls their
+`reason`). See `member-registrations-member-record.md` MR-50 and MR-53.
 
 ### Reference data
 
@@ -1365,12 +1411,15 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
 `headcount_only`, `series_required`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
-`officer_required`, `pledge_already_terminal`, `payment_failed`, `ussd_disabled` (`503`), `code_invalid`, `code_expired`,
+`officer_required`, `pledge_already_terminal`, `payment_failed`, `contact_in_use` (`409`),
+`already_verified` (`409`), `ussd_disabled` (`503`), `code_invalid`, `code_expired`,
 `code_used`, `code_voided`, `code_wrong_session`, `too_many_tries`, `already_clocked`,
 `registration_not_pending`, `not_shepherd`, `not_presbyter`, `not_senior_presbyter`,
 `delegate_required`, `delegation_exists`, `not_eligible`, `subscription_not_active`,
 `period_already_paid`, `not_covered`, `claim_not_pending`, `card_in_use`, `cors_rejected`,
-`session_closed`.
+`no_contact_or_guardian`, `guardian_required`, `guardian_not_eligible`, `guardian_chain_cycle`,
+`guardian_chain_unreachable`, `guardian_chain_too_long`, `no_own_contact` (`409`),
+`too_many_requests` (`429`), `delivery_unavailable` (`503`), `session_closed`.
 
 ### Concurrency and caching
 
@@ -1412,7 +1461,12 @@ The 24b and 24c tables (`attendance_codes`, `registration_requests`, `clocking_d
 and migrations 0014/0015. The 24d correction adds `event_session_headcounts`, `presbyter_only` on
 `event_instances` and `event_series`, and `ussd_sessions.external_id` in migration 0016, defined in the
 USSD spec. The MVP's `event_session_offering_counts` and `event_session_offering_count_lines` arrive in
-migration `0017` and are defined in `member-registrations-events-offerings.md` (phase 5).
+migration `0017` and are defined in `member-registrations-events-offerings.md` (phase 5). Phase 3's
+migration `0025` adds `member_contacts.verified_at`, `member_confirmations`,
+`member_verification_codes` (with `token_hash`, `contact_id` and `destination_value_hash`) and
+`registration_requests.phone_encrypted`,
+defined in the USSD spec; the request hash remains for the rate limit and the reference, and approval
+refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at` stays inert history; `confirmedAt` and eligibility read the confirmation audit.
 
 ## Acceptance Criteria
 

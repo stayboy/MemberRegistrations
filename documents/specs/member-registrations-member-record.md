@@ -1,13 +1,15 @@
 # Member registrations - member record actions, add/edit form, photo and membership verification
 
 **Status:** approved by the owner, 2026-11-18; independent spec review ACCEPT, 2026-11-18, and
-re-reviewed for the approval-guardian amendment and the ETag byte-length amendment the same day. Three
+re-reviewed for the approval-guardian amendment and the ETag byte-length amendment, for the
+Phase 3 verification amendment (grill answers of 2026-11-18), and for the 2026-11-19
+contact-verification reshape (the member portal, per-contact proof and officer confirmation). Three
 phases: **Phase 1** is a wire-contract gate: a small additive surface (a titles read endpoint, the
 title create fields, a guardian eligibility filter and a guardian projection) plus new refusals on
 the existing member and relationship endpoints (reachability); **Phase 2** (photo) adds a migration,
-a wire endpoint and PII handling; **Phase 3** (OTP verification and the USSD gate) adds a migration,
-a wire change, new outbound WhatsApp and SMS dependencies, an email sender, authentication behaviour
-and a USSD behaviour change. Phases 1, 2 and 3 are hard gates under `AGENTS.md` §17: each parks
+a wire endpoint and PII handling; **Phase 3** (contact verification, the member portal and officer confirmation) adds a
+migration, a wire change, new outbound WhatsApp and SMS dependencies, an email sender, a public
+acceptance page and encrypted pending storage. Phases 1, 2 and 3 are hard gates under `AGENTS.md` §17: each parks
 until the owner authorises that round and that gate by name.
 
 **Amendments (2026-11-18, during the Phase 2 build):** the `PUT` photo response is `200` with the
@@ -38,10 +40,12 @@ Nothing in the register can show a face. Every avatar is initials, so a large re
 scanned by sight, and an officer who has just met a member has no way to attach the photograph they
 took.
 
-A member's phone is recorded as a contact but nothing proves that the person holding it is the member.
-The record shows a `Verified` badge that only a seed or a direct API call can set, and the USSD service
-accepts any phone, member or not, so the register cannot answer "is this phone this member?" and the
-member's short code is a public menu.
+A member's phone is recorded as a contact, and the USSD service can tell whether the dialing number
+belongs to a member - but it cannot prove that the person holding the phone is that member. The record's
+`Verified` badge can be set only by a seed or a direct API call, and it cannot show which of the
+member's contacts was actually proven. The product deliberately answers "is this number one of the
+member's?" rather than "is this phone this person?"; a second contact (email or WhatsApp) is the extra
+proof, and an officer can attest when a member has no usable channel.
 
 The presbyter title is displayed on the record and accepted by the update wire, but the add and edit
 forms cannot set it, so a title arrives only from an import or a database visit, and the create schema
@@ -71,19 +75,16 @@ authenticated session, and shown wherever the member's avatar appears; initials 
 The original file never leaves the browser: the client crops and re-encodes it, so no EXIF and no
 filename reach the register.
 
-**Phase 3 - membership verification by OTP, a hard gate.** A registered number that has not verified
-opens a **verification menu** in USSD. The register itself chooses where the code goes, from the
-contacts recorded on the member: **WhatsApp first, email second, phone (SMS) third**, and when both
-WhatsApp and email exist it sends the same code to both, so the member uses whichever arrives. The
-member enters the code in the same session; neither the member nor the officer picks a channel. An
-officer can start the same delivery from the record and see where it went and when it expires, and
-can revoke a verification; the officer never sees or enters the code. Registration requires a
-reachable member - their own contact or a guardian - so every member is either verifiable or
-reachable through someone who is. Verification follows the number: a member with their own phone or WhatsApp
-number verifies and uses USSD; a member without one is reached through their guardian, so the record shows
-`Via <guardian>` rather than a `Verified` badge. Age is not the test; having a phone or WhatsApp number is. An unregistered phone can still
-self-register (the register’s existing USSD flow) but cannot use member services until it verifies.
-Changing or removing the verified number clears it.
+**Phase 3 - contact verification, the member acceptance page and officer confirmation, a hard gate.** The USSD session
+identifies a member by an owned phone or WhatsApp number; that is possession of the number, not proof of
+the person. The register still chooses where the code goes: **email** when present, else **WhatsApp**,
+else the **phone**; every message carries the code and a short link to the public member acceptance
+page, where the code is entered. A proven contact sets that
+contact's `verified_at` and the badge names the channel; an officer can also **confirm** a member with an
+audit, for a member with no usable channel, and `Revoke verification` withdraws every proof and the
+confirmation. The officer never sees or types the code. Anonymous registration keeps the anonymous menu;
+the request retains the caller's number encrypted and approval binds it as owned or borrowed, so an
+approved member is identified next session and can verify. Age is not the test; having a contact is.
 
 ## User Stories
 
@@ -137,24 +138,25 @@ Changing or removing the verified number clears it.
     is wrong or no longer wanted.
 25. As a reader of the register, I want the photograph wherever a member's avatar appears, so that I
     recognise people rather than reading initials.
-26. As a member, I want the USSD menu to send the code for me, so that I do not have to understand
+26. As a member, I want the register to send the code to me, so that I do not have to understand
     delivery channels.
-27. As a member, I want the code on the contact I actually use, WhatsApp first, then email, then my
-    phone, so that it reaches me without a choice I should not have to make.
-28. As a member with both WhatsApp and email, I want the code on both, so that whichever I open first
-    works.
-29. As a member, I want to enter the code in the same USSD session, so that I do not need a
-    smartphone app or a second channel.
-30. As a member whose code was started by an officer, I want to open the USSD menu and enter it, so
+27. As a member, I want the code on the contact the register picks - email first, then WhatsApp, then
+    my phone - so that it reaches me without a choice I should not have to make.
+28. As a member with both email and WhatsApp, I want the register to pick one reliably and tell me
+    which, so that I know where to look.
+29. As a member, I want to open the link in the message and enter the code there, so that I do not
+    need to remember a menu path.
+30. As a member whose code was started by an officer, I want to enter it on the member acceptance
+    page, so
     that an officer can begin the process and I can finish it.
-31. As a member, I want the main menu to open after I verify, so that I can check events, offerings
-    and my welfare cover in the same session.
-32. As a member who has verified before, I want the main menu to open immediately, so that I am not
-    asked for a code on every dial.
+31. As a member, I want the main menu to open without a verification prompt, so that I can check
+    events, offerings and my welfare cover in the same session.
+32. As a member, I want the main menu to open as soon as I dial, so that I am not stopped by a
+    verification prompt.
 33. As a person whose number is not registered, I want the USSD service to offer registration rather
     than a dead end, so that I can join the register.
-34. As a member who has just registered by USSD, I want to verify on my next session, so that the
-    register knows the number is mine before it shows me member data.
+34. As a member who has just registered by USSD, I want to be identified by my own number next session
+    and able to verify, so that I can complete my contact proof.
 35. As a member, I want a code that expires and a limited number of tries, so that a guessed code
     cannot open my record.
 36. As a member, I want a resend after a short wait, so that a lost message does not lock me out
@@ -163,12 +165,13 @@ Changing or removing the verified number clears it.
     member at the desk can be sent a code without dialling first.
 38. As a church administrator, I want the register to choose the channel, so that I do not have to
     ask the member which one they have.
-39. As a church administrator, I want to see which destinations the code went to and when it
-    expires, so that I can tell the member what to expect without ever seeing the code.
+39. As a church administrator, I want to see which destination the code went to, how the member
+    completes it and when it expires, so that I can tell them what to expect without ever seeing the
+    code.
 40. As a church administrator, I want to revoke a verification when a phone changes hands, so that
     the old number immediately loses member access.
-41. As a church administrator, I want the `Verified` badge and its date on the record, so that I can
-    see at a glance whether the member can use USSD.
+41. As a church administrator, I want the `Verified` badge, its proof and its date on the record, so
+    that I can see at a glance which contact is proven.
 42. As a registration officer, I want the contact values captured before the member is created, so
     that no member enters the register without a way to verify.
 43. As a privacy-conscious officer, I want a code never written to a production log or returned by
@@ -192,10 +195,10 @@ Changing or removing the verified number clears it.
     unremovable, so that nobody becomes unreachable.
 52. As a church administrator, I want to change a guardian on the edit form, so that a family
     change is recorded where I am working.
-53. As a church administrator, I want no `Verified` badge or verify action for a member with no
-    phone or WhatsApp number, so that the register does not claim a verification that cannot exist.
-54. As a member who later gets a phone or WhatsApp number, I want to add it and verify, so that I gain USSD access
-    when I can.
+53. As a church administrator, I want no code send for a member with no email, phone or WhatsApp, and
+    a `Confirm member` action instead, so that the register offers only a proof that can exist.
+54. As a member who later gets an email, phone or WhatsApp number, I want to add it and verify, so
+    that I gain the badge and eligibility when I can.
 55. As a church administrator, I want a member with contacts and a guardian to keep both, so that
     direct and proxy reachability can coexist.
 56. As a church administrator, I want a member with neither a contact nor a guardian to be refused,
@@ -295,12 +298,15 @@ and involvement` (the membership facts, title, card, ministries, shepherd), `Rel
   `lastName`, so the wire and existing data are unchanged; `otherNames` stays on the API for imports
   and existing records but is no longer edited in the form.
 
-- **Approval requires a guardian.** The USSD registration request stores only a one-way phone hash,
-  so approving it cannot reuse the phone. `POST /v1/registration-requests/:id/approve` MUST carry
-  `guardianMemberNo`; the approval MUST validate it like any guardian (18+, reachable, chain rules)
-  and write the member and the guardian link in one transaction. Without a guardian the approval is
-  refused; an ineligible guardian is `422 guardian_not_eligible`. The approvals screen MUST require
-  the guardian too.
+- **Approval binds the number, and a guardian only when needed.** The USSD registration request
+  retains the caller's number encrypted (Phase 3, MR-53), so approving it can bind that number.
+  `POST /v1/registration-requests/:id/approve` MUST carry `phoneOwnership` (`own` or `borrowed`) and a
+  `guardianMemberNo` only when the number is borrowed (or the member has no own contact). `own` writes
+  the decrypted number as an owned contact and needs no guardian; `borrowed` links the number to the
+  guardian and validates it like any guardian (18+, reachable, chain rules), writing the member, its
+  contact and the guardian link in one transaction. A missing required guardian is `422
+validation_error` naming the field; an ineligible guardian is `422 guardian_not_eligible`. The
+  approvals screen MUST ask the own/borrowed question and require the guardian only when borrowed.
 
 - **No migration, but a wire-contract change.** Phase 1 adds the titles endpoint, the title create
   fields, the guardian filter and the guardian projection, and it adds refusals to existing member and
@@ -344,89 +350,89 @@ and involvement` (the membership facts, title, card, ministries, shepherd), `Rel
 - **One avatar component.** The header, the members list, the contacts dialog header, the member
   pickers and the shepherding rosters use the same `MemberAvatar`; initials are the fallback.
 
-### Phase 3 - OTP verification and the USSD gate (hard gate)
+### Phase 3 - contact verification, the member acceptance page and officer confirmation (hard gate)
 
-- **Verification binds the member and the number.** `members.verified_at` (already present) gains a
-  companion `verified_number_hash`; a member is verified only while the calling number’s HMAC matches
-  that hash, and the calling number may be a phone **or** a WhatsApp number, because `findOwnedMember`
-  resolves both. Changing or removing the verified number clears both. A member-level `Verified` badge
-  means "this member has a verified number"; its title names the masked number (the country code and the last two digits, e.g. `+233 *** 01`) and
-  the date.
-- **The code.** Six digits from `crypto.randomInt`, hashed at rest with HMAC-SHA256 under an
-  `OTP_PEPPER` secret, never stored in clear and never logged outside the development console
-  senders. Valid for 10 minutes, five attempts, one code live at a time. A resend is allowed after
-  60 seconds and at most five in an hour per member. The counters live in Postgres
-  (`consumeRateLimit`), so they survive a restart and a second instance.
-- **The register chooses the destinations; nobody else does.** `issue(memberId, now)` resolves the
-  contacts recorded on the member: if WhatsApp exists it sends there, and if email also exists it
-  sends the same code there too; otherwise email if it exists; otherwise SMS to the number. A member with no phone or WhatsApp has no
-  USSD identity and is refused earlier with `409 no_own_contact`. One code is generated per issue and
-  every destination receives that same code.
-- **Three delivery ports.** The new `WhatsAppSender.send(to, body)`, a new `EmailSender.send(to, body)`
-  (the current `Mailer` exposes only `sendMagicLink`, so email needs its own generic method or a
-  sibling port), and the new `SmsSender.send(to, body)`. All have console implementations outside
-  production and provider adapters in production; production never logs a code. The providers are
-  deployment choices; the interfaces are fixed.
-- **One verification service.** `issue(memberId, now)` resolves, sends and records the destinations;
-  `verify(memberId, number, code, now)` compares in constant time, counts the attempt, consumes the
-  row and sets `verified_at` and `verified_number_hash`. Completion is always the member entering the
-  code in USSD; `revoke(memberId)` clears both and consumes any live code.
-- **The USSD verification menu has no channel choice.** On a registered but unverified number the
-  first screen is `Verify your membership`: `1 Send code`, `2 Enter code`, `0 Exit`. Choosing 1
-  issues the code, renders `We sent a code to <masked destinations>` and then prompts for the six
-  digits; choosing 2 accepts a code an officer started. A correct code verifies and moves to the main
-  menu in the same session. A wrong code re-prompts with the remaining attempts; after the fifth the
-  session ends with `Too many attempts`. An expired code renders `That code has expired` and offers a
-  resend.
-- **The gate.** A verified number goes straight to the menu. An unregistered number gets the existing
-  `Register` flow and nothing else; a member created that way is unverified and must verify next
-  session. Registered and unverified cannot see events, offerings, welfare, profile or shepherding
-  until the code is accepted. The pipeline checks the gate on every frame, so a revoke takes effect
-  mid-session.
-- **Contacts exist before the member does.** The create form requires a phone or WhatsApp contact, because the
-  phone or WhatsApp number is the USSD identity and a delivery channel; email is recorded on the
-  create form when the member has them, never added later as a prerequisite for verification. The edit
-  form can still correct them.
-- **The officer’s controls.** The `Actions` menu gains `Verify membership` when the member is
-  unverified: choosing it sends immediately, with no channel selector, and shows the masked
-  destinations and the expiry. It gains `Revoke verification` when verified, behind a confirmation
-  that names the consequence. The `Verified` badge stays a display; there is no officer-side "mark
-  verified" action and the officer never sees or types the code.
-- **A member without a phone or WhatsApp is not verified by OTP.** They have no USSD identity, so `issue`
-  refuses with `409 no_own_contact`; the record shows `Via <guardian>` instead of the `Verified`
-  badge and `Verify membership` is not offered. A member with a phone or WhatsApp number verifies normally, whatever
-  their age; adding a phone or WhatsApp later enables the flow. A legacy member with a number keeps the
-  standard gate.
+- **Identification is possession, not identity.** An owned `phone` or `whatsapp` contact match identifies
+  the member for the USSD session and opens the member menu; the register proves "this number", never
+  "this person". An identified member uses the menu whether or not any contact is verified: there is no
+  verification gate. An anonymous number keeps the anonymous menu and visitor giving. A spoofed MSISDN
+  is an accepted, documented risk of trusting the gateway's number assertion; the register does not
+  claim to defend it.
+- **Proof is per contact.** `member_contacts.verified_at` records that a code sent to that one contact
+  was accepted. The `Verified` badge names the most recent proof - `Email verified`, `WhatsApp
+verified`, `Phone verified` or `Officer confirmed` - with the masked value and the date; its title
+  lists every proof. Changing or removing a contact clears its proof. The officer confirmation lives in
+  the append-only `member_confirmations` table; the DTO's `confirmedAt` and `requires_verified` read the
+  latest non-withdrawn row, never the legacy `members.verified_at`, which stays inert history. An
+  imported or seeded `verified_at` with no audit row is history only: no badge and no eligibility.
+- **The register picks the channel; the page completes it.** `issue(memberId, now)` resolves one channel
+  from the member's own contacts: **email** when present, else **WhatsApp**, else the **phone**, skipping any contact that is already
+  proven; when every owned contact is proven the action is not offered and `issue` refuses `409
+already_verified`. Every channel is completed on the **member acceptance page**: the message carries the six-digit code and the
+  short link. Neither the member nor the officer chooses. A member with no email, WhatsApp or phone is
+  refused with `409 no_own_contact`.
+- **The code.** Six digits from `crypto.randomInt`, HMAC-SHA-256 under `OTP_PEPPER`, valid for ten
+  minutes, five attempts, one live code per member. A resend is allowed after 60 seconds and at most
+  five in an hour per member; the refusal is `429 too_many_requests`; the fifth wrong code ends the
+  attempt with `Too many attempts`. The counters live in Postgres.
+- **The member acceptance page.** A public page at `/v#t=<token>` (base `VERIFICATION_LINK_BASE`, e.g.
+  `/v` locally or `/v.html` on static hosting), served outside the officer app's `#/` router, with no
+  member data before acceptance. The token is random, stored only as a hash, single-use and expiring with
+  the code; the page asks for the six digits and posts `{ token, code }` to an unauthenticated endpoint
+  rate-limited per token and per address, with the five-attempt cap. Success shows only the masked
+  destination and the outcome. **Every** message (email, WhatsApp, SMS) carries the code and the link;
+  the link never verifies by itself.
+- **The member starts it too.** An identified member (an owned phone or WhatsApp) opens `My Profile >
+1 Verify contact`; the register issues through the same service, sends the code and link to the
+  resolved channel, and renders `status.verification_sent` - "A code was sent to <mask>. Open the link
+  we sent." The action is hidden once a proof or officer confirmation exists, and it shares the officer
+  throttle. The page remains the only entry; no six-digit prompt is added to USSD. An email-only or
+  contactless member has no USSD identity and is officer-initiated. The feature is specified in
+  `member-verification-initiation.md`.
+- **The officer's controls.** `Verify membership` on an unverified member sends to the resolved channel
+  and shows the masked destination, the **completion route** (`open the link we sent to <channel>`), and
+  the expiry; never the code. `Confirm member` records an audited
+  confirmation with a reason and is the path for a member with no own contact or a failed channel.
+  `Revoke verification` withdraws every contact proof and the confirmation, audited; it never removes a
+  contact and never blocks an identified phone. The officer never sees or types the code.
+- **Registration.** The pending request retains the caller's number **encrypted** under
+  `REGISTRATION_PHONE_KEY` (AES-256-GCM) and erases it on approve, reject or purge. Approval decrypts it
+  and writes it as an owned phone contact, or, on the officer's `borrowed` choice, links it to the
+  guardian and requires the guardian; the member then has no own number. An approved member with an own
+  number is identified next session and can verify on the member acceptance page. The
+  officer sees the masked number only.
+- **Email-only and contactless members.** A member whose only contact is email verifies on the
+  acceptance page like any other channel; a contactless member is reached through the guardian and
+  officer-confirmed.
 - **The bare `verified` input leaves the wire.** `createMemberSchema` and `updateMemberSchema` drop
-  `verified`; `verifiedAt` becomes read-only and is set only by the verification service. The UI never
-  sent it; the import parser does not use it; no seed depends on it in production.
-- **No anonymous member menu.** The USSD machine’s anonymous lanes (`memberPresent: false`) are
-  removed for member services; registration is the one anonymous path.
+  `verified`; `confirmedAt` and `verifiedContacts` are read-only, set only by the verification and
+  confirmation services. The UI never sent `verified`; the import parser does not use it.
+- **Anonymous features remain.** An unregistered number keeps today's anonymous menu (`Register`,
+  `Offerings`, `Activities`, `Attendance`, `Exit`) and visitor giving; the gate never applies to an
+  anonymous session. The real flag is `session.anonymous`.
+- **Data model.** `member_contacts.verified_at`; `member_confirmations` (append-only: `id`, `member_id`,
+  `confirmed_by`, `confirmed_at`, `reason`, `withdrawn_at`, `withdrawn_by`); `member_verification_codes`
+  with `token_hash`, `contact_id` and `destination_value_hash` (always present); `registration_requests.phone_encrypted`; `members.verified_at` stays
+  inert history and the confirmation audit is the source. `0025` is re-authored in place; the member-level
+  number hash and mask never land.
 
 ### Options explored - membership verification
 
-The conversation explored five shapes; the spec builds the hybrid in the first.
+The conversation explored the shapes; the spec now builds the hybrid.
 
-1. **The register picks the contact; the member or an officer starts it; the member completes in
-   USSD (chosen).** WhatsApp first, email second, phone third, and WhatsApp plus email when both
-   exist. Chosen because it needs no channel decision from either person, covers the desk and the
-   handset, and proves possession of a contact the member actually uses. **Cost:** three delivery
-   ports, a reachability requirement at registration, and a code that must survive between an
-   officer’s send and the member’s next session.
-2. **Member or officer chooses SMS or email** (the earlier draft). Rejected by the owner: the choice
-   belongs to the register, not to the member or the officer.
-3. **Officer-assisted completion** (the officer reads the code to the member and types it). Rejected:
-   you confirmed the member completes verification in USSD, and an officer who types the code is a
-   relay rather than a control.
-4. **A code entered in a member web or app portal.** Rejected: no member portal exists, and USSD is
-   the member’s only channel.
-5. **The membership card number or the date of birth as the second factor.** Rejected: both are
-   guessable or shared, and neither proves possession.
+1. **The register picks one channel; every channel uses the member acceptance page (chosen).** The
+   register chooses one channel and the message carries the code and a short link; the page accepts the
+   code for any channel. Cost: a public page and a token.
+2. **USSD for email/WhatsApp and the page for the phone** (the earlier draft). Rejected by the owner:
+   the link reaches every channel, so one completion surface is simpler and USSD verification retires.
+3. **A channel choice by the member or the officer.** Rejected: the register chooses, not either person.
+4. **Officer-assisted code completion** (the officer reads or types the code). Rejected: the officer
+   confirmation is an attestation, not a relay, and the officer never sees the code.
+5. **The membership card number or the date of birth as the factor.** Rejected: guessable or shared.
 
-Within the chosen shape the spec settles four sub-decisions: verification is bound to the number (a
-second number must verify), the code is six digits (a million values with five attempts), it is stored
-as HMAC-SHA256 under a pepper rather than a slow hash (the attempt and rate limits are the control),
-and registration stays the one anonymous path so a new member can still join.
+Sub-decisions: proof is per contact; the register sends one code to one channel; the phone uses the
+member acceptance page; the
+officer confirmation is audited; registration retains the number encrypted and binds it at approval.
 
 ### API contracts
 
@@ -465,12 +471,28 @@ type PhotoContentType = 'image/webp' | 'image/jpeg' | 'image/png';
 
 // DELETE /v1/members/:memberNo/photo  -> 204
 
-// Phase 3: the officer starts a code; the member completes it in USSD. No channel is chosen.
+// Phase 3: the officer starts a code; the member completes it on the member acceptance page.
 // POST /v1/members/:memberNo/verification/otp
-// 202      { destinations: [{ channel: 'whatsapp' | 'email' | 'sms', masked }], expiresAt }
-// 409      no_own_contact       // the member has no phone or WhatsApp (no USSD identity)
-// 429      too_many_requests    // resend throttle
-// DELETE /v1/members/:memberNo/verification  -> 204
+// 202      { destination: { channel: 'email' | 'whatsapp' | 'phone', masked }, expiresAt }
+// 409      no_own_contact
+// 429      too_many_requests
+// 503      delivery_unavailable
+// DELETE /v1/members/:memberNo/verification  -> 204  // withdraw every contact proof and the confirmation
+// POST /v1/members/:memberNo/confirmation   { reason } -> 201 { confirmedAt }
+// DELETE /v1/members/:memberNo/confirmation -> 204
+
+// Public member acceptance page (unauthenticated; the token and the code are the credential):
+// POST /portal/verification/accept { token, code } -> 200 { channel: 'email' | 'whatsapp' | 'phone', masked }
+// 400      code_invalid | code_expired | too_many_tries
+// 429      too_many_requests
+
+// Approval of an anonymous registration:
+// POST /v1/registration-requests/:id/approve { guardianMemberNo, phoneOwnership: 'own' | 'borrowed' }
+
+// MemberDetail gains:
+// verifiedContacts: [{ id, channel: 'phone' | 'whatsapp' | 'email', masked, verifiedAt }]
+// confirmedAt: string | null
+
 // Phase 1: the guardian surface (no migration).
 // GET /v1/members?guardianEligible=true&forMemberNo=<no>
 //   -> 200 { items: [{ memberNo, name, contactMasked, via: string[] }] }
@@ -486,11 +508,16 @@ type PhotoContentType = 'image/webp' | 'image/jpeg' | 'image/png';
 // POST a guardian link with no terminal own contact              -> 422 guardian_chain_unreachable
 // POST a guardian link longer than three                         -> 422 guardian_chain_too_long
 // DELETE the last guardian of a member with no own contact -> 409 guardian_required
-// POST /v1/members/:memberNo/verification/otp with no phone or WhatsApp -> 409 no_own_contact
+// POST /v1/members/:memberNo/verification/otp with no email, WhatsApp or phone -> 409 no_own_contact
 interface MemberDetail {
   photoUpdatedAt: string | null;
-  verifiedAt: string | null; // set only by a successful OTP
-  verifiedNumberMasked: string | null; // the masked calling number (phone or WhatsApp)
+  verifiedContacts: {
+    id: string;
+    channel: 'phone' | 'whatsapp' | 'email';
+    masked: string;
+    verifiedAt: string;
+  }[];
+  confirmedAt: string | null; // the officer confirmation
   guardian: { memberNo: string; name: string; contactMasked: string; via: string[] } | null;
 }
 
@@ -501,16 +528,19 @@ interface MemberListItem {
 
 ## Requirements
 
-**Phase map.** Phase 1 owns MR-1..MR-13, MR-38..MR-42, MR-45, MR-48, MR-49 and MR-50; Phase 2 owns MR-14..MR-20; Phase 3
-owns MR-22..MR-35 and MR-37, plus MR-43, MR-44, MR-46 and MR-47. MR-21 is shared by Phases 2 and 3 (photo and
+**Phase map.** Phase 1 owns MR-1..MR-13, MR-38..MR-42, MR-45, MR-48, MR-49 and the guardian-required part of MR-50;
+Phase 2 owns MR-14..MR-20; Phase 3 owns MR-22..MR-35, MR-37, MR-51..MR-55, the `phoneOwnership` part of
+MR-50, plus MR-43, MR-44, MR-46 and MR-47. Phase 1's approval stays guardian-required until Phase 3's
+encrypted retention lands; Phase 3 adds the own/borrowed choice. MR-21 is shared by Phases 2 and 3 (photo and
 OTP logging), and MR-36 constrains all three. Where a requirement names a later phase, it says so.
 
 - MR-1: `PageActions` MUST support one action marked primary, rendered as a visible button beside the
   `Actions` menu; the remaining actions MUST render as menu items, destructive ones after a divider.
 - MR-2: The member record MUST mark `Edit` primary and MUST place `View contacts`, `Assign shepherd`,
-  `Add ministry`, `Add relationship`, `Add subscription`, `Verify membership` when the member has a
-  phone or WhatsApp and is unverified (Phase 3), `Revoke verification` when verified (Phase 3), `Archive`/`Restore`
-  and `Purge` in the menu.
+  `Add ministry`, `Add relationship`, `Add subscription`, `Verify membership` when the member has an owned
+  contact that is not yet proven and no active confirmation (Phase 3), `Confirm member` when no active confirmation
+  exists (Phase 3), `Revoke verification` when any proof or confirmation exists (Phase 3),
+  `Archive`/`Restore` and `Purge` in the menu.
 - MR-3: Each menu action MUST invoke the surface that already owns the mutation; it MUST NOT
   duplicate that surface's form.
 - MR-4: The menu MUST show `Restore` for an archived member and `Archive` otherwise, and `Purge` in
@@ -552,42 +582,75 @@ OTP logging), and MR-36 constrains all three. Where a requirement names a later 
   MUST reuse the same crop and encode path.
 - MR-21: No log line, error message or stored value MUST contain the photo bytes, the source filename
   or EXIF data, and no production log line MUST contain an OTP code.
-- MR-22: A registered number (phone or WhatsApp) without a live verification MUST see the verification
-  menu and MUST NOT reach member services until the code is accepted; a verified number MUST pass
-  straight to the menu.
+- MR-22: An owned phone or WhatsApp contact MUST identify the member and MUST open the member menu; an
+  anonymous number MUST keep the anonymous menu. There is no verification gate. A spoofed MSISDN MUST be
+  recorded as an accepted risk, not defended by a code to the same number.
 - MR-23: Neither the member nor the officer MUST choose a delivery channel. The register MUST resolve
-  the destinations from the member’s contacts.
-- MR-24: The resolver MUST try WhatsApp first, email second and the number (SMS) third; when both
-  WhatsApp and email exist it MUST send the same code to both; when only one exists it MUST use that
-  one. A member with no phone or WhatsApp MUST be refused earlier with `409 no_own_contact`, so the
-  SMS fallback always has a number.
-- MR-25: A code MUST be six digits, single-use, valid for ten minutes and limited to five attempts,
-  and MUST be stored only as an HMAC.
-- MR-26: A correct code MUST set `verified_at` and the verified number hash for the calling number
-  (phone or WhatsApp); a wrong code MUST decrement the attempts; an expired or consumed code MUST be
-  refused.
-- MR-27: A resend MUST be allowed after 60 seconds and at most five times an hour per member; the
-  counters MUST live in Postgres.
-- MR-28: An unregistered number MUST see only the registration flow and MUST NOT reach member services.
-  A member created by that flow MUST be unverified.
-- MR-29: An officer MUST be able to start a code from the member record with no channel choice, and
-  MUST see the masked destinations and the expiry but never the code.
+  one channel from the member's own contacts.
+- MR-24: The resolver MUST choose the first **unproven** channel: email when present, else WhatsApp, else
+  the phone; a proven contact MUST be skipped. When every owned contact is proven the issue MUST be
+  refused with `409 already_verified`. Every channel MUST be completed on the member acceptance page, and
+  the message MUST carry the code and the short link. A member with no email, WhatsApp or phone MUST be
+  refused with `409 no_own_contact`. A
+  stored number of at most 10 digits MUST be prefixed with `DEFAULT_COUNTRY_CODE` when it does not
+  already start with it; a longer number MUST be used as stored.
+- MR-25: A code MUST be six digits, single-use, valid for ten minutes and limited to five attempts, and
+  MUST be stored only as an HMAC.
+- MR-26: A correct code MUST set `member_contacts.verified_at` on the one contact the code was sent to;
+  a wrong code MUST decrement the attempts; an expired or consumed code MUST be refused. A second entry
+  of the same code MUST be refused.
+- MR-27: A resend MUST be allowed after 60 seconds and at most five times an hour per member, officer
+  sends included; the refusal MUST be `429 too_many_requests`; the counters MUST live in Postgres.
+- MR-28: An unregistered number MUST see the anonymous menu (`Register`, `Offerings`, `Activities`,
+  `Attendance`, `Exit`) and MUST NOT reach member-only data or actions. Approval MUST bind the
+  registration number as an owned contact, or as the guardian's when the officer records it borrowed.
+- MR-29: An officer MUST be able to start a code from the member record with no channel choice, and MUST
+  see the masked destination, the completion route (the link sent to that channel) and the expiry, but
+  never the code.
 - MR-30: The create form MUST record the contacts the member has and MUST NOT require a contact the
   member does not have when a guardian supplies reachability; it MUST refuse a member with neither
   (MR-38).
-- MR-31: An officer MUST be able to revoke a verification; the next frame from that number MUST require
-  a new code.
-- MR-32: Changing or removing the verified number contact MUST clear the verification.
-- MR-33: `createMemberSchema` and `updateMemberSchema` MUST no longer accept `verified`; `verifiedAt`
-  MUST be read-only and set only by the verification service.
-- MR-34: The `Verified` badge MUST render only when `verifiedAt` is set, and its title MUST name the
-  masked number and the date.
-- MR-35: WhatsApp, email and SMS MUST be delivered through their ports only; the console
-  implementations MUST exist only outside production, and production MUST never log a code.
+- MR-31: An officer MUST be able to withdraw every contact proof and the confirmation. The confirmation
+  withdrawal MUST be audited (actor and instant); clearing a contact proof is a column clear with no
+  separate audit. Neither MUST remove a contact or block an identified phone. The USSD session remains
+  identified.
+- MR-32: Changing or removing a contact MUST clear that contact's proof; removing the last contact is
+  still governed by the guardian rule (MR-39).
+- MR-33: `createMemberSchema` and `updateMemberSchema` MUST no longer accept `verified`; `confirmedAt`
+  and `verifiedContacts` MUST be read-only and set only by the verification and confirmation services.
+- MR-34: The `Verified` badge MUST render only when a contact proof or an officer confirmation exists,
+  MUST name the proof (`Email`, `WhatsApp`, `Phone` or `Officer confirmed`) and
+  the date, and its title MUST list every proof. An imported `verified_at` with no audit row MUST NOT
+  render the badge.
+- MR-35: Email, WhatsApp and SMS MUST be delivered through their ports only; email MUST use Resend
+  behind a generic method, WhatsApp and SMS a provider-neutral HTTP adapter, and a destination with no
+  configured sender MUST be refused with `503 delivery_unavailable`; the console implementations MUST
+  exist only outside production, and production MUST never log a code.
 - MR-36: Phase 1 MUST NOT require a migration; Phase 2 and Phase 3 migrations MUST be additive and
   reversible without changing the ORM contract.
-- MR-37: A code an officer started MUST be completable in USSD through the menu’s `Enter code`
-  option.
+- MR-37: A code an officer started MUST be completable exactly once, on the member acceptance page.
+- MR-51: The member acceptance page MUST be public and served outside the officer router, with no
+  member data before acceptance; its token MUST be random, stored only as a hash, single-use and
+  expiring with the code; the link MUST NOT verify by itself, and every message MUST carry the code and the
+  link. Its accept endpoint MUST enforce the five-attempt cap and a per-token and per-address rate
+  limit, answering `429 too_many_requests` when either is exceeded.
+- MR-52: `Confirm member` MUST record an append-only audit (actor, reason, instant) and `Revoke
+verification` MUST withdraw it with an audit; the officer MUST never see or type a code.
+- MR-53: A pending registration request MUST retain the caller's number encrypted under
+  `REGISTRATION_PHONE_KEY` (at least 16 characters, required in production), show only the mask, and
+  erase the encrypted value on approve, reject or purge; approval MUST bind it as owned or borrowed,
+  and a number already owned by another member MUST be refused with `409 contact_in_use` naming the
+  owner, leaving the request pending. The existing hash remains for the rate limit and the reference;
+  the encrypted value exists only to bind the contact at approval. Purge MUST erase the member's
+  confirmation rows (or null their `reason`).
+- MR-54: An identified member (an owned phone or WhatsApp) with at least one unproven owned contact and
+  no officer confirmation MUST be able to start a code from `My Profile > 1 Verify contact` in
+  USSD; the register MUST resolve one channel, send the code and the acceptance-page link, and render
+  the masked destination and the link instruction. USSD MUST NOT prompt for the six-digit code.
+- MR-55: The member-initiated send MUST share the officer's 60-second and 5-per-hour limits, the one
+  live code and the 503 `delivery_unavailable`; a member with every owned contact proven, or an active
+  officer confirmation, MUST NOT see the action; an anonymous session MUST NOT see it. An email-only or contactless member has no USSD identity and is
+  officer-initiated; the 409 belongs to the officer path.
 
 - MR-38: Every member created through the member API MUST be reachable: at least one own contact or at
   least one active `guardian` relationship. Bulk imports and seeds are outside this create rule; an
@@ -609,15 +672,17 @@ OTP logging), and MR-36 constrains all three. Where a requirement names a later 
 - MR-42: The add and edit forms MUST manage relationships. The create form’s guardian rides the
   create payload; other relationships are added after the member exists through the existing
   endpoints; on edit every change applies immediately.
-- MR-43: A member with no own phone or WhatsApp MUST NOT be offered OTP verification; the service MUST
-  refuse with `409 no_own_contact` and no `Verified` badge MUST render for them.
-- MR-44: Adding a phone or WhatsApp later MUST enable the standard verification; the guardian relationship MAY
-  remain.
+- MR-43: A member with no own email, phone or WhatsApp MUST NOT be offered a code; the service MUST
+  refuse with `409 no_own_contact`, and the officer MAY confirm the member instead, in which case the
+  badge reads `Officer confirmed`.
+- MR-44: Adding an email, phone or WhatsApp later MUST enable the standard send and completion; the
+  guardian relationship MAY remain.
 - MR-45: A member with both contacts and a guardian MUST keep both; either alone MUST satisfy
   reachability.
 - MR-46: Age MUST NOT determine contact or verification eligibility. A member of any age with a
   phone or WhatsApp verifies; a member without one is reached through the guardian.
-- MR-47: A legacy member with a phone or WhatsApp number MUST keep the standard gate.
+- MR-47: A legacy member with a phone or WhatsApp number MUST keep the standard identification and MAY
+  verify an email or WhatsApp contact, or the phone on the member acceptance page.
 - MR-48: The add and edit forms MUST present the horizontal stepper described in the Phase 1
   decisions, directly beneath the breadcrumb, with numbered bubbles, a check on completed steps and
   connector lines:
@@ -633,11 +698,11 @@ OTP logging), and MR-36 constrains all three. Where a requirement names a later 
   `Other names`; the separate `otherNames` input MUST be removed, and the `Other names` field MUST
   write `lastName`. Existing `otherNames` values MUST remain untouched.
 
-- MR-50: Approving a registration request MUST require `guardianMemberNo`, validate the guardian by
-  MR-40's rules and write the member and the guardian link in one transaction; the approval endpoint
-  and the approvals screen MUST both require the guardian. A missing guardian MUST be
-  `422 validation_error` naming the field; a guardian refusal MUST use MR-40’s codes
-  (`guardian_not_eligible`, `guardian_chain_cycle`, `guardian_chain_unreachable`,
+- MR-50: Approving a registration request MUST require `phoneOwnership`; `own` MUST write the
+  decrypted number as an owned contact, and `borrowed` MUST link it to a `guardianMemberNo` validated
+  by MR-40's rules, writing the member, its contact and the guardian link in one transaction. A missing
+  guardian when one is required MUST be `422 validation_error` naming the field; a guardian refusal
+  MUST use MR-40's codes (`guardian_not_eligible`, `guardian_chain_cycle`, `guardian_chain_unreachable`,
   `guardian_chain_too_long`); a refusal MUST leave the request `pending`.
 
 ## Acceptance Criteria
@@ -647,7 +712,10 @@ AC-MR12..AC-MR14, AC-MR31 and AC-MR34; Phase 3 owns AC-MR15..AC-MR23, AC-MR28, A
 and AC-MR37; AC-MR36 is shared by Phases 2 and 3. The verify and revoke items inside AC-MR1 belong
 to Phase 3.
 
-### AC-MR1: **Given** the member record, **When** it renders, **Then** `Edit` is a visible button and the `Actions` menu holds `View contacts`, `Assign shepherd`, `Add ministry`, `Add relationship`, `Add subscription`, `Verify membership` when the member has a phone or WhatsApp and is unverified (Phase 3), `Revoke verification` when verified (Phase 3), then `Archive` or `Restore`, then `Purge`. (MR-1..MR-4)
+### AC-MR1: **Given** the member record, **When** it renders, **Then** `Edit` is a visible button and the `Actions` menu holds `View contacts`, `Assign shepherd`, `Add ministry`, `Add relationship`, `Add subscription`, `Verify membership` when the member has an email, WhatsApp or phone and no proof (Phase 3),
+
+`Confirm member` when no active confirmation exists (Phase 3), `Revoke verification` when verified or
+confirmed (Phase 3), then `Archive` or `Restore`, then `Purge`. (MR-1..MR-4)
 
 ### AC-MR2: **Given** the `View contacts` menu item, **When** it is chosen from any tab, **Then** the contacts dialog opens and the values are visible; **Given** `Add subscription`, **Then** the Welfare & Services tab is active and its add control has focus. (MR-3)
 
@@ -675,23 +743,23 @@ to Phase 3.
 
 ### AC-MR14: **Given** a stored photo, **When** requested with its `ETag`, **Then** the response is 304; **Given** no `If-None-Match`, **Then** 200 with `Cache-Control: private, max-age=300`; **Given** the photo is removed, **Then** 404 and the avatars fall back to initials. (MR-17)
 
-### AC-MR15: **Given** a registered, unverified number, **When** it dials USSD, **Then** it sees `Verify your membership` with `1 Send code`, `2 Enter code` and `0 Exit`, no channel choice, and no member data before the code is accepted. (MR-22, MR-23)
+### AC-MR15: **Given** an owned phone or WhatsApp number, **When** it dials USSD, **Then** the member menu opens with no verification gate; **Given** an anonymous number, **Then** it sees the anonymous menu and no member data. (MR-22, MR-28)
 
-### AC-MR16: **Given** the correct code, **When** it is entered, **Then** the member is verified for that number, the main menu opens in the same session, and the record shows `Verified` with the masked number and date; **Given** the same number dials again, **Then** the menu opens without a code. (MR-26, MR-34)
+### AC-MR16: **Given** an email or WhatsApp member, **When** the officer sends and the member enters the code on the member acceptance page, **Then** the one contact the code was sent to is verified, the badge names the proof and the date, and a second entry of the same code is refused. (MR-24, MR-26, MR-34)
 
-### AC-MR17: **Given** a wrong code, **When** it is entered, **Then** the prompt names the remaining attempts; **Given** five wrong codes, **Then** the session ends and the code is refused; **Given** an expired code, **Then** the prompt offers a resend. (MR-25, MR-26, MR-27)
+### AC-MR17: **Given** a wrong code, **When** it is entered, **Then** the prompt names the remaining attempts; **Given** five wrong codes, **Then** the code is refused; **Given** an expired code, **Then** the prompt offers a resend. (MR-25, MR-26, MR-27)
 
-### AC-MR18: **Given** an unregistered number, **When** it dials, **Then** it sees only `Register`; **When** it completes the registration, **Then** the new member is unverified and its next session shows the verification menu. (MR-28)
+### AC-MR18: **Given** an unregistered number, **When** it dials, **Then** it sees the anonymous menu (`Register`, `Offerings`, `Activities`, `Attendance`, `Exit`) and no member data; **When** the registration is approved with its own number, **Then** the member is identified next session and can verify; **When** it is approved as borrowed, **Then** the number links to the guardian, the member has no own number, and the guardian is required. (MR-28, MR-53)
 
-### AC-MR19: **Given** an officer revokes a verification, **When** the same number dials, **Then** a new code is required; **Given** the verified number contact is removed or replaced, **Then** the verification is cleared. (MR-31, MR-32)
+### AC-MR19: **Given** an officer revokes verification, **When** the record renders, **Then** every contact proof and the confirmation are withdrawn with an audit and the badge is gone; **Given** the member's phone is still owned, **Then** it still identifies the member at USSD; **Given** a verified contact is changed or removed, **Then** its proof is cleared. (MR-31, MR-32)
 
-### AC-MR20: **Given** an update request carrying `verified`, **When** it is submitted, **Then** the field is ignored or refused and `verifiedAt` does not change; **Given** a verification in production, **When** it is logged, **Then** no code appears. (MR-21, MR-33, MR-35)
+### AC-MR20: **Given** an update request carrying `verified`, **When** it is submitted, **Then** the field is ignored or refused and `confirmedAt` does not change; **Given** a verification in production, **When** it is logged, **Then** no code appears. (MR-21, MR-33, MR-35)
 
-### AC-MR21: **Given** an unverified member, **When** the officer chooses `Verify membership`, **Then** the register sends with no channel selector, the response lists the masked destinations and the expiry, never the code, and the member receives it; **Given** no phone or WhatsApp, **Then** the response is `409 no_own_contact` and nothing is sent. (MR-29, MR-24)
+### AC-MR21: **Given** an unverified member, **When** the officer chooses `Verify membership`, **Then** the register sends to the resolved channel with no selector, the response lists the masked destination, the completion route and the expiry, never the code; **Given** no email, WhatsApp or phone, **Then** the response is `409 no_own_contact` and nothing is sent. (MR-29, MR-24)
 
-### AC-MR22: **Given** a code the officer started, **When** the member chooses `2 Enter code` in USSD and enters it, **Then** the member is verified and the menu opens; **When** the same code is entered a second time, **Then** it is refused. (MR-37)
+### AC-MR22: **Given** a code the officer started, **When** the member completes it on the member acceptance page, **Then** it is accepted once; **When** the same code is entered a second time, **Then** it is refused. (MR-37)
 
-### AC-MR23: **Given** a member with WhatsApp and email, **When** a code is issued, **Then** both destinations receive the same code; **Given** a number and email with no WhatsApp, **Then** email receives it; **Given** phone only, **Then** SMS receives it; **Given** no phone or WhatsApp, **Then** the issue is refused with `409 no_own_contact`. (MR-24)
+### AC-MR23: **Given** a member with email and WhatsApp, **When** a code is issued, **Then** email receives it and the message carries the link; **Given** WhatsApp only, **Then** WhatsApp receives it and the message carries the link; **Given** email only, **Then** email receives it and the link; **Given** phone only, **Then** the SMS carries the code and the link; **Given** none, **Then** the issue is refused with `409 no_own_contact`. (MR-24)
 
 ### AC-MR24: **Given** the add form, **When** a member with no contact and no guardian is saved, **Then** the save is refused with `422 no_contact_or_guardian` and the guardian field is named; **When** a guardian is chosen, **Then** `guardianMemberNo` rides the create payload, the member and the relationship are written in one transaction, and a failed link writes neither; **When** contacts are entered, **Then** they are recorded and no guardian is required. (MR-38, MR-30)
 
@@ -701,7 +769,7 @@ to Phase 3.
 
 ### AC-MR27: **Given** a member with no own contact and one guardian, **When** the officer removes it, **Then** the response is `409 guardian_required` and the link remains; **Given** the link is the only path for a dependant, **Then** the removal is refused with the same code; **Given** the member has an own contact and no dependant relies on the link, **Then** the guardian can be removed; **Given** a member with one contact and no guardian, **When** that contact is removed, **Then** the response is `409 guardian_required`. (MR-38, MR-39, MR-45)
 
-### AC-MR28: **Given** a proxy-only member, **When** the OTP endpoint is called directly, **Then** the response is `409 no_own_contact`; **When** a phone or WhatsApp contact is added, **Then** the standard verification menu sends a code and the member can verify, whatever their age. (MR-43, MR-44, MR-46)
+### AC-MR28: **Given** a proxy-only member, **When** the OTP endpoint is called directly, **Then** the response is `409 no_own_contact`; **When** an email, phone or WhatsApp contact is added, **Then** the standard send applies and the member can complete it, whatever their age. (MR-43, MR-44, MR-46)
 
 ### AC-MR29: **Given** a member with both contacts and a guardian, **When** the record renders, **Then** both are shown and either alone satisfies reachability. (MR-45)
 
@@ -709,17 +777,17 @@ to Phase 3.
 
 ### AC-MR31: **Given** a browser without camera permission, **When** `Take photo` is chosen, **Then** the dialog explains the denial and the file input remains usable; **Given** a granted camera, **Then** a captured frame is cropped and encoded by the same path as a file. (MR-20)
 
-### AC-MR32: **Given** a legacy member with a phone or WhatsApp number, **When** that number dials USSD, **Then** the standard verification menu applies and the member verifies. (MR-47)
+### AC-MR32: **Given** a legacy member with a phone or WhatsApp number, **When** that number dials USSD, **Then** the member menu opens and the member can verify any contact on the member acceptance page. (MR-47)
 
 ### AC-MR33: **Given** the Phase 1 change set, **When** it is checked, **Then** no migration file is added or changed and the ORM/migration drift check passes. (MR-36)
 
 ### AC-MR34: **Given** a photo upload, **When** it is stored and logged, **Then** no filename, EXIF value or byte payload appears in the row or the log; the log carries the member number and byte length only. (MR-21)
 
-### AC-MR35: **Given** a send, **When** another is requested within 60 seconds, **Then** the response is 429; **When** a sixth is requested in an hour, **Then** the response is 429. (MR-27)
+### AC-MR35: **Given** a send, **When** another is requested within 60 seconds, **Then** the response is `429 too_many_requests`; **When** a sixth is requested in an hour, **Then** the response is `429 too_many_requests`; **Given** a destination with no configured sender, **When** a code is issued, **Then** the response is `503 delivery_unavailable` and nothing is stored. (MR-27, MR-35)
 
 ### AC-MR36: **Given** the Phase 2 and Phase 3 change sets, **When** each migration is applied and reverted, **Then** it is additive and reversible and the ORM/migration drift check passes. (MR-36)
 
-### AC-MR37: **Given** a member with no own phone or WhatsApp, **When** the record renders, **Then** there is no `Verified` badge and no `Verify membership` action; **Given** a member with both an own number and a guardian, **When** a code is issued, **Then** it goes to the own number, not the guardian’s. (MR-43, MR-24)
+### AC-MR37: **Given** a member with no own email, phone or WhatsApp, **When** the record renders, **Then** there is no `Verify membership` send and `Confirm member` is offered instead; **Given** an imported `verified_at` with no audit row, **Then** no badge renders; **Given** an own number and a guardian, **When** a code is issued, **Then** it goes to the own contact, not the guardian's. (MR-43, MR-24, MR-34)
 
 ### AC-MR38: **Given** a create with a contact and no relationships, **When** the form opens, **Then** the rail shows `Person and contact`, `Church and involvement` and `Review`, and `Next` from step 2 reaches `Review`; **Given** no contact, **Then** the `Relationships` step is present and `Next` is blocked until a guardian is chosen; **Given** an invalid field on a step, **When** `Next` is chosen, **Then** the error shows and the step stays; **Given** `Back`, **Then** no validation runs; **Given** the stepper, **Then** it is horizontal directly beneath the breadcrumb at every width, its labels hide below 600 px and its numbered bubbles, completed checks and connectors remain; **Given** the first step, **Then** `Back` is disabled; **Given** a non-final step, **Then** `Next` carries the accent, and on `Review` the accent is `Create member`/`Save changes`; **Given** the future steps beyond the first invalid, **Then** they are disabled, and the active step’s heading takes focus; **Given** a reload of `?step=`, **Then** that step is restored; **Given** the edit-time contacts, ministries or relationships, **Then** they carry no unsaved state and are not part of the Review save; **Given** `Review`, **When** `Create member` is chosen, **Then** the same atomic payloads run. (MR-48)
 
@@ -727,21 +795,31 @@ to Phase 3.
 
 ### AC-MR40: **Given** a pending registration request, **When** the approve dialog is submitted without a guardian, **Then** the save is refused and the guardian is named; **When** an eligible adult is chosen, **Then** the member and the guardian link are written in one transaction and the approved member is reachable; **Given** a guardian that MR-40's rules refuse (for example under 18), **Then** the response uses MR-40's code for that refusal and nothing is written. (MR-50)
 
+### AC-MR41: **Given** a phone-only member, **When** the officer sends, **Then** the SMS carries the code and a short link to the member acceptance page; **When** the member opens the link and enters the code, **Then** the phone contact is verified and the badge names `Phone verified`; **Given** the token, **Then** it is single-use, it expires with the code, it never appears in the URL as the code, and a second use is refused. (MR-51)
+
+### AC-MR42: **Given** a member with no own contact, **When** the officer chooses `Confirm member` with a reason, **Then** an audit row records the actor, reason and instant and the badge reads `Officer confirmed`; **When** `Revoke verification` is chosen, **Then** the confirmation and every contact proof are withdrawn with an audit; **Given** the member's phone is still owned, **Then** it still identifies the member. (MR-52, MR-31)
+
+### AC-MR43: **Given** a pending registration request, **When** it is stored, **Then** the caller's number is encrypted under `REGISTRATION_PHONE_KEY` and the list shows only the mask; **When** it is approved as own, **Then** the number becomes an owned contact; **When** it is approved as borrowed, **Then** it links to the guardian and the guardian is required; **When** it is approved, rejected or purged, **Then** the encrypted value is erased. (MR-53, MR-28)
+
+### AC-MR44: **Given** an identified member (an owned phone or WhatsApp) with at least one unproven owned contact and no officer confirmation, **When** they choose `My Profile > Verify contact`, **Then** the register sends the code and the acceptance-page link to the resolved channel and renders the masked destination and the link instruction, with no six-digit prompt in USSD; **Given** the member opens the link, **Then** the page accepts the code once and the contact is proven. (MR-54)
+
+### AC-MR45: **Given** a member who asked within 60 seconds or six times in an hour, **When** they choose the action, **Then** the notice names the wait or the limit; **Given** a member with every owned contact proven, or an active officer confirmation, **Then** the action is absent; **Given** an anonymous session, **Then** the action is absent. (MR-55)
+
+### AC-MR46: **Given** one proven contact and another owned unproven contact, **When** the officer or the member starts a code, **Then** the resolver picks the unproven channel and, once accepted, the badge lists both proofs; **Given** every owned contact is proven or the member is officer-confirmed, **Then** the action is absent and a direct issue is `409 already_verified`. (MR-24, MR-54, MR-55)
+
 ## Testing Decisions
 
-- **Seams, highest first.** (1) The USSD pipeline seam: `runUssdFrame` with fake WhatsApp, email and
-  SMS senders and a PGlite member, asserting the verification menu with no channel choice, the
-  resolver for WhatsApp plus email, a number with email and no WhatsApp, phone only and no contact, a code started by an
-  officer and completed by `Enter code`, a correct code, a wrong code, expiry, the attempt limit,
-  resend throttling, an unregistered number and a revoke mid-session. (2) The HTTP seam: route tests
-  for `GET /v1/presbyter-titles`, the create payload with a title and contacts, the photo
-  `PUT`/`GET`/`DELETE` (magic bytes, size, ETag/304, cache header, auth),
-  `POST /v1/members/:memberNo/verification/otp` (the resolved destinations, `409 no_own_contact`, the
-  throttle) and `DELETE /v1/members/:memberNo/verification`. (3) The page seam: DOM tests for the
-  form (no assembly field, card, title picker and its gender filter, required contacts, ministries,
-  shepherd, photo actions), the detail action row (verify, revoke) and `MemberAvatar`. (4) One browser
-  case: create a member with a title, contacts, a ministry and a shepherd, upload a photo, and verify
-  through the USSD harness. (5) The migration seam: PGlite migration tests and `npm run smoke`.
+- **Seams, highest first.** (1) The portal seam: the public accept route with a token and a code -
+  single use, expiry, attempts, the rate limit, any channel, and no member data before acceptance. (2)
+  The HTTP seam: route tests for `GET /v1/presbyter-titles`, the create payload with a title and
+  contacts, the photo `PUT`/`GET`/`DELETE`, `POST /v1/members/:memberNo/verification/otp` (the resolved
+  channel and link, `409 no_own_contact`, the throttle, `503 delivery_unavailable`), `DELETE
+…/verification`, `POST`/`DELETE …/confirmation`, and approval with `phoneOwnership`. (3) The page
+  seam: DOM tests for the form, the detail action row (verify, confirm, revoke), the member acceptance
+  page and `MemberAvatar`. (4) The USSD seam: the identified member menu, the anonymous menu with no
+  verification gate, and the member-initiated `Verify contact` action (channel, mask, link, throttle,
+  contactless, hidden when proven). (5) The migration seam: PGlite migration tests, the encryption
+  round-trip and `npm run smoke`.
 - **Reachability and guardian seam.** Route tests for `422 no_contact_or_guardian`,
   `409 guardian_required`, `422 guardian_not_eligible`, `422 guardian_chain_cycle`,
   `422 guardian_chain_unreachable`, `422 guardian_chain_too_long` and `409 no_own_contact`; members
@@ -769,19 +847,21 @@ to Phase 3.
 - **Inline contact editing in the form.** The dialog is the one write path.
 - **A zoom/pan cropper**, multiple photos, galleries, image moderation or a CDN.
 - **Photo import/export, CSV or print surfaces.**
-- **A channel choice for the member or the officer.** The register resolves WhatsApp, then email, then
+- **A channel choice for the member or the officer.** The register resolves email, then WhatsApp, then
   phone; a manual override is explored and rejected.
-- **Officer completion of the code.** The officer starts the code and reads where it went; the member
-  enters it in USSD.
-- **A member web or app portal**, a code in an app, or verification by membership card or date of
-  birth alone.
-- **More than one verified number per member.** One number verifies at a time; changing it re-verifies.
+- **Officer completion of the code.** The officer never types the code; `Confirm member` is an audited
+  attestation, not a relay.
+- **A full member portal beyond the OTP acceptance page**, a code in an app, or verification by
+  membership card or date of birth alone. The acceptance page shows no member data and dies with its
+  token.
+- **More than one proof at a time is allowed.** A member may prove several contacts; the badge names the
+  most recent and its title lists them all.
 - **Requiring any contact from a member who has none.** A guardian supplies reachability; the member’s
   own contacts are recorded only when they exist.
-- **Verification for imported or seeded members.** An imported `verified_at` remains valid; the spec
-  does not re-verify history.
-- **USSD access for a proxy-only member.** They have no number to dial from; the guardian’s USSD
-  access is the adult’s.
+- **Verification for imported or seeded members.** A `verified_at` with no audit row stays as history:
+  no badge and no eligibility; a fresh contact proof or an officer confirmation replaces it.
+- **USSD access for a proxy-only member.** They have no number to dial from; the guardian’s access is
+  the adult’s, and the officer confirmation covers the member.
 - **Inherited contacts in the members list, exports or pickers.** Only the record shows the
   guardian’s contact.
 - **More than one guardian, an unbounded chain (the limit is three links), or a guardian history
@@ -793,8 +873,9 @@ to Phase 3.
 
 - **Phase split.** Phase 1 is a wire-contract gate with no migration (titles, the title create fields,
   the guardian filter and projection, and the reachability refusals). Phase 2 carries the photo
-  migration and endpoint. Phase 3 carries the verification migration, the WhatsApp and SMS ports, the
-  email sender, the USSD gate and the removal of the `verified` input. The owner authorises each phase
+  migration and endpoint. Phase 3 carries the verification migration (per-contact proof, the code store, the
+  confirmation audit and the encrypted registration number), the three senders, the public portal, the
+  officer confirmation and the removal of the `verified` input. The owner authorises each phase
   by naming the round and its gate when the time comes.
 - **Three delivery ports, three vendor questions.** WhatsApp is the new `WhatsAppSender`; SMS is the
   new `SmsSender`; email is the new `EmailSender`, backed by the existing mailer transport (Resend in
@@ -803,27 +884,36 @@ to Phase 3.
   production, `NullMailer` is the test default, and the test fakes capture the code; production never
   logs one. WhatsApp and email delivery, and the member’s contact quality, are the cost of the richer
   channels.
-- **The USSD gate removes anonymous member services.** Registration stays open; events, offerings,
-  welfare, profile and shepherding do not. This is a behaviour change for every existing unverified
-  member and is the cost of "only verified members have USSD access".
+- **Identification, not a gate.** An owned number opens the member menu and verification is a badge and
+  an eligibility fact, not an access gate; registration and the anonymous menu (Offerings, Activities,
+  Attendance and visitor giving) stay open. The cost is that member data is protected by possession of
+  an owned number, not by proof of the person; a spoofed MSISDN is the accepted risk and a second
+  channel or an officer confirmation is the extra proof.
 - **Removing `verified` is a breaking wire change** for any caller other than this UI. No repository
   code or import sets it, but a deployed integration could; the release notes must say so.
 - **Reachability replaced the age rule (owner, 2026-11-18).** Age is not a valid test: a child may
   have a phone and an adult may have none, as with a maid who relies on the household. The rule is
-  reachability - an own contact or a guardian - and verification follows the number. A guardian may
+  reachability - an own contact or a guardian - and verification follows the contact. A guardian may
   themselves be proxy-only (owner, 2026-11-18), so a chain is allowed: it must terminate at an adult
-  with an own contact, must not cycle, and is limited to three links. A member with no phone or WhatsApp number has no
-  USSD identity and is reached through the chain; adding a number later enables the standard flow.
+  with an own contact, must not cycle, and is limited to three links. A member with no email, phone or
+  WhatsApp has no USSD identity and is reached through the chain; adding a contact later enables the
+  flow.
 - **Catalogue amendments.** Phase 1 amends the UI spec's FR-29 (action row), FR-29a (contacts on
   edit), FR-71 (the assembly date leaves the form; the membership card and title join it; the shepherd
   is a post-create step) and the API spec with the titles endpoint, the create fields, the guardian
   filter and projection and the reachability refusals. Phase 2 amends the API spec with the photo
-  entity, migration and endpoints and the UI spec's avatar clauses. Phase 3 amends the API spec's `verified` create/update input and the UI spec's FR-25a checkbox, badge
-  and action row, and `member-registrations-ussd.md` with the verification state and the gate.
+  entity, migration and endpoints and the UI spec's avatar clauses. Phase 3 amends the API spec ('verified' off the wire, `verifiedContacts` and `confirmedAt`, the
+  verification, confirmation and public portal routes, the approval `phoneOwnership`), the UI spec
+  (FR-25a, the badge, the action row, the member acceptance page and the approve dialog) and
+  `member-registrations-ussd.md` (identification, the anonymous menu and the no-gate decision).
 - **Mocks and baselines.** One mock cut covers the add/edit form (populated, validation, title,
   contacts, shepherd, photo dialog) and the detail action row and header. The affected baselines are
-  `member-add`, `member-detail`, `member-detail-overview`, `members-list` and `contacts-editable`. The
-  USSD verification screens are text states in the USSD spec's glossary, not web mocks.
+  `member-add`, `member-detail`, `member-detail-overview`, `members-list` and `contacts-editable`. The USSD
+  handset set carries no verification screens; the member acceptance page is an acceptance-page mock,
+  and the officer record badge/actions and the sent dialog are portal mocks.
+- **Member-initiated verification.** The 2026-11-19 instruction amends the phase: the member starts the
+  code from USSD (`My Profile > Verify contact`), the page enters it, and the officer path and throttle
+  are shared. See `member-verification-initiation.md`.
 - **Why a spec file and not an issue.** This repository deliberately does not use a GitHub issue
   tracker or triage labels (`AGENTS.md` §13); the area specs under `documents/specs/` are its
   equivalent, and this file follows the same `to-spec` shape as the officers and headcount specs.

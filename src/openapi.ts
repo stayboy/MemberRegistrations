@@ -34,6 +34,10 @@ import {
   subscriptionInputSchema,
   subscriptionResponseSchema,
   updateMemberSchema,
+  acceptanceResultSchema,
+  confirmationInputSchema,
+  confirmationResultSchema,
+  verificationIssueSchema,
 } from './schemas/members.js';
 import {
   createSeriesSchema,
@@ -262,6 +266,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         MemberDetail: toSchema(memberDetailSchema, 'output'),
         MemberList: toSchema(memberListSchema, 'output'),
         PhotoUpload: toSchema(photoUploadSchema, 'output'),
+        VerificationIssue: toSchema(verificationIssueSchema, 'output'),
+        ConfirmationInput: toSchema(confirmationInputSchema, 'input'),
+        ConfirmationResult: toSchema(confirmationResultSchema, 'output'),
+        AcceptanceResult: toSchema(acceptanceResultSchema, 'output'),
         MemberContributionsSummary: toSchema(memberContributionsSummarySchema, 'output'),
         MemberAttendanceWindow: toSchema(memberAttendanceWindowSchema, 'output'),
         MemberProfile: toSchema(memberProfileSchema, 'output'),
@@ -775,6 +783,103 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             204: noContent('The photo columns are cleared; avatars fall back to initials.'),
             401: unauthorized,
             404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/verification/otp': {
+        parameters: [memberNoParam],
+        post: {
+          summary: 'Start a member verification code',
+          description:
+            'Resolves one destination from the member’s own contacts: the first unproven email, else the first unproven WhatsApp, else the first unproven phone (a proven contact is skipped, MR-24/AC-MR46). It generates one six-digit code and one single-use acceptance-page token, binds them to that contact and stores only their hashes plus a hash of the contact’s value (MR-26). The message carries the code and the link, for every channel. The response lists the masked destination and the expiry, never the code or the link. A member with no own email, WhatsApp or phone is 409 no_own_contact; a member whose every owned contact is proven, or who is officer-confirmed, is 409 already_verified; one send per 60 seconds and five per hour are 429 too_many_requests; a destination with no configured sender is 503 delivery_unavailable and nothing is stored.',
+          parameters: [actorHeader],
+          responses: {
+            202: json(
+              'The code was sent; the masked destination and the expiry, with Cache-Control: no-store.',
+              'VerificationIssue',
+            ),
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The member has no own email, WhatsApp or phone (no_own_contact), or every owned contact is proven or the member is officer-confirmed (already_verified).',
+            ),
+            429: problem('The send throttle refused the request (too_many_requests).'),
+            503: problem('A destination has no configured sender (delivery_unavailable).'),
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/verification': {
+        parameters: [memberNoParam],
+        delete: {
+          summary: 'Withdraw a member verification',
+          description:
+            'Withdraws every contact proof and the officer confirmation with an audit, and consumes any live code. It never removes a contact and never blocks an identified number (MR-31).',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('The proofs, the confirmation and any live code are withdrawn.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/confirmation': {
+        parameters: [memberNoParam],
+        post: {
+          summary: 'Confirm the member with an audited reason',
+          description:
+            'Records an append-only officer confirmation (actor, reason, instant). MemberDetail.confirmedAt reads the latest non-withdrawn row; a phone proof alone does not make requires_verified pass. The officer never sees or types a code (MR-52).',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ConfirmationInput') } },
+          },
+          responses: {
+            201: json('The confirmation instant.', 'ConfirmationResult'),
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+        delete: {
+          summary: 'Withdraw the officer confirmation',
+          description:
+            'Withdraws the active confirmation with an audit; contact proofs are untouched. An unknown or purged member is 404 (MR-52).',
+          parameters: [actorHeader],
+          responses: {
+            204: noContent('The active confirmation is withdrawn.'),
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/portal/verification/accept': {
+        post: {
+          summary: 'Accept a verification code on the public member acceptance page',
+          description:
+            'Unauthenticated by design: the single-use token and the six-digit code are the credential, whatever channel the code was sent to, and the answer carries only the masked destination. A wrong code is 400 code_invalid, an expired one 400 code_expired, the fifth wrong one 400 too_many_tries, and the per-token and per-address rate limit is 429 too_many_requests. The route answers no member data and the log carries no code, token or destination value (MR-51).',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['token', 'code'],
+                  properties: {
+                    token: { type: 'string' },
+                    code: { type: 'string', pattern: '^\\d{6}$' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: json('The bound contact was proven.', 'AcceptanceResult'),
+            400: problem('code_invalid, code_expired or too_many_tries.'),
+            429: problem('The token or the address is over its window (too_many_requests).'),
           },
         },
       },
@@ -2678,7 +2783,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Approve a request and create the member',
           description:
-            'The request names seed the ordinary member create path; gender is undisclosed, joinedOn is today in UTC and no contacts are written. MR-50 requires guardianMemberNo: the guardian is validated like any other (18+, reachable, chain rules) and the member, the guardian link and the approval are one transaction, so an ineligible guardian is 422 guardian_not_eligible and the request stays pending. A decided request, including a second approval, is 409 registration_not_pending.',
+            'The request names seed the ordinary member create path; gender is undisclosed and joinedOn is today in UTC. The pending request retains the caller’s number encrypted; phoneOwnership decides it: own writes it as the member’s owned phone contact (no guardian is required, and a guardianMemberNo sent with own is 422 validation_error naming the field), borrowed links the number to guardianMemberNo, which is then required and validated like any other (18+, reachable, chain rules). The member, its contact and the guardian link are one transaction, so a refusal is 422 guardian_not_eligible or 422 validation_error naming the missing guardian and the request stays pending; a number already owned by another member is 409 contact_in_use naming the owner, whether the pre-check or the unique index catches it. A decided request, including a second approval, is 409 registration_not_pending. The encrypted value is erased on every decision (MR-50, MR-53).',
           parameters: [actorHeader],
           requestBody: {
             required: true,
@@ -2688,7 +2793,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             200: json('The approved request linked to the member.', 'RegistrationRequest'),
             401: unauthorized,
             404: notFound,
-            409: conflict,
+            409: problem(
+              'contact_in_use when the number belongs to another member, or registration_not_pending when the request was already decided.',
+            ),
             422: validation,
           },
         },

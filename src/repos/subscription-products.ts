@@ -46,7 +46,12 @@ interface ProductRow extends Row {
 export interface EligibilityMember {
   joinedOn: string | null;
   membershipCardNo: string | null;
-  verifiedAt: string | null;
+  /**
+   * MR-33 / the API spec: an email or WhatsApp proof, or an active officer
+   * confirmation. A phone proof alone does not qualify - possession of the
+   * number is already the identification.
+   */
+  verified: boolean;
   gender: Gender;
   dob: string | null;
 }
@@ -125,7 +130,7 @@ export function isEligible(
   }
 
   if (product.requiresCard && member.membershipCardNo === null) return false;
-  if (product.requiresVerified && member.verifiedAt === null) return false;
+  if (product.requiresVerified && !member.verified) return false;
 
   if (product.gender !== null && member.gender !== product.gender) return false;
 

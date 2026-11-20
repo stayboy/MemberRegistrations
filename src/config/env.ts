@@ -14,6 +14,18 @@ export const DEFAULT_USSD_NALO_USER_ID = 'NALOTest';
 export const DEFAULT_USSD_NALO_MAX_MSG_CHARS = 120;
 export const DEFAULT_PAYMENT_GATEWAY_SECRET = 'dev-only-payment-gateway-secret';
 
+/** The HMAC pepper every verification code is stored under (MR-25). */
+export const DEFAULT_OTP_PEPPER = 'dev-only-otp-pepper';
+
+/** Ghana (233) unless the deployment says otherwise; 1-3 digits (MR-24). */
+export const DEFAULT_COUNTRY_CODE = '233';
+
+/** Encrypts a pending registration's number; production must override it (MR-53). */
+export const DEFAULT_REGISTRATION_PHONE_KEY = 'dev-only-registration-phone-key';
+
+/** The member acceptance page; the SMS carries `${base}#t=<token>` (MR-51). */
+export const DEFAULT_VERIFICATION_LINK_BASE = 'http://localhost:5173/v';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -52,6 +64,25 @@ const envSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
   PAYMENT_GATEWAY_SECRET: z.string().min(16).default(DEFAULT_PAYMENT_GATEWAY_SECRET),
+  // Codes are stored only as an HMAC; production must override this default.
+  OTP_PEPPER: z.string().min(16).default(DEFAULT_OTP_PEPPER),
+  // Prefixes a bare stored number for delivery and masking; the stored value is
+  // never rewritten (MR-24).
+  DEFAULT_COUNTRY_CODE: z
+    .string()
+    .regex(/^\d{1,3}$/)
+    .default(DEFAULT_COUNTRY_CODE),
+  // The provider-neutral HTTP adapters for WhatsApp and SMS (MR-35). Unset in
+  // production means the channel has no sender and the issue is a 503.
+  WHATSAPP_SEND_URL: z.string().url().optional(),
+  SMS_SEND_URL: z.string().url().optional(),
+  MESSAGE_SEND_TOKEN: z.string().min(1).optional(),
+  // AES-256-GCM key material for a pending registration's number; production
+  // must override the development default (MR-53).
+  REGISTRATION_PHONE_KEY: z.string().min(16).default(DEFAULT_REGISTRATION_PHONE_KEY),
+  // The public member acceptance page, outside the officer `#/` router. The SMS
+  // appends `#t=<token>`; production has no safe default (MR-51).
+  VERIFICATION_LINK_BASE: z.string().url().default(DEFAULT_VERIFICATION_LINK_BASE),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -75,6 +106,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       throw new Error('MAGIC_LINK_FROM is required when NODE_ENV=production');
     if (env.VISITOR_PHONE_PEPPER === DEFAULT_VISITOR_PHONE_PEPPER) {
       throw new Error('VISITOR_PHONE_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.OTP_PEPPER === DEFAULT_OTP_PEPPER) {
+      throw new Error('OTP_PEPPER is required when NODE_ENV=production');
+    }
+    if (env.REGISTRATION_PHONE_KEY === DEFAULT_REGISTRATION_PHONE_KEY) {
+      throw new Error('REGISTRATION_PHONE_KEY is required when NODE_ENV=production');
+    }
+    if (env.VERIFICATION_LINK_BASE === DEFAULT_VERIFICATION_LINK_BASE) {
+      throw new Error('VERIFICATION_LINK_BASE is required when NODE_ENV=production');
     }
     if (env.USSD_ENABLED) {
       if (env.USSD_GATEWAY_SECRET === DEFAULT_USSD_GATEWAY_SECRET) {

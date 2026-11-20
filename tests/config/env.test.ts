@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_COUNTRY_CODE,
+  DEFAULT_OTP_PEPPER,
   DEFAULT_PAYMENT_GATEWAY_SECRET,
+  DEFAULT_REGISTRATION_PHONE_KEY,
   DEFAULT_USSD_CODE_PEPPER,
   DEFAULT_USSD_GATEWAY_SECRET,
   DEFAULT_USSD_NALO_MAX_MSG_CHARS,
   DEFAULT_USSD_NALO_USER_ID,
   DEFAULT_USSD_PHONE_PEPPER,
+  DEFAULT_VERIFICATION_LINK_BASE,
   DEFAULT_VISITOR_PHONE_PEPPER,
   loadEnv,
 } from '../../src/config/env.js';
@@ -20,6 +24,9 @@ const production = {
 
 const productionSecrets = {
   VISITOR_PHONE_PEPPER: 'production-phone-pepper',
+  OTP_PEPPER: 'production-otp-pepper',
+  REGISTRATION_PHONE_KEY: 'production-registration-key',
+  VERIFICATION_LINK_BASE: 'https://register.example.test/v',
   USSD_GATEWAY_SECRET: 'production-ussd-gateway-secret',
   USSD_PHONE_PEPPER: 'production-ussd-phone-pepper',
   USSD_CODE_PEPPER: 'production-ussd-code-pepper',
@@ -32,10 +39,46 @@ describe('environment', () => {
     expect(() => loadEnv(production)).toThrow(/VISITOR_PHONE_PEPPER/);
   });
 
+  it('fails a production boot without an OTP pepper override', () => {
+    expect(() =>
+      loadEnv({ ...production, VISITOR_PHONE_PEPPER: 'production-phone-pepper' }),
+    ).toThrow(/OTP_PEPPER/);
+  });
+
+  it('fails a production boot without a registration phone key or a link base', () => {
+    expect(() =>
+      loadEnv({
+        ...production,
+        VISITOR_PHONE_PEPPER: 'production-phone-pepper',
+        OTP_PEPPER: 'production-otp-pepper',
+      }),
+    ).toThrow(/REGISTRATION_PHONE_KEY/);
+
+    expect(() =>
+      loadEnv({
+        ...production,
+        VISITOR_PHONE_PEPPER: 'production-phone-pepper',
+        OTP_PEPPER: 'production-otp-pepper',
+        REGISTRATION_PHONE_KEY: 'production-registration-key',
+      }),
+    ).toThrow(/VERIFICATION_LINK_BASE/);
+  });
+
   it('boots production with only the required names and both subsystems off', () => {
-    const env = loadEnv({ ...production, VISITOR_PHONE_PEPPER: 'production-phone-pepper' });
+    const env = loadEnv({
+      ...production,
+      VISITOR_PHONE_PEPPER: 'production-phone-pepper',
+      OTP_PEPPER: 'production-otp-pepper',
+      REGISTRATION_PHONE_KEY: 'production-registration-key',
+      VERIFICATION_LINK_BASE: 'https://register.example.test/v',
+    });
     expect(env.USSD_ENABLED).toBe(false);
     expect(env.PAYMENTS_ENABLED).toBe(false);
+    // Codes are stored under this pepper; a production boot never keeps the
+    // development default.
+    expect(env.OTP_PEPPER).toBe('production-otp-pepper');
+    expect(env.REGISTRATION_PHONE_KEY).toBe('production-registration-key');
+    expect(env.VERIFICATION_LINK_BASE).toBe('https://register.example.test/v');
     // The disabled subsystems keep their development defaults; they are inert.
     expect(env.USSD_GATEWAY_SECRET).toBe(DEFAULT_USSD_GATEWAY_SECRET);
     expect(env.USSD_PHONE_PEPPER).toBe(DEFAULT_USSD_PHONE_PEPPER);
@@ -117,6 +160,9 @@ describe('environment', () => {
   it('accepts production with explicit secrets and both subsystems off', () => {
     const env = loadEnv({ ...production, ...productionSecrets });
     expect(env.VISITOR_PHONE_PEPPER).toBe('production-phone-pepper');
+    expect(env.OTP_PEPPER).toBe('production-otp-pepper');
+    expect(env.REGISTRATION_PHONE_KEY).toBe('production-registration-key');
+    expect(env.VERIFICATION_LINK_BASE).toBe('https://register.example.test/v');
     expect(env.USSD_ENABLED).toBe(false);
     expect(env.PAYMENTS_ENABLED).toBe(false);
     expect(env.USSD_GATEWAY_SECRET).toBe('production-ussd-gateway-secret');
@@ -127,6 +173,9 @@ describe('environment', () => {
     const env = loadEnv({
       ...production,
       VISITOR_PHONE_PEPPER: 'production-phone-pepper',
+      OTP_PEPPER: 'production-otp-pepper',
+      REGISTRATION_PHONE_KEY: 'production-registration-key',
+      VERIFICATION_LINK_BASE: 'https://register.example.test/v',
       PAYMENTS_ENABLED: 'true',
       PAYMENT_GATEWAY_SECRET: 'production-payment-gateway-secret',
     });
@@ -150,12 +199,66 @@ describe('environment', () => {
       DEFAULT_VISITOR_PHONE_PEPPER,
     );
     expect(loadEnv({ NODE_ENV: 'test' }).VISITOR_PHONE_PEPPER).toBe(DEFAULT_VISITOR_PHONE_PEPPER);
+    expect(loadEnv({ NODE_ENV: 'test' }).OTP_PEPPER).toBe(DEFAULT_OTP_PEPPER);
+    expect(loadEnv({ NODE_ENV: 'test' }).REGISTRATION_PHONE_KEY).toBe(
+      DEFAULT_REGISTRATION_PHONE_KEY,
+    );
+    expect(loadEnv({ NODE_ENV: 'test' }).VERIFICATION_LINK_BASE).toBe(
+      DEFAULT_VERIFICATION_LINK_BASE,
+    );
+    expect(loadEnv({ NODE_ENV: 'test' }).DEFAULT_COUNTRY_CODE).toBe(DEFAULT_COUNTRY_CODE);
+    expect(loadEnv({ NODE_ENV: 'test' }).WHATSAPP_SEND_URL).toBeUndefined();
+    expect(loadEnv({ NODE_ENV: 'test' }).SMS_SEND_URL).toBeUndefined();
+    expect(loadEnv({ NODE_ENV: 'test' }).MESSAGE_SEND_TOKEN).toBeUndefined();
     expect(loadEnv({ NODE_ENV: 'test' }).USSD_ENABLED).toBe(false);
     expect(loadEnv({ NODE_ENV: 'test' }).PAYMENTS_ENABLED).toBe(false);
     expect(loadEnv({ NODE_ENV: 'test', PAYMENTS_ENABLED: 'true' }).PAYMENTS_ENABLED).toBe(true);
     expect(loadEnv({ NODE_ENV: 'test' }).PAYMENT_GATEWAY_SECRET).toBe(
       DEFAULT_PAYMENT_GATEWAY_SECRET,
     );
+  });
+
+  it('validates the country code and the provider-neutral sender settings', () => {
+    expect(loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1' }).DEFAULT_COUNTRY_CODE).toBe('1');
+    expect(loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '234' }).DEFAULT_COUNTRY_CODE).toBe(
+      '234',
+    );
+    expect(() => loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1234' })).toThrow(
+      /DEFAULT_COUNTRY_CODE/,
+    );
+    expect(() => loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '+233' })).toThrow(
+      /DEFAULT_COUNTRY_CODE/,
+    );
+
+    const configured = loadEnv({
+      NODE_ENV: 'test',
+      WHATSAPP_SEND_URL: 'https://messages.example.test/whatsapp',
+      SMS_SEND_URL: 'https://messages.example.test/sms',
+      MESSAGE_SEND_TOKEN: 'provider-token',
+    });
+    expect(configured.WHATSAPP_SEND_URL).toBe('https://messages.example.test/whatsapp');
+    expect(configured.SMS_SEND_URL).toBe('https://messages.example.test/sms');
+    expect(configured.MESSAGE_SEND_TOKEN).toBe('provider-token');
+    expect(() => loadEnv({ NODE_ENV: 'test', WHATSAPP_SEND_URL: 'not-a-url' })).toThrow(
+      /WHATSAPP_SEND_URL/,
+    );
+  });
+
+  it('validates the registration key length and the acceptance page URL', () => {
+    expect(() => loadEnv({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'too-short' })).toThrow(
+      /REGISTRATION_PHONE_KEY/,
+    );
+    expect(
+      loadEnv({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'a-valid-key-of-16' })
+        .REGISTRATION_PHONE_KEY,
+    ).toBe('a-valid-key-of-16');
+    expect(() => loadEnv({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'not-a-url' })).toThrow(
+      /VERIFICATION_LINK_BASE/,
+    );
+    expect(
+      loadEnv({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'https://example.test/v' })
+        .VERIFICATION_LINK_BASE,
+    ).toBe('https://example.test/v');
   });
 
   it('rejects a PAYMENTS_ENABLED value other than true or false', () => {

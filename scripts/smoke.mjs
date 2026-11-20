@@ -859,7 +859,10 @@ async function runScenario() {
     requests.status === 200 &&
       requestRow?.firstName === 'Yaa' &&
       requestRow?.lastName === 'Asante' &&
-      requestRow?.status === 'pending',
+      requestRow?.status === 'pending' &&
+      // The caller's number is retained encrypted and shown only as a mask.
+      requestRow?.phoneMasked === '+233 *** 01' &&
+      !JSON.stringify(requestRow).includes('8990000001'),
     JSON.stringify(requests.body),
   );
 
@@ -900,14 +903,66 @@ async function runScenario() {
   const card = await request('/v1/members/M-9005', {
     method: 'PUT',
     headers: write,
-    body: JSON.stringify({ membershipCardNo: 'SMOKE-CARD-9005', verified: true }),
+    body: JSON.stringify({ membershipCardNo: 'SMOKE-CARD-9005' }),
   });
   check(
-    'card and verification set',
+    'card set and verification left to the service',
     card.status === 200 &&
       card.body.membershipCardNo === 'SMOKE-CARD-9005' &&
-      Boolean(card.body.verifiedAt),
+      card.body.verifiedContacts.length === 0 &&
+      card.body.confirmedAt === null,
     JSON.stringify(card.body),
+  );
+
+  // The officer action starts a code on the register-chosen channel. The phone
+  // is completed on the public acceptance page, so the SMS carries the code and
+  // the link; the member stays unverified until the code is entered there.
+  const otp = await request('/v1/members/M-9005/verification/otp', {
+    method: 'POST',
+    headers: write,
+    body: JSON.stringify({}),
+  });
+  const destination = otp.body?.destination;
+  check(
+    'verification code started',
+    otp.status === 202 &&
+      destination?.channel === 'phone' &&
+      destination?.masked === '+233 *** 01' &&
+      typeof otp.body.expiresAt === 'string' &&
+      otp.body.entry === undefined &&
+      otp.body.code === undefined &&
+      otp.body.token === undefined,
+    JSON.stringify(otp.body),
+  );
+
+  // The development sender prints the message; the application log stays silent
+  // (LOG_LEVEL=silent), so the code appears only on the sender's own line.
+  const smsLine = output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('[verification] sms to '))
+    .at(-1);
+  const sentCode = smsLine ? /\b(\d{6})\b/.exec(smsLine)?.[1] : undefined;
+  check(
+    'the SMS carries the code and the acceptance link',
+    Boolean(smsLine) &&
+      Boolean(sentCode) &&
+      smsLine.includes('#t=') &&
+      smsLine.includes('member verification code'),
+    smsLine ?? 'no development SMS line was printed',
+  );
+  const leak = output
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith('[verification] '))
+    .find((line) => sentCode !== undefined && line.includes(sentCode));
+  check('no code in the application log', leak === undefined, leak ?? '');
+
+  const stillUnverified = await request('/v1/members/M-9005', { headers: read });
+  check(
+    'the member stays unverified until the code is entered',
+    stillUnverified.status === 200 &&
+      stillUnverified.body.verifiedContacts.length === 0 &&
+      stillUnverified.body.confirmedAt === null,
+    JSON.stringify(stillUnverified.body),
   );
 
   const welfareSubscription = await request('/v1/members/M-9005/subscriptions', {

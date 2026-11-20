@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { fileURLToPath } from 'node:url';
 import { resolveGatewayOrigin } from './src/auth/gatewayOrigin.ts';
 
 /**
@@ -61,6 +62,12 @@ export default defineConfig(({ mode }) => {
       // carved-out `import-parsers` group; app code (including the lazy route
       // chunks) stays separate.
       rolldownOptions: {
+        // Two documents: the officer app at `/` and the public member acceptance
+        // page at `/v` (served from `v.html`; MR-51, FR-25b).
+        input: {
+          main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          acceptance: fileURLToPath(new URL('./v.html', import.meta.url)),
+        },
         output: {
           codeSplitting: {
             groups: [

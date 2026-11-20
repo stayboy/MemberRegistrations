@@ -91,12 +91,44 @@ describe('welfare eligibility', () => {
     await request(app)
       .put('/v1/members/E-1001')
       .set(writeHeaders)
-      .send({ membershipCardNo: 'CARD-E-1001', verified: true })
+      .send({ membershipCardNo: 'CARD-E-1001' })
       .expect(200);
+    // Verification is read-only on the member API now; an email proof is what
+    // the eligibility rule reads (Phase 3), so the fixture adds one and proves it.
+    await request(app)
+      .post('/v1/members/E-1001/contacts')
+      .set(writeHeaders)
+      .send({ kind: 'email', value: 'eligible@example.test' })
+      .expect(201);
+    await harness.db.query(
+      `update member_contacts set verified_at = now()
+        where member_id = (select id from members where member_no = 'E-1001')
+          and kind = 'email'`,
+    );
 
     const accepted = await subscribe('E-1001', { productCode: product.code });
     expect(accepted.status).toBe(201);
     expect(accepted.body.paidBy).toBe('member');
+  });
+
+  it('does not count a phone proof alone for requires_verified, but an officer confirmation does', async () => {
+    const product = await createProduct({ code: 'VERIFIED-ONLY', requiresVerified: true });
+    await createMember('E-1101');
+
+    await harness.db.query(
+      `update member_contacts set verified_at = now()
+        where member_id = (select id from members where member_no = 'E-1101')`,
+    );
+    const phoneOnly = await subscribe('E-1101', { productCode: product.code });
+    expect(phoneOnly.status).toBe(422);
+    expect(phoneOnly.body.code).toBe('not_eligible');
+
+    await harness.db.query(
+      `insert into member_confirmations (member_id, confirmed_by, reason)
+       select id, 'officer', 'Known' from members where member_no = 'E-1101'`,
+    );
+    const confirmed = await subscribe('E-1101', { productCode: product.code });
+    expect(confirmed.status).toBe(201);
   });
 
   it('tests gender and age rules, and an unknown dob fails an age rule', async () => {

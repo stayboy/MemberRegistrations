@@ -3,11 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  confirmMember,
   fetchMemberDetail,
   listMinistries,
+  requestMemberVerification,
+  revokeMemberVerification,
   type MemberDetail,
   type Ministry,
 } from '../api/members';
+import { ApiError } from '../api/errors';
 import { DATE_TIME_STORAGE_KEY, DateTimeProvider } from '../shell/DateTimeProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { renderWithProviders } from '../test/render';
@@ -27,6 +31,9 @@ vi.mock('../api/members', async (importOriginal) => {
     ...actual,
     fetchMemberDetail: vi.fn(),
     listMinistries: vi.fn(),
+    requestMemberVerification: vi.fn(),
+    revokeMemberVerification: vi.fn(),
+    confirmMember: vi.fn(),
   };
 });
 
@@ -62,7 +69,15 @@ const DETAIL: MemberDetail = {
   title: { code: 'ELD', label: 'Elder', titledOn: '2021-02-01' },
   membershipCardNo: 'MC-1001',
   photoUpdatedAt: null,
-  verifiedAt: '2026-11-05T09:00:00.000Z',
+  verifiedContacts: [
+    {
+      id: 'contact-1001-phone',
+      channel: 'phone',
+      masked: '+233 *** 01',
+      verifiedAt: '2026-11-05T09:00:00.000Z',
+    },
+  ],
+  confirmedAt: null,
   assemblyJoinedOn: '2019-03-03',
   cameFrom: 'Accra Central',
   movedOutOn: null,
@@ -220,7 +235,8 @@ const EMPTY: MemberDetail = {
   addressLine: null,
   title: null,
   membershipCardNo: null,
-  verifiedAt: null,
+  verifiedContacts: [],
+  confirmedAt: null,
   assemblyJoinedOn: null,
   cameFrom: null,
   movedOutOn: null,
@@ -245,6 +261,9 @@ const MINISTRIES: Ministry[] = [
 
 const fetchMemberDetailMock = vi.mocked(fetchMemberDetail);
 const listMinistriesMock = vi.mocked(listMinistries);
+const requestVerificationMock = vi.mocked(requestMemberVerification);
+const revokeVerificationMock = vi.mocked(revokeMemberVerification);
+const confirmMemberMock = vi.mocked(confirmMember);
 
 beforeEach(() => {
   // Pin only the clock: the cards read the current UTC quarter and month, while
@@ -259,12 +278,19 @@ beforeEach(() => {
 
   fetchMemberDetailMock.mockReset();
   fetchMemberDetailMock.mockImplementation(async (_baseUrl, _token, memberNo) => ({
-    member: memberNo === EMPTY.memberNo ? EMPTY : DETAIL,
+    // A refetch after a send must answer the same member, not the fixture's
+    // default: the route's number is what the dialog's context names.
+    member: memberNo === DETAIL.memberNo ? DETAIL : { ...EMPTY, memberNo },
     etag: '"v3"',
   }));
 
   listMinistriesMock.mockReset();
   listMinistriesMock.mockResolvedValue(MINISTRIES);
+
+  requestVerificationMock.mockReset();
+  revokeVerificationMock.mockReset();
+  confirmMemberMock.mockReset();
+  confirmMemberMock.mockResolvedValue({ confirmedAt: '2026-11-17T12:05:00.000Z' });
 });
 
 afterEach(() => {
@@ -381,7 +407,7 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Contacts' });
     // The button counted 3 while the detail could only render one value: the
     // label reads `contactCount`, never `contacts.length` (AC-47, R6).
-    expect(within(dialog).getAllByRole('listitem')).toHaveLength(1);
+    expect(await within(dialog).findAllByRole('listitem')).toHaveLength(1);
     expect(within(dialog).getByText('+233 20 000 0001')).toBeVisible();
   });
 
@@ -403,12 +429,12 @@ describe('MemberDetailPage overview (FR-29, AC-12)', () => {
     expect(heading.compareDocumentPosition(verified) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(verified).toHaveAccessibleName('Verified · 5 November 2026');
+    expect(verified).toHaveAccessibleName('Verified · Phone · 5 November 2026');
     expect(screen.getByText('Presbyter')).toBeVisible();
     expect(screen.getByText('Active')).toBeVisible();
   });
 
-  it('leaves the header badgeless for a member without verifiedAt, with the status badge only', async () => {
+  it('leaves the header badgeless for a member with no proof or confirmation, with the status badge only', async () => {
     renderDetail(EMPTY.memberNo);
 
     expect(
@@ -544,16 +570,22 @@ describe('MemberDetailPage action row (MR-1..MR-4, AC-MR1..AC-MR3)', () => {
       'Add ministry',
       'Add relationship',
       'Add subscription',
+      'Confirm member',
+      'Revoke verification',
       'Archive',
       'Purge',
     ]);
     expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument();
 
-    // The destructive group starts after the divider.
+    // MR-2: `Revoke verification` is not destructive, so it stays above the
+    // divider, with Archive/Restore and Purge in the group beneath it.
     const dividers = [...document.querySelectorAll<HTMLElement>('.fui-MenuDivider')];
     expect(dividers).toHaveLength(1);
-    const archive = screen.getByRole('menuitem', { name: 'Archive' });
-    expect(dividers[0]!.nextElementSibling).toBe(archive);
+    const revoke = screen.getByRole('menuitem', { name: 'Revoke verification' });
+    expect(revoke.compareDocumentPosition(dividers[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(dividers[0]!.nextElementSibling).toBe(screen.getByRole('menuitem', { name: 'Archive' }));
   });
 
   it('offers Restore instead of Archive for an archived member and always keeps Purge', async () => {
@@ -610,6 +642,462 @@ describe('MemberDetailPage action row (MR-1..MR-4, AC-MR1..AC-MR3)', () => {
       'aria-selected',
       'true',
     );
+  });
+});
+
+describe('MemberDetailPage verification (MR-29, MR-31, MR-34, MR-35)', () => {
+  const OWN_PHONE = {
+    id: 'contact-1002-phone',
+    kind: 'phone' as const,
+    value: '+233 20 000 0002',
+    displayOrder: 0,
+    ownerMemberNo: 'M-1002',
+    linked: false,
+  };
+  const UNVERIFIED: MemberDetail = {
+    ...EMPTY,
+    memberNo: 'M-1005',
+    contactCount: 1,
+    contacts: [OWN_PHONE],
+  };
+
+  function renderUnverified(member: MemberDetail = UNVERIFIED): void {
+    fetchMemberDetailMock.mockResolvedValueOnce({ member, etag: '"v1"' });
+    renderDetail(member.memberNo);
+  }
+
+  it('names the proof and the date in the badge, and lists the mask in its title', async () => {
+    renderDetail();
+
+    const badge = await screen.findByTestId('member-verified');
+    expect(badge).toHaveAccessibleName('Verified · Phone · 5 November 2026');
+  });
+
+  it.each([
+    ['email', 'Email'],
+    ['whatsapp', 'WhatsApp'],
+    ['phone', 'Phone'],
+  ] as const)('names the %s proof in the badge', async (channel, label) => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...DETAIL,
+        verifiedContacts: [
+          {
+            id: `contact-proof-${channel}`,
+            channel,
+            masked: channel === 'email' ? 'a***@example.test' : '+233 *** 01',
+            verifiedAt: '2026-11-05T09:00:00.000Z',
+          },
+        ],
+      },
+      etag: '"v3"',
+    });
+    renderDetail();
+
+    expect(await screen.findByTestId('member-verified')).toHaveAccessibleName(
+      `Verified · ${label} · 5 November 2026`,
+    );
+  });
+
+  it('lists every contact proof in the title, newest first (AC-MR46)', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...DETAIL,
+        verifiedContacts: [
+          {
+            id: 'contact-1001-phone',
+            channel: 'phone',
+            masked: '+233 *** 01',
+            verifiedAt: '2026-11-04T09:00:00.000Z',
+          },
+          {
+            id: 'contact-1001-email',
+            channel: 'email',
+            masked: 'k***@example.test',
+            verifiedAt: '2026-11-05T09:00:00.000Z',
+          },
+        ],
+      },
+      etag: '"v4"',
+    });
+    renderDetail();
+
+    expect(await screen.findByTestId('member-verified')).toHaveAccessibleName(
+      'Verified · Email · 5 November 2026',
+    );
+    const user = userEvent.setup();
+    await user.hover(screen.getByTestId('member-verified'));
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Email k***@example.test · 5 November 2026');
+    expect(tooltip).toHaveTextContent('Phone +233 *** 01 · 4 November 2026');
+  });
+
+  it('names the most recent proof when the confirmation and a contact proof both exist', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: {
+        ...DETAIL,
+        verifiedContacts: [
+          {
+            id: 'contact-1001-email',
+            channel: 'email',
+            masked: 'k***@example.test',
+            verifiedAt: '2026-11-01T09:00:00.000Z',
+          },
+        ],
+        confirmedAt: '2026-11-06T09:00:00.000Z',
+      },
+      etag: '"v3"',
+    });
+    renderDetail();
+
+    expect(await screen.findByTestId('member-verified')).toHaveAccessibleName(
+      'Verified · Officer · 6 November 2026',
+    );
+    // The title lists every proof, so an officer sees the email proof too.
+    const user = userEvent.setup();
+    await user.hover(screen.getByTestId('member-verified'));
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Officer confirmed · 6 November 2026');
+    expect(tooltip).toHaveTextContent('Email k***@example.test · 1 November 2026');
+  });
+
+  it('renders no badge for an imported date with no audit row', async () => {
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: { ...DETAIL, verifiedContacts: [], confirmedAt: null },
+      etag: '"v3"',
+    });
+    renderDetail();
+
+    await screen.findByRole('heading', { level: 1, name: 'Kwame Asante (Male, 41y)' });
+    expect(screen.queryByTestId('member-verified')).not.toBeInTheDocument();
+  });
+
+  it('offers Verify membership for an unverified member with an own number and sends at once', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockResolvedValueOnce({
+      destination: { channel: 'phone', masked: '+233 *** 01' },
+      expiresAt: '2026-11-17T12:10:00.000Z',
+    });
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Revoke verification' })).not.toBeInTheDocument();
+    // MR-2: the verification verb sits above the destructive divider.
+    const divider = document.querySelector<HTMLElement>('.fui-MenuDivider');
+    expect(divider).not.toBeNull();
+    const verifyItem = screen.getByRole('menuitem', { name: 'Verify membership' });
+    expect(verifyItem.compareDocumentPosition(divider!) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(divider!.nextElementSibling).toBe(screen.getByRole('menuitem', { name: 'Archive' }));
+    await user.click(verifyItem);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Verify membership' })).toBeVisible();
+    expect(within(dialog).getByTestId('verify-context')).toHaveTextContent(
+      'Ama Mensah · M-1005 · not yet verified',
+    );
+    expect(within(dialog).getByTestId('verify-lead')).toHaveTextContent(
+      "A six-digit code was sent to the member's phone and expires at",
+    );
+    expect(within(dialog).getByTestId('verify-lead')).toHaveTextContent(
+      /expires at \d{2}:\d{2}\.$/,
+    );
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('Phone');
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('+233 *** 01');
+    expect(within(dialog).getByTestId('verify-note')).toHaveTextContent(
+      'SMS is completed on the member acceptance page: open the link we sent to +233 *** 01 and enter the six-digit code. The code is never shown here, and the officer never sees it.',
+    );
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    expect(close).toBeVisible();
+    expect(close).not.toHaveClass(/fui-Button--primary/);
+    expect(requestVerificationMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'dom-lane-session',
+      'M-1005',
+    );
+  });
+
+  it('names the email destination and the shared link when the code went to an email', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockResolvedValueOnce({
+      destination: { channel: 'email', masked: 'v***@example.test' },
+      expiresAt: '2026-11-17T12:10:00.000Z',
+    });
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('verify-lead')).toHaveTextContent(
+      "A six-digit code was sent to the member's email and expires at",
+    );
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('Email');
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('v***@example.test');
+    expect(within(dialog).getByTestId('verify-note')).toHaveTextContent(
+      'Email is completed on the member acceptance page: open the link we sent to v***@example.test and enter the six-digit code. The code is never shown here, and the officer never sees it.',
+    );
+  });
+
+  it('names WhatsApp in the note when WhatsApp is the resolved channel', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockResolvedValueOnce({
+      destination: { channel: 'whatsapp', masked: '+233 *** 42' },
+      expiresAt: '2026-11-17T12:10:00.000Z',
+    });
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('WhatsApp');
+    expect(within(dialog).getByTestId('verify-destination')).toHaveTextContent('+233 *** 42');
+    expect(within(dialog).getByTestId('verify-note')).toHaveTextContent(
+      'WhatsApp is completed on the member acceptance page: open the link we sent to +233 *** 42 and enter the six-digit code. The code is never shown here, and the officer never sees it.',
+    );
+  });
+
+  it('offers Verify membership to an email-only member (MR-43)', async () => {
+    const user = userEvent.setup();
+    renderUnverified({
+      ...EMPTY,
+      memberNo: 'M-1007',
+      contactCount: 1,
+      contacts: [
+        {
+          id: 'contact-1007-email',
+          kind: 'email',
+          value: 'only@example.test',
+          displayOrder: 0,
+          ownerMemberNo: 'M-1007',
+          linked: false,
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Verify membership' })).toBeInTheDocument();
+  });
+
+  it('offers Verify membership while another owned contact is unproven (AC-MR46)', async () => {
+    const user = userEvent.setup();
+    const provenPhone = {
+      id: 'contact-1008-phone',
+      kind: 'phone' as const,
+      value: '+233 20 000 0008',
+      displayOrder: 0,
+      ownerMemberNo: 'M-1008',
+      linked: false,
+    };
+    const unprovenEmail = {
+      id: 'contact-1008-email',
+      kind: 'email' as const,
+      value: 'mixed@example.test',
+      displayOrder: 1,
+      ownerMemberNo: 'M-1008',
+      linked: false,
+    };
+    renderUnverified({
+      ...EMPTY,
+      memberNo: 'M-1008',
+      contactCount: 2,
+      contacts: [provenPhone, unprovenEmail],
+      verifiedContacts: [
+        {
+          id: provenPhone.id,
+          channel: 'phone',
+          masked: '+233 *** 08',
+          verifiedAt: '2026-11-05T09:00:00.000Z',
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Verify membership' })).toBeInTheDocument();
+    // The badge still states the proof that exists.
+    expect(await screen.findByTestId('member-verified')).toHaveAccessibleName(
+      'Verified · Phone · 5 November 2026',
+    );
+  });
+
+  it('does not offer Verify membership when every owned contact is proven (AC-MR46)', async () => {
+    const user = userEvent.setup();
+    const phone = { ...OWN_PHONE, ownerMemberNo: 'M-1009' };
+    const email = {
+      id: 'contact-1009-email',
+      kind: 'email' as const,
+      value: 'both@example.test',
+      displayOrder: 1,
+      ownerMemberNo: 'M-1009',
+      linked: false,
+    };
+    renderUnverified({
+      ...EMPTY,
+      memberNo: 'M-1009',
+      contactCount: 2,
+      contacts: [phone, email],
+      verifiedContacts: [
+        {
+          id: phone.id,
+          channel: 'phone',
+          masked: '+233 *** 02',
+          verifiedAt: '2026-11-04T09:00:00.000Z',
+        },
+        {
+          id: email.id,
+          channel: 'email',
+          masked: 'b***@example.test',
+          verifiedAt: '2026-11-05T09:00:00.000Z',
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Verify membership' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Revoke verification' })).toBeInTheDocument();
+  });
+
+  it('renders the 409 already_verified refusal when nothing is left to prove', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockRejectedValueOnce(
+      new ApiError(409, 'Already verified', { code: 'already_verified' }),
+    );
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    expect(
+      await screen.findByText(
+        'Every contact this member owns is already proven, or an officer confirmed the member.',
+      ),
+    ).toBeVisible();
+  });
+
+  it('offers Confirm member but not Verify for a member with no own number', async () => {
+    const user = userEvent.setup();
+    renderUnverified({ ...EMPTY, memberNo: 'M-1006' });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Verify membership' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Revoke verification' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Confirm member' })).toBeInTheDocument();
+  });
+
+  it('does not offer Verify or Confirm for an archived member', async () => {
+    const user = userEvent.setup();
+    renderUnverified({ ...UNVERIFIED, archivedAt: '2026-02-01T00:00:00.000Z' });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Verify membership' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Confirm member' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Restore' })).toBeInTheDocument();
+  });
+
+  it('renders the 429 refusal when the send is throttled', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockRejectedValueOnce(new ApiError(429, 'Too many requests'));
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    expect(
+      await screen.findByText(
+        'A code was requested too recently, or five were sent this hour. Try again later.',
+      ),
+    ).toBeVisible();
+  });
+
+  it('renders the 409 refusal when the member has no own number', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockRejectedValueOnce(new ApiError(409, 'No own contact'));
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    expect(
+      await screen.findByText('This member has no email, phone or WhatsApp number to verify.'),
+    ).toBeVisible();
+  });
+
+  it('renders the 503 refusal when no channel is configured', async () => {
+    const user = userEvent.setup();
+    requestVerificationMock.mockRejectedValueOnce(new ApiError(503, 'No sender'));
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Verify membership' }));
+
+    expect(
+      await screen.findByText('No messaging channel is configured, so no code was sent.'),
+    ).toBeVisible();
+  });
+
+  it('confirms the consequence before revoking a verification', async () => {
+    const user = userEvent.setup();
+    revokeVerificationMock.mockResolvedValueOnce(undefined);
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Verify membership' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Revoke verification' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Revoke the verification for Kwame Asante (Male, 41y)?');
+    expect(dialog).toHaveTextContent(/Every contact proof and the officer confirmation/);
+    expect(revokeVerificationMock).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Revoke verification' }));
+    await waitFor(() => {
+      expect(revokeVerificationMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'dom-lane-session',
+        'M-1001',
+      );
+    });
+  });
+
+  it('records a reason before confirming a member', async () => {
+    const user = userEvent.setup();
+    renderUnverified();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Confirm member' }));
+
+    const dialog = await screen.findByRole('dialog');
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm member' });
+    expect(confirm).toBeDisabled();
+    expect(within(dialog).getByText(/records no code and changes no contact/)).toBeVisible();
+
+    await user.type(within(dialog).getByLabelText('Reason'), 'Known to the office for years');
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    await waitFor(() => {
+      expect(confirmMemberMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'dom-lane-session',
+        'M-1005',
+        'Known to the office for years',
+      );
+    });
+  });
+
+  it('does not offer Confirm member when a confirmation is already active', async () => {
+    const user = userEvent.setup();
+    fetchMemberDetailMock.mockResolvedValueOnce({
+      member: { ...DETAIL, confirmedAt: '2026-11-06T09:00:00.000Z' },
+      etag: '"v3"',
+    });
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions' }));
+    expect(screen.queryByRole('menuitem', { name: 'Confirm member' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Revoke verification' })).toBeInTheDocument();
   });
 });
 

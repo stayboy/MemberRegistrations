@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_COUNTRY_CODE } from '../../src/config/env.js';
 import { migrate } from '../../src/db/migrate.js';
 import { MemberRepository } from '../../src/repos/members.js';
 import { PresbyterTitleRepository } from '../../src/repos/presbyter-titles.js';
@@ -536,7 +537,7 @@ describe.skipIf(!testDatabaseUrl)('guardians through the pooled pg driver', () =
   beforeAll(async () => {
     pooled = await createScratchPgDb(testDatabaseUrl!);
     await migrate(pooled);
-    repo = new MemberRepository(pooled);
+    repo = new MemberRepository(pooled, DEFAULT_COUNTRY_CODE);
   });
 
   afterAll(async () => {

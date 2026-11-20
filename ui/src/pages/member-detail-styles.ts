@@ -160,6 +160,35 @@ export const useMemberDetailStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalL,
   },
+  /**
+   * FR-25b's sent dialog: the destination reads as one bordered row, like the
+   * contacts dialog's list rows, with the channel glyph leading, the kind in the
+   * fixed muted column and the mask taking the room left.
+   */
+  destinationRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    minHeight: '42px',
+    padding: `0 ${tokens.spacingHorizontalM}`,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  destinationIcon: {
+    flexShrink: 0,
+    fontSize: '20px',
+    color: tokens.colorNeutralForeground2,
+  },
+  destinationKind: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
+    minWidth: '72px',
+  },
+  destinationValue: {
+    wordBreak: 'break-all',
+  },
   dialogGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',

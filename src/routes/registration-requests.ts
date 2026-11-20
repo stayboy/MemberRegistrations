@@ -28,8 +28,16 @@ export function registrationRequestsRouter(repo: RegistrationRequestRepository):
 
   router.post('/:id/approve', async (req, res) => {
     const id = idSchema.parse(req.params.id);
-    const { memberNo, guardianMemberNo } = registrationApproveSchema.parse(req.body);
-    const item = await repo.approve(id, memberNo, guardianMemberNo, actorOf(req));
+    const { memberNo, phoneOwnership, guardianMemberNo } = registrationApproveSchema.parse(
+      req.body,
+    );
+    const item = await repo.approve(
+      id,
+      memberNo,
+      phoneOwnership,
+      guardianMemberNo ?? null,
+      actorOf(req),
+    );
     res.setHeader('Cache-Control', 'no-store');
     res.json(item);
   });

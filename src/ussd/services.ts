@@ -1,6 +1,7 @@
 import type { Db, Row } from '../db/sql.js';
 import { ValidationError } from '../errors/domain-errors.js';
 import { todayIn } from '../domain/series.js';
+import type { PhoneCipher } from '../domain/phone-cipher.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventRepository } from '../repos/events.js';
@@ -16,6 +17,7 @@ import {
   type SubscriptionProductRepository,
 } from '../repos/subscription-products.js';
 import type { SubscriptionRepository } from '../repos/subscriptions.js';
+import type { VerificationService } from '../verification/service.js';
 import type {
   CreateGroupInput,
   CreatePledgeInput,
@@ -35,6 +37,7 @@ import type {
   UssdWelfareDependent,
   UssdWelfareProduct,
   UssdWelfareSubscription,
+  UssdVerificationSent,
 } from './machine.js';
 
 export interface UssdServiceDeps {
@@ -49,6 +52,10 @@ export interface UssdServiceDeps {
   clocking: ClockingRepository;
   subscriptionProducts: SubscriptionProductRepository;
   subscriptions: SubscriptionRepository;
+  /** Encrypts a registration's caller number for the officer's decision (MR-53). */
+  phoneCipher: PhoneCipher;
+  /** MR-54: the same in-process issue the officer route calls. */
+  verification: VerificationService;
 }
 
 interface EventRow extends Row {
@@ -263,7 +270,7 @@ interface WelfareMemberRow extends Row {
   member_no: string;
   joined_on: unknown;
   membership_card_no: string | null;
-  verified_at: unknown;
+  verified_eligible: boolean;
   gender: EligibilityMember['gender'];
   dob: unknown;
 }
@@ -275,15 +282,16 @@ function isoDate(value: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : text;
 }
 
-function isoDateTime(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  return String(value);
-}
-
 async function requireWelfareMember(db: Db, memberNo: string): Promise<WelfareMemberRow> {
   const [row] = await db.query<WelfareMemberRow>(
-    `select id, member_no, joined_on, membership_card_no, verified_at, gender, dob
+    `select id, member_no, joined_on, membership_card_no,
+            (exists (select 1 from member_contacts c
+                      where c.member_id = members.id and c.verified_at is not null
+                        and c.kind in ('email', 'whatsapp'))
+             or exists (select 1 from member_confirmations mc
+                         where mc.member_id = members.id and mc.withdrawn_at is null))
+              as verified_eligible,
+            gender, dob
        from members
       where lower(member_no) = lower($1) and archived_at is null and purged_at is null`,
     [memberNo],
@@ -296,7 +304,7 @@ function eligibilityOf(row: WelfareMemberRow): EligibilityMember {
   return {
     joinedOn: isoDate(row.joined_on),
     membershipCardNo: row.membership_card_no,
-    verifiedAt: isoDateTime(row.verified_at),
+    verified: row.verified_eligible,
     gender: row.gender,
     dob: isoDate(row.dob),
   };
@@ -521,6 +529,13 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
       return deps.members.profile(memberNo);
     },
 
+    async startVerification(memberNo: string): Promise<UssdVerificationSent> {
+      // MR-54: one service path with the officer action; the response is reduced
+      // to the notice's only member data.
+      const issued = await deps.verification.issue(memberNo);
+      return { channel: issued.destination.channel, masked: issued.destination.masked };
+    },
+
     async redeemCode(input: {
       code: string;
       memberNo: string;
@@ -555,11 +570,14 @@ export function createUssdServices(deps: UssdServiceDeps): UssdServices {
       firstName: string;
       lastName: string;
       phoneHash: string;
+      /** The caller's normalized digits; encrypted at rest, never returned (MR-53). */
+      phone: string;
     }): Promise<{ reference: string }> {
       const result = await deps.attendanceCodes.redeem({
         code: input.code.trim(),
         purpose: 'registration',
         phoneHash: input.phoneHash,
+        phoneEncrypted: deps.phoneCipher.encrypt(input.phone),
         memberId: null,
         actor: `ussd:${input.phoneHash}`,
         firstName: input.firstName,

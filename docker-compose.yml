@@ -59,6 +59,9 @@ services:
       # library default, and the smoke signs with the same values the app verifies with.
       USSD_GATEWAY_SECRET: local-development-ussd-gateway-secret
       PAYMENT_GATEWAY_SECRET: local-development-payment-secret
+      # The public member acceptance page is served by the Compose UI on 8080;
+      # the SMS appends #t=<token> to this base (MR-51).
+      VERIFICATION_LINK_BASE: http://localhost:8080/v
       LOG_LEVEL: info
     depends_on:
       migrate:

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STANDALONE_MOCKS,
   ancestorsAt,
   checkShell,
   classesOf,
@@ -133,6 +134,17 @@ describe('shell-check: a wrapper must not reuse a restyling class', () => {
     expect(restylingClasses(CSS).has('side')).toBe(false);
     expect(restylingClasses(CSS).has('state')).toBe(true);
     expect(restylingClasses(CSS).has('screen')).toBe(true);
+  });
+});
+
+describe('shell-check: a standalone surface is named, not silently skipped', () => {
+  it('gives every standalone mock a repository-relative path and a reason', () => {
+    const entries = Object.entries(STANDALONE_MOCKS);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [path, reason] of entries) {
+      expect(path).toMatch(/^mockups\/[a-z0-9-]+\/[a-z0-9-]+\.html$/);
+      expect(reason.length).toBeGreaterThan(20);
+    }
   });
 });
 

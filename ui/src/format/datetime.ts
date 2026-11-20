@@ -170,6 +170,30 @@ export function formatInstant(
 }
 
 /**
+ * The wall-clock time of an ISO instant, converted to the browser zone (or
+ * `options.timeZone`). The clock cycle follows the officer's preference. This is
+ * the time half of {@link formatInstant}, for a sentence that already names the
+ * day or when only the time matters ("expires at 14:32").
+ */
+export function formatInstantTime(
+  value: string | null | undefined,
+  preference: DateTimePreference,
+  options: InstantFormatOptions = {},
+): string {
+  const date = parseInstant(value);
+  if (!date) return '';
+
+  try {
+    return new Intl.DateTimeFormat(options.locale, {
+      ...timeOptions(preference.timeCycle, false),
+      timeZone: options.timeZone,
+    }).format(date);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * A calendar date (`YYYY-MM-DD`, or the date part of a full ISO string) built at
  * noon UTC and formatted in UTC. It deliberately takes no time zone: a birthday
  * or a session date never moves because the reader is west of UTC.

@@ -12,7 +12,14 @@ const services = {} as UssdServices;
 const memberSession: UssdSessionInfo = {
   phone: '8012345678',
   phoneHash: 'a'.repeat(64),
-  member: { id: 'm1', memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah' },
+  member: {
+    id: 'm1',
+    memberNo: 'M-1001',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    hasUnprovenContact: true,
+    confirmed: true,
+  },
   anonymous: false,
 };
 

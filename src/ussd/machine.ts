@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { t, type GlossaryKey } from './glossary.js';
+import { DeliveryUnavailableError, RateLimitedError } from '../errors/domain-errors.js';
+import { full, t, type GlossaryKey } from './glossary.js';
 import { money, parseAmount, parseUssdDate, shortDate, truncate } from './format.js';
 
 /** Every state the shipped menu tree can occupy, in registry order. */
@@ -45,6 +46,7 @@ export const STATES = [
   'attendance.delegate_reason',
   'attendance.done',
   'profile',
+  'verify.sent',
   'register.code',
   'register.first',
   'register.last',
@@ -232,10 +234,20 @@ export interface UssdSessionInfo {
     memberNo: string;
     firstName: string | null;
     lastName: string | null;
+    /** At least one owned contact has no proof yet (MR-54). */
+    hasUnprovenContact: boolean;
+    /** An active officer confirmation; the action is hidden (MR-55). */
+    confirmed: boolean;
   } | null;
   anonymous: boolean;
   /** The channel's declared paged-list sizes; the reference is 3 events and 5 offerings. */
   pageSize?: { events: number; offerings: number };
+}
+
+/** The destination a member-initiated code went to; the notice's only member data. */
+export interface UssdVerificationSent {
+  channel: 'email' | 'whatsapp' | 'phone';
+  masked: string;
 }
 export interface CreateGroupInput {
   memberNo?: string;
@@ -289,6 +301,8 @@ export interface UssdServices {
   }): Promise<UssdHeadcount>;
   attendance(memberNo: string, from: string, to: string): Promise<UssdAttendance>;
   profile(memberNo: string): Promise<UssdProfile>;
+  /** MR-54: start a code from My Profile; the acceptance page completes it. */
+  startVerification(memberNo: string): Promise<UssdVerificationSent>;
   redeemCode(input: {
     code: string;
     memberNo: string;
@@ -301,6 +315,7 @@ export interface UssdServices {
     firstName: string;
     lastName: string;
     phoneHash: string;
+    phone: string;
   }): Promise<{ reference: string }>;
   clockIn(input: {
     eventId: string;
@@ -350,6 +365,8 @@ export interface UssdContext {
   summary?: MemberPayments;
   groupReference?: string;
   notice?: GlossaryKey;
+  /** MR-54: the mask the verify.sent notice names; never the code or token. */
+  verification?: UssdVerificationSent;
   invalid?: number;
   returnState?: UssdState;
   messageKey?: GlossaryKey;
@@ -662,6 +679,7 @@ const PARENTS: Record<UssdState, UssdState | null> = {
   'attendance.delegate_reason': 'attendance.delegate',
   'attendance.done': 'main',
   profile: 'main',
+  'verify.sent': 'profile',
   'register.code': 'main',
   'register.first': 'register.code',
   'register.last': 'register.first',
@@ -705,6 +723,15 @@ async function activityViewer(
 
 function noticeLines(context: UssdContext): string[] {
   return context.notice ? [t(context.notice)] : [];
+}
+
+/** MR-55: the service's refusals map to the USSD notices. */
+function verificationNotice(error: unknown): GlossaryKey {
+  if (error instanceof RateLimitedError) {
+    return error.window === 'hour' ? 'error.verify_limit' : 'error.verify_too_soon';
+  }
+  if (error instanceof DeliveryUnavailableError) return 'error.not_sent';
+  return 'error.try_again';
 }
 
 function navLines(
@@ -1331,7 +1358,7 @@ function renderedAttendanceEvent(context: UssdContext, session: UssdSessionInfo)
   );
 }
 
-function renderedProfile(context: UssdContext): Rendered {
+function renderedProfile(context: UssdContext, session: UssdSessionInfo): Rendered {
   const profile = context.profile;
   const lines = [...noticeLines(context)];
   if (profile) {
@@ -1367,8 +1394,25 @@ function renderedProfile(context: UssdContext): Rendered {
       }`,
     );
   }
+  const options: UssdOption[] = [];
+  // MR-54/MR-55: the action is offered only while an owned contact is still
+  // unproven and no officer confirmation is active.
+  if (session.member && session.member.hasUnprovenContact && !session.member.confirmed) {
+    lines.push(`1 ${full('action.verify_contact')}`);
+    options.push({ key: '1', label: full('action.verify_contact') });
+  }
   const nav = navLines('profile', context, false);
-  return screen('profile', context, [...lines, ...nav.lines], nav.options);
+  return screen('profile', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+}
+
+/** MR-54: the notice after a member-initiated send; it accepts no digits. */
+function renderedVerifySent(context: UssdContext): Rendered {
+  const lines = [...noticeLines(context)];
+  if (context.verification) {
+    lines.push(full('status.verification_sent').replace('<mask>', context.verification.masked));
+  }
+  const nav = navLines('verify.sent', context, false);
+  return screen('verify.sent', context, [...lines, ...nav.lines], nav.options);
 }
 
 function renderedAttendanceDone(context: UssdContext): Rendered {
@@ -1704,7 +1748,9 @@ export function render(
     case 'attendance.done':
       return renderedAttendanceDone(context);
     case 'profile':
-      return renderedProfile(context);
+      return renderedProfile(context, session);
+    case 'verify.sent':
+      return renderedVerifySent(context);
     case 'register.code':
     case 'register.first':
     case 'register.last':
@@ -3167,6 +3213,36 @@ export async function advance(
   }
 
   if (state === 'profile') {
+    // MR-54/MR-55: only the offered action is accepted; a hidden action (already
+    // proven or confirmed) is an invalid choice.
+    if (
+      value !== '1' ||
+      !session.member ||
+      !session.member.hasUnprovenContact ||
+      session.member.confirmed
+    ) {
+      return invalid(state, context, 'error.invalid_choice');
+    }
+    try {
+      const sent = await services.startVerification(session.member.memberNo);
+      return {
+        state: 'verify.sent',
+        context: { ...context, verification: sent, notice: undefined },
+        done: false,
+      };
+    } catch (error) {
+      // The service's refusals are the officer action's: contactless, throttled
+      // or no sender. The notice names the one that applies and keeps 9 Back.
+      return {
+        state: 'verify.sent',
+        context: { ...context, verification: undefined, notice: verificationNotice(error) },
+        done: false,
+      };
+    }
+  }
+
+  if (state === 'verify.sent') {
+    // The notice accepts no digits; 9 and 00 were handled by the back block.
     return invalid(state, context, 'error.invalid_choice');
   }
 
@@ -3205,6 +3281,7 @@ export async function advance(
         firstName: context.firstName ?? '',
         lastName,
         phoneHash: session.phoneHash,
+        phone: session.phone,
       });
       return {
         state: 'register.done',

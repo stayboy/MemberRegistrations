@@ -248,7 +248,14 @@ explicit IANA `timezone` to decide what "today" means for that series. Clients c
 | `AUTH_SESSION_ABSOLUTE_MINUTES` | `720`         | Absolute session cap; must be at least the idle lifetime.                                         |
 | `UI_BASE_URL`                   | local Pages   | Magic-link landing page; set to the deployed `/#/connect` URL.                                    |
 | `RESEND_API_KEY`                | —             | Production mail delivery.                                                                         |
-| `MAGIC_LINK_FROM`               | —             | Verified Resend sender address.                                                                   |
+| `MAGIC_LINK_FROM`               | —             | Verified Resend sender address; also the verification email's sender.                             |
+| `OTP_PEPPER`                    | dev default   | HMAC pepper for verification codes; required in production.                                       |
+| `DEFAULT_COUNTRY_CODE`          | `233`         | Digits (1-3) prefixed to a bare stored number for delivery and masking.                           |
+| `WHATSAPP_SEND_URL`             | —             | Provider-neutral WhatsApp adapter; unset in production → `503 delivery_unavailable`.              |
+| `SMS_SEND_URL`                  | —             | Provider-neutral SMS adapter; unset in production → `503 delivery_unavailable`.                   |
+| `MESSAGE_SEND_TOKEN`            | —             | Bearer for the WhatsApp/SMS adapters.                                                             |
+| `REGISTRATION_PHONE_KEY`        | dev default   | AES-256-GCM key for a pending registration's number; required in production.                      |
+| `VERIFICATION_LINK_BASE`        | local `/v`    | The public member acceptance page; the SMS appends `#t=<token>`; required in production.          |
 | `CORS_ALLOWED_ORIGINS`          | Pages + local | Comma-separated allowlist for `/auth/*` and `/gateway/v1/*`.                                      |
 | `LOG_LEVEL`                     | `info`        | Pino level (`silent` in tests).                                                                   |
 
