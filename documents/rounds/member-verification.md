@@ -141,9 +141,12 @@ gate-run 2026-11-20T06:41:57.276Z profile=full steps=7/7 lines=7 bytes=960
   (`contact_id` + `destination_value_hash`), the unique-race mappings, the remaining-attempts copy, the
   country-code mask, the contract nits, the harness replay moved to `beforeAll` (full suite green twice),
   and the two capture entries.
-- **Pooled `pg`:** the 10 pooled tests are **unexecuted this pass** - Docker is unavailable on this host
-  (no daemon, no local Postgres), so the new concurrency/binding cases have only the PGlite lane. The
-  publish step must run `0025` and the approval/concurrency cases against the real Compose Postgres.
+- **Pooled `pg`:** the 10 pooled tests ran in CI (the `verify` job passed with its Postgres) and on the
+  parent's scratch Postgres (`49 passed` across the two suites); the Compose publish applied `0024` and
+  `0025` to the real database.
+- **Publish:** 2026-11-20 - `docker compose build`/`up -d` from `1350ba7`; `0024_member_photo` and
+  `0025_member_verification` applied; the app healthy, the UI and `/v` answer 200. The publish-executor
+  rungs were unavailable (free limit, then shell denied); the parent executed and recorded the reason.
 
 ### Section 8 - the timeout record
 
