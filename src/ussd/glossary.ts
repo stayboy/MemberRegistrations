@@ -15,6 +15,21 @@ export const GLOSSARY = {
   'menu.profile': { full: 'My Profile', short: 'Profile' },
   'menu.register': { full: 'Register', short: 'Register' },
   'menu.exit': { full: 'Exit', short: 'Exit' },
+  'action.verify_contact': { full: 'Verify contact', short: 'Verify' },
+  'status.verification_sent': {
+    full: 'A code was sent to <mask>. Open the link we sent.',
+    short: 'Code sent',
+  },
+  'error.verify_too_soon': {
+    full: 'A code was just sent. Try again shortly.',
+    short: 'Too soon',
+  },
+  'error.verify_limit': {
+    full: 'Too many codes this hour. Try again later or ask the office.',
+    short: 'Hour limit',
+  },
+  'error.not_sent': { full: 'The code could not be sent. Ask the office.', short: 'Not sent' },
+  'error.code_expired': { full: 'That code has expired', short: 'Expired' },
   'nav.back': { full: 'Back', short: 'Back' },
   'nav.more': { full: 'More', short: 'More' },
   'nav.main': { full: 'Main menu', short: 'Main' },

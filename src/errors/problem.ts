@@ -1,12 +1,15 @@
 import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 import {
+  AlreadyVerifiedError,
   BadRequestError,
   ConflictError,
+  DeliveryUnavailableError,
   ImportError,
   NotFoundError,
   PaymentFailedError,
   PhotoTooLargeError,
+  RateLimitedError,
   ReassignmentRequiredError,
   TooManyTriesError,
   UnauthorizedError,
@@ -112,6 +115,16 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     return;
   }
 
+  if (error instanceof RateLimitedError) {
+    sendProblem(res, 429, 'Too Many Requests', error.message, 'too_many_requests');
+    return;
+  }
+
+  if (error instanceof DeliveryUnavailableError) {
+    sendProblem(res, 503, 'Service Unavailable', error.message, 'delivery_unavailable');
+    return;
+  }
+
   if (error instanceof PhotoTooLargeError) {
     sendProblem(res, 413, 'Payload too large', error.message, error.code);
     return;
@@ -140,6 +153,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
         ...problemBody(409, 'Conflict', error.message, 'conflict'),
         currentAssignment: error.currentAssignment,
       });
+    return;
+  }
+
+  if (error instanceof AlreadyVerifiedError) {
+    sendProblem(res, 409, 'Conflict', error.message, 'already_verified');
     return;
   }
 

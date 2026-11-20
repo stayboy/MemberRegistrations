@@ -39,10 +39,16 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `member-detail-overview.png`        | Member overview, four cards and fixed panels     | 1440 × 900  | `v2-shell/19-member-overview-collapsed.png` |
 | `member-detail-overview-empty.png`  | Member overview with no history or subscriptions | 1440 × 900  | `v2-shell/19-member-overview-empty.png`     |
 | `member-detail-overview-narrow.png` | Member overview in one column                    | 860 × 900   | `v2-shell/19-member-overview-narrow.png`    |
+| `member-detail-verified.png`        | Verified record header and badge, three proofs   | 1440 × 900  | `v2-shell/23-member-verification-badge.png` |
+| `acceptance.png`                    | Public acceptance page, the entry form           | 1440 × 900  | `v2-shell/24-member-acceptance.png`         |
 
 `member-add` uses the step-flow entry's 1123 px and `series-detail` its 1000 px, rather than a
 rounded 900 px, because the form's first step and the series screen are taller than the fold. `imports-batches` has no local
 mock; its viewport follows the other 900 px screens.
+
+`member-detail-verified` and `acceptance` were added by the member-verification round (MR-34, MR-51):
+the first shows the record header with the badge naming the newest of three proofs on `M-1010`, the
+second the public page reached at `v.html#t=<token>` (production serves the same document at `/v`).
 
 The 2026-11-18 capture moved **every** screen, because the `API connected` pill was removed from the
 page-title row on all of them (FR-10, owner 2026-11-18). `members-list` and `member-detail` also carry

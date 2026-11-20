@@ -14,6 +14,8 @@ import {
   MessageBarBody,
   MessageBarTitle,
   Option,
+  Radio,
+  RadioGroup,
   Spinner,
   Table,
   TableBody,
@@ -64,6 +66,7 @@ export function UssdRegistrationsPage() {
   const [approveTarget, setApproveTarget] = useState<RegistrationRequest | null>(null);
   const [memberNo, setMemberNo] = useState('');
   const [memberNoTouched, setMemberNoTouched] = useState(false);
+  const [phoneOwnership, setPhoneOwnership] = useState<'own' | 'borrowed'>('own');
   const [guardianMemberNo, setGuardianMemberNo] = useState('');
   const [guardianTouched, setGuardianTouched] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<RegistrationRequest | null>(null);
@@ -76,12 +79,13 @@ export function UssdRegistrationsPage() {
     enabled: Boolean(token),
   });
 
-  // MR-50: the approved member has no own contact, so approval names the guardian. The
-  // approved member does not exist yet, so the candidate list is asked without `forMemberNo`.
+  // MR-53: only a borrowed number needs the guardian, so the list is read only
+  // when that choice is selected. The approved member does not exist yet, so the
+  // candidate list is asked without `forMemberNo`.
   const guardianCandidatesQuery = useQuery({
     queryKey: ['ussd', baseUrl, 'registrations', 'guardians'],
     queryFn: ({ signal }) => listGuardianCandidates(baseUrl, token, undefined, signal),
-    enabled: Boolean(token) && approveTarget !== null,
+    enabled: Boolean(token) && approveTarget !== null && phoneOwnership === 'borrowed',
   });
 
   useEffect(() => {
@@ -117,20 +121,29 @@ export function UssdRegistrationsPage() {
     return names;
   }, [eventQueries]);
 
-  /** Closes the approval dialog and clears both inputs, so the next request starts blank. */
+  /** Closes the approval dialog and clears every input, so the next request starts blank. */
   function closeApprove(): void {
     setApproveTarget(null);
     setMemberNo('');
     setMemberNoTouched(false);
+    setPhoneOwnership('own');
     setGuardianMemberNo('');
     setGuardianTouched(false);
   }
 
   const approveMutation = useMutation({
-    mutationFn: (input: { id: string; memberNo: string; guardianMemberNo: string }) =>
+    mutationFn: (input: {
+      id: string;
+      memberNo: string;
+      phoneOwnership: 'own' | 'borrowed';
+      guardianMemberNo: string;
+    }) =>
       approveRegistrationRequest(baseUrl, token, input.id, {
         memberNo: input.memberNo,
-        guardianMemberNo: input.guardianMemberNo,
+        phoneOwnership: input.phoneOwnership,
+        ...(input.phoneOwnership === 'borrowed'
+          ? { guardianMemberNo: input.guardianMemberNo }
+          : {}),
       }),
     onSuccess: () => {
       closeApprove();
@@ -166,7 +179,8 @@ export function UssdRegistrationsPage() {
   });
 
   const memberNoValid = MEMBER_NO_PATTERN.test(memberNo.trim());
-  const canApprove = memberNoValid && guardianMemberNo.length > 0;
+  const guardianRequired = phoneOwnership === 'borrowed';
+  const canApprove = memberNoValid && (!guardianRequired || guardianMemberNo.length > 0);
 
   return (
     <PageFrame
@@ -262,6 +276,10 @@ export function UssdRegistrationsPage() {
                               setActionError(null);
                               setMemberNo('');
                               setMemberNoTouched(false);
+                              // MR-53: an unreadable retained number cannot be
+                              // written as the member's own contact, so the only
+                              // offered ownership is borrowed.
+                              setPhoneOwnership(request.phoneMasked === null ? 'borrowed' : 'own');
                               setGuardianMemberNo('');
                               setGuardianTouched(false);
                               setApproveTarget(request);
@@ -327,51 +345,85 @@ export function UssdRegistrationsPage() {
                 </Field>
 
                 <Field
-                  label="Guardian"
-                  required
-                  hint="The request stores no contact, so this adult is how the register reaches the member. Only reachable adults are offered."
-                  validationState={guardianTouched && !guardianMemberNo ? 'error' : 'none'}
-                  validationMessage={
-                    guardianTouched && !guardianMemberNo
-                      ? 'Choose the guardian this member is reached through.'
-                      : undefined
-                  }
+                  label="Caller's number"
+                  hint="Retained encrypted until this decision; the register shows only the mask. Approval erases it."
                 >
-                  <Dropdown
-                    placeholder="Choose a guardian"
-                    value={
-                      selectedGuardian
-                        ? `${selectedGuardian.memberNo} · ${selectedGuardian.name} · ${selectedGuardian.contactMasked}`
-                        : guardianMemberNo || 'No guardian'
-                    }
-                    selectedOptions={guardianMemberNo ? [guardianMemberNo] : []}
-                    disabled={guardianCandidatesQuery.isPending}
-                    onOpenChange={(_, data) => {
-                      if (data.open) setGuardianTouched(true);
-                    }}
-                    onOptionSelect={(_, data) => {
-                      setGuardianMemberNo(data.optionValue ?? '');
-                      setGuardianTouched(true);
-                    }}
-                  >
-                    {guardians.map((guardian) => (
-                      <Option
-                        key={guardian.memberNo}
-                        value={guardian.memberNo}
-                        text={`${guardian.memberNo} · ${guardian.name}`}
-                      >
-                        {guardian.memberNo} · {guardian.name} · {guardian.contactMasked}
-                      </Option>
-                    ))}
-                  </Dropdown>
+                  <Text data-testid="registration-phone-masked">
+                    {approveTarget?.phoneMasked ?? 'Not available'}
+                  </Text>
                 </Field>
 
-                {guardianCandidatesQuery.isError ? (
+                <Field
+                  label="Who owns this number?"
+                  hint="Own writes it as the member's phone contact, so they are identified at USSD. Borrowed leaves it with the guardian and requires one."
+                >
+                  <RadioGroup
+                    value={phoneOwnership}
+                    onChange={(_, data) => {
+                      const next = data.value === 'borrowed' ? 'borrowed' : 'own';
+                      setPhoneOwnership(next);
+                      if (next === 'own') {
+                        setGuardianMemberNo('');
+                        setGuardianTouched(false);
+                      }
+                    }}
+                  >
+                    <Radio
+                      value="own"
+                      label="Own - the member's own number"
+                      disabled={approveTarget?.phoneMasked == null}
+                    />
+                    <Radio value="borrowed" label="Borrowed - the guardian's number" />
+                  </RadioGroup>
+                </Field>
+                {guardianRequired ? (
+                  <Field
+                    label="Guardian"
+                    required
+                    hint="The member has no own number, so this adult is how the register reaches them. Only reachable adults are offered."
+                    validationState={guardianTouched && !guardianMemberNo ? 'error' : 'none'}
+                    validationMessage={
+                      guardianTouched && !guardianMemberNo
+                        ? 'Choose the guardian this member is reached through.'
+                        : undefined
+                    }
+                  >
+                    <Dropdown
+                      placeholder="Choose a guardian"
+                      value={
+                        selectedGuardian
+                          ? `${selectedGuardian.memberNo} · ${selectedGuardian.name} · ${selectedGuardian.contactMasked}`
+                          : guardianMemberNo || 'No guardian'
+                      }
+                      selectedOptions={guardianMemberNo ? [guardianMemberNo] : []}
+                      disabled={guardianCandidatesQuery.isPending}
+                      onOpenChange={(_, data) => {
+                        if (data.open) setGuardianTouched(true);
+                      }}
+                      onOptionSelect={(_, data) => {
+                        setGuardianMemberNo(data.optionValue ?? '');
+                        setGuardianTouched(true);
+                      }}
+                    >
+                      {guardians.map((guardian) => (
+                        <Option
+                          key={guardian.memberNo}
+                          value={guardian.memberNo}
+                          text={`${guardian.memberNo} · ${guardian.name}`}
+                        >
+                          {guardian.memberNo} · {guardian.name} · {guardian.contactMasked}
+                        </Option>
+                      ))}
+                    </Dropdown>
+                  </Field>
+                ) : null}
+
+                {guardianRequired && guardianCandidatesQuery.isError ? (
                   <MessageBar intent="warning">
                     <MessageBarBody>
                       <MessageBarTitle>The guardian list is unavailable</MessageBarTitle>
-                      The request cannot be approved until an eligible adult can be chosen. Check
-                      the API connection and try again.
+                      The request cannot be approved as borrowed until an eligible adult can be
+                      chosen. Choose Own, or check the API connection and try again.
                     </MessageBarBody>
                   </MessageBar>
                 ) : null}
@@ -396,6 +448,7 @@ export function UssdRegistrationsPage() {
                   approveMutation.mutate({
                     id: approveTarget.id,
                     memberNo,
+                    phoneOwnership,
                     guardianMemberNo,
                   });
                 }}

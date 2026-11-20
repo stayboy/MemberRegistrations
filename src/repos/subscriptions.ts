@@ -59,7 +59,8 @@ interface MemberRow extends Row {
   dob: string | null;
   joined_on: string | null;
   membership_card_no: string | null;
-  verified_at: Date | string | null;
+  /** An email/WhatsApp proof or an active officer confirmation (MR-33). */
+  verified_eligible: boolean;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
 }
@@ -269,7 +270,7 @@ function eligibilityMember(row: MemberRow): EligibilityMember {
   return {
     joinedOn: isoDate(row.joined_on),
     membershipCardNo: row.membership_card_no,
-    verifiedAt: isoTimestamp(row.verified_at),
+    verified: row.verified_eligible,
     gender: row.gender,
     dob: isoDate(row.dob),
   };
@@ -931,7 +932,14 @@ export class SubscriptionRepository {
   private async requireMember(db: DbClient, memberNo: string): Promise<MemberRow> {
     const [row] = await db.query<MemberRow>(
       `select id, member_no, first_name, last_name, other_names, gender, dob, joined_on,
-              membership_card_no, verified_at, archived_at, purged_at
+              membership_card_no,
+              (exists (select 1 from member_contacts c
+                        where c.member_id = members.id and c.verified_at is not null
+                          and c.kind in ('email', 'whatsapp'))
+               or exists (select 1 from member_confirmations mc
+                           where mc.member_id = members.id and mc.withdrawn_at is null))
+                as verified_eligible,
+              archived_at, purged_at
          from members
         where lower(member_no) = lower($1)`,
       [memberNo],
@@ -945,7 +953,14 @@ export class SubscriptionRepository {
   private async requireMemberById(db: DbClient, memberId: string): Promise<MemberRow> {
     const [row] = await db.query<MemberRow>(
       `select id, member_no, first_name, last_name, other_names, gender, dob, joined_on,
-              membership_card_no, verified_at, archived_at, purged_at
+              membership_card_no,
+              (exists (select 1 from member_contacts c
+                        where c.member_id = members.id and c.verified_at is not null
+                          and c.kind in ('email', 'whatsapp'))
+               or exists (select 1 from member_confirmations mc
+                           where mc.member_id = members.id and mc.withdrawn_at is null))
+                as verified_eligible,
+              archived_at, purged_at
          from members
         where id = $1`,
       [memberId],
@@ -969,7 +984,14 @@ export class SubscriptionRepository {
   private async findMemberRow(db: DbClient, memberNo: string): Promise<MemberRow> {
     const [row] = await db.query<MemberRow>(
       `select id, member_no, first_name, last_name, other_names, gender, dob, joined_on,
-              membership_card_no, verified_at, archived_at, purged_at
+              membership_card_no,
+              (exists (select 1 from member_contacts c
+                        where c.member_id = members.id and c.verified_at is not null
+                          and c.kind in ('email', 'whatsapp'))
+               or exists (select 1 from member_confirmations mc
+                           where mc.member_id = members.id and mc.withdrawn_at is null))
+                as verified_eligible,
+              archived_at, purged_at
          from members
         where lower(member_no) = lower($1)`,
       [memberNo],

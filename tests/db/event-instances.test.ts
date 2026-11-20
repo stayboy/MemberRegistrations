@@ -53,13 +53,24 @@ describe('event instances', () => {
 });
 
 describe('0005 event-instance backfill', () => {
-  it('turns a pre-migration occurrence and attendance into an event instance', async () => {
-    const db = await createPgliteDb();
+  // The replay runs in a hook, not inside `it`: instantiating Wasm Postgres and
+  // replaying the early migrations is a before-load step, and `hookTimeout` is
+  // the liveness guard the test timeout is not (AGENTS.md §8, round record).
+  let db: Db;
+
+  beforeAll(async () => {
+    db = await createPgliteDb();
     for (const migration of MIGRATIONS) {
       if (migration.version >= '0005_event_instances') break;
       await db.exec(migration.sql);
     }
+  });
 
+  afterAll(async () => {
+    await db.close();
+  });
+
+  it('turns a pre-migration occurrence and attendance into an event instance', async () => {
     const [series] = await db.query<{ id: string }>(
       `insert into event_series (name, created_by, updated_by) values ('Sunday Service', 'test', 'test')
        returning id`,

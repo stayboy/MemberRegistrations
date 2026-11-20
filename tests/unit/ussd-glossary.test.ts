@@ -3,6 +3,7 @@ import { GLOSSARY, GLOSSARY_KEYS, full, t, type GlossaryKey } from '../../src/us
 import { money, parseAmount, parseUssdDate, shortDate, truncate } from '../../src/ussd/format.js';
 import {
   STATES,
+  parentOf,
   render,
   type UssdContext,
   type UssdServices,
@@ -14,7 +15,14 @@ const services = {} as UssdServices;
 const memberSession: UssdSessionInfo = {
   phone: '8012345678',
   phoneHash: 'a'.repeat(64),
-  member: { id: 'm1', memberNo: 'M-1001', firstName: 'Ama', lastName: 'Mensah' },
+  member: {
+    id: 'm1',
+    memberNo: 'M-1001',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    hasUnprovenContact: true,
+    confirmed: false,
+  },
   anonymous: false,
 };
 
@@ -249,6 +257,9 @@ function contextFor(state: (typeof STATES)[number]): UssdContext {
   if (state === 'error') {
     base.terminal = false;
   }
+  if (state === 'verify.sent') {
+    base.verification = { channel: 'email', masked: 'a***@example.com' };
+  }
   return base;
 }
 
@@ -288,6 +299,34 @@ describe('USSD display glossary', () => {
       expect(rendered.text.length, `${state}: ${rendered.text}`).toBeLessThanOrEqual(182);
       expect(rendered.text.trim().length, state).toBeGreaterThan(0);
     }
+  });
+
+  it('registers the member-initiated verification action and notice (MR-54, MR-55)', () => {
+    expect(STATES).toContain('verify.sent');
+    expect(parentOf('verify.sent')).toBe('profile');
+    expect(t('action.verify_contact')).toBe('Verify');
+    expect(full('status.verification_sent')).toBe(
+      'A code was sent to <mask>. Open the link we sent.',
+    );
+
+    const profile = render('profile', contextFor('profile'), memberSession, services);
+    expect(profile.text).toContain('1 Verify contact');
+    expect(profile.options.map((option) => option.key)).toContain('1');
+
+    const sent = render('verify.sent', contextFor('verify.sent'), memberSession, services);
+    expect(sent.text).toContain('a***@example.com');
+    expect(sent.text).toContain('Open the link we sent.');
+    expect(sent.text).not.toContain('<mask>');
+    expect(sent.options.map((option) => option.key)).toEqual(['9', '00']);
+    expect(sent.text.length).toBeLessThanOrEqual(182);
+
+    const proven = render(
+      'profile',
+      contextFor('profile'),
+      { ...memberSession, member: { ...memberSession.member!, confirmed: true } },
+      services,
+    );
+    expect(proven.text).not.toContain('Verify contact');
   });
 
   it('renders a three-item and a five-item split confirmation inside the budget', () => {

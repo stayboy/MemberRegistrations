@@ -7,15 +7,21 @@ import { authRouter, corsHeader, corsMiddleware, gatewayAuth } from './authn/rou
 import { AuthService, DEFAULT_AUTH_CONFIG, type AuthConfig } from './authn/service.js';
 import {
   DEFAULT_CORS_ORIGINS,
+  DEFAULT_COUNTRY_CODE,
+  DEFAULT_OTP_PEPPER,
   DEFAULT_PAYMENT_GATEWAY_SECRET,
+  DEFAULT_REGISTRATION_PHONE_KEY,
   DEFAULT_USSD_CODE_PEPPER,
   DEFAULT_USSD_GATEWAY_SECRET,
   DEFAULT_USSD_NALO_MAX_MSG_CHARS,
   DEFAULT_USSD_NALO_USER_ID,
   DEFAULT_USSD_PHONE_PEPPER,
+  DEFAULT_VERIFICATION_LINK_BASE,
   DEFAULT_VISITOR_PHONE_PEPPER,
 } from './config/env.js';
 import { errorHandler, notFoundHandler, sendProblem } from './errors/problem.js';
+import { createSenders, type Senders } from './messaging/senders.js';
+import { createPhoneCipher, type PhoneCipher } from './domain/phone-cipher.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { StubPaymentGateway, type PaymentGateway } from './payments/gateway.js';
 import { AttendanceCodeRepository } from './repos/attendance-codes.js';
@@ -38,6 +44,7 @@ import { ShepherdingRepository } from './repos/shepherding.js';
 import { SubscriptionProductRepository } from './repos/subscription-products.js';
 import { SubscriptionRepository } from './repos/subscriptions.js';
 import { UssdRepository } from './repos/ussd.js';
+import { VerificationRepository } from './repos/verification.js';
 import { attendanceCodesRouter } from './routes/attendance-codes.js';
 import { contributionsRouter } from './routes/contributions.js';
 import { eventsRouter } from './routes/events.js';
@@ -54,10 +61,12 @@ import { seriesRouter } from './routes/series.js';
 import { memberShepherdingRouter, shepherdingRouter } from './routes/shepherding.js';
 import { subscriptionProductsRouter } from './routes/subscription-products.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
+import { verificationRouter, publicVerificationRouter } from './routes/verification.js';
 import { devUssdRouter } from './routes/dev-ussd.js';
 import { ussdRouter } from './routes/ussd.js';
 import { buildUssdAdapters } from './ussd/adapters.js';
 import { createUssdServices } from './ussd/services.js';
+import { VerificationService } from './verification/service.js';
 import type { Db } from './db/sql.js';
 
 export interface AppOptions {
@@ -74,6 +83,19 @@ export interface AppOptions {
   paymentGatewaySecret?: string;
   /** Mounts the HMAC-only callback; off by default so the path answers 404. */
   paymentsEnabled?: boolean;
+  /**
+   * The verification delivery ports (MR-35). Production builds them from the
+   * environment; tests inject capturing fakes or explicit nulls for the 503.
+   */
+  senders?: Senders;
+  verification?: {
+    otpPepper?: string;
+    countryCode?: string;
+    /** The acceptance page origin; the SMS appends `#t=<token>` (MR-51). */
+    linkBase?: string;
+  };
+  /** AES-256-GCM key material for a pending registration's number (MR-53). */
+  registrationPhoneKey?: string;
   ussd?: {
     enabled?: boolean;
     gatewaySecret?: string;
@@ -92,7 +114,16 @@ export function createApp(options: AppOptions): Express {
   const logger = options.logger ?? pino({ level: options.logLevel ?? 'info' });
   const app = express();
 
-  const members = new MemberRepository(options.db);
+  const ussdPhonePepper =
+    options.ussd?.phonePepper ?? process.env.USSD_PHONE_PEPPER ?? DEFAULT_USSD_PHONE_PEPPER;
+  const countryCode =
+    options.verification?.countryCode ?? process.env.DEFAULT_COUNTRY_CODE ?? DEFAULT_COUNTRY_CODE;
+  const registrationPhoneKey =
+    options.registrationPhoneKey ??
+    process.env.REGISTRATION_PHONE_KEY ??
+    DEFAULT_REGISTRATION_PHONE_KEY;
+  const phoneCipher: PhoneCipher = createPhoneCipher(registrationPhoneKey);
+  const members = new MemberRepository(options.db, countryCode);
   const ministries = new MinistryRepository(options.db);
   const presbyterTitles = new PresbyterTitleRepository(options.db);
   const series = new SeriesRepository(options.db);
@@ -140,8 +171,7 @@ export function createApp(options: AppOptions): Express {
     enabled: options.ussd?.enabled ?? process.env.USSD_ENABLED === 'true',
     gatewaySecret:
       options.ussd?.gatewaySecret ?? process.env.USSD_GATEWAY_SECRET ?? DEFAULT_USSD_GATEWAY_SECRET,
-    phonePepper:
-      options.ussd?.phonePepper ?? process.env.USSD_PHONE_PEPPER ?? DEFAULT_USSD_PHONE_PEPPER,
+    phonePepper: ussdPhonePepper,
     codePepper:
       options.ussd?.codePepper ?? process.env.USSD_CODE_PEPPER ?? DEFAULT_USSD_CODE_PEPPER,
     naloUserId:
@@ -151,8 +181,35 @@ export function createApp(options: AppOptions): Express {
       Number(process.env.USSD_NALO_MAX_MSG_CHARS ?? DEFAULT_USSD_NALO_MAX_MSG_CHARS),
   };
   const attendanceCodes = new AttendanceCodeRepository(options.db, ussd.codePepper);
-  const registrationRequests = new RegistrationRequestRepository(options.db, members);
+  const registrationRequests = new RegistrationRequestRepository(
+    options.db,
+    members,
+    phoneCipher,
+    countryCode,
+  );
   const clocking = new ClockingRepository(options.db);
+  const senders =
+    options.senders ??
+    createSenders({
+      NODE_ENV: process.env.NODE_ENV,
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+      MAGIC_LINK_FROM: process.env.MAGIC_LINK_FROM,
+      WHATSAPP_SEND_URL: process.env.WHATSAPP_SEND_URL,
+      SMS_SEND_URL: process.env.SMS_SEND_URL,
+      MESSAGE_SEND_TOKEN: process.env.MESSAGE_SEND_TOKEN,
+    });
+  const verification = new VerificationService(
+    new VerificationRepository(options.db, countryCode),
+    {
+      otpPepper: options.verification?.otpPepper ?? process.env.OTP_PEPPER ?? DEFAULT_OTP_PEPPER,
+      countryCode,
+      linkBase:
+        options.verification?.linkBase ??
+        process.env.VERIFICATION_LINK_BASE ??
+        DEFAULT_VERIFICATION_LINK_BASE,
+      senders,
+    },
+  );
   const ussdServices = createUssdServices({
     db: options.db,
     members,
@@ -165,6 +222,8 @@ export function createApp(options: AppOptions): Express {
     clocking,
     subscriptionProducts,
     subscriptions,
+    phoneCipher,
+    verification,
   });
 
   app.disable('x-powered-by');
@@ -275,6 +334,7 @@ export function createApp(options: AppOptions): Express {
   v1.use('/contributions', contributionsRoutes);
   v1.use('/pledges', pledgesRouter(pledges));
   v1.use('/members', membersRouter(members, subscriptions));
+  v1.use('/members', verificationRouter(verification));
   v1.use('/members', memberShepherdingRouter(shepherding));
   v1.use('/subscriptions', subscriptionsRouter(subscriptions));
   v1.use('/subscription-products', subscriptionProductsRouter(subscriptionProducts));
@@ -289,6 +349,11 @@ export function createApp(options: AppOptions): Express {
   v1.use('/shepherding', shepherdingRouter(shepherding));
 
   app.use('/v1', gate, v1);
+
+  // The member acceptance page is public by design (MR-51): the single-use token
+  // and the code are its credential, it answers no member data, and the browser
+  // reaches it from the UI origin, so the same allowlist applies.
+  app.use('/portal', corsMiddleware(corsOrigins), publicVerificationRouter(verification));
 
   // Browser routes: CORS first, so OPTIONS never reaches a session check.
   app.use('/auth', corsMiddleware(corsOrigins), authRouter(auth, mailer, logger));

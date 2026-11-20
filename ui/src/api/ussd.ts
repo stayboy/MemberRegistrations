@@ -114,6 +114,8 @@ export interface RegistrationRequest {
   readonly lastName: string;
   /** One-way phone hash; the raw phone is never returned. */
   readonly phoneHash: string;
+  /** The caller's number as the officer may see it; never the raw value. */
+  readonly phoneMasked: string | null;
   readonly eventId: string;
   readonly sessionDate: string;
   readonly status: RegistrationStatus;
@@ -167,14 +169,19 @@ export async function listRegistrationRequests(
 }
 
 /**
- * `POST /v1/registration-requests/:id/approve` with the immutable member number and the
- * guardian the approved member is reached through (MR-50).
+ * `POST /v1/registration-requests/:id/approve` with the immutable member number,
+ * the ownership of the caller's number and, for `borrowed`, the guardian the
+ * member is reached through (MR-50, MR-53).
  */
 export async function approveRegistrationRequest(
   baseUrl: string,
   sessionToken: string,
   id: string,
-  input: { readonly memberNo: string; readonly guardianMemberNo: string },
+  input: {
+    readonly memberNo: string;
+    readonly phoneOwnership: 'own' | 'borrowed';
+    readonly guardianMemberNo?: string;
+  },
 ): Promise<RegistrationRequest> {
   const item = await gatewayRequest<RegistrationRequest>(
     baseUrl,
@@ -183,7 +190,8 @@ export async function approveRegistrationRequest(
       method: 'POST',
       body: {
         memberNo: input.memberNo.trim(),
-        guardianMemberNo: input.guardianMemberNo.trim(),
+        phoneOwnership: input.phoneOwnership,
+        ...(input.guardianMemberNo ? { guardianMemberNo: input.guardianMemberNo.trim() } : {}),
       },
       sessionToken,
     },

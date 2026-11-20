@@ -172,7 +172,7 @@ export class CodeInvalidError extends ValidationError {
   }
 }
 
-/** A one-time code is past its 15-minute TTL. */
+/** A one-time code is past its expiry when it is presented. */
 export class CodeExpiredError extends ValidationError {
   constructor(message = 'The code has expired') {
     super(message, 'code_expired');
@@ -204,6 +204,47 @@ export class CodeWrongSessionError extends ValidationError {
 export class TooManyTriesError extends DomainError {
   constructor(message = 'Too many attempts; try again later') {
     super(message, 'too_many_tries');
+  }
+}
+
+/** The member holds no own email, phone or WhatsApp, so no code can be delivered (MR-43). */
+export class NoOwnContactError extends ConflictError {
+  constructor(message = 'The member has no own email, phone or WhatsApp to verify') {
+    super(message, 'no_own_contact');
+  }
+}
+
+/** Every owned contact already carries a proof, or an officer confirmed the member (MR-24). */
+export class AlreadyVerifiedError extends ConflictError {
+  constructor(
+    message = 'Every contact this member owns is already proven, or the member is officer-confirmed',
+  ) {
+    super(message, 'already_verified');
+  }
+}
+
+/** A fixed-window throttle refused the send; the caller may retry later (MR-27). */
+export class RateLimitedError extends DomainError {
+  constructor(
+    message = 'Too many requests; try again later',
+    /** Which window refused: the 60-second resend or the five-per-hour cap (MR-27). */
+    readonly window: 'minute' | 'hour' = 'minute',
+  ) {
+    super(message, 'too_many_requests');
+  }
+}
+
+/** A destination has no configured sender, so nothing was generated or stored (MR-35). */
+export class DeliveryUnavailableError extends DomainError {
+  constructor(message = 'No sender is configured for this destination') {
+    super(message, 'delivery_unavailable');
+  }
+}
+
+/** The number an approval would bind already belongs to another member (MR-53). */
+export class ContactInUseError extends ConflictError {
+  constructor(message = 'The contact value already belongs to a member') {
+    super(message, 'contact_in_use');
   }
 }
 

@@ -133,6 +133,32 @@ describe('member lifecycle', () => {
     expect(response.body.code).toBe('conflict');
   });
 
+  it('rejects a contact value another member owns with the generic conflict (MR-53)', async () => {
+    // The member API documents a plain `conflict` here; only registration
+    // approval names `contact_in_use`, so this pins that the create path keeps
+    // its own code while sharing the uniqueness index.
+    await create('M-1015', { contacts: [{ kind: 'phone', value: '0809 900 0015' }] });
+
+    const duplicate = await request(app)
+      .post('/v1/members')
+      .set(writeHeaders)
+      .send({
+        memberNo: 'M-1016',
+        firstName: 'Other',
+        lastName: 'Holder',
+        contacts: [{ kind: 'phone', value: '08099000015' }],
+      });
+
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.code).toBe('conflict');
+    expect(duplicate.body.detail).toContain('already belongs');
+
+    const [created] = await harness.db.query<{ count: number }>(
+      `select count(*)::int as count from members where member_no = 'M-1016'`,
+    );
+    expect(created!.count).toBe(0);
+  });
+
   it('finds a member by a shared contact value', async () => {
     await create('M-1002', { contacts: [{ kind: 'phone', value: '+234 801 234 5678' }] });
 
@@ -442,11 +468,12 @@ describe('member card and verification', () => {
   it('trims the card, keeps it detail-only and enforces case-insensitive uniqueness', async () => {
     const created = await create('M-5001', { membershipCardNo: '  Card-ONE  ' });
     expect(created.body.membershipCardNo).toBe('Card-ONE');
-    expect(created.body.verifiedAt).toBeNull();
+    expect(created.body.verifiedContacts).toEqual([]);
+    expect(created.body.confirmedAt).toBeNull();
 
     const list = await request(app).get('/v1/members').query({ q: 'M-5001' }).set(readHeaders);
     expect(list.body.items[0]).not.toHaveProperty('membershipCardNo');
-    expect(list.body.items[0]).not.toHaveProperty('verifiedAt');
+    expect(list.body.items[0]).not.toHaveProperty('verifiedContacts');
 
     const duplicate = await request(app).post('/v1/members').set(writeHeaders).send({
       memberNo: 'M-5002',
@@ -500,38 +527,49 @@ describe('member card and verification', () => {
     expect(taken.body.code).toBe('card_in_use');
   });
 
-  it('sets and clears the officer verification timestamp independently of the card', async () => {
-    await create('M-5101');
+  it('never accepts `verified`: the proof and the confirmation are read-only', async () => {
+    const created = await create('M-5101', { verified: true });
+    expect(created.body.verifiedContacts).toEqual([]);
+    expect(created.body.confirmedAt).toBeNull();
 
-    const verified = await request(app)
+    const ignored = await request(app)
       .put('/v1/members/M-5101')
       .set(writeHeaders)
       .send({ verified: true });
-    expect(verified.status).toBe(200);
-    expect(verified.body.verifiedAt).toBeTruthy();
-    expect(verified.body.membershipCardNo).toBeNull();
-    const first = verified.body.verifiedAt as string;
+    // The retired field is stripped, so a body that carries nothing else has no
+    // fields to update and is refused; either way the read-only fields never move.
+    expect(ignored.status).toBe(422);
+    expect(ignored.body.code).toBe('validation_error');
+    const afterIgnored = await request(app).get('/v1/members/M-5101').set(readHeaders);
+    expect(afterIgnored.body.verifiedContacts).toEqual([]);
+    expect(afterIgnored.body.confirmedAt).toBeNull();
+    expect(afterIgnored.body.membershipCardNo).toBeNull();
 
-    const refreshed = await request(app)
+    // A proof and a confirmation written by the services survive a write that
+    // names the retired field: the payload can never clear or refresh them
+    // (MR-33, AC-MR20).
+    const id = (
+      await harness.db.query<{ id: string }>('select id from members where member_no = $1', [
+        'M-5101',
+      ])
+    )[0]!.id;
+    await harness.db.query(
+      `update member_contacts set verified_at = '2026-11-01T09:00:00Z'
+        where member_id = $1`,
+      [id],
+    );
+    await harness.db.query(
+      `insert into member_confirmations (member_id, confirmed_by, confirmed_at, reason)
+       values ($1, 'officer', '2026-11-02T09:00:00Z', 'Known')`,
+      [id],
+    );
+    const stillConfirmed = await request(app)
       .put('/v1/members/M-5101')
       .set(writeHeaders)
-      .send({ verified: true });
-    expect(refreshed.status).toBe(200);
-    expect(refreshed.body.verifiedAt).toBeTruthy();
-    expect(Date.parse(refreshed.body.verifiedAt)).toBeGreaterThanOrEqual(Date.parse(first));
-
-    const omitted = await request(app)
-      .put('/v1/members/M-5101')
-      .set(writeHeaders)
-      .send({ placeOfResidence: 'Accra' });
-    expect(omitted.body.verifiedAt).toBe(refreshed.body.verifiedAt);
-
-    const cleared = await request(app)
-      .put('/v1/members/M-5101')
-      .set(writeHeaders)
-      .send({ verified: false });
-    expect(cleared.status).toBe(200);
-    expect(cleared.body.verifiedAt).toBeNull();
+      .send({ verified: false, placeOfResidence: 'Accra' });
+    expect(stillConfirmed.status).toBe(200);
+    expect(stillConfirmed.body.confirmedAt).toBe('2026-11-02T09:00:00.000Z');
+    expect(stillConfirmed.body.verifiedContacts).toHaveLength(1);
   });
 });
 

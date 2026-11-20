@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
 import { createPgliteDb } from '../../src/db/pglite.js';
 import { migrate } from '../../src/db/migrate.js';
+import { MIGRATIONS } from '../../src/db/migrations.js';
 import {
   eventSeries,
   eventSessionHeadcounts,
@@ -10,10 +11,14 @@ import {
   headcountBuckets,
   headcountLines,
   headcountModes,
+  memberVerificationCodes,
+  memberConfirmations,
+  memberContacts,
   members,
   ministries,
   ministryPositions,
   presbyterTitles,
+  registrationRequests,
   seriesExceptions,
   seriesSchedules,
   subscriptionClaims,
@@ -188,6 +193,10 @@ describe('ORM schema drift', () => {
     ['headcount_lines', headcountLines],
     ['event_session_offering_counts', eventSessionOfferingCounts],
     ['event_session_offering_count_lines', eventSessionOfferingCountLines],
+    ['member_verification_codes', memberVerificationCodes],
+    ['member_confirmations', memberConfirmations],
+    ['member_contacts', memberContacts],
+    ['registration_requests', registrationRequests],
   ];
 
   it('matches the committed SQL migrations', async () => {
@@ -275,6 +284,64 @@ describe('ORM schema drift', () => {
       { column: 'headcount_id', foreignTable: 'event_session_headcounts', foreignColumn: 'id' },
       { column: 'mode_code', foreignTable: 'headcount_buckets', foreignColumn: 'mode_code' },
     ]);
+  });
+
+  it('matches the member verification live index and constraints', async () => {
+    expect(sortByName(await dbIndexes(db, 'member_verification_codes'))).toEqual(
+      sortByName(schemaIndexes(memberVerificationCodes)),
+    );
+    expect(await dbForeignKeys(db, 'member_verification_codes')).toEqual(
+      schemaForeignKeys(memberVerificationCodes),
+    );
+    expect(await dbCheckNames(db, 'member_verification_codes')).toEqual(
+      schemaCheckNames(memberVerificationCodes),
+    );
+    expect(sortByName(await dbIndexes(db, 'member_confirmations'))).toEqual(
+      sortByName(schemaIndexes(memberConfirmations)),
+    );
+    expect(await dbForeignKeys(db, 'member_confirmations')).toEqual(
+      schemaForeignKeys(memberConfirmations),
+    );
+  });
+
+  /**
+   * AC-MR36: the Phase 3 migration is additive and reversible. The runner owns
+   * SQL only (there is no down file), so the test applies the reverse DDL,
+   * proves the rest of the register still answers, and reapplies the migration.
+   */
+  it('reverts 0025 additively and reapplies it', async () => {
+    const migration = MIGRATIONS.find((entry) => entry.version === '0025_member_verification');
+    expect(migration).toBeDefined();
+
+    await db.exec(`
+      drop table member_verification_codes;
+      drop table member_confirmations;
+      alter table member_contacts drop column verified_at;
+      alter table registration_requests drop column phone_encrypted;
+    `);
+
+    expect(await dbColumns(db, 'member_verification_codes')).toEqual([]);
+    expect(await dbColumns(db, 'member_confirmations')).toEqual([]);
+    const revertedContacts = (await dbColumns(db, 'member_contacts')).map((column) => column.name);
+    expect(revertedContacts).not.toContain('verified_at');
+    const revertedRequests = (await dbColumns(db, 'registration_requests')).map(
+      (column) => column.name,
+    );
+    expect(revertedRequests).not.toContain('phone_encrypted');
+    // Nothing else was disturbed: existing rows and their history still read.
+    const [alive] = await db.query<{ count: number | string }>('select count(*) from members');
+    expect(Number(alive?.count ?? -1)).toBeGreaterThanOrEqual(0);
+    await db.query('select verified_at from members limit 1');
+
+    await db.exec(migration!.sql);
+
+    expect(await dbColumns(db, 'member_verification_codes')).toEqual(
+      schemaColumns(memberVerificationCodes),
+    );
+    expect(sortByName(await dbIndexes(db, 'member_verification_codes'))).toEqual(
+      sortByName(schemaIndexes(memberVerificationCodes)),
+    );
+    expect(await dbColumns(db, 'member_confirmations')).toEqual(schemaColumns(memberConfirmations));
   });
 
   it('fails on a deliberate column mismatch', async () => {

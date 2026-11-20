@@ -38,7 +38,6 @@ export const createMemberSchema = z.object({
   /** The presbyter title, with the same rules the update contract already applies (MR-11). */
   titleCode: z.string().min(2).max(32).nullable().optional(),
   titledOn: dateStringSchema.nullable().optional(),
-  verified: z.boolean().optional(),
   contacts: z.array(contactInputSchema).max(20).optional(),
   ministries: z.array(z.string().min(2).max(16)).max(20).optional(),
   /**
@@ -68,7 +67,6 @@ export const updateMemberSchema = z.object({
   titleCode: z.string().min(2).max(32).nullable().optional(),
   titledOn: dateStringSchema.nullable().optional(),
   membershipCardNo: z.string().trim().max(32).nullable().optional(),
-  verified: z.boolean().optional(),
 });
 
 /** Sets, replaces or clears the duty a member carries in one ministry. */
@@ -319,7 +317,17 @@ export const memberDetailSchema = memberSummarySchema.extend({
   id: z.string(),
   presbyterRank: z.number().int().nullable(),
   membershipCardNo: z.string().nullable(),
-  verifiedAt: z.string().nullable(),
+  /** The proven own contacts, each with its masked value and proof instant (MR-34). */
+  verifiedContacts: z.array(
+    z.object({
+      id: z.string(),
+      channel: z.enum(['phone', 'whatsapp', 'email']),
+      masked: z.string(),
+      verifiedAt: z.string(),
+    }),
+  ),
+  /** The latest non-withdrawn officer confirmation; null when none (MR-52). */
+  confirmedAt: z.string().nullable(),
   maidenName: z.string().nullable(),
   alias: z.string().nullable(),
   dob: z.string().nullable(),
@@ -350,6 +358,30 @@ export const memberListSchema = z.object({
 /** `PUT /v1/members/:memberNo/photo` (MR-16). */
 export const photoUploadSchema = z.object({
   photoUpdatedAt: z.string(),
+});
+
+/** `POST /v1/members/:memberNo/verification/otp`: masked destination, never a code (MR-29). */
+export const verificationIssueSchema = z.object({
+  destination: z.object({
+    channel: z.enum(['email', 'whatsapp', 'phone']),
+    masked: z.string(),
+  }),
+  expiresAt: z.string(),
+});
+
+/** `POST /v1/members/:memberNo/confirmation`: the officer's audited reason (MR-52). */
+export const confirmationInputSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+});
+
+export const confirmationResultSchema = z.object({
+  confirmedAt: z.string(),
+});
+
+/** The public acceptance answer: the masked destination and nothing else (MR-51). */
+export const acceptanceResultSchema = z.object({
+  channel: z.enum(['email', 'whatsapp', 'phone']),
+  masked: z.string(),
 });
 
 export const memberContributionWindowSchema = z.object({

@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
+  Field,
   Input,
   MessageBar,
   MessageBarBody,
@@ -15,19 +16,26 @@ import {
   Tab,
   TabList,
   Text,
+  Textarea,
   Tooltip,
 } from '@fluentui/react-components';
 import {
   AddRegular,
   ArchiveRegular,
   ArrowUndoRegular,
+  CallRegular,
+  ChatRegular,
   CheckmarkCircleFilled,
+  CheckmarkCircleRegular,
   ContactCardRegular,
   DeleteRegular,
+  DismissCircleRegular,
   EditRegular,
+  MailRegular,
   MoneyRegular,
   PeopleAddRegular,
   PeopleRegular,
+  ShieldCheckmarkRegular,
 } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
@@ -39,6 +47,7 @@ import {
   addMemberRelationship,
   addSubscription,
   archiveMember,
+  confirmMember,
   endSubscription,
   fetchMemberDetail,
   getMemberShepherding,
@@ -47,7 +56,9 @@ import {
   removeCoverage,
   removeMemberMinistry,
   removeMemberRelationship,
+  requestMemberVerification,
   restoreMember,
+  revokeMemberVerification,
   type RelationshipInput,
   type SubscriptionInput,
 } from '../api/members';
@@ -64,13 +75,42 @@ import { isNotFoundError } from '../format/member-form';
 import { contactsAction } from '../overview/cards';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { MemberAttendanceTab } from './MemberAttendanceTab';
-import { errorMessage } from './member-detail-errors';
+import { errorMessage, verificationErrorMessage } from './member-detail-errors';
 import { useMemberDetailStyles } from './member-detail-styles';
 import { MemberOverviewTab } from './MemberOverviewTab';
 import { MemberShepherdingTab } from './MemberShepherdingTab';
 import { MemberSubscriptionsTab } from './MemberSubscriptionsTab';
 
 type MemberTab = 'overview' | 'attendance' | 'subscriptions' | 'shepherding';
+
+/** The three channels a verification code can take (MR-24). */
+type IssuedChannel = 'phone' | 'whatsapp' | 'email';
+
+/** MR-34: the badge names the proof a contact carries. */
+function channelLabel(channel: IssuedChannel): string {
+  if (channel === 'email') return 'Email';
+  if (channel === 'whatsapp') return 'WhatsApp';
+  return 'Phone';
+}
+
+/** The word the sent dialog's lead uses: "the member's email", not "the Email". */
+function channelNoun(channel: IssuedChannel): string {
+  if (channel === 'email') return 'email';
+  if (channel === 'whatsapp') return 'WhatsApp';
+  return 'phone';
+}
+
+function channelIcon(channel: IssuedChannel) {
+  if (channel === 'email') return <MailRegular aria-hidden />;
+  if (channel === 'whatsapp') return <ChatRegular aria-hidden />;
+  return <CallRegular aria-hidden />;
+}
+
+/** FR-25b's sent-dialog note: the one completion surface, never the code. */
+function completionNote(channel: IssuedChannel, masked: string): string {
+  const channelName = channel === 'phone' ? 'SMS' : channelLabel(channel);
+  return `${channelName} is completed on the member acceptance page: open the link we sent to ${masked} and enter the six-digit code. The code is never shown here, and the officer never sees it.`;
+}
 
 /**
  * Member-detail shell (FR-29): the header, actions, detail query and every
@@ -79,7 +119,7 @@ type MemberTab = 'overview' | 'attendance' | 'subscriptions' | 'shepherding';
  */
 export function MemberDetailPage() {
   const styles = useMemberDetailStyles();
-  const { formatDate, formatInstantTitle } = useDateTimeFormat();
+  const { formatDate, formatInstantTime, formatInstantTitle } = useDateTimeFormat();
   const { memberNo: routeMemberNo } = useParams<{ memberNo: string }>();
   const memberNo = routeMemberNo ?? '';
   const navigate = useNavigate();
@@ -94,6 +134,11 @@ export function MemberDetailPage() {
   const [purgeConfirm, setPurgeConfirm] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
   const [endAssignmentOpen, setEndAssignmentOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [revokeVerificationOpen, setRevokeVerificationOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmReason, setConfirmReason] = useState('');
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** MR-3: a menu action that owns its surface focuses that surface's own add control. */
 
@@ -204,6 +249,21 @@ export function MemberDetailPage() {
     mutationFn: (assignmentId: string) => endAssignment(baseUrl, token, assignmentId),
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: () => requestMemberVerification(baseUrl, token, memberNo),
+    // A code leaves the record unchanged, but the brief asks for the member
+    // queries to be refreshed on either verification action.
+    onSuccess: invalidate,
+  });
+
+  const revokeVerificationMutation = useMutation({
+    mutationFn: () => revokeMemberVerification(baseUrl, token, memberNo),
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: (reason: string) => confirmMember(baseUrl, token, memberNo, reason),
+  });
+
   const member = detailQuery.data?.member;
   const isArchived = Boolean(member?.archivedAt);
 
@@ -272,6 +332,49 @@ export function MemberDetailPage() {
     });
   }
 
+  /** MR-29: the officer action sends at once, with no channel choice. */
+  function startVerification(): void {
+    setActionError(null);
+    verifyMutation.reset();
+    setVerifyOpen(true);
+    verifyMutation.mutate();
+  }
+
+  /** MR-31: confirm the consequence before withdrawing the proofs and confirmation. */
+  function confirmRevokeVerification(): void {
+    setActionError(null);
+    revokeVerificationMutation.mutate(undefined, {
+      onSuccess: () => {
+        setRevokeVerificationOpen(false);
+        invalidate();
+      },
+      onError: (error: unknown) => {
+        setRevokeVerificationOpen(false);
+        failAction(error);
+      },
+    });
+  }
+
+  /** MR-52: the officer confirmation records the typed reason, never a code. */
+  function submitConfirmation(): void {
+    setConfirmTouched(true);
+    const reason = confirmReason.trim();
+    if (!reason) return;
+    setActionError(null);
+    confirmMutation.mutate(reason, {
+      onSuccess: () => {
+        setConfirmOpen(false);
+        setConfirmReason('');
+        setConfirmTouched(false);
+        invalidate();
+      },
+      onError: (error: unknown) => {
+        setConfirmOpen(false);
+        failAction(error);
+      },
+    });
+  }
+
   if (detailQuery.isPending) {
     return (
       <PageFrame sectionId="members" title="Member record" submenu={memberNo}>
@@ -313,7 +416,43 @@ export function MemberDetailPage() {
   }
 
   const contacts = contactsAction(member.contactCount);
-  const verifiedLabel = member.verifiedAt ? `Verified · ${formatDate(member.verifiedAt)}` : null;
+  // MR-34: the badge names the most recent proof. An imported legacy
+  // `members.verified_at` never reaches the DTO, so it renders nothing.
+  const proofs = [
+    ...member.verifiedContacts.map((contact) => ({
+      key: contact.id,
+      label: channelLabel(contact.channel),
+      detail: `${channelLabel(contact.channel)} ${contact.masked}`,
+      at: contact.verifiedAt,
+    })),
+    ...(member.confirmedAt
+      ? [
+          {
+            key: 'officer-confirmation',
+            label: 'Officer',
+            detail: 'Officer confirmed',
+            at: member.confirmedAt,
+          },
+        ]
+      : []),
+  ].sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
+  const latestProof = proofs[0] ?? null;
+  const verifiedLabel = latestProof
+    ? `Verified · ${latestProof.label} · ${formatDate(latestProof.at)}`
+    : null;
+  const verifiedTitle = proofs
+    .map((proof) => `${proof.detail} · ${formatDate(proof.at)}`)
+    .join('; ');
+  // MR-24/AC-MR46: the send is offered while any owned contact still lacks a
+  // proof; a proven contact is skipped by the resolver rather than blocking the
+  // action. An officer confirmation means there is nothing left to prove.
+  const provenContactIds = new Set(member.verifiedContacts.map((contact) => contact.id));
+  const hasUnprovenContact = member.contacts.some(
+    (contact) =>
+      !contact.linked &&
+      (contact.kind === 'email' || contact.kind === 'whatsapp' || contact.kind === 'phone') &&
+      !provenContactIds.has(contact.id),
+  );
   const titleAddon = {
     leading: (
       <MemberAvatar
@@ -328,7 +467,7 @@ export function MemberDetailPage() {
     trailing: (
       <span className={styles.titleBadges}>
         {verifiedLabel ? (
-          <Tooltip content={verifiedLabel} relationship="description">
+          <Tooltip content={verifiedTitle} relationship="description">
             <Badge
               appearance="filled"
               color="brand"
@@ -415,6 +554,50 @@ export function MemberDetailPage() {
         focusAddControl('subscription');
       },
     },
+    ...(!isArchived && member.confirmedAt === null && hasUnprovenContact
+      ? [
+          {
+            id: 'verify-membership',
+            kind: 'verb' as const,
+            label: 'Verify membership',
+            icon: <CheckmarkCircleRegular />,
+            onSelect: startVerification,
+            disabled: verifyMutation.isPending,
+          },
+        ]
+      : []),
+    ...(!isArchived && member.confirmedAt === null
+      ? [
+          {
+            id: 'confirm-member',
+            kind: 'verb' as const,
+            label: 'Confirm member',
+            icon: <ShieldCheckmarkRegular />,
+            onSelect: () => {
+              setActionError(null);
+              setConfirmReason('');
+              setConfirmTouched(false);
+              setConfirmOpen(true);
+            },
+            disabled: confirmMutation.isPending,
+          },
+        ]
+      : []),
+    ...(proofs.length > 0
+      ? [
+          {
+            id: 'revoke-verification',
+            kind: 'verb' as const,
+            label: 'Revoke verification',
+            icon: <DismissCircleRegular />,
+            onSelect: () => {
+              setActionError(null);
+              setRevokeVerificationOpen(true);
+            },
+            disabled: revokeVerificationMutation.isPending,
+          },
+        ]
+      : []),
     isArchived
       ? {
           id: 'restore',
@@ -588,6 +771,134 @@ export function MemberDetailPage() {
         onConfirm={confirmArchive}
         onCancel={() => setArchiveOpen(false)}
       />
+
+      <ConfirmDialog
+        open={revokeVerificationOpen}
+        title={`Revoke the verification for ${memberLabel(member)}?`}
+        message="Every contact proof and the officer confirmation are withdrawn, with an audit, and any code waiting is cancelled. The member's contacts stay, and an owned number still identifies them at USSD."
+        confirmLabel="Revoke verification"
+        busy={revokeVerificationMutation.isPending}
+        onConfirm={confirmRevokeVerification}
+        onCancel={() => setRevokeVerificationOpen(false)}
+      />
+
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open && !confirmMutation.isPending) setConfirmOpen(false);
+        }}
+      >
+        <DialogSurface aria-label="Confirm member">
+          <DialogBody>
+            <DialogTitle>Confirm {memberLabel(member)}</DialogTitle>
+            <DialogContent className={styles.dialogContent}>
+              <Text size={200}>
+                The confirmation is an officer attestation with your actor, the reason and the
+                instant. It records no code and changes no contact.
+              </Text>
+              <Field
+                label="Reason"
+                hint="Stored with the confirmation and its withdrawal. The officer never sees or types a code."
+                validationState={confirmTouched && !confirmReason.trim() ? 'error' : 'none'}
+                validationMessage={
+                  confirmTouched && !confirmReason.trim()
+                    ? 'Give the reason for the confirmation.'
+                    : undefined
+                }
+              >
+                <Textarea
+                  value={confirmReason}
+                  autoFocus
+                  resize="vertical"
+                  onChange={(_, data) => {
+                    setConfirmReason(data.value);
+                    setConfirmTouched(true);
+                  }}
+                />
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="secondary"
+                disabled={confirmMutation.isPending}
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                appearance="primary"
+                disabled={confirmMutation.isPending || !confirmReason.trim()}
+                onClick={submitConfirmation}
+              >
+                {confirmMutation.isPending ? 'Confirming…' : 'Confirm member'}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog
+        open={verifyOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open && !verifyMutation.isPending) setVerifyOpen(false);
+        }}
+      >
+        <DialogSurface aria-label="Verify membership">
+          <DialogBody>
+            <DialogTitle>Verify membership</DialogTitle>
+            <DialogContent className={styles.dialogContent}>
+              <Text size={200} className={styles.muted} data-testid="verify-context">
+                {memberName(member)} · {member.memberNo} ·{' '}
+                {proofs.length === 0 ? 'not yet verified' : 'verified'}
+              </Text>
+              {verifyMutation.isPending ? <Spinner label="Sending the code…" /> : null}
+              {verifyMutation.isError ? (
+                <MessageBar intent="warning">
+                  <MessageBarBody>
+                    <MessageBarTitle>The code was not sent</MessageBarTitle>
+                    {verificationErrorMessage(verifyMutation.error)}
+                  </MessageBarBody>
+                </MessageBar>
+              ) : null}
+              {verifyMutation.isSuccess ? (
+                <>
+                  <Text data-testid="verify-lead">
+                    A six-digit code was sent to the member&apos;s{' '}
+                    {channelNoun(verifyMutation.data.destination.channel)} and expires at{' '}
+                    {formatInstantTime(verifyMutation.data.expiresAt)}.
+                  </Text>
+                  <div className={styles.destinationRow} data-testid="verify-destination">
+                    <span className={styles.destinationIcon}>
+                      {channelIcon(verifyMutation.data.destination.channel)}
+                    </span>
+                    <Text size={200} className={styles.destinationKind}>
+                      {channelLabel(verifyMutation.data.destination.channel)}
+                    </Text>
+                    <Text className={styles.destinationValue}>
+                      {verifyMutation.data.destination.masked}
+                    </Text>
+                  </div>
+                  <Text size={200} className={styles.muted} data-testid="verify-note">
+                    {completionNote(
+                      verifyMutation.data.destination.channel,
+                      verifyMutation.data.destination.masked,
+                    )}
+                  </Text>
+                </>
+              ) : null}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="secondary"
+                onClick={() => setVerifyOpen(false)}
+                disabled={verifyMutation.isPending}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
       <Dialog
         open={purgeOpen}

@@ -520,6 +520,81 @@
         "sha256": "bf9c4679b38ee6fe9b39231dd00222e4cc650e786dd9e0bb407a1b161b3888b1",
         "basis": "Owner pre-authorisation for the unattended member-photo round (2026-11-18); the cut is listed for the owner review at the end of the unattended work."
       }
+    },
+    "23-member-verification-badge": {
+      "mock": {
+        "path": "mockups/v2-shell/23-member-verification-badge.png",
+        "sha256": "d18a16f34d31520a6cd4bbf319d0b7a168305776865fa95941985bab957fc46d",
+        "source": "mockups/v2-shell/23-member-verification-badge.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-20",
+        "sha256": "d18a16f34d31520a6cd4bbf319d0b7a168305776865fa95941985bab957fc46d",
+        "basis": "Owner signed the v4 badge after the second-contact rule (proven email + unproven phone, Verify membership in the menu), 2026-11-20."
+      }
+    },
+    "23-member-verification-sent": {
+      "mock": {
+        "path": "mockups/v2-shell/23-member-verification-sent.png",
+        "sha256": "6bc78de1a14c0377e3e50a2dd1f9cdb9a873e431170f23487af2a26a20cf611a",
+        "source": "mockups/v2-shell/23-member-verification-sent.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-19",
+        "sha256": "6bc78de1a14c0377e3e50a2dd1f9cdb9a873e431170f23487af2a26a20cf611a",
+        "basis": "Owner accepted the 2026-11-19 grill recommendation to sign the five re-cut Phase 3 portal states from their hashes; the USSD handset pair is recorded separately as local review artifacts."
+      }
+    },
+    "23-member-verification-actions": {
+      "mock": {
+        "path": "mockups/v2-shell/23-member-verification-actions.png",
+        "sha256": "bbe22ec66bd9c183dafc63e2454c00276ef0e6a9c6948cf008951316ad14829c",
+        "source": "mockups/v2-shell/23-member-verification-actions.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-19",
+        "sha256": "bbe22ec66bd9c183dafc63e2454c00276ef0e6a9c6948cf008951316ad14829c",
+        "basis": "Owner accepted the 2026-11-19 grill recommendation to sign the five re-cut Phase 3 portal states from their hashes; the USSD handset pair is recorded separately as local review artifacts."
+      }
+    },
+    "24-member-acceptance": {
+      "mock": {
+        "path": "mockups/v2-shell/24-member-acceptance.png",
+        "sha256": "5e4f34b1082331a8ca49866f4dce97a5962e295a7da1ea58cae33aa2f04b16bd",
+        "source": "mockups/v2-shell/24-member-acceptance.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-19",
+        "sha256": "5e4f34b1082331a8ca49866f4dce97a5962e295a7da1ea58cae33aa2f04b16bd",
+        "basis": "Owner accepted the 2026-11-19 grill recommendation to sign the five re-cut Phase 3 portal states from their hashes; the USSD handset pair is recorded separately as local review artifacts."
+      }
+    },
+    "24-member-acceptance-verified": {
+      "mock": {
+        "path": "mockups/v2-shell/24-member-acceptance-verified.png",
+        "sha256": "605fce25d4c04e98c31d21213697bedb02746787daf38c9058b6c509b26f5b83",
+        "source": "mockups/v2-shell/24-member-acceptance-verified.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-19",
+        "sha256": "605fce25d4c04e98c31d21213697bedb02746787daf38c9058b6c509b26f5b83",
+        "basis": "Owner accepted the 2026-11-19 grill recommendation to sign the five re-cut Phase 3 portal states from their hashes; the USSD handset pair is recorded separately as local review artifacts."
+      }
     }
   },
   "inventory": [

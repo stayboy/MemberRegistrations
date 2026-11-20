@@ -47,3 +47,4 @@ FROM nginx:1.31.2-alpine AS ui
 ARG GIT_SHA=dev
 LABEL org.opencontainers.image.revision=$GIT_SHA
 COPY --from=ui-build /app/ui/dist /usr/share/nginx/html
+COPY ui/nginx.conf /etc/nginx/conf.d/default.conf

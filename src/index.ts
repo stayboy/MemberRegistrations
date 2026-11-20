@@ -1,5 +1,6 @@
 import { loadEnv } from './config/env.js';
 import { createMailer } from './authn/mailer.js';
+import { createSenders } from './messaging/senders.js';
 import { createApp } from './create-app.js';
 import { migrate } from './db/migrate.js';
 import { createPgDb } from './db/pg.js';
@@ -35,6 +36,13 @@ const app = createApp({
   visitorPhonePepper: env.VISITOR_PHONE_PEPPER,
   paymentGatewaySecret: env.PAYMENT_GATEWAY_SECRET,
   paymentsEnabled: env.PAYMENTS_ENABLED,
+  senders: createSenders(env),
+  verification: {
+    otpPepper: env.OTP_PEPPER,
+    countryCode: env.DEFAULT_COUNTRY_CODE,
+    linkBase: env.VERIFICATION_LINK_BASE,
+  },
+  registrationPhoneKey: env.REGISTRATION_PHONE_KEY,
   ussd: {
     enabled: env.USSD_ENABLED,
     gatewaySecret: env.USSD_GATEWAY_SECRET,

@@ -222,6 +222,20 @@ export function mockFiles(set) {
 export { repoRoot, MOCK_CSS };
 
 /**
+ * Mocks that deliberately carry **no** shell, keyed by repository-relative path, with the reason they
+ * are outside it. A surface the spec places outside the officer app - the public member acceptance
+ * page at `/v#t=<token>` (FR-25b) - cannot pass the guard, and a silent skip would hide a real
+ * failure in the same folder. So the guard names the exception: the CLI prints `skip` and the reason,
+ * and the recorder asserts the absence the other way round (no top bar, no sidebar, no footer).
+ */
+export const STANDALONE_MOCKS = {
+  'mockups/v2-shell/24-member-acceptance.html':
+    'the public member acceptance page at `/v#t=<token>` is outside the officer shell (FR-25b)',
+  'mockups/v2-shell/24-member-acceptance-verified.html':
+    'the accepted state of the same public page: outside the officer shell, no member data but the mask (FR-25b)',
+};
+
+/**
  * The sets the shell sweep covers, in the order the owner approved (2026-11-14). Excluded, and why:
  * `old/` is retired, `ussd/` draws a phone frame and a back-office console rather than the page shell,
  * `ui-fixed-gateway-origin/` holds comparison pages for one diagnostic, and `mvp-hardening/` is a
@@ -254,9 +268,13 @@ if (invokedDirectly) {
       continue;
     }
     for (const file of mockFiles(set)) {
+      const rel = file.slice(repoRoot.length + 1).replaceAll('\\', '/');
+      if (STANDALONE_MOCKS[rel] !== undefined) {
+        console.log(`skip  ${rel} - ${STANDALONE_MOCKS[rel]}`);
+        continue;
+      }
       checked += 1;
       const { failures } = checkShell(readFileSync(file, 'utf8'));
-      const rel = file.slice(repoRoot.length + 1).replaceAll('\\', '/');
       if (failures.length === 0) {
         console.log(`ok    ${rel}`);
         continue;

@@ -6,6 +6,10 @@ export interface OwnedMember {
   memberNo: string;
   firstName: string | null;
   lastName: string | null;
+  /** At least one owned contact still lacks a proof (MR-54). */
+  hasUnprovenContact: boolean;
+  /** An active officer confirmation; the action is hidden regardless of proofs (MR-55). */
+  confirmed: boolean;
 }
 
 export interface UssdSessionRow {
@@ -80,6 +84,10 @@ export class UssdRepository {
   /**
    * Owned contacts only. A linked-only match is deliberately anonymous: a
    * household number says nothing about which member dialled.
+   *
+   * MR-54/MR-55: the profile action is offered while at least one owned contact
+   * lacks a proof and no officer confirmation is active. A member is only found
+   * here through an owned phone or WhatsApp, so at least one owned contact exists.
    */
   async findOwnedMember(phoneDigits: string): Promise<OwnedMember | null> {
     const [row] = await this.db.query<{
@@ -87,8 +95,18 @@ export class UssdRepository {
       member_no: string;
       first_name: string | null;
       last_name: string | null;
+      has_unproven_contact: boolean;
+      confirmed: boolean;
     }>(
-      `select m.id, m.member_no, m.first_name, m.last_name
+      `select m.id, m.member_no, m.first_name, m.last_name,
+              exists (
+                select 1 from member_contacts unproven
+                 where unproven.member_id = m.id and unproven.verified_at is null
+              ) as has_unproven_contact,
+              exists (
+                select 1 from member_confirmations confirmation
+                 where confirmation.member_id = m.id and confirmation.withdrawn_at is null
+              ) as confirmed
          from member_contacts c
          join members m on m.id = c.member_id
         where c.normalized_value = $1
@@ -105,6 +123,8 @@ export class UssdRepository {
       memberNo: row.member_no,
       firstName: row.first_name,
       lastName: row.last_name,
+      hasUnprovenContact: row.has_unproven_contact,
+      confirmed: row.confirmed,
     };
   }
 

@@ -1233,4 +1233,57 @@ alter table members add column photo_content_type text
 alter table members add column photo_updated_at timestamptz;
 `,
   },
+  {
+    version: '0025_member_verification',
+    sql: `
+-- Phase 3's contact verification. Proof is per contact (MR-26): the code sent to
+-- one contact sets that contact's verified_at, and changing or removing the
+-- contact clears it. members.verified_at stays inert history and no new write
+-- touches it; the officer confirmation is the append-only table below (MR-52).
+alter table member_contacts add column verified_at timestamptz;
+
+-- The officer confirmation and its withdrawal are one append-only audit. A row
+-- is active while withdrawn_at is null; confirmedAt reads the latest active one
+-- (MR-52).
+create table member_confirmations (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  confirmed_by text not null,
+  confirmed_at timestamptz not null default now(),
+  reason text not null,
+  withdrawn_at timestamptz,
+  withdrawn_by text
+);
+create index member_confirmations_member
+  on member_confirmations (member_id, confirmed_at);
+
+-- One live code per member. The row keeps only the HMAC of the six digits, the
+-- one masked destination, the one contact it binds to (with that contact's value
+-- hash, so an edit between issue and accept refuses the code), the single-use
+-- token hash, the expiry and the attempt count (MR-25, MR-26, MR-51). Consumed
+-- rows stay for history; the partial unique index guarantees a single live code.
+create table member_verification_codes (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  code_hash text not null,
+  destination jsonb not null,
+  contact_id uuid references member_contacts(id) on delete set null,
+  destination_value_hash text not null,
+  token_hash text not null,
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  consumed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index member_verification_codes_live
+  on member_verification_codes (member_id)
+  where consumed_at is null;
+
+-- A pending registration retains the caller's number so approval can bind it as
+-- an owned or borrowed contact (MR-53). It is AES-256-GCM ciphertext under
+-- REGISTRATION_PHONE_KEY, never returned, and erased on approve, reject or purge.
+alter table registration_requests add column phone_encrypted text;
+`,
+  },
 ];

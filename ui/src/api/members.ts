@@ -1,4 +1,4 @@
-import { ApiError } from './errors';
+import { ApiError, toApiError } from './errors';
 import { gatewayRequest, gatewayRequestRaw, gatewayRequestWithMeta } from './gateway';
 
 /** Wire types mirror the UI spec's §9.2 DTOs and the ticket-13a list contract. */
@@ -244,8 +244,10 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
     readonly titledOn: string | null;
   } | null;
   readonly membershipCardNo: string | null;
-  /** Officer-set verification timestamp; the overview shows a check badge while present. */
-  readonly verifiedAt: string | null;
+  /** The proven own contacts, each with its masked value and proof instant (MR-34). */
+  readonly verifiedContacts: readonly VerifiedContact[];
+  /** The latest non-withdrawn officer confirmation; null when none (MR-52). */
+  readonly confirmedAt: string | null;
   readonly maidenName: string | null;
   readonly alias: string | null;
   readonly dob: string | null;
@@ -268,6 +270,13 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   readonly subscriptions: readonly MemberSubscription[];
   readonly relationships: readonly MemberRelationship[];
   readonly attendance: readonly MemberAttendanceSeries[];
+}
+
+export interface VerifiedContact {
+  readonly id: string;
+  readonly channel: 'phone' | 'whatsapp' | 'email';
+  readonly masked: string;
+  readonly verifiedAt: string;
 }
 
 export interface MemberListPage {
@@ -656,6 +665,104 @@ export async function purgeMember(
     body: { confirm: memberNo },
     sessionToken,
   });
+}
+
+/** `POST /v1/members/:memberNo/verification/otp` (MR-29): a masked destination, never a code. */
+export interface MemberVerificationIssue {
+  readonly destination: {
+    readonly channel: 'email' | 'whatsapp' | 'phone';
+    readonly masked: string;
+  };
+  readonly expiresAt: string;
+}
+
+/** The one verification path; there is no channel choice (MR-23). */
+export function memberVerificationPath(memberNo: string): string {
+  return `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/verification`;
+}
+
+/**
+ * Starts a code. The response names the masked destination, the completion entry
+ * and the expiry; the code itself never reaches the browser (MR-29).
+ */
+export async function requestMemberVerification(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<MemberVerificationIssue> {
+  const issued = await gatewayRequest<MemberVerificationIssue>(
+    baseUrl,
+    `${memberVerificationPath(memberNo)}/otp`,
+    { method: 'POST', body: {}, sessionToken },
+  );
+  if (!issued) throw new ApiError(500, 'The verification response was empty.');
+  return issued;
+}
+
+/** `DELETE /v1/members/:memberNo/verification`: withdraw proofs and confirmation (MR-31). */
+export async function revokeMemberVerification(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(baseUrl, memberVerificationPath(memberNo), {
+    method: 'DELETE',
+    sessionToken,
+  });
+}
+
+/** `POST /v1/members/:memberNo/confirmation`: the audited officer attestation (MR-52). */
+export async function confirmMember(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+  reason: string,
+): Promise<{ readonly confirmedAt: string }> {
+  const result = await gatewayRequest<{ readonly confirmedAt: string }>(
+    baseUrl,
+    `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/confirmation`,
+    { method: 'POST', body: { reason: reason.trim() }, sessionToken },
+  );
+  if (!result) throw new ApiError(500, 'The confirmation response was empty.');
+  return result;
+}
+
+/** `DELETE /v1/members/:memberNo/confirmation`: withdraw the attestation alone (MR-52). */
+export async function withdrawConfirmationRequest(
+  baseUrl: string,
+  sessionToken: string,
+  memberNo: string,
+): Promise<void> {
+  await gatewayRequest(baseUrl, `${MEMBERS_PATH}/${encodeURIComponent(memberNo)}/confirmation`, {
+    method: 'DELETE',
+    sessionToken,
+  });
+}
+
+/**
+ * The public acceptance page's answer (MR-51). The page has no session: the
+ * single-use token and the six-digit code are its credential, so this is a raw
+ * `fetch` with no `Authorization` header and no session helper.
+ */
+export interface MemberAcceptance {
+  readonly channel: 'phone' | 'whatsapp' | 'email';
+  readonly masked: string;
+}
+
+export async function acceptMemberVerification(
+  baseUrl: string,
+  token: string,
+  code: string,
+): Promise<MemberAcceptance> {
+  const response = await fetch(`${baseUrl}/portal/verification/accept`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token.trim(), code: code.trim() }),
+    cache: 'no-store',
+    credentials: 'omit',
+  });
+  if (!response.ok) throw await toApiError(response);
+  return (await response.json()) as MemberAcceptance;
 }
 
 export async function addContact(

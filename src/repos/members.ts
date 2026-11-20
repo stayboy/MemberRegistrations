@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   CardInUseError,
   ConflictError,
+  ContactInUseError,
   GuardianChainCycleError,
   GuardianChainTooLongError,
   GuardianChainUnreachableError,
@@ -35,6 +36,11 @@ import {
 } from '../db/schema.js';
 import { sqlConstraint, sqlState } from '../errors/sqlstate.js';
 import { loadContacts, type ContactDto } from './contacts.js';
+import {
+  loadActiveConfirmation,
+  loadVerifiedContacts,
+  type VerifiedContact,
+} from './verification.js';
 import {
   ShepherdingRepository,
   type OverviewCallsDto,
@@ -240,8 +246,10 @@ export interface MemberDetail extends Omit<MemberSummary, 'attendance' | 'subscr
   presbyterRank: number | null;
   /** Detail-only back-office card number; null when not on file. */
   membershipCardNo: string | null;
-  /** Detail-only officer-set verification timestamp; null means unverified. */
-  verifiedAt: string | null;
+  /** The proven own contacts; each carries its masked value and the proof instant (MR-34). */
+  verifiedContacts: VerifiedContact[];
+  /** The latest non-withdrawn officer confirmation; null when none (MR-52). */
+  confirmedAt: string | null;
   maidenName: string | null;
   alias: string | null;
   dob: string | null;
@@ -298,8 +306,6 @@ export interface CreateMemberInput {
   titleCode?: string | null;
   /** UTC calendar date the office was taken; never in the future, and cleared with the title. */
   titledOn?: string | null;
-  /** Sets (true) or clears (false) the officer verification timestamp. */
-  verified?: boolean;
   contacts?: ContactInput[];
   ministries?: string[];
   /**
@@ -347,6 +353,15 @@ export interface SubscriptionInput {
 /** The guardian link cap from MR-40: a member reaches an own contact in three links or fewer. */
 const GUARDIAN_CHAIN_LIMIT = 3;
 
+/**
+ * How a duplicate contact value is reported. Member create and the direct
+ * contact endpoints document the generic `conflict`; registration approval
+ * documents `contact_in_use`, because the number being bound is the caller's
+ * own and a race with another approval must not read as a member-number clash
+ * (MR-53).
+ */
+type DuplicateContactCode = 'conflict' | 'contact_in_use';
+
 /** A member as the guardian walk sees it. */
 interface GuardianMemberRow extends Row {
   id: string;
@@ -391,7 +406,6 @@ interface MemberRow extends Row {
   titled_on: string | null;
   membership_card_no: string | null;
   photo_updated_at: Date | string | null;
-  verified_at: Date | string | null;
   archived_at: Date | string | null;
   purged_at: Date | string | null;
   version: number;
@@ -425,7 +439,6 @@ const memberColumns = {
   titled_on: members.titledOn,
   membership_card_no: members.membershipCardNo,
   photo_updated_at: members.photoUpdatedAt,
-  verified_at: members.verifiedAt,
   archived_at: members.archivedAt,
   purged_at: members.purgedAt,
   version: members.version,
@@ -441,7 +454,7 @@ const MEMBER_ROW_COLUMNS = `m.id, m.member_no, m.first_name, m.last_name, m.othe
   m.maiden_name, m.alias, m.dob, m.gender, m.place_of_residence, m.address_line,
   m.joined_on, m.assembly_joined_on, m.came_from, m.moved_out_on, m.moved_to_assembly,
   m.is_presbyter, m.presbyter_rank, m.title_code, m.titled_on, m.membership_card_no,
-  m.photo_updated_at, m.verified_at, m.archived_at, m.purged_at, m.version,
+  m.photo_updated_at, m.archived_at, m.purged_at, m.version,
   m.created_at, m.updated_at`;
 
 type Statement = ReturnType<typeof sql>;
@@ -541,7 +554,14 @@ async function touch(client: DbClient, memberId: string, actor: string): Promise
 }
 
 export class MemberRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    /**
+     * `DEFAULT_COUNTRY_CODE`, so a proven contact is masked exactly as the
+     * verification dialog and the USSD message mask it (MR-24, MR-34).
+     */
+    private readonly countryCode: string,
+  ) {}
 
   async list(query: ListQuery): Promise<{ items: MemberSummary[]; nextCursor?: string }> {
     const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
@@ -1009,8 +1029,16 @@ export class MemberRepository {
   /**
    * The member create path inside a caller-owned transaction, so approval can
    * create the member and mark its request in one unit of work.
+   *
+   * `duplicateContact` names the error a duplicate contact value raises: the
+   * member API documents `conflict`, approval documents `contact_in_use` (MR-53).
    */
-  async createWithin(db: DbClient, input: CreateMemberInput, actor: string): Promise<string> {
+  async createWithin(
+    db: DbClient,
+    input: CreateMemberInput,
+    actor: string,
+    duplicateContact: DuplicateContactCode = 'conflict',
+  ): Promise<string> {
     const memberNo = assertMemberNo(requiredText(input.memberNo, 'memberNo'));
     const gender = input.gender ?? 'undisclosed';
     if (!GENDERS.includes(gender)) throw new ValidationError('gender is not recognised');
@@ -1029,7 +1057,6 @@ export class MemberRepository {
       throw new ValidationError('presbyterRank must be a positive integer');
     }
     const membershipCardNo = normalizeCardNo(input.membershipCardNo);
-    const verifiedAt = input.verified === true ? new Date() : null;
 
     // MR-11: the create contract accepts the same title rules the update applies.
     let titleCode: string | null = null;
@@ -1072,14 +1099,16 @@ export class MemberRepository {
           titleCode,
           titledOn,
           membershipCardNo,
-          verifiedAt,
+          // MR-33: verification is read-only and set only by the verification
+          // service, so a new member is never verified.
+          verifiedAt: null,
           createdBy: actor,
           updatedBy: actor,
         })
         .returning({ id: members.id });
 
       for (const [index, contact] of (input.contacts ?? []).entries()) {
-        await this.insertContact(db, row!.id, contact, index);
+        await this.insertContact(db, row!.id, contact, index, duplicateContact);
       }
       for (const code of input.ministries ?? []) {
         await this.assignMinistryTx(db, row!.id, code);
@@ -1168,9 +1197,6 @@ export class MemberRepository {
     if (input.isPresbyter !== undefined) fields.isPresbyter = input.isPresbyter;
     if (input.membershipCardNo !== undefined) {
       fields.membershipCardNo = normalizeCardNo(input.membershipCardNo);
-    }
-    if (input.verified !== undefined) {
-      fields.verifiedAt = input.verified ? new Date() : null;
     }
 
     const nextIsPresbyter = input.isPresbyter ?? row.is_presbyter;
@@ -1329,6 +1355,16 @@ export class MemberRepository {
     await this.db.transaction(async (tx) => {
       await tx.query('delete from member_contact_links where member_id = $1', [row.id]);
       await tx.query('delete from member_contacts where member_id = $1', [row.id]);
+      // Proofs and audit hang off the contacts and the member; purge is PII
+      // erasure, so the confirmation rows and codes go with the rest (MR-53).
+      await tx.query('delete from member_confirmations where member_id = $1', [row.id]);
+      await tx.query('delete from member_verification_codes where member_id = $1', [row.id]);
+      // The pending request retains the caller's number encrypted only until a
+      // decision; a purge erases it (MR-53).
+      await tx.query(
+        'update registration_requests set phone_encrypted = null where member_id = $1',
+        [row.id],
+      );
       await tx.query('delete from subscription_coverage where member_id = $1', [row.id]);
       await tx.query('delete from subscription_claims where member_id = $1', [row.id]);
       await tx.query('delete from subscriptions where policyholder_member_id = $1', [row.id]);
@@ -1370,6 +1406,7 @@ export class MemberRepository {
           photo: null,
           photoContentType: null,
           photoUpdatedAt: null,
+          // MR-52: the audit is the source, so the inert legacy date goes too.
           verifiedAt: null,
           archivedAt: sql`now()`,
           purgedAt: sql`now()`,
@@ -1404,16 +1441,20 @@ export class MemberRepository {
     const [existing] = await this.db.query<{
       kind: ContactKind;
       value: string;
+      normalized_value: string;
       display_order: number;
-    }>('select kind, value, display_order from member_contacts where id = $1 and member_id = $2', [
-      contactId,
-      row.id,
-    ]);
+    }>(
+      'select kind, value, normalized_value, display_order from member_contacts where id = $1 and member_id = $2',
+      [contactId, row.id],
+    );
     if (!existing) throw new NotFoundError(`Contact ${contactId} was not found`);
 
     const kind = input.kind ?? existing.kind;
     const value = input.value ?? existing.value;
     const normalized = normalizeContactValue(kind, value);
+    // MR-32: a change of kind or value clears this contact's proof; a reorder
+    // alone does not, because the value a code proved is unchanged.
+    const proofCleared = kind !== existing.kind || normalized !== existing.normalized_value;
 
     try {
       await this.db.transaction(async (tx) => {
@@ -1424,6 +1465,7 @@ export class MemberRepository {
             value: value.trim(),
             normalizedValue: normalized,
             displayOrder: input.displayOrder ?? existing.display_order,
+            ...(proofCleared ? { verifiedAt: null } : {}),
             updatedAt: sql`now()`,
           })
           .where(eq(memberContacts.id, contactId));
@@ -1442,6 +1484,7 @@ export class MemberRepository {
 
   async removeContact(memberNo: string, contactId: string, actor: string): Promise<void> {
     const row = await this.requireRow(memberNo);
+
     await this.db.transaction(async (tx) => {
       const deleted = await tx.orm
         .delete(memberContacts)
@@ -2209,6 +2252,8 @@ export class MemberRepository {
       labels,
       overview,
       guardian,
+      verifiedContacts,
+      confirmedAt,
     ] = await Promise.all([
       this.contactsFor(row.id),
       this.subscriptionsFor(row.id),
@@ -2218,6 +2263,8 @@ export class MemberRepository {
       this.titleLabels(row.title_code === null ? [] : [row.title_code]),
       new ShepherdingRepository(this.db).overviewForMember(row.id),
       this.guardianFor(this.db, row.id),
+      loadVerifiedContacts(this.db, row.id, this.countryCode),
+      loadActiveConfirmation(this.db, row.id),
     ]);
 
     return {
@@ -2225,7 +2272,8 @@ export class MemberRepository {
       id: row.id,
       presbyterRank: row.presbyter_rank,
       membershipCardNo: row.membership_card_no,
-      verifiedAt: isoTimestamp(row.verified_at),
+      verifiedContacts,
+      confirmedAt,
       maidenName: row.maiden_name,
       alias: row.alias,
       dob: isoDate(row.dob),
@@ -2663,6 +2711,7 @@ export class MemberRepository {
     memberId: string,
     input: ContactInput,
     fallbackOrder?: number,
+    duplicateContact: DuplicateContactCode = 'conflict',
   ): Promise<{ id: string }> {
     const normalized = normalizeContactValue(input.kind, input.value);
     const order =
@@ -2688,10 +2737,18 @@ export class MemberRepository {
         .returning({ id: memberContacts.id });
       return row!;
     } catch (error) {
-      if (sqlState(error) === '23505') {
-        throw new ConflictError(`Contact value "${input.value}" already belongs to a member`);
+      if (sqlState(error) !== '23505') throw error;
+      const message = `Contact value "${input.value}" already belongs to a member`;
+      // MR-53: on the approval path a value another member already owns is
+      // `contact_in_use` (the pre-check names the owner; this is the race's
+      // generic refusal). Every other caller documents the plain `conflict`.
+      if (
+        duplicateContact === 'contact_in_use' &&
+        sqlConstraint(error) === 'member_contacts_value'
+      ) {
+        throw new ContactInUseError(message);
       }
-      throw error;
+      throw new ConflictError(message);
     }
   }
 

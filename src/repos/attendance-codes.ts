@@ -68,6 +68,8 @@ export interface RedeemInput {
   actor: string;
   firstName?: string;
   lastName?: string;
+  /** The caller's number under AES-256-GCM for a registration request (MR-53). */
+  phoneEncrypted?: string;
 }
 
 const CODE_TTL_MINUTES = 15;
@@ -367,15 +369,16 @@ export class AttendanceCodeRepository {
       try {
         const [request] = await tx.query<{ id: string }>(
           `insert into registration_requests (
-             reference, first_name, last_name, phone_hash, event_instance_id,
-             session_date, code_id
-           ) values ($1,$2,$3,$4,$5,$6,$7)
+             reference, first_name, last_name, phone_hash, phone_encrypted,
+             event_instance_id, session_date, code_id
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8)
            returning id`,
           [
             reference,
             firstName,
             lastName,
             input.phoneHash,
+            input.phoneEncrypted ?? null,
             code.event_instance_id,
             sessionDate,
             code.id,

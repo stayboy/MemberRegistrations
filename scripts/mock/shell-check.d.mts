@@ -15,5 +15,6 @@ export function checkShell(html: string, options?: { css?: string }): ShellCheck
 export function mockFiles(set: string): string[];
 
 export const SWEEP_SETS: string[];
+export const STANDALONE_MOCKS: Record<string, string>;
 export const repoRoot: string;
 export const MOCK_CSS: string;

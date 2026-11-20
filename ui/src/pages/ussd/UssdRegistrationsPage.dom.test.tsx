@@ -16,10 +16,10 @@ import { renderWithProviders } from '../../test/render';
 import { UssdRegistrationsPage } from './UssdRegistrationsPage';
 
 /**
- * MR-50 / AC-MR40: the approve dialog requires a guardian. The request carries only a
- * one-way phone hash, so the approved member's reachability is the chosen adult's; the
- * dialog refuses to approve without one, sends both numbers, and surfaces the API's
- * `422 guardian_not_eligible` without claiming the request was approved.
+ * FR-82 / MR-50 / MR-53: the approve dialog shows the caller's masked number and
+ * asks whether it is the registrant's own or borrowed. `own` binds it as the
+ * member's contact and needs no guardian; `borrowed` requires one, and the
+ * payload carries `phoneOwnership` either way.
  */
 vi.mock('../../api/ussd', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/ussd')>();
@@ -63,6 +63,7 @@ const PENDING: RegistrationRequest = {
   firstName: 'Kojo',
   lastName: 'Owusu',
   phoneHash: 'phone-hash-1',
+  phoneMasked: '+233 *** 01',
   eventId: 'event-1',
   sessionDate: '2026-11-16',
   status: 'pending',
@@ -94,6 +95,7 @@ beforeEach(() => {
   approveRegistrationRequestMock.mockResolvedValue({
     ...PENDING,
     status: 'approved',
+    phoneMasked: null,
     decidedBy: 'efua',
     decidedAt: '2026-11-18T10:00:00.000Z',
     memberNo: 'REQ-APPROVED-9',
@@ -133,19 +135,58 @@ async function chooseGuardian(
   await user.click(await screen.findByRole('option', { name: new RegExp(memberNo) }));
 }
 
-describe('UssdRegistrationsPage approval (MR-50, AC-MR40)', () => {
-  it('requires a guardian as well as the member number, then sends both', async () => {
+describe('UssdRegistrationsPage approval (FR-82, MR-50, MR-53)', () => {
+  it('shows the masked number and approves a member number with no guardian when the number is own', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await openApproveDialog(user);
+    expect(within(dialog).getByTestId('registration-phone-masked')).toHaveTextContent(
+      '+233 *** 01',
+    );
+    expect(within(dialog).queryByRole('combobox', { name: /^Guardian/ })).not.toBeInTheDocument();
+    // The guardian list is not read for the own choice.
+    expect(listGuardianCandidatesMock).not.toHaveBeenCalled();
+
+    const approve = within(dialog).getByRole('button', { name: 'Approve and create member' });
+    await user.type(within(dialog).getByLabelText('Member number'), 'REQ-APPROVED-9');
+    expect(approve).toBeEnabled();
+    await user.click(approve);
+
+    await waitFor(() => expect(approveRegistrationRequestMock).toHaveBeenCalledTimes(1));
+    expect(approveRegistrationRequestMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'req-1',
+      { memberNo: 'REQ-APPROVED-9', phoneOwnership: 'own' },
+    );
+  });
+
+  it('disables Own when the retained number cannot be read and starts on Borrowed (MR-53)', async () => {
+    const user = userEvent.setup();
+    listRegistrationRequestsMock.mockResolvedValue([{ ...PENDING, phoneMasked: null }]);
+    renderPage();
+
+    const dialog = await openApproveDialog(user);
+    expect(within(dialog).getByTestId('registration-phone-masked')).toHaveTextContent(
+      'Not available',
+    );
+    expect(within(dialog).getByRole('radio', { name: /Own/ })).toBeDisabled();
+    expect(within(dialog).getByRole('radio', { name: /Borrowed/ })).toBeChecked();
+    // The borrowed choice needs a guardian, so the picker is present at once.
+    expect(within(dialog).getByRole('combobox', { name: /^Guardian/ })).toBeInTheDocument();
+  });
+
+  it('requires a guardian when the number is borrowed and sends both', async () => {
     const user = userEvent.setup();
     renderPage();
 
     const dialog = await openApproveDialog(user);
     const approve = within(dialog).getByRole('button', { name: 'Approve and create member' });
-
     await user.type(within(dialog).getByLabelText('Member number'), 'REQ-APPROVED-9');
-    // Both numbers are needed, so a valid member number alone cannot approve.
-    expect(approve).toBeDisabled();
+    await user.click(within(dialog).getByRole('radio', { name: /Borrowed/ }));
 
-    // The candidates are asked without `forMemberNo`: the member does not exist yet.
+    // The borrowed choice reveals the required guardian picker.
     await waitFor(() => expect(listGuardianCandidatesMock).toHaveBeenCalled());
     expect(listGuardianCandidatesMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -153,8 +194,8 @@ describe('UssdRegistrationsPage approval (MR-50, AC-MR40)', () => {
       undefined,
       expect.anything(),
     );
+    expect(approve).toBeDisabled();
 
-    // Opening the picker marks it visited, so the missing choice is named.
     await user.click(within(dialog).getByRole('combobox', { name: /^Guardian/ }));
     expect(
       await screen.findByText('Choose the guardian this member is reached through.'),
@@ -169,7 +210,7 @@ describe('UssdRegistrationsPage approval (MR-50, AC-MR40)', () => {
       expect.anything(),
       expect.anything(),
       'req-1',
-      { memberNo: 'REQ-APPROVED-9', guardianMemberNo: 'G-1001' },
+      { memberNo: 'REQ-APPROVED-9', phoneOwnership: 'borrowed', guardianMemberNo: 'G-1001' },
     );
   });
 
@@ -182,6 +223,7 @@ describe('UssdRegistrationsPage approval (MR-50, AC-MR40)', () => {
 
     const dialog = await openApproveDialog(user);
     await user.type(within(dialog).getByLabelText('Member number'), 'REQ-APPROVED-9');
+    await user.click(within(dialog).getByRole('radio', { name: /Borrowed/ }));
     await chooseGuardian(user, dialog, 'G-1002');
     await user.click(within(dialog).getByRole('button', { name: 'Approve and create member' }));
 

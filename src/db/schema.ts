@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import type { VerificationDestination } from '../domain/verification.js';
 import {
   bigint,
   boolean,
@@ -115,6 +116,7 @@ export const members = pgTable(
     photoContentType: text('photo_content_type'),
     /** The instant the current bytes were stored; drives the wire ETag. */
     photoUpdatedAt: timestamp('photo_updated_at', { withTimezone: true }),
+    /** Inert history: the officer confirmation audit is the source (MR-52). */
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     purgedAt: timestamp('purged_at', { withTimezone: true }),
@@ -209,6 +211,8 @@ export const memberContacts = pgTable(
     value: text('value').notNull(),
     normalizedValue: text('normalized_value').notNull(),
     displayOrder: integer('display_order').notNull(),
+    /** Set when a code sent to this one contact was accepted; cleared on a change (MR-26). */
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -383,6 +387,89 @@ export const shepherdingCalls = pgTable(
     index('shepherding_calls_called_on').on(table.calledOn),
   ],
 );
+
+/**
+ * One live verification code per member (MR-25): the HMAC of the six digits, the
+ * one masked destination, the contact it binds to and that value's hash (MR-26),
+ * the single-use token hash, the expiry and the attempt count. Consumed rows stay
+ * for history, and the partial unique index keeps a single live code.
+ */
+export const memberVerificationCodes = pgTable(
+  'member_verification_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    /** `{ channel, masked }`: the wire form, never a delivery address. */
+    destination: jsonb('destination').$type<VerificationDestination>().notNull(),
+    /** The one contact the code is bound to; a deleted contact leaves it null (MR-26). */
+    contactId: uuid('contact_id').references(() => memberContacts.id, {
+      onDelete: 'set null',
+    }),
+    /** The bound value's hash at issue time; `accept` re-checks it (MR-26). */
+    destinationValueHash: text('destination_value_hash').notNull(),
+    /** SHA-256 of the acceptance-page token; every live code has one (MR-51). */
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('member_verification_codes_live')
+      .on(table.memberId)
+      .where(sql`${table.consumedAt} is null`),
+  ],
+);
+
+/**
+ * The officer confirmation, append-only (MR-52). A row is active while
+ * `withdrawnAt` is null; `confirmedAt` on the member reads the latest active row
+ * and never the inert `members.verified_at`.
+ */
+export const memberConfirmations = pgTable(
+  'member_confirmations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    confirmedBy: text('confirmed_by').notNull(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull().defaultNow(),
+    reason: text('reason').notNull(),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+    withdrawnBy: text('withdrawn_by'),
+  },
+  (table) => [index('member_confirmations_member').on(table.memberId, table.confirmedAt)],
+);
+
+/**
+ * An anonymous USSD registration request. The caller's number is retained
+ * encrypted (`phoneEncrypted`, AES-256-GCM under `REGISTRATION_PHONE_KEY`) for
+ * approval and erased on the decision; the hash remains for the rate limit
+ * (MR-53). No member exists until the request is approved.
+ */
+export const registrationRequests = pgTable('registration_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reference: text('reference').notNull().unique(),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  phoneHash: text('phone_hash').notNull(),
+  phoneEncrypted: text('phone_encrypted'),
+  eventInstanceId: uuid('event_instance_id')
+    .notNull()
+    .references(() => eventInstances.id),
+  sessionDate: date('session_date').notNull(),
+  codeId: uuid('code_id').notNull(),
+  status: text('status').notNull().default('pending'),
+  memberId: uuid('member_id').references(() => members.id),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  decidedBy: text('decided_by'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+});
 
 /**
  * Provider correlation and the append-only headcount observations. The

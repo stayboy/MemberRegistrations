@@ -3,6 +3,7 @@ import {
   formatCalendarDate,
   formatDateRange,
   formatInstant,
+  formatInstantTime,
   formatInstantTitle,
   formatWallClockTime,
   parseDateTimePreference,
@@ -23,6 +24,8 @@ interface DateTimePreferenceContextValue {
 export interface DateTimeFormatters {
   formatDate(value: string | null | undefined): string;
   formatInstant(value: string | null | undefined): string;
+  /** The time half of an instant, for "expires at 14:32" (FR-25b's sent dialog). */
+  formatInstantTime(value: string | null | undefined): string;
   formatTime(value: string | null | undefined): string;
   formatRange(from: string | null | undefined, to: string | null | undefined): string;
   formatInstantTitle(value: string | null | undefined): string | undefined;
@@ -88,6 +91,7 @@ export function useDateTimeFormat(): DateTimeFormatters {
     () => ({
       formatDate: (value) => formatCalendarDate(value, preference),
       formatInstant: (value) => formatInstant(value, preference),
+      formatInstantTime: (value) => formatInstantTime(value, preference),
       formatTime: (value) => formatWallClockTime(value, preference),
       formatRange: (from, to) => formatDateRange(from, to, preference),
       formatInstantTitle: (value) => formatInstantTitle(value),

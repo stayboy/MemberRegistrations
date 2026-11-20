@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_COUNTRY_CODE } from '../../src/config/env.js';
 import { MemberRepository } from '../../src/repos/members.js';
 import { ShepherdingRepository } from '../../src/repos/shepherding.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
@@ -34,7 +35,7 @@ function memberNos(items: readonly { memberNo: string }[]): string[] {
 beforeAll(async () => {
   harness = await createTestApp();
   app = harness.app;
-  members = new MemberRepository(harness.db);
+  members = new MemberRepository(harness.db, DEFAULT_COUNTRY_CODE);
   shepherding = new ShepherdingRepository(harness.db);
 
   await create('P-9001', { isPresbyter: true });

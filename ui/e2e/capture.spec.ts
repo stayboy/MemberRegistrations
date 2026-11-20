@@ -155,6 +155,17 @@ test('member detail overview narrow', async ({ page }) => {
   await capture(page, 'member-detail-overview-narrow');
 });
 
+test('member detail verified', async ({ page }) => {
+  await openScreen(page, '/members/M-1010', { width: 1440, height: 900 });
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Akosua Boateng (Female, 37y)' }),
+  ).toBeVisible();
+  // MR-34/AC-MR46: the newest proof names the badge; the title lists every proof.
+  const badge = page.getByTestId('member-verified');
+  await expect(badge).toHaveAccessibleName('Verified · Officer · Jan 4, 2026');
+  await capture(page, 'member-detail-verified');
+});
+
 test('add member', async ({ page }) => {
   await openScreen(page, '/members/new', { width: 1440, height: 1123 });
   await expect(page.getByRole('heading', { level: 1, name: 'Person and contact' })).toBeVisible();
@@ -261,6 +272,22 @@ test('contacts editable', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Edit phone +233 20 000 0001' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Remove phone +233 20 000 0001' })).toBeVisible();
   await capture(page, 'contacts-editable');
+});
+
+// --- Public member acceptance page -----------------------------------------
+
+test('acceptance entry', async ({ page }) => {
+  // FR-25b/MR-51: the standalone page, outside the officer shell and the `#/`
+  // router. Preview serves it from `v.html`; production maps `/v` to the same
+  // document (nginx.conf), and the base is `VERIFICATION_LINK_BASE`.
+  await page.clock.setFixedTime(new Date('2026-01-05T12:00:00.000Z'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedTheme(page, 'fluent', 'light');
+  await page.goto('v.html#t=capture-token');
+  await expect(page.getByRole('heading', { level: 1, name: 'Verify your contact' })).toBeVisible();
+  await expect(page.getByLabel('Six-digit code')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Verify my contact' })).toBeDisabled();
+  await capture(page, 'acceptance');
 });
 
 // --- Imports and settings --------------------------------------------------
