@@ -15,6 +15,20 @@ const ERROR_BLOCK_LINES = 15;
 const TAIL_LINES = 20;
 const ERROR_RE = /error|fail|✗|not ok/i;
 
+/**
+ * The full gate runs the pooled `pg` lane, which needs a scratch Postgres named by
+ * `TEST_DATABASE_URL`. The `fast` and `precommit` profiles deliberately skip that lane
+ * so the quick gate and the pre-commit hook stay quick.
+ */
+export function requiresPooledLane(profile, env = process.env) {
+  return profile === 'full' && !env.TEST_DATABASE_URL;
+}
+
+/** The one line the terminal and `.gates/test.log` both carry when the lane is missing. */
+export const POOLED_LANE_REQUIRED =
+  'test ... FAIL: the full gate requires TEST_DATABASE_URL (the pooled pg lane). ' +
+  'Set it to a scratch Postgres (never production) or run `npm run verify:fast` for the quick gate.';
+
 const STEP_COMMANDS = {
   'check-round': ['npm', ['run', 'check-round']],
   format: ['npm', ['run', 'format:check']],
@@ -92,6 +106,27 @@ function clip(summary, maxLines, maxBytes) {
  * bounded summary: one line on success, header plus error block and tail on failure.
  */
 export async function runGate(name, { profile = 'fast' } = {}) {
+  if (name === 'test' && requiresPooledLane(profile, process.env)) {
+    // Skip the child process: run the same failure path with the policy message so the
+    // terminal summary and `.gates/test.log` cannot tell different stories.
+    const started = Date.now();
+    const log = `${POOLED_LANE_REQUIRED}\n`;
+    mkdirSync(logDir, { recursive: true });
+    const logPath = join(logDir, `${name}.log`);
+    writeFileSync(logPath, log, 'utf8');
+    process.stdout.write(`${POOLED_LANE_REQUIRED}\n`);
+    return {
+      name,
+      ok: false,
+      exitCode: 1,
+      durationMs: Date.now() - started,
+      logPath,
+      logBytes: Buffer.byteLength(log, 'utf8'),
+      summary: POOLED_LANE_REQUIRED,
+      summaryLines: 1,
+    };
+  }
+
   const [command, args] = commandFor(name, profile);
   const started = Date.now();
   const { code, output } = await run([command, ...args].join(' '));
