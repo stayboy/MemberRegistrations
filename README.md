@@ -261,26 +261,56 @@ explicit IANA `timezone` to decide what "today" means for that series. Clients c
 
 ## Scripts
 
-| Script                        | Purpose                                   |
-| ----------------------------- | ----------------------------------------- |
-| `npm run dev`                 | `tsx watch` with `.env` loaded            |
-| `npm run db:migrate`          | Apply pending migrations (`DATABASE_URL`) |
-| `npm run officers:add`        | Seed or reactivate an officer             |
-| `npm run officers:list`       | List officers and their actor ids         |
-| `npm run officers:deactivate` | Deactivate an officer and revoke sessions |
-| `npm run build`               | Compile `src` to `dist`                   |
-| `npm start`                   | Run the compiled server                   |
-| `npm run typecheck`           | `tsc --noEmit`                            |
-| `npm test`                    | Vitest run (PGlite, no external services) |
-| `npm run test:watch`          | Vitest watch mode                         |
-| `npm run test:coverage`       | Coverage report                           |
-| `npm run lint`                | ESLint 10 flat config                     |
-| `npm run format`              | Prettier write                            |
-| `npm run format:check`        | Prettier check                            |
-| `npm run verify:fast`         | format:check + lint + typecheck + test    |
-| `npm run verify`              | `verify:fast` + build (the required gate) |
-| `npm run smoke`               | Build + exercise the compiled server      |
-| `npm run hooks:install`       | Install the pre-commit hook               |
+| Script                        | Purpose                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| `npm run dev`                 | `tsx watch` with `.env` loaded                                                                |
+| `npm run db:migrate`          | Apply pending migrations (`DATABASE_URL`)                                                     |
+| `npm run officers:add`        | Seed or reactivate an officer                                                                 |
+| `npm run officers:list`       | List officers and their actor ids                                                             |
+| `npm run officers:deactivate` | Deactivate an officer and revoke sessions                                                     |
+| `npm run build`               | Compile `src` to `dist`                                                                       |
+| `npm start`                   | Run the compiled server                                                                       |
+| `npm run typecheck`           | `tsc --noEmit`                                                                                |
+| `npm test`                    | Vitest run (PGlite, no external services)                                                     |
+| `npm run test:watch`          | Vitest watch mode                                                                             |
+| `npm run test:coverage`       | Coverage report                                                                               |
+| `npm run lint`                | ESLint 10 flat config                                                                         |
+| `npm run format`              | Prettier write                                                                                |
+| `npm run format:check`        | Prettier check                                                                                |
+| `npm run verify:fast`         | format:check + lint + typecheck + test                                                        |
+| `npm run verify`              | skill + check-round + format:check + lint + typecheck + test + build (7 steps; required gate) |
+| `npm run smoke`               | Build + exercise the compiled server                                                          |
+| `npm run hooks:install`       | Install the pre-commit hook                                                                   |
+
+## Verification
+
+`npm run verify` is the required gate: skill check, round check, format, lint, typecheck, tests
+and build (7 steps). Its `test` step runs the pooled `pg` lane, so it needs a scratch Postgres
+named by `TEST_DATABASE_URL`. Without that variable the gate fails at `test` with a message
+naming it. Never point `TEST_DATABASE_URL` at the Compose or production database.
+
+Start a throwaway server — the same image CI uses (`postgres:18.6`; the
+`postgres:18.6-alpine` variant works too) — on a port that does not collide with Compose:
+
+```bash
+docker run --rm -d --name mr-verify-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18.6
+until docker exec mr-verify-pg pg_isready -U postgres; do sleep 1; done
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres npm run verify
+docker rm -f mr-verify-pg
+```
+
+PowerShell:
+
+```powershell
+docker run --rm -d --name mr-verify-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18.6
+while (-not (docker exec mr-verify-pg pg_isready -U postgres 2>$null)) { Start-Sleep -Seconds 1 }
+$env:TEST_DATABASE_URL = 'postgres://postgres:postgres@localhost:55432/postgres'
+npm run verify
+docker rm -f mr-verify-pg
+```
+
+`npm run verify:fast` and the pre-commit hook (`npm run verify:precommit`) skip the pooled lane:
+they run against in-process PGlite and need no `TEST_DATABASE_URL`, which keeps the hook quick.
 
 ## Architecture
 
