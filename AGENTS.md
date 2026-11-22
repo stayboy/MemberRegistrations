@@ -15,6 +15,13 @@ delta is `documents/agents/orchestrator-policy.md`. This file owns the non-negot
 
 - For a non-trivial feature, run the grilling interview: map the design tree, ask the whole frontier
   in one round (numbered questions, each with a recommendation and its cost), and wait for answers.
+- **Every open question is settled by a grill round** — a spec, a round or a design decision with
+  behaviour or design consequence, not yet recorded as settled, is put to the numbered frontier with a
+  recommendation and a cost per question; the agent must not settle it by a binary choice, a silent
+  deferral or its own resolution. The owner may answer directly at any point (the grill is the default,
+  not a gate), and an owner's binary answer is accepted and recorded in the spec; §17's auto-accept is
+  the owner's standing consent, not the agent's own resolution. A trivial clarification is not an open
+  question (owner, 2026-11-22).
 - Do not write implementation code until the frontier is empty **and the owner has explicitly approved
   the amended spec**. Approval is a separate, explicit step. In an unattended round (§17) the end-of-round
   go-forward grill is auto-accepted, but the spec is still amended and recorded before any code.
