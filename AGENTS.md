@@ -163,8 +163,8 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, every markdown file
-under `.opencode/skills/`, and every markdown
-file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
+under `.opencode/skills/`, every `documents/mock-claims/*.json` mock-claim catalogue (owner, 2026-11-22),
+and every markdown file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
 lands only after the reviewer seat has reviewed the exact text — `deepseek-v4-pro` build `0813` outside
 the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider answers)
 between 12:00 and 18:00 local on Monday to Friday, or when no provider answers with `0813` (credit

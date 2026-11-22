@@ -11,7 +11,7 @@
           "section": "Acceptance Criteria"
         }
       ],
-      "acsMatch": ["headcount"]
+      "acsMatch": ["a headcount is attempted", "a headcount is recorded"]
     }
   ],
   "states": {
