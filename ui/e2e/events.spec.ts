@@ -1,4 +1,4 @@
-import { expect, open, seedSession, test } from './fixtures';
+import { expect, open, openActions, seedSession, test } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
@@ -109,4 +109,89 @@ test('the event detail shows the read-only Active offerings panel and terms', as
   await expect(dialog.getByRole('heading', { name: 'Terms of reference · Tithe' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('the events list holds New event and New series in one Actions menu', async ({ page }) => {
+  await open(page, '/events');
+
+  // AC-55: Refresh is a bare icon and one Actions menu holds both create verbs.
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(1);
+
+  await openActions(page);
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: 'New event' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'New series' })).toBeVisible();
+
+  await menu.getByRole('menuitem', { name: 'New event' }).click();
+  await expect(page).toHaveURL(/\/events\/new$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+
+  await open(page, '/events');
+  await openActions(page);
+  await page.getByRole('menuitem', { name: 'New series' }).click();
+  await expect(page).toHaveURL(/\/events\/series\/new$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'New series' })).toBeVisible();
+});
+
+test('the New event form creates a standalone event and opens its detail', async ({
+  page,
+  gateway,
+}) => {
+  await open(page, '/events');
+  await openActions(page);
+  await page.getByRole('menuitem', { name: 'New event' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+  // FR-9a: a form's commit/cancel pair replaces the page's Actions menu.
+  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
+
+  await page.getByLabel('Event number').fill('EVT-2026-031');
+  await page.getByLabel(/^Name/).fill('Strategic Conference');
+  await page.getByLabel('Start date').fill('2026-01-15');
+  await page.getByLabel('End date').fill('2026-01-16');
+  await page.getByLabel(/^Start time/).fill('09:00');
+  await page.getByLabel('End time (optional)').fill('17:00');
+  await page.getByRole('combobox', { name: 'Venue type' }).click();
+  await page.getByRole('option', { name: 'Auditorium' }).click();
+  await page.getByLabel('Venue name (optional)').fill('Main Auditorium');
+  await page.getByLabel('Description (optional)').fill('Annual leadership conference.');
+  await page.getByRole('switch', { name: 'Presbyter only' }).click();
+
+  await page.getByRole('button', { name: 'Create event' }).click();
+
+  await expect(page).toHaveURL(/\/events\/created-EVT-2026-031$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Strategic Conference' })).toBeVisible();
+
+  // AC-56: the recorded wire carries the FR-42a fields and one session, never
+  // the status or source the API derives.
+  const body = gateway.lastEventCreate as Record<string, unknown>;
+  expect(body).toMatchObject({
+    eventNo: 'EVT-2026-031',
+    name: 'Strategic Conference',
+    startDate: '2026-01-15',
+    endDate: '2026-01-16',
+    startTime: '09:00',
+    endTime: '17:00',
+    venueType: 'auditorium',
+    venueName: 'Main Auditorium',
+    description: 'Annual leadership conference.',
+    tracksMembers: true,
+    presbyterOnly: true,
+  });
+  expect(body).not.toHaveProperty('timezone');
+  expect(body).not.toHaveProperty('status');
+  expect(body).not.toHaveProperty('source');
+  // The start-date change moved the lone session, and its blank times inherit.
+  expect(body.sessions).toEqual([{ date: '2026-01-15' }]);
+});
+
+test('a duplicate event number shows the 409 against the Event number field', async ({ page }) => {
+  await open(page, '/events/new');
+  await page.getByLabel('Event number').fill('EVT-2026-001');
+  await page.getByLabel(/^Name/).fill('Duplicate conference');
+
+  await page.getByRole('button', { name: 'Create event' }).click();
+
+  await expect(page).toHaveURL(/\/events\/new$/);
+  await expect(page.getByText('Event number EVT-2026-001 is already in use')).toBeVisible();
 });

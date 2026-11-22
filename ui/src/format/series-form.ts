@@ -8,20 +8,8 @@ import { utcToday } from './member-form';
  * made (FR-42).
  */
 
-export const SERIES_TIMEZONE_OTHER = 'other';
-
-export const SERIES_TIMEZONE_OPTIONS: readonly {
-  readonly value: string;
-  readonly label: string;
-}[] = [
-  { value: 'Africa/Lagos', label: 'Africa/Lagos (West Africa Time)' },
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/London', label: 'Europe/London (UK time)' },
-  { value: 'America/New_York', label: 'America/New_York (US Eastern)' },
-];
-
 export type SeriesFormField =
-  'name' | 'ministryCode' | 'timezone' | 'description' | 'effectiveFrom' | 'rrule' | 'endsOn';
+  'name' | 'ministryCode' | 'presbyterOnly' | 'description' | 'effectiveFrom' | 'rrule' | 'endsOn';
 
 export type SeriesFormErrors = Partial<Record<SeriesFormField, string>>;
 
@@ -29,10 +17,8 @@ export interface SeriesFormValues {
   readonly name: string;
   /** Empty means "no ministry"; the API receives `null`. */
   readonly ministryCode: string;
-  /** The value the API receives, including a custom "Other" timezone. */
-  readonly timezone: string;
-  /** The dropdown selection (`other` when the free-text input is shown). */
-  readonly timezoneSelection: string;
+  /** Presbyter-only series are hidden on member-facing surfaces and roster the presbyters. */
+  readonly presbyterOnly: boolean;
   readonly description: string;
   readonly effectiveFrom: string;
   readonly rrule: string;
@@ -48,7 +34,6 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MIN_RRULE_LENGTH = 6;
 const MAX_RRULE_LENGTH = 200;
 const MAX_NAME_LENGTH = 120;
-const MAX_TIMEZONE_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 500;
 
 /**
@@ -92,12 +77,6 @@ export function validateSeriesForm(
   if (name.length === 0) errors.name = 'Name is required.';
   else if (name.length > MAX_NAME_LENGTH) {
     errors.name = `Name must be ${MAX_NAME_LENGTH} characters or fewer.`;
-  }
-
-  const timezone = values.timezone.trim();
-  if (timezone.length === 0) errors.timezone = 'Timezone is required.';
-  else if (timezone.length > MAX_TIMEZONE_LENGTH) {
-    errors.timezone = `Timezone must be ${MAX_TIMEZONE_LENGTH} characters or fewer.`;
   }
 
   if (trimmedLength(values.description) > MAX_DESCRIPTION_LENGTH) {
@@ -153,8 +132,7 @@ export function createEmptySeriesForm(today: string = utcToday()): SeriesFormVal
   return {
     name: '',
     ministryCode: '',
-    timezone: 'Africa/Lagos',
-    timezoneSelection: 'Africa/Lagos',
+    presbyterOnly: false,
     description: '',
     effectiveFrom: today,
     rrule: '',
@@ -164,13 +142,10 @@ export function createEmptySeriesForm(today: string = utcToday()): SeriesFormVal
 
 /** Prefills edit mode from the detail DTO; schedule fields stay untouched. */
 export function fromSeriesDetail(series: SeriesDto): SeriesFormValues {
-  const known = SERIES_TIMEZONE_OPTIONS.some((option) => option.value === series.timezone);
-
   return {
     name: series.name,
     ministryCode: series.ministry?.code ?? '',
-    timezone: series.timezone,
-    timezoneSelection: known ? series.timezone : SERIES_TIMEZONE_OTHER,
+    presbyterOnly: series.presbyterOnly,
     description: series.description ?? '',
     // Schedule fields are create-only and never rendered or sent in edit mode;
     // the shared form shape still requires them.
@@ -185,7 +160,7 @@ export function toCreateSeriesPayload(values: SeriesFormValues): CreateSeriesInp
   return {
     name: values.name.trim(),
     ministryCode: blankToNull(values.ministryCode),
-    timezone: values.timezone.trim(),
+    presbyterOnly: values.presbyterOnly,
     description: blankToNull(values.description),
     schedule: {
       effectiveFrom: values.effectiveFrom.trim(),
@@ -203,7 +178,7 @@ export function toUpdateSeriesPayload(values: SeriesFormValues): UpdateSeriesInp
   return {
     name: values.name.trim(),
     ministryCode: blankToNull(values.ministryCode),
-    timezone: values.timezone.trim(),
+    presbyterOnly: values.presbyterOnly,
     description: blankToNull(values.description),
   };
 }

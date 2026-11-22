@@ -181,6 +181,12 @@ test('events list', async ({ page }) => {
   await capture(page, 'events-list');
 });
 
+test('events new', async ({ page }) => {
+  await openScreen(page, '/events/new', { width: 1440, height: 1123 });
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+  await capture(page, 'events-new');
+});
+
 test('event detail', async ({ page }) => {
   await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
@@ -224,6 +230,12 @@ test('series detail', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Schedule versions' })).toBeVisible();
   await capture(page, 'series-detail');
+});
+
+test('series new', async ({ page }) => {
+  await openScreen(page, '/events/series/new', { width: 1440, height: 900 });
+  await expect(page.getByRole('heading', { level: 1, name: 'New series' })).toBeVisible();
+  await capture(page, 'series-new');
 });
 
 // --- Shepherding and contacts ----------------------------------------------

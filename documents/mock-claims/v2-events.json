@@ -38,7 +38,34 @@
           "section": "Acceptance Criteria"
         }
       ],
-      "acsMatch": ["one page verb", "a date window", "each series activity shows"]
+      "acsMatch": [
+        "one page verb",
+        "a date window",
+        "each series activity shows",
+        "renders against the API"
+      ]
+    },
+    {
+      "id": "event-create",
+      "route": "/events/new",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["the New event form"]
+    },
+    {
+      "id": "series-create",
+      "route": "/events/series/new",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["Presbyter only"]
     }
   ],
   "states": {
@@ -94,12 +121,39 @@
         "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+        "by": "owner",
+        "at": "2026-11-22",
+        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699"
+      }
+    },
+    "10-event-create": {
+      "mock": {
+        "path": "mockups/v2-events/10-event-create.png",
+        "sha256": "97312ae383b83b204c0fb44ac10186f09d16efd87756c02e1a5459739c76ebdd",
+        "source": "mockups/v2-events/10-event-create.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-22",
+        "sha256": "97312ae383b83b204c0fb44ac10186f09d16efd87756c02e1a5459739c76ebdd"
+      }
+    },
+    "11-series-create": {
+      "mock": {
+        "path": "mockups/v2-events/11-series-create.png",
+        "sha256": "2e872ec7e36721b9c9f07f12ef676a96e80e5ffcee03fc0cefee01e49a2dfe04",
+        "source": "mockups/v2-events/11-series-create.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-22",
+        "sha256": "2e872ec7e36721b9c9f07f12ef676a96e80e5ffcee03fc0cefee01e49a2dfe04"
       }
     },
     "02-event-detail": {
@@ -231,6 +285,34 @@
           "id": "AC-4",
           "disposition": "claimed",
           "entry": "EVA-SERIES"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-55",
+          "disposition": "claimed",
+          "entry": "EVA-ACTIONS"
+        }
+      ]
+    },
+    {
+      "surface": "event-create",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-56",
+          "disposition": "claimed",
+          "entry": "EVC-FIELDS"
+        }
+      ]
+    },
+    {
+      "surface": "series-create",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-57",
+          "disposition": "claimed",
+          "entry": "SYC-PRESBYTER"
         }
       ]
     }
@@ -245,6 +327,28 @@
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-3",
         "quote": "each session row offers **Record headcount**"
+      }
+    },
+    {
+      "id": "EVC-CREATE",
+      "as": "operator",
+      "iWant": "to create a standalone event from the events list",
+      "soThat": "I can add a one-off conference without inventing a series",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-56",
+        "quote": "the request carries the FR-42a fields and one or more sessions"
+      }
+    },
+    {
+      "id": "SYC-CREATE",
+      "as": "operator",
+      "iWant": "to create a presbyter-only series from the events list",
+      "soThat": "I can set up a study that is hidden from member-facing surfaces",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-57",
+        "quote": "it offers a **Presbyter only** toggle and sends `presbyterOnly`"
       }
     }
   ],
@@ -386,7 +490,7 @@
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
-      "ac": ["AC-50"],
+      "ac": ["AC-50", "AC-55"],
       "assert": "image",
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
@@ -426,6 +530,40 @@
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-4",
         "quote": "each series activity shows a human-readable schedule"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVC-FIELDS",
+      "story": "EVC-CREATE",
+      "state": "10-event-create",
+      "claim": "The New event form carries Identity, When and where, Sessions and Tracking, with the form commit/cancel pair in the header rather than an Actions menu.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-56"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-56",
+        "quote": "the request carries the FR-42a fields and one or more sessions"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "SYC-PRESBYTER",
+      "story": "SYC-CREATE",
+      "state": "11-series-create",
+      "claim": "The series form carries the Presbyter only toggle on create, with the first schedule version below it.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-57"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-57",
+        "quote": "it offers a **Presbyter only** toggle and sends `presbyterOnly`"
       },
       "control": "spec"
     }

@@ -28,6 +28,8 @@ export interface SeriesDto {
   readonly timezone: string;
   readonly description: string | null;
   readonly archivedAt: string | null;
+  /** Presbyter-only series are hidden on member-facing surfaces and roster the presbyters. */
+  readonly presbyterOnly: boolean;
   readonly schedules: readonly ScheduleDto[];
   readonly exceptions: readonly SeriesExceptionDto[];
 }
@@ -94,6 +96,7 @@ export interface SeriesScheduleInput {
 export interface CreateSeriesInput {
   readonly name: string;
   readonly ministryCode?: string | null;
+  readonly presbyterOnly?: boolean;
   readonly timezone?: string;
   readonly description?: string | null;
   readonly schedule: SeriesScheduleInput;
@@ -103,6 +106,7 @@ export interface CreateSeriesInput {
 export interface UpdateSeriesInput {
   readonly name?: string;
   readonly ministryCode?: string | null;
+  readonly presbyterOnly?: boolean;
   readonly timezone?: string;
   readonly description?: string | null;
   readonly archived?: boolean;
@@ -200,6 +204,7 @@ export async function createSeries(
     body: {
       name: input.name,
       ministryCode: input.ministryCode ?? null,
+      presbyterOnly: input.presbyterOnly,
       timezone: input.timezone,
       description: input.description ?? null,
       schedule: {
@@ -229,6 +234,7 @@ export async function updateSeries(
     body: {
       name: input.name,
       ministryCode: input.ministryCode,
+      presbyterOnly: input.presbyterOnly,
       timezone: input.timezone,
       description: input.description,
       archived: input.archived,
