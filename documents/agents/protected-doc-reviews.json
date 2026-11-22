@@ -165,13 +165,13 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "1788cf514146001a315a318587e5d443ce12b77f3b475626acd9fa1f63fa3816",
+      "sha256": "6e8df508006f989c94f4824b942c6305f507724b7b614f0eb9ba905f9a9f98d2",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the second event-parent mock re-cut - the one-verb events list on the members grid with the row kebab and no Open link, the side-by-side schedule-versions/exceptions, the fleshed-out standalone detail with KPIs and summary, the round lane chips in the headcount dialog, and the import panel with a drop zone, template download and explicit End session; plus the v2-imports capture-pattern wording and the ended-state claim, aligned to the amended explicit-end spec. why: the owner rejected the first re-cut and accepted eight decisions (2026-11-22), including that a capture never ends a session. rejected: claiming the owner signed (the sign-off is the milestone); leaving the old capture-ends copy or the bundled import-panel claim.",
+      "reason": "changes: the owner's signature on the eleven event-parent states (six re-cut, five unchanged candidates); each entry is `coverage: \"signed\"` with `by: \"owner\"`, `at: \"2026-11-22\"` and the pin it carried. why: the owner answered \"Sign all eleven (Recommended)\" on 2026-11-22, closing the mock-sign-off milestone. rejected: leaving the entries auto-signed; changing any claim text at signing.",
       "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; Sunday off-peak) read the exact working-tree text of both catalogues, the five amended specs and the guard's absence/state rule. The spec amendment ACCEPTed with one P2 (which channel carries the explicit end) and four nits; the catalogue pass REWORKed on three cross-spec contradictions and one non-atomic claim; all were fixed and the confirmation ACCEPTed. The six re-cut states are `auto-signed` with `by: \"unattended\"` and a pending-owner basis; no state claims the owner signed. The owner's sign-off is the milestone and flips them to `signed`.",
+      "attestation": "`deepseek-v4-pro:0813` (first choice; Sunday off-peak) compared the signed texts with the text it had ACCEPTed: the signature flip is the only change, every pin is unchanged, no claim/story/quote/surface/inventory text moved, no state outside the eleven was touched, and both round-doc tables match the catalogue. VERDICT ACCEPT.",
       "at": "2026-11-22"
     },
     {
@@ -209,13 +209,13 @@
     },
     {
       "path": "documents/mock-claims/v2-shell.json",
-      "sha256": "26963e2f5680125dc1033f71802467b95f9225f85eb2ae4570c1192ad58fced5",
+      "sha256": "7d332478eb68f1558045a364a6637c22c418bc336e326ac288468dab8412ef04",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the event-parent mock re-cut - the events list (one New event verb), the form (Repeats + Audience, no ministry/presbyter fields), the recurrence/occurrence detail with the standalone import, the headcount dialog with Visitor Mode, the events-list rows - and the admin/visitor states (Admin Audiences, the rule builder, the member add visitor, the promotion), recorded `auto-signed` for the owner's sign-off. why: the approved event-parent, audience and session-offerings spec amendment. rejected: claiming the owner signed (the owner's sign-off is the milestone); leaving the pre-change states as current.",
+      "reason": "changes: the owner's signature on the eleven event-parent states (six re-cut, five unchanged candidates); each entry is `coverage: \"signed\"` with `by: \"owner\"`, `at: \"2026-11-22\"` and the pin it carried. why: the owner answered \"Sign all eleven (Recommended)\" on 2026-11-22, closing the mock-sign-off milestone. rejected: leaving the entries auto-signed; changing any claim text at signing.",
       "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; outside the 12:00-18:00 window) read the exact working-tree text of both protected catalogues and the specs they cite. The first pass ACCEPTed with three P2s - the events-list entries filed under the detail story, two mixed present/absent atoms, and the rule-builder/promotion atoms unreachable from the inventory; all three were fixed and the confirmation ACCEPTed. Two nits remain pre-existing and out of scope: three auto-signed states carry the stale 'pending the reviewer second look' basis, and three states are declared with no entries. Every re-cut state is `auto-signed` with `by: \"unattended\"` and a pending-owner basis; no state claims the owner signed. The owner's sign-off is the milestone and flips the list to `signed`.",
+      "attestation": "`deepseek-v4-pro:0813` (first choice; Sunday off-peak) compared the signed texts with the text it had ACCEPTed: the signature flip is the only change, every pin is unchanged, no claim/story/quote/surface/inventory text moved, no state outside the eleven was touched, and both round-doc tables match the catalogue. VERDICT ACCEPT.",
       "at": "2026-11-22"
     },
     {

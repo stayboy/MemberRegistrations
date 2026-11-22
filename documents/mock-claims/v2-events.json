@@ -67,12 +67,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f"
       }
     },
     "04-activity-detail-event": {
@@ -82,12 +81,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e"
       }
     },
     "05-activity-detail-cancelled": {
@@ -97,12 +95,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4"
       }
     },
     "01-events-list": {
@@ -112,12 +109,11 @@
         "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da"
       }
     },
     "10-event-create": {
@@ -127,12 +123,11 @@
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807"
       }
     },
     "02-event-detail": {
@@ -184,12 +179,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7"
       }
     },
     "07-import-attendance-panel": {
@@ -199,12 +193,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f"
       }
     }
   },
