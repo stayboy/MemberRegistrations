@@ -614,12 +614,11 @@
         "source": "mockups/v2-shell/25-admin-audiences.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "c6a7efed450d0b3b9178972c2fc964e28fc4e38cc5241a5855aa400bc0bde98f",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "c6a7efed450d0b3b9178972c2fc964e28fc4e38cc5241a5855aa400bc0bde98f"
       }
     },
     "26-audience-rule-builder": {
@@ -629,12 +628,11 @@
         "source": "mockups/v2-shell/26-audience-rule-builder.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "0024461aba55ef926e58425b25cc498005db8ada236a87903c172fbd968bfcc2",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "0024461aba55ef926e58425b25cc498005db8ada236a87903c172fbd968bfcc2"
       }
     },
     "27-add-member-visitor": {
@@ -644,12 +642,11 @@
         "source": "mockups/v2-shell/27-add-member-visitor.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "91d28c706369c0ed328b54f24a974d0bdc1f40cbc30a587238236348d44f61d1",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "91d28c706369c0ed328b54f24a974d0bdc1f40cbc30a587238236348d44f61d1"
       }
     },
     "28-member-visitor-promote": {
@@ -659,12 +656,11 @@
         "source": "mockups/v2-shell/28-member-visitor-promote.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
+        "by": "owner",
         "at": "2026-11-22",
-        "sha256": "ce8c80ec45f0842e3177fb2f2e1453dab085f5e398f67fa1e0a89ed61ef11711",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+        "sha256": "ce8c80ec45f0842e3177fb2f2e1453dab085f5e398f67fa1e0a89ed61ef11711"
       }
     }
   },

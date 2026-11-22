@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                             |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN (owner sign-off pending)                                                                                                               |
+| Status                 | ACCEPTED (owner signed 2026-11-22; six states superseded by the round-2 re-cut)                                                             |
 | Tier                   | 1 — Plan                                                                                                                                    |
 | Mode                   | `unattended (auto-accept recommendations)`                                                                                                  |
 | Base                   | `28f67b2`                                                                                                                                   |
@@ -60,36 +60,36 @@ Seat: consistent — mock-builder/parent `ollama-cloud/deepseek-v4.1-flash:1017`
 
 ## Mock sign-off
 
-| Surface | State                          | sha256      | Signer | Date    | Verdict                       |
-| ------- | ------------------------------ | ----------- | ------ | ------- | ----------------------------- |
-| Events  | `01-events-list`               | `876bbec4…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `10-event-create`              | `5f5d7194…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `03-activity-detail-series`    | `366a23b5…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `04-activity-detail-event`     | `a4404b25…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `05-activity-detail-cancelled` | `1b5af370…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `06-record-headcount-dialog`   | `0ff059ff…` | owner  | pending | auto-signed, pending sign-off |
-| Events  | `07-import-attendance-panel`   | `4140f134…` | owner  | pending | auto-signed, pending sign-off |
-| Admin   | `25-admin-audiences`           | `c6a7efed…` | owner  | pending | auto-signed, pending sign-off |
-| Admin   | `26-audience-rule-builder`     | `0024461a…` | owner  | pending | auto-signed, pending sign-off |
-| Admin   | `27-add-member-visitor`        | `91d28c70…` | owner  | pending | auto-signed, pending sign-off |
-| Admin   | `28-member-visitor-promote`    | `ce8c80ec…` | owner  | pending | auto-signed, pending sign-off |
+| Surface | State                          | sha256      | Signer | Date       | Verdict                             |
+| ------- | ------------------------------ | ----------- | ------ | ---------- | ----------------------------------- |
+| Events  | `01-events-list`               | `876bbec4…` | owner  | n/a        | superseded by round 2; signed there |
+| Events  | `10-event-create`              | `5f5d7194…` | owner  | 2026-11-22 | signed 2026-11-22                   |
+| Events  | `03-activity-detail-series`    | `366a23b5…` | owner  | n/a        | superseded by round 2; signed there |
+| Events  | `04-activity-detail-event`     | `a4404b25…` | owner  | n/a        | superseded by round 2; signed there |
+| Events  | `05-activity-detail-cancelled` | `1b5af370…` | owner  | n/a        | superseded by round 2; signed there |
+| Events  | `06-record-headcount-dialog`   | `0ff059ff…` | owner  | n/a        | superseded by round 2; signed there |
+| Events  | `07-import-attendance-panel`   | `4140f134…` | owner  | n/a        | superseded by round 2; signed there |
+| Admin   | `25-admin-audiences`           | `c6a7efed…` | owner  | 2026-11-22 | signed 2026-11-22                   |
+| Admin   | `26-audience-rule-builder`     | `0024461a…` | owner  | 2026-11-22 | signed 2026-11-22                   |
+| Admin   | `27-add-member-visitor`        | `91d28c70…` | owner  | 2026-11-22 | signed 2026-11-22                   |
+| Admin   | `28-member-visitor-promote`    | `ce8c80ec…` | owner  | 2026-11-22 | signed 2026-11-22                   |
 
 Mock coverage: claimed 11 · e2e-only 0 · deferred 0 · prose 0 (for the re-cut states; the full catalogue line is in `documents/mock-claims/`).
 
 ## Mock parity
 
-Pending at the owner's sign-off.
+The six states this round cut were re-cut in the round-2 round and signed there; the five unchanged candidates were signed 2026-11-22.
 
 ## Acceptance
 
-| #   | Criterion                                              | Met     | Evidence                |
-| --- | ------------------------------------------------------ | ------- | ----------------------- |
-| 1   | The re-cut states match the approved spec              | yes     | the eleven states above |
-| 2   | The catalogue records each `auto-signed` with its hash | yes     | the sign-off table      |
-| 3   | The protected review accepts the two catalogues        | yes     | `## Review`             |
-| 4   | The owner signs the states                             | pending | the milestone           |
+| #   | Criterion                                              | Met | Evidence                |
+| --- | ------------------------------------------------------ | --- | ----------------------- |
+| 1   | The re-cut states match the approved spec              | yes | the eleven states above |
+| 2   | The catalogue records each `auto-signed` with its hash | yes | the sign-off table      |
+| 3   | The protected review accepts the two catalogues        | yes | `## Review`             |
+| 4   | The owner signs the states                             | yes | signed 2026-11-22       |
 
-Verdict: **PENDING OWNER SIGN-OFF**.
+Verdict: **ACCEPTED** (the six re-cut states were signed at the round-2 cut).
 
 ## Deviations
 
