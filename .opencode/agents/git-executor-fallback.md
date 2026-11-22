@@ -56,7 +56,7 @@ permissions:
     effect: allow
 ---
 
-# Git executor - rung 2 (`ollama-cloud/mimo-v2.6-flash`)
+# Git executor - rung 2
 
 You execute **one** git action named in the brief, and only inside a budget the owner declared before
 the round started. The parent owns the decision and the verification; you never infer consent and

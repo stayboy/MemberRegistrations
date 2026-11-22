@@ -3,30 +3,32 @@
 Durable, owner-accepted lessons, newest first. Each entry names the rule, the evidence and the
 trigger that should have caught it. Product rules belong in the spec, not here.
 
-Propose an entry in the reply; it reaches this file only when the owner accepts it.
+Propose an entry in the reply; the Admission below governs what it carries.
 
-**Admission (owner, 2026-11-15; durability test, owner, 2026-11-17).** A lesson is admitted in three
-steps, and all are required:
+**Admission (owner, 2026-11-15; durability test, owner, 2026-11-17; reviewer-seat review before the
+proposal, owner, 2026-11-22).** A lesson is admitted in three steps, and all are required:
 
 1. **A durability test precedes the proposal.** Before a proposition is offered as a candidate lesson,
    answer three checks in writing and show them with it: **home** - does a governing file already own the
    rule, which makes the proposal a note or a merge rather than a second home? **truth** - is every
    factual claim true against the files and the record it cites? A claim that can be checked is checked,
-   not argued: run the command, read the file, cite the line. **durability** - apply step 2's test now,
-   before the proposal: would a future round judge work differently, and does the rule still say
+   not argued: run the command, read the file, cite the line. **durability** - apply step 2's question
+   now, before the proposal: would a future round judge work differently, and does the rule still say
    anything once the tool or version that produced it changes? The proposer runs the test and shows the
    three answers with the verdict - an entry, a merge into an existing entry, a note, or insufficient
    evidence - and a proposition without them is not yet a candidate for this file. That verdict is the
-   proposer's evidence, not a second weighing: step 2's weighing still decides.
+   proposer's evidence, not the decision: the owner's acceptance in step 3 still decides.
    `documents/research/clef-lesson-durability.md` supplies the durable / note / insufficient-evidence
    axis; merging into an existing entry is this file's fourth outcome.
-2. **A weighing follows** - a `grill-me` round, or the durability review where the owner asks for one
-   instead - its recommendations delivered automatically, asking one question above all: does this
-   change how the next piece of work is judged, or does it only explain a failure that already happened?
-   A proposition that is a **consequence of a technical failure** - a mistake, a missed step, a flaky
-   tool, a build that disagreed with a test runner - is **a note, not a lesson**. It is recorded in the
-   round doc and, where the evidence is worth keeping, in `documents/research/`, and it never enters this
-   file. A note changes the record; a lesson changes a decision.
+2. **The durability review is the weighing, and it comes first.** A reviewer-seat review of the
+   proposition is required before it is offered (owner, 2026-11-22), and the proposal carries its
+   verdict. The review asks one question above all: does this change how the next piece of work is
+   judged, or does it only explain a failure that already happened? A `grill-me` round may follow, and
+   its recommendations are delivered automatically. A proposition that is a **consequence of a
+   technical failure** - a mistake, a missed step, a flaky tool, a build that disagreed with a test
+   runner - is **a note, not a lesson**. It is recorded in the round doc and, where the evidence is
+   worth keeping, in `documents/research/`, and it never enters this file. A note changes the
+   record; a lesson changes a decision.
 3. **Only a durable rule is proposed here**, and the owner accepts it.
 
 The distinction exists because the file is read as policy: an entry that says "we once broke the build"
@@ -274,13 +276,13 @@ their consent to begin instead.
 ## 2026-11-10 — The reviewer seat is chosen by the clock, not by the model you prefer
 
 **Rule.** `documents/agents/orchestrator-policy.md` (Seats) makes the reviewer, plan-gate, spec-review
-and acceptance seat `cline-pass/cline-pass/mimo-v2.6-pro` between 12:00 and 18:00 local; outside that
-window the ranked pro seat applies. Read the clock and the table before dispatching, and name the seat
-in the round doc. A review dispatched on the wrong seat is no verdict until it is re-run on the right
-one — or on the ranked fallback, with the reason recorded, because a provider that refuses a model is a
-fallback, not a second seat. `AGENTS.md` §10a still words the protected-document gate as a review by
-`0813`; the Seats ruling (owner, 2026-11-09) applies inside the window, and harmonising that sentence is
-queued in `documents/backlog.md`.
+and acceptance seat `cline-pass/cline-pass/mimo-v2.6-pro` between 12:00 and 18:00 local on Monday to
+Friday; outside that window, and all weekend, the ranked pro seat applies. Read the clock and the table
+before dispatching, and name the seat in the round doc. A review dispatched on the wrong seat is no
+verdict until it is re-run on the right one — or on the ranked fallback, with the reason recorded,
+because a provider that refuses a model is a fallback, not a second seat. `AGENTS.md` §10a still words
+the protected-document gate as a review by `0813`; the Seats ruling (owner, 2026-11-09) applies inside
+the window, and harmonising that sentence is queued in `documents/backlog.md`.
 
 **Evidence.** The #101 code review (13:24) sat on `deepseek-v4-pro` `0813` inside the window, and so did
 the ruleset round's merge-policy review (14:41); the owner caught both. The code review was re-run as

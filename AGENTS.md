@@ -155,8 +155,8 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 
 - Tier 1–2 work gets one `documents/rounds/<slug>.md` with `## Plan`, `## Verification` and
   `## Acceptance`; see `documents/rounds/README.md`. It is committed but ephemeral.
-- Durable lessons go to `documents/lessons.md`, newest first. Propose an entry in the reply; write it
-  only when the owner accepts it.
+- Durable lessons go to `documents/lessons.md`, newest first; its Admission governs what a proposal must
+  carry. Propose an entry in the reply and write it only when the owner accepts it.
 - Deferred work goes to `documents/backlog.md`. Never silently descope.
 
 ## 10a. Governing documents are review-gated
@@ -167,8 +167,9 @@ under `.opencode/skills/`, and every markdown
 file in the canonical orchestrator skill (`~/.agents/skills/orchestrator/`) are **protected**: a change
 lands only after the reviewer seat has reviewed the exact text — `deepseek-v4-pro` build `0813` outside
 the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider answers)
-between 12:00 and 18:00 local, or when no provider answers with `0813` (credit exhaustion, HTTP 429 and
-timeouts count as unavailable; a registry listing does not). The basis is stated in `fallbackReason`.
+between 12:00 and 18:00 local on Monday to Friday, or when no provider answers with `0813` (credit
+exhaustion, HTTP 429 and timeouts count as unavailable; a registry listing does not). The basis is
+stated in `fallbackReason`.
 
 The record is `documents/agents/protected-doc-reviews.json` — one entry per file with `path`, `sha256`
 (of the exact reviewed text: line endings normalised to LF, trailing whitespace trimmed, a leading BOM
@@ -299,14 +300,15 @@ reintroduce them silently.
   attended by saying so. The consent is this rule, never the owner's silence.
 - **Grill-me seat (owner, 2026-11-07).** Every `grill-me` session runs on the `grill-flash` class
   (mapping: `documents/agents/seats.json`) — ollama-cloud's candidate first, the cline-pass provider as
-  its fallback. Between 12:00 and 18:00 local the provider preference flips: the cline-pass provider is
-  tried first (owner, 2026-11-11). The window moves **the grill-me, reviewer and worker classes**; every
+  its fallback. Between 12:00 and 18:00 local on Monday to Friday the provider preference flips: the
+  cline-pass provider is tried first (owner, 2026-11-11); Saturday and Sunday are off-peak all day, so
+  the outside-window order applies. The window moves **the grill-me, reviewer and worker classes**; every
   other class is unclocked (owner, 2026-11-13).
 - **Worker seat (owner, 2026-11-13).** The implementer — at every tier since 2026-11-16 — runs on the
   `worker-flash` class (mapping: `documents/agents/seats.json`) and follows the window like the classes
-  above: the cline-pass provider between 12:00 and 18:00 local, ollama-cloud outside it. An explicit owner
-  override for a round beats both, and the round doc records it. The parent integrates, runs the gates and
-  commits; it does not author the implementation at any tier.
+  above: the cline-pass provider between 12:00 and 18:00 local on Monday to Friday, ollama-cloud outside
+  it and all weekend. An explicit owner override for a round beats both, and the round doc records it.
+  The parent integrates, runs the gates and commits; it does not author the implementation at any tier.
 - **The grill still happens.** An unattended round asks the whole frontier in one numbered round with a
   recommendation per question. Every accepted decision is written into the owning **spec** (§1) and
   recorded in the round doc as `Mode: unattended (auto-accept recommendations)`; the completion report

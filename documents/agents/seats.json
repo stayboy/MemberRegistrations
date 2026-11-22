@@ -69,7 +69,7 @@
     "git-executor": "Only one free candidate exists today (`opencode/beam-free`), so the second and third rungs are metered; that is the gap the 2026-11-17 ruling names - a free provider exhausted twice in a day is replaced at the round's end, not retried all day. Its 2026-11-22 429s are the owner's in-session proof to make, so the rung stays as is and the decision is recorded in `modelExceptions`.",
     "mock-builder": "Default `deepseek-v4.1-flash-1017` (owner, 2026-11-17) for building and re-cutting mocks under `mockups/`; it sits in `anyWindow` because a mock cut is not clock-sensitive.",
     "probe": "One dispatch per class per local day, at round open; the outcome is recorded in that round's Seats table and holds until the next day. The `publish-executor` is the exception: it is probed at its first post-merge dispatch (see its note).",
-    "insideWindow": "12:00-18:00 local moves the worker, grill and reviewer classes; the git and publish executors are not clocked.",
+    "insideWindow": "12:00-18:00 local Monday-Friday moves the worker, grill and reviewer classes; Saturday and Sunday are off-peak all day, so the outside-window ranking applies; the git and publish executors are not clocked.",
     "publish-executor": "Runs only on clean `main` after a merge (owner, 2026-11-18). Like the git executor it is unclocked, so probe it on first use after a merge rather than at round open. `opencode/deepseek-v4.1-flash-free` is the free rung and `publish-executor-fallback.md` serves the metered second rung; a free provider exhausted twice in a day is replaced at the round’s end."
   },
   "probedAt": {

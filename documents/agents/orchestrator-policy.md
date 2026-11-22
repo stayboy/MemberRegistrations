@@ -23,10 +23,10 @@ The skill catalogues the Tier 3 seats for repos that enable them; this policy di
 **Spec review (all tiers).** Every behavioural spec, new or amended, is reviewed by a **separate**
 session of the `reviewer-pro` class - never the author - **before the implementer builds against it**
 (the worker, at every tier). The class's first candidate is the one `AGENTS.md` section 10a pins by name
-(`deepseek-v4-pro` build `0813` outside the 12:00–18:00 local window, and `mimo-v2.6-pro` on whichever
-provider answers inside it), and a fallback states its basis. The procedure is the canonical skill's
-Procedure step 1b; this paragraph records the repo's model choice and record. The verdict and the
-reviewed revision go
+(`deepseek-v4-pro` build `0813` outside the 12:00–18:00 local window on Monday to Friday, and
+`mimo-v2.6-pro` on whichever provider answers inside it), and a fallback states its basis. The procedure
+is the canonical skill's Procedure step 1b; this paragraph records the repo's model choice and record.
+The verdict and the reviewed revision go
 in the spec's status line plus the round doc, or the commit body at Tier 0. A typo, formatting or
 clarifying edit keeps only its changelog line. This is separate from the plan gate and the code review:
 the spec is the contract the implementer reads, so it is reviewed before the work starts, not after it
@@ -38,21 +38,21 @@ Model ranking is a repo instruction: use the first available candidate in each c
 the unavailable first choice and the chosen candidate in the round doc (the commit body at Tier 0) when
 a fallback is used. The fallback is standing-approved for these seats (owner, 2026-11-08); it is not a
 renegotiation of the gate. This supersedes the earlier "a fallback needs the owner's recorded approval":
-the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00 local the
-reviewer / plan-gate / spec-review / acceptance class moves to `mimo-v2.6-pro` on whichever configured
-provider answers (owner, 2026-11-09); outside that window the ranking applies. The same window moves the
-**grill-me** class to the cline-pass provider for the same model (owner, 2026-11-11). From 2026-11-13 the
-**worker** class follows the window too, on the same provider rule, and no other class is clocked. An
-explicit owner override for a named round beats any ranking here, and the
-round doc records it.
+the approval is now the ranking itself, scoped as below. Between 12:00 and 18:00 local on Monday to
+Friday the reviewer / plan-gate / spec-review / acceptance class moves to `mimo-v2.6-pro` on
+whichever configured provider answers (owner, 2026-11-09); outside that window and all weekend the
+ranking applies. The same Monday-to-Friday window moves the **grill-me** class to the cline-pass
+provider for the same model (owner, 2026-11-11). From 2026-11-13 the **worker** class follows the window
+too, on the same provider rule, and no other class is clocked. An explicit owner override for a named
+round beats any ranking here, and the round doc records it.
 
-| Seat                                                                                                | Class (ranked candidates live in `documents/agents/seats.json`)                                                                                            |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker (implements at every tier; reviews a Tier 0 change)                                          | `worker-flash` — windowed: inside 12:00–18:00 local the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last |
-| Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | `reviewer-pro` — windowed, and **its first candidate is pinned by name in `AGENTS.md` section 10a**; three candidates, the metered rungs last              |
-| Grill-me (every round that opens one)                                                               | `grill-flash` — windowed: inside the window the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last         |
-| Git executor (all git writes)                                                                       | `git-executor` — a free provider first, then the metered rungs; every metered brief draws on the round's brief cap                                         |
-| Publish executor (the post-merge local rebuild; not a git write)                                    | `publish-executor` - unclocked: a free provider first, then the metered rungs; draws nothing from `git-seat-budget:`                                       |
+| Seat                                                                                                | Class (ranked candidates live in `documents/agents/seats.json`)                                                                                                                |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Worker (implements at every tier; reviews a Tier 0 change)                                          | `worker-flash` — windowed: inside 12:00–18:00 local on Monday to Friday the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last |
+| Reviewer, plan gate, acceptance (every tier with an independent review) and spec review (all tiers) | `reviewer-pro` — windowed on Monday to Friday, and **its first candidate is pinned by name in `AGENTS.md` section 10a**; three candidates, the metered rungs last              |
+| Grill-me (every round that opens one)                                                               | `grill-flash` — windowed on Monday to Friday: inside the window the cline-pass provider first, outside it ollama-cloud first; three candidates, the metered rungs last         |
+| Git executor (all git writes)                                                                       | `git-executor` — a free provider first, then the metered rungs; every metered brief draws on the round's brief cap                                                             |
+| Publish executor (the post-merge local rebuild; not a git write)                                    | `publish-executor` - unclocked: a free provider first, then the metered rungs; draws nothing from `git-seat-budget:`                                                           |
 
 **Capability classes (owner, 2026-11-17).** The table names classes; the class-to-model mapping lives in
 `documents/agents/seats.json`, which is not review-gated, so refreshing a candidate that disappeared is
@@ -218,10 +218,11 @@ under `.opencode/skills/`, and the canonical
 orchestrator skill's markdown
 are review-gated: a change lands only after the reviewer seat reviews the exact text — `deepseek-v4-pro`
 `0813` outside the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider
-answers) between 12:00 and 18:00 local, or when no provider answers with `0813` — the basis stated in
-`fallbackReason`. A document joins this set when it **owns a non-negotiable or a repo delta of the canonical
-skill** — not because it lives under `documents/agents/`: a runbook or a research note under `documents/` is not
-governing either, and the seat files under `.opencode/agents/` are operational, not governing (owner,
+answers) between 12:00 and 18:00 local on Monday to Friday, or when no provider answers with `0813` —
+the basis stated in `fallbackReason`. A document joins this set when it **owns a non-negotiable or a
+repo delta of the canonical skill** — not because it lives under `documents/agents/`: a runbook or a
+research note under `documents/` is not governing either, and the seat files under `.opencode/agents/`
+are operational, not governing (owner,
 2026-11-13). **Every editable skill file is protected** (owner, 2026-11-15): a repo skill owns a
 procedure an agent follows, which is a delta of the canonical skill, so it joins the set as a whole
 directory rather than file by file - a new skill is covered the day it lands. For a named file outside a covered directory, the parent proposes the member and the owner confirms it; a
