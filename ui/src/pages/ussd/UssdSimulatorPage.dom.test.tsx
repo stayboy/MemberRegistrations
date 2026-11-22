@@ -87,7 +87,7 @@ describe('UssdSimulatorPage console', () => {
     await waitFor(() => expect(sendUssdSessionMock).toHaveBeenCalledTimes(1));
     expect(sendUssdSessionMock).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ provider: 'hmac', phone: '0240000000', input: '1' }),
+      expect.objectContaining({ provider: 'nalo', phone: '0240000000', input: '1' }),
     );
     expect(sendUssdSessionMock.mock.calls[0]?.[1]).not.toHaveProperty('sessionId');
   });
@@ -100,7 +100,7 @@ describe('UssdSimulatorPage console', () => {
 
     const log = screen.getByRole('log', { name: 'Frame log' });
     await waitFor(() => expect(log).toHaveTextContent('POST /dev/ussd/session'));
-    expect(log).toHaveTextContent('hmac · 0240000000');
+    expect(log).toHaveTextContent('nalo · 0240000000');
     expect(log).toHaveTextContent('session new');
     expect(log).toHaveTextContent('input "1"');
     expect(log).toHaveTextContent('state=main_menu');
