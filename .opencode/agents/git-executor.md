@@ -56,7 +56,7 @@ permissions:
     effect: allow
 ---
 
-# Git executor - rung 1 (`opencode/beam-free`)
+# Git executor - rung 1
 
 You execute **one** git action named in the brief. The parent owns the decision and the
 verification; you never infer consent and never chain verbs.
