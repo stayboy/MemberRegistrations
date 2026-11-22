@@ -430,7 +430,8 @@ describe('POST /dev/ussd/session', () => {
     expect(started.status).toBe(200);
     expect(started.body).toMatchObject({ provider: 'nalo', done: false, state: 'main' });
     expect(started.body.sessionId).toMatch(/^devnalo-/);
-    expect(started.body.wire).toMatchObject({ USERID: NALO_USER_ID, MSGTYPE: true });
+    expect(started.body.wire).toMatchObject({ MSGTYPE: true });
+    expect(started.body.wire).not.toHaveProperty('USERID');
     expect(started.body.wire).not.toHaveProperty('SESSIONID');
     expect(started.body.text).toBe(started.body.wire.MSG);
     expect(JSON.stringify(started.body)).not.toContain(USSD_SECRET);
@@ -447,6 +448,41 @@ describe('POST /dev/ussd/session', () => {
     expect(next.status).toBe(200);
     expect(next.body.state).toBe('offerings');
     expect(next.body.wire.MSGTYPE).toBe(true);
+  });
+
+  it('redacts the Nalo USERID at the browser boundary and keeps MSG and text', async () => {
+    const started = await request(harness.app).post('/dev/ussd/session').send({
+      provider: 'nalo',
+      phone: '0801 555 0019',
+      input: '',
+    });
+    expect(started.status).toBe(200);
+    expect(started.body.wire).not.toHaveProperty('USERID');
+    expect(started.body.wire).toHaveProperty('MSG');
+    expect(started.body.text).toBe(started.body.wire.MSG);
+    expect(JSON.stringify(started.body)).not.toContain(NALO_USER_ID);
+  });
+
+  it('passes the HMAC wire through untouched', async () => {
+    const started = await request(harness.app).post('/dev/ussd/session').send({
+      provider: 'hmac',
+      phone: '0801 555 0018',
+      input: '',
+    });
+    expect(started.status).toBe(200);
+    expect(started.body.wire).toMatchObject({
+      sessionId: started.body.sessionId,
+      text: started.body.text,
+      done: started.body.done,
+      state: started.body.state,
+    });
+    expect(Object.keys(started.body.wire).sort()).toEqual([
+      'done',
+      'options',
+      'sessionId',
+      'state',
+      'text',
+    ]);
   });
 
   it('refuses with 404 not_found in production', async () => {

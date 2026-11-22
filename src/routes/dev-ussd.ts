@@ -132,6 +132,15 @@ export function devUssdRouter(
           body.provider === 'nalo'
             ? ((wire as { MSG: string }).MSG ?? render.text)
             : ((wire as { text: string }).text ?? render.text);
+        // The adapter's payload is the provider's contract; the route's payload is a
+        // browser's. Nalo's `USERID` is the whole provider credential, so it stops at
+        // this boundary and never enters the inspector.
+        let safeWire = wire;
+        if (body.provider === 'nalo') {
+          const safe = { ...(wire as Record<string, unknown>) };
+          delete safe.USERID;
+          safeWire = safe;
+        }
         res.setHeader('Cache-Control', 'no-store');
         res.json({
           provider: body.provider,
@@ -139,7 +148,7 @@ export function devUssdRouter(
           text,
           done: render.done,
           state: render.state,
-          wire,
+          wire: safeWire,
         });
       } catch (error) {
         if (!sendUssdRateLimit(res, error)) throw error;

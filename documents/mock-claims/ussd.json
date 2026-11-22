@@ -1,0 +1,83 @@
+{
+  "set": "ussd",
+  "specs": ["documents/specs/member-registrations-ui.md"],
+  "surfaces": [
+    {
+      "id": "ussd-console",
+      "route": "/ussd/simulator",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["AC-50"]
+    }
+  ],
+  "states": {
+    "console": {
+      "mock": {
+        "path": "mockups/ussd/44-ussd-console.png",
+        "sha256": "10af5801e3c64b0c92176bf09dfed25b30f7898d6db237be9302ca91b3cbd97d",
+        "source": "mockups/ussd/console.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-22",
+        "sha256": "10af5801e3c64b0c92176bf09dfed25b30f7898d6db237be9302ca91b3cbd97d"
+      }
+    }
+  },
+  "inventory": [
+    {
+      "surface": "ussd-console",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-50",
+          "disposition": "claimed",
+          "entry": "UC-01"
+        }
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "UC",
+      "as": "developer running the local Compose stack",
+      "iWant": "to drive the real USSD player from one console page",
+      "soThat": "a member walkthrough, including contact verification, can be demonstrated without a handset",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "one Actions menu holds them"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "id": "UC-01",
+      "story": "UC",
+      "state": "console",
+      "claim": "The console's two verbs, New session and Clear log, sit in one Actions menu; no verb renders in the action row.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "assert": "dom",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-50",
+        "quote": "one Actions menu holds them"
+      },
+      "ac": ["AC-50"],
+      "control": "spec",
+      "target": {
+        "mock": { "selector": ".action-row .btn" },
+        "build": { "role": "button", "name": "Actions" }
+      },
+      "test": "ui/src/pages/ussd/UssdSimulatorPage.dom.test.tsx::starts a new session and clears the log from the action row"
+    }
+  ]
+}

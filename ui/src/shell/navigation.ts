@@ -22,6 +22,7 @@ import {
   SettingsRegular,
   type FluentIcon,
 } from '@fluentui/react-icons';
+import { isLocalTools } from '../env/localTools';
 
 export type SectionId = 'members' | 'events' | 'imports' | 'shepherding' | 'ussd' | 'admin';
 
@@ -216,15 +217,16 @@ export const SECTIONS: readonly NavSection[] = [
 export const BRAND_ICON = BookContactsRegular;
 
 /**
- * The sidebar's item list. A production build drops development-only items,
- * while `sectionForPath`/`navItemForPath` still resolve the full map so a deep
- * link to a hidden page keeps its section and breadcrumb.
+ * The sidebar's item list. A deployed build drops development-only items, while
+ * the local Compose console build (`localTools`) keeps them; `sectionForPath`/
+ * `navItemForPath` still resolve the full map so a deep link to a hidden page
+ * keeps its section and breadcrumb.
  */
 export function visibleNavItems(
   section: NavSection,
-  production = import.meta.env.PROD,
+  localTools = isLocalTools(),
 ): readonly NavItem[] {
-  return production ? section.items.filter((item) => !item.devOnly) : section.items;
+  return localTools ? section.items : section.items.filter((item) => !item.devOnly);
 }
 
 function itemMatchesPath(item: NavItem, pathname: string): boolean {

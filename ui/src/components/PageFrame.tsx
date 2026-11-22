@@ -9,6 +9,7 @@ import {
 } from '@fluentui/react-components';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { isLocalTools } from '../env/localTools';
 import { connectionErrorDetail, useGatewayHealth } from '../shell/gatewayHealth';
 import { SECTIONS, firstItemOf, type SectionId } from '../shell/navigation';
 import { PageActions, isVerb, type PageAction } from './PageActions';
@@ -126,14 +127,18 @@ const useStyles = makeStyles({
 
 /**
  * The production notice belongs to every USSD operator page. The Simulator is
- * development-only and keeps its own MessageBar, so it is excluded here.
+ * development-only and keeps its own MessageBar, so it is excluded here. The
+ * local Compose dashboard is a deployed `production` build that opts into the
+ * console with `VITE_USSD_CONSOLE=true`; `localTools` suppresses the notice
+ * there, because the console reaches a development API.
  */
 export function showsUssdProductionNotice(
   sectionId: SectionId,
   pathname: string,
   production = import.meta.env.PROD,
+  localTools = isLocalTools(),
 ): boolean {
-  return production && sectionId === 'ussd' && pathname !== '/ussd/simulator';
+  return production && !localTools && sectionId === 'ussd' && pathname !== '/ussd/simulator';
 }
 
 export function PageFrame({
