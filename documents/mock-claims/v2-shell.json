@@ -67,7 +67,18 @@
           "section": "Acceptance Criteria"
         }
       ],
-      "acsMatch": ["Add member page", "registration with contact values entered"]
+      "acsMatch": ["Add member page", "registration with contact values entered", "Add member form"]
+    },
+    {
+      "id": "admin-audiences",
+      "route": "/admin/audiences",
+      "spec": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "section": "Acceptance Criteria"
+        }
+      ],
+      "acsMatch": ["Admin Audiences page"]
     }
   ],
   "states": {
@@ -595,6 +606,66 @@
         "sha256": "605fce25d4c04e98c31d21213697bedb02746787daf38c9058b6c509b26f5b83",
         "basis": "Owner accepted the 2026-11-19 grill recommendation to sign the five re-cut Phase 3 portal states from their hashes; the USSD handset pair is recorded separately as local review artifacts."
       }
+    },
+    "25-admin-audiences": {
+      "mock": {
+        "path": "mockups/v2-shell/25-admin-audiences.png",
+        "sha256": "c6a7efed450d0b3b9178972c2fc964e28fc4e38cc5241a5855aa400bc0bde98f",
+        "source": "mockups/v2-shell/25-admin-audiences.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "c6a7efed450d0b3b9178972c2fc964e28fc4e38cc5241a5855aa400bc0bde98f",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
+    },
+    "26-audience-rule-builder": {
+      "mock": {
+        "path": "mockups/v2-shell/26-audience-rule-builder.png",
+        "sha256": "0024461aba55ef926e58425b25cc498005db8ada236a87903c172fbd968bfcc2",
+        "source": "mockups/v2-shell/26-audience-rule-builder.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "0024461aba55ef926e58425b25cc498005db8ada236a87903c172fbd968bfcc2",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
+    },
+    "27-add-member-visitor": {
+      "mock": {
+        "path": "mockups/v2-shell/27-add-member-visitor.png",
+        "sha256": "91d28c706369c0ed328b54f24a974d0bdc1f40cbc30a587238236348d44f61d1",
+        "source": "mockups/v2-shell/27-add-member-visitor.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "91d28c706369c0ed328b54f24a974d0bdc1f40cbc30a587238236348d44f61d1",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
+    },
+    "28-member-visitor-promote": {
+      "mock": {
+        "path": "mockups/v2-shell/28-member-visitor-promote.png",
+        "sha256": "ce8c80ec45f0842e3177fb2f2e1453dab085f5e398f67fa1e0a89ed61ef11711",
+        "source": "mockups/v2-shell/28-member-visitor-promote.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "ce8c80ec45f0842e3177fb2f2e1453dab085f5e398f67fa1e0a89ed61ef11711",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     }
   },
   "inventory": [
@@ -736,6 +807,23 @@
           "id": "AC-52",
           "disposition": "claimed",
           "entry": "AM-CREATE-REQUEST"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-59",
+          "disposition": "claimed",
+          "entry": "AM-VISITOR"
+        }
+      ]
+    },
+    {
+      "surface": "admin-audiences",
+      "acs": [
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-58",
+          "disposition": "claimed",
+          "entry": "ADM-AUDIENCES"
         }
       ]
     }
@@ -783,6 +871,28 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-52",
         "quote": "a registration with contact values entered"
+      }
+    },
+    {
+      "id": "AUD-GROUPS",
+      "as": "administrator",
+      "iWant": "to see and edit the groups an event targets",
+      "soThat": "the event's audience is reference data, not a rule I rebuild by hand",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-58",
+        "quote": "system and custom audiences are listed with a `System` tag"
+      }
+    },
+    {
+      "id": "VIS-VISITOR",
+      "as": "registrar",
+      "iWant": "to register a first-timer as a visitor and promote them later",
+      "soThat": "they have a record without joining the church-wide rosters",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-59",
+        "quote": "the new record shows a `Visitor` tag with **Promote to member** in its menu"
       }
     }
   ],
@@ -1316,6 +1426,58 @@
         "quote": "no reorder control"
       },
       "control": "spec"
+    },
+    {
+      "id": "ADM-AUDIENCES",
+      "story": "AUD-GROUPS",
+      "state": "25-admin-audiences",
+      "claim": "System and custom audiences are listed with a `System` tag, the API summary and the referencing event count; a system row offers no edit control.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-58"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-58",
+        "quote": "system and custom audiences are listed with a `System` tag"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "ADM-RULE",
+      "story": "AUD-GROUPS",
+      "state": "26-audience-rule-builder",
+      "claim": "A custom audience opens the rule builder: the operator and the repeatable clause rows, with the API's live summary shown before saving.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AM-VISITOR",
+      "story": "VIS-VISITOR",
+      "state": "27-add-member-visitor",
+      "claim": "The Add member form's Membership status is set to Visitor and carries the promotion hint.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-59"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-59",
+        "quote": "the request sends that membership status"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "MEM-PROMOTE",
+      "story": "VIS-VISITOR",
+      "state": "28-member-visitor-promote",
+      "claim": "The visitor record carries the Visitor tag in its header and Promote to member at the head of its Actions menu.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
     }
   ]
 }

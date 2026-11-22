@@ -23,7 +23,8 @@
         "the detail shows the event",
         "the import panel opens on that",
         "schedule versions",
-        "adds a schedule version or exception"
+        "adds a schedule version or exception",
+        "never presents the headcount as the sum"
       ]
     },
     {
@@ -62,47 +63,77 @@
     "03-activity-detail-series": {
       "mock": {
         "path": "mockups/v2-events/03-activity-detail-series.png",
-        "sha256": "cccb700124cbe07ce8ae62e7b2425d58fb7167121f6bc3a82a135b3d1e1af2af",
+        "sha256": "366a23b5135c4fd773cb10035fc99c88e4f55d3a3ceb25566c229bc8ac2f7afa",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "366a23b5135c4fd773cb10035fc99c88e4f55d3a3ceb25566c229bc8ac2f7afa",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "04-activity-detail-event": {
       "mock": {
         "path": "mockups/v2-events/04-activity-detail-event.png",
-        "sha256": "bcb0c03c6e28bf4270e73ada34d4517fcbe192cd207836297aa7bcfef03cadaf",
+        "sha256": "a4404b250164b153a1aeaffd7518e3ef6d16d9c309a01a079506cf8cd0740de0",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "a4404b250164b153a1aeaffd7518e3ef6d16d9c309a01a079506cf8cd0740de0",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "05-activity-detail-cancelled": {
       "mock": {
         "path": "mockups/v2-events/05-activity-detail-cancelled.png",
-        "sha256": "a7621b8390b222710d74a9b4acb971aa2e877c0db369172b2b2e6e53143927cb",
+        "sha256": "1b5af3707ffd5c9f84b8c0c7d4e4d99d5ea182d7d9e95d207d2e30f7245f9a91",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "1b5af3707ffd5c9f84b8c0c7d4e4d99d5ea182d7d9e95d207d2e30f7245f9a91",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "01-events-list": {
       "mock": {
         "path": "mockups/v2-events/01-events-list.png",
-        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699",
+        "sha256": "876bbec40ffed59b01e62e447e7bb4959af7e28ee2921d1b00e879714681fd53",
         "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "876bbec40ffed59b01e62e447e7bb4959af7e28ee2921d1b00e879714681fd53",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "10-event-create": {
       "mock": {
         "path": "mockups/v2-events/10-event-create.png",
-        "sha256": "97312ae383b83b204c0fb44ac10186f09d16efd87756c02e1a5459739c76ebdd",
+        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807",
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "02-event-detail": {
       "mock": {
@@ -149,20 +180,32 @@
     "06-record-headcount-dialog": {
       "mock": {
         "path": "mockups/v2-events/06-record-headcount-dialog.png",
-        "sha256": "c65614ecf3bba3482d6cced3208ac971d92a942266d8662c947adb9c0f89e641",
+        "sha256": "0ff059ff2976754b6f65f9661f08709a0be7e12b27653e855bfa51582aafb09f",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "0ff059ff2976754b6f65f9661f08709a0be7e12b27653e855bfa51582aafb09f",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     },
     "07-import-attendance-panel": {
       "mock": {
         "path": "mockups/v2-events/07-import-attendance-panel.png",
-        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f",
+        "sha256": "4140f13467521590deb684e8248aa6597a109c84aca07f3fbce707705fe03e06",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-22",
+        "sha256": "4140f13467521590deb684e8248aa6597a109c84aca07f3fbce707705fe03e06",
+        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
+      }
     }
   },
   "inventory": [
@@ -186,6 +229,12 @@
           "id": "AC-7",
           "disposition": "claimed",
           "entry": "AD-IMPORT"
+        },
+        {
+          "file": "documents/specs/member-registrations-ui.md",
+          "id": "AC-61",
+          "disposition": "claimed",
+          "entry": "AD-HC-VISITOR"
         },
         {
           "file": "documents/specs/member-registrations-events-offerings.md",
@@ -242,8 +291,8 @@
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-57",
-          "disposition": "deferred",
-          "backlog": "Audience picker on the event form (mock)"
+          "disposition": "claimed",
+          "entry": "EVC-AUDIENCE"
         }
       ]
     }
@@ -258,6 +307,17 @@
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-3",
         "quote": "each occurrence row offers **Record headcount**"
+      }
+    },
+    {
+      "id": "EVA-LIST",
+      "as": "operator",
+      "iWant": "the events list to show one row per event, with each recurring event's schedule and next occurrence and every row's audience, attendance and offering summaries",
+      "soThat": "I can read a date window at a glance instead of opening each event",
+      "spec": {
+        "file": "documents/specs/member-registrations-events-offerings.md",
+        "anchor": "AC-2",
+        "quote": "it shows one row per event with its occurrences in the window"
       }
     },
     {
@@ -388,7 +448,7 @@
       "id": "AD-HC-DIALOG",
       "story": "AD-SESSIONS",
       "state": "06-record-headcount-dialog",
-      "claim": "The count dialog offers one field per lane - visitors (male, female, children) and presbyters (elder, deaconess, deacon) - with the total derived from them.",
+      "claim": "The count dialog draws Visitor Mode’s visitor men, visitor women and visitor children beside the adult lane, with each lane its own observation.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
@@ -397,14 +457,14 @@
       "id": "AD-IMPORT-PANEL",
       "story": "AD-SESSIONS",
       "state": "07-import-attendance-panel",
-      "claim": "The import panel states the session’s capture state and lists the parsed rows, with nothing written before commit.",
+      "claim": "The import panel on a standalone occurrence states that occurrence's capture state and lists the parsed rows, with nothing written before commit.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
     },
     {
       "id": "EVA-ACTIONS",
-      "story": "AD-SESSIONS",
+      "story": "EVA-LIST",
       "state": "01-events-list",
       "claim": "The page’s one verb (New event) sits in one Actions menu, with Refresh leading the row.",
       "expect": "PRESENT",
@@ -421,7 +481,7 @@
     },
     {
       "id": "EVA-ROWS",
-      "story": "AD-SESSIONS",
+      "story": "EVA-LIST",
       "state": "01-events-list",
       "claim": "Each row names its event, its audience and place, and its attendance and offering summaries, so a date window reads at a glance.",
       "expect": "PRESENT",
@@ -438,7 +498,7 @@
     },
     {
       "id": "EVA-SERIES",
-      "story": "AD-SESSIONS",
+      "story": "EVA-LIST",
       "state": "01-events-list",
       "claim": "A recurring event is a row like any other, showing its schedule and its next occurrence rather than living on a list of its own.",
       "expect": "PRESENT",
@@ -467,6 +527,74 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-56",
         "quote": "the request carries the FR-42a fields"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVC-AUDIENCE",
+      "story": "EVC-CREATE",
+      "state": "10-event-create",
+      "claim": "One Audience picker carries the seeded groups with the server-rendered summary.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-57"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-57",
+        "quote": "it offers the active audiences with their server-rendered summaries"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVC-NO-MINISTRY",
+      "story": "EVC-CREATE",
+      "state": "10-event-create",
+      "claim": "A separate Ministry select or Presbyter-only toggle on the event form.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-57"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-57",
+        "quote": "the Ministry select and the Presbyter-only toggle are absent as controls"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AD-HC-VISITOR",
+      "story": "AD-SESSIONS",
+      "state": "06-record-headcount-dialog",
+      "claim": "Visitor Mode’s visitor men, visitor women and visitor children sit beside the adult lane.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-61"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-61",
+        "quote": "**Visitor Mode** offers visitor men, visitor women and visitor children"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "AD-HC-NO-SUM",
+      "story": "AD-SESSIONS",
+      "state": "06-record-headcount-dialog",
+      "claim": "A headcount presented as the sum of the attendance rows.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-61"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-61",
+        "quote": "never presents the headcount as the sum of the attendance rows"
       },
       "control": "spec"
     }
