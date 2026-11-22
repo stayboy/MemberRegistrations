@@ -2,12 +2,12 @@
 
 |                        |                                                                                                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN (owner sign-off pending)                                                                                                                                                                     |
+| Status                 | ACCEPTED (owner signed all eleven, 2026-11-22)                                                                                                                                                    |
 | Tier                   | 1 — Plan                                                                                                                                                                                          |
 | Mode                   | `unattended (auto-accept recommendations)`                                                                                                                                                        |
 | Base                   | `9c69208`                                                                                                                                                                                         |
 | Review rounds          | 3 (spec amendment ACCEPT + P2; catalogue REWORK; confirmation ACCEPT)                                                                                                                             |
-| Gate runs in parent    | 2 (the hash tripwire before the record; the full pass after)                                                                                                                                      |
+| Gate runs in parent    | 3 (the hash tripwire before the record; the full pass after; the signed-text pass)                                                                                                                |
 | Spec                   | the event-parent specs + the session-end amendment (`member-registrations-api.md`, `member-registrations-events-offerings.md`, `member-registrations-headcount.md`, `member-registrations-ui.md`) |
 | Workers                | `single` (spec + mock-builder)                                                                                                                                                                    |
 | Implementer            | `worker ollama-cloud/deepseek-v4.1-flash:1017 (spec and mocks); parent ollama-cloud/deepseek-v4.1-flash:1017 (round doc, records, gates)`                                                         |
@@ -83,24 +83,30 @@ Seat: consistent — mock-builder/parent `ollama-cloud/deepseek-v4.1-flash:1017`
 | 4     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                          |
 | 5     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | After the checks                                           |
 | 6     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                                            |
+| 7     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `chore/mock-signoff` from `main` for the signature     |
+| 8     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | The eleven signatures, the records and the round docs      |
+| 9     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | Sign-off branch only                                       |
+| 10    | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                          |
+| 11    | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | After the checks                                           |
+| 12    | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                                            |
 
 ## Mock sign-off
 
 The six re-cut states, plus the five this re-cut did not change (the owner did not flag them):
 
-| Surface | State                          | sha256 (short) | Cut        | Signer | Verdict              |
-| ------- | ------------------------------ | -------------- | ---------- | ------ | -------------------- |
-| Events  | `01-events-list`               | `dfadc7ed…`    | this round | owner  | auto-signed, pending |
-| Events  | `03-activity-detail-series`    | `ee296ee4…`    | this round | owner  | auto-signed, pending |
-| Events  | `04-activity-detail-event`     | `c0671da3…`    | this round | owner  | auto-signed, pending |
-| Events  | `05-activity-detail-cancelled` | `e74e9bb6…`    | this round | owner  | auto-signed, pending |
-| Events  | `06-record-headcount-dialog`   | `41ede1e4…`    | this round | owner  | auto-signed, pending |
-| Events  | `07-import-attendance-panel`   | `a26c426c…`    | this round | owner  | auto-signed, pending |
-| Events  | `10-event-create`              | `5f5d7194…`    | round 1    | owner  | auto-signed, pending |
-| Admin   | `25-admin-audiences`           | `c6a7efed…`    | round 1    | owner  | auto-signed, pending |
-| Admin   | `26-audience-rule-builder`     | `0024461a…`    | round 1    | owner  | auto-signed, pending |
-| Admin   | `27-add-member-visitor`        | `91d28c70…`    | round 1    | owner  | auto-signed, pending |
-| Admin   | `28-member-visitor-promote`    | `ce8c80ec…`    | round 1    | owner  | auto-signed, pending |
+| Surface | State                          | sha256 (short) | Cut        | Signer | Verdict           |
+| ------- | ------------------------------ | -------------- | ---------- | ------ | ----------------- |
+| Events  | `01-events-list`               | `dfadc7ed…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `03-activity-detail-series`    | `ee296ee4…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `04-activity-detail-event`     | `c0671da3…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `05-activity-detail-cancelled` | `e74e9bb6…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `06-record-headcount-dialog`   | `41ede1e4…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `07-import-attendance-panel`   | `a26c426c…`    | this round | owner  | signed 2026-11-22 |
+| Events  | `10-event-create`              | `5f5d7194…`    | round 1    | owner  | signed 2026-11-22 |
+| Admin   | `25-admin-audiences`           | `c6a7efed…`    | round 1    | owner  | signed 2026-11-22 |
+| Admin   | `26-audience-rule-builder`     | `0024461a…`    | round 1    | owner  | signed 2026-11-22 |
+| Admin   | `27-add-member-visitor`        | `91d28c70…`    | round 1    | owner  | signed 2026-11-22 |
+| Admin   | `28-member-visitor-promote`    | `ce8c80ec…`    | round 1    | owner  | signed 2026-11-22 |
 
 Full hashes are in `documents/mock-claims/v2-events.json` and `v2-shell.json`.
 
@@ -113,20 +119,22 @@ sign-off.
 
 ## Acceptance
 
-| #   | Criterion                                              | Met     | Evidence                        |
-| --- | ------------------------------------------------------ | ------- | ------------------------------- |
-| 1   | The owner's eight decisions are drawn                  | yes     | the six states; items 1-6 and 7 |
-| 2   | The session-end amendment is in the specs and reviewed | yes     | `## Review`; the five specs     |
-| 3   | The catalogue records each `auto-signed` with its hash | yes     | the sign-off table              |
-| 4   | The protected review accepts the catalogues            | yes     | `## Review`                     |
-| 5   | The owner signs the states                             | pending | the milestone                   |
+| #   | Criterion                                              | Met | Evidence                        |
+| --- | ------------------------------------------------------ | --- | ------------------------------- |
+| 1   | The owner's eight decisions are drawn                  | yes | the six states; items 1-6 and 7 |
+| 2   | The session-end amendment is in the specs and reviewed | yes | `## Review`; the five specs     |
+| 3   | The catalogue records each `auto-signed` with its hash | yes | the sign-off table              |
+| 4   | The protected review accepts the catalogues            | yes | `## Review`                     |
+| 5   | The owner signs the states                             | yes | signed 2026-11-22               |
 
-Verdict: **PENDING OWNER SIGN-OFF**.
+Verdict: **ACCEPTED**.
 
 ## Deviations
 
-- **Every state is `auto-signed`** under §17 (owner, 2026-11-15), with `by: "unattended"` and a pending-owner basis;
-  none claims the owner signed. The owner's signature flips each to `signed`, or drops it to `target` for a re-cut.
+- **The owner signed all eleven states on 2026-11-22** after the second cut: the six re-cut here and the five
+  unchanged candidates (`10`, `25`–`28`). Each catalogue entry is now `coverage: "signed"` with
+  `signed: { by: "owner", at: "2026-11-22", sha256 }`; the two protected catalogues were re-reviewed at the signed
+  text and the record re-hashed.
 - **The close is the attendance channel's** (item 9, settled after the `0813` P2): an end-only attendance import
   offered on member-tracking occurrences only; a `tracksMembers = false` occurrence is never closed. The headcount
   request loses `ended`, a wire change that lands with the implementation round.
