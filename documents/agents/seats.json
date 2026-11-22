@@ -1,5 +1,5 @@
 {
-  "$comment": "Capability class to model mapping (owner, 2026-11-17). The protected policy names classes; this file names the models, so replacing a model that disappeared is one edit here instead of a protected-document review. Keep three candidates per class, the metered rungs last, and refresh that class's `probedAt` date when a round probes its first candidate. A candidate observed unavailable twice in a day is replaced at the round's end (policy: Seat health is probed once per round); two consecutive days makes that the owner's decision.",
+  "$comment": "Capability class to model mapping (owner, 2026-11-17). The protected policy names classes; this file names the models, so replacing a model that disappeared is one edit here instead of a protected-document review. Keep three candidates per class, the metered rungs last, and refresh that class's `probedAt` date when a round probes its first candidate. A candidate observed unavailable twice in a day is replaced at the round's end (policy: Seat health is probed once per round); two consecutive days makes that the owner's decision. `modelExceptions` records a model a class legitimately names outside its ranked candidates, with the owner's basis: it is an audit record, not a rung, and the seat-model guard accepts it only for the class that names it.",
   "classes": {
     "worker-flash": {
       "outsideWindow": [
@@ -53,18 +53,24 @@
     },
     "publish-executor": {
       "anyWindow": [
-        "opencode/beam-free",
+        "opencode/deepseek-v4.1-flash-free",
         "ollama-cloud/mimo-v2.6-flash",
         "openrouter/deepseek/deepseek-v4.1-flash-1017"
       ]
     }
   },
+  "modelExceptions": {
+    "git-executor": {
+      "allowed": "opencode/beam-free",
+      "basis": "owner keeps the rung as is and will prove it in-session (2026-11-22); see documents/backlog.md"
+    }
+  },
   "notes": {
-    "git-executor": "Only one free candidate exists today (`opencode/beam-free`), so the second and third rungs are metered; that is the gap the 2026-11-17 ruling names - a free provider exhausted twice in a day is replaced at the round's end, not retried all day.",
+    "git-executor": "Only one free candidate exists today (`opencode/beam-free`), so the second and third rungs are metered; that is the gap the 2026-11-17 ruling names - a free provider exhausted twice in a day is replaced at the round's end, not retried all day. Its 2026-11-22 429s are the owner's in-session proof to make, so the rung stays as is and the decision is recorded in `modelExceptions`.",
     "mock-builder": "Default `deepseek-v4.1-flash-1017` (owner, 2026-11-17) for building and re-cutting mocks under `mockups/`; it sits in `anyWindow` because a mock cut is not clock-sensitive.",
     "probe": "One dispatch per class per local day, at round open; the outcome is recorded in that round's Seats table and holds until the next day. The `publish-executor` is the exception: it is probed at its first post-merge dispatch (see its note).",
     "insideWindow": "12:00-18:00 local moves the worker, grill and reviewer classes; the git and publish executors are not clocked.",
-    "publish-executor": "Runs only on clean `main` after a merge (owner, 2026-11-18). Like the git executor it is unclocked, so probe it on first use after a merge rather than at round open. `opencode/beam-free` is the only free candidate today, so the second and third rungs are metered and a free provider exhausted twice in a day is replaced at the round’s end."
+    "publish-executor": "Runs only on clean `main` after a merge (owner, 2026-11-18). Like the git executor it is unclocked, so probe it on first use after a merge rather than at round open. `opencode/deepseek-v4.1-flash-free` is the free rung and `publish-executor-fallback.md` serves the metered second rung; a free provider exhausted twice in a day is replaced at the round’s end."
   },
   "probedAt": {
     "worker-flash": "2026-11-17",

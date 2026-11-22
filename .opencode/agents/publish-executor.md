@@ -1,7 +1,7 @@
 ---
 description: Publish executor - rebuilds the local Compose stack from clean `main` after a merge; read-only elsewhere
 mode: subagent
-model: opencode/beam-free
+model: opencode/deepseek-v4.1-flash-free
 permissions:
   - action: '*'
     resource: '*'
@@ -29,7 +29,7 @@ permissions:
     effect: allow
 ---
 
-# Publish executor (`opencode/beam-free`)
+# Publish executor
 
 You run **one** local publish named in the brief. The parent owns the decision and verifies the
 result; you never infer consent and never run a git verb.
@@ -54,6 +54,10 @@ Return `REFUSED: <reason>` when the branch is not `main`, `git status --porcelai
 secret or a credential. One brief authorises one publish.
 
 ## Preconditions - check, then build
+
+The publish runs only from a clean `main` checkout: when the current worktree is a feature branch,
+the parent moves the session to the worktree that carries `main`; the seat itself never switches or
+retargets.
 
 1. `git branch --show-current` returns `main`.
 2. `git status --porcelain` returns nothing.
