@@ -1,6 +1,8 @@
 # Member registrations - headcount
 
-**Status:** draft, 2026-11-14 (rework after review). This spec owns the headcount observation model. The
+**Status:** draft, 2026-11-14 (rework after review). Amended 2026-11-22: a capture never ends a session;
+the operator's explicit **End session** does, and nothing enforces it (HC-6, AC-H17). This spec owns the
+headcount observation model. The
 USSD surface spec (`member-registrations-ussd.md`, "Attendance: check, punch, clock, delegate,
 headcounts") keeps the phone rendering, the prompt grammar and the glossary; where the two disagree, this
 document wins on the model and that one wins on the screen.
@@ -59,8 +61,10 @@ The operator records a headcount from the **activity detail** (`#/events/:id`), 
   evaluated per observation: recording one lane never restates another lane's `asOf`.
 - **HC-5** Each bucket is an integer 0-10,000; a mode's `total` is the sum of its buckets and at most
   30,000; an all-zero observation is allowed and is a real count of zero.
-- **HC-6** `ended` is a **session-level** fact, not a lane's: an ended attendance capture closes every
-  lane for writing, and the history of every lane stays readable.
+- **HC-6** `ended` is a **session-level**, **explicit** fact, not a lane's: an administrator's **End
+  session** closes every lane for writing and the history of every lane stays readable. A headcount never
+  ends the session, and neither does a regular import capture: only the explicit **End session** (the
+  end-only attendance import) closes it. Nothing enforces a close: a session may stay open indefinitely.
 
 ## 2. Modes and buckets are reference data
 
@@ -199,6 +203,8 @@ members present rather than as a headcount bucket (owner, 2026-11-14). The lane 
 ### AC-H15: **Given** a headcount-only session, **When** its capture time is read, **Then** it is the latest observation across all lanes, while any count shown names its mode; the Roster figure is never added to a lane. (HC-23, HC-24)
 
 ### AC-H16: **Given** a correction that names an observation in another mode, **When** the destination lane has no current observation, **Then** the correction becomes that lane's current and the superseded observation's lane reads not recorded; **When** the destination lane already has a current, **Then** the response is a validation error naming that lane and nothing is written. (HC-25)
+
+### AC-H17: **Given** an open session, **When** a headcount or an import is recorded, **Then** the session stays open and every lane accepts further writes; **Given** the administrator presses **End session**, **Then** every lane refuses a write and every lane stays readable; **Given** an open session nobody ends, **Then** it stays open indefinitely and nothing enforces the close. (HC-6)
 
 ## Settled with the owner (2026-11-14)
 

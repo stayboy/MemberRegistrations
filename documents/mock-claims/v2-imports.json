@@ -23,7 +23,7 @@
         "a CSV with 10,001 rows",
         "the batch id, kind, row count, checksum",
         "falls on a different date from the selected session",
-        "this capture will end it"
+        "End session"
       ]
     },
     {
@@ -229,7 +229,7 @@
       "id": "IMP-ENDED-STATE",
       "story": "IMP-STATES",
       "state": "attendance-ended",
-      "claim": "The occurrence panel states the capture has ended.",
+      "claim": "The occurrence panel states the session has ended.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"

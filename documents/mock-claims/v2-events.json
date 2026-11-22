@@ -63,7 +63,7 @@
     "03-activity-detail-series": {
       "mock": {
         "path": "mockups/v2-events/03-activity-detail-series.png",
-        "sha256": "366a23b5135c4fd773cb10035fc99c88e4f55d3a3ceb25566c229bc8ac2f7afa",
+        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -71,14 +71,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "366a23b5135c4fd773cb10035fc99c88e4f55d3a3ceb25566c229bc8ac2f7afa",
+        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     },
     "04-activity-detail-event": {
       "mock": {
         "path": "mockups/v2-events/04-activity-detail-event.png",
-        "sha256": "a4404b250164b153a1aeaffd7518e3ef6d16d9c309a01a079506cf8cd0740de0",
+        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -86,14 +86,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "a4404b250164b153a1aeaffd7518e3ef6d16d9c309a01a079506cf8cd0740de0",
+        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     },
     "05-activity-detail-cancelled": {
       "mock": {
         "path": "mockups/v2-events/05-activity-detail-cancelled.png",
-        "sha256": "1b5af3707ffd5c9f84b8c0c7d4e4d99d5ea182d7d9e95d207d2e30f7245f9a91",
+        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -101,14 +101,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "1b5af3707ffd5c9f84b8c0c7d4e4d99d5ea182d7d9e95d207d2e30f7245f9a91",
+        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     },
     "01-events-list": {
       "mock": {
         "path": "mockups/v2-events/01-events-list.png",
-        "sha256": "876bbec40ffed59b01e62e447e7bb4959af7e28ee2921d1b00e879714681fd53",
+        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da",
         "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
@@ -116,7 +116,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "876bbec40ffed59b01e62e447e7bb4959af7e28ee2921d1b00e879714681fd53",
+        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     },
@@ -180,7 +180,7 @@
     "06-record-headcount-dialog": {
       "mock": {
         "path": "mockups/v2-events/06-record-headcount-dialog.png",
-        "sha256": "0ff059ff2976754b6f65f9661f08709a0be7e12b27653e855bfa51582aafb09f",
+        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -188,14 +188,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "0ff059ff2976754b6f65f9661f08709a0be7e12b27653e855bfa51582aafb09f",
+        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     },
     "07-import-attendance-panel": {
       "mock": {
         "path": "mockups/v2-events/07-import-attendance-panel.png",
-        "sha256": "4140f13467521590deb684e8248aa6597a109c84aca07f3fbce707705fe03e06",
+        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
@@ -203,7 +203,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-22",
-        "sha256": "4140f13467521590deb684e8248aa6597a109c84aca07f3fbce707705fe03e06",
+        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f",
         "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md §17 auto-signed mocks); pending the owner sign-off"
       }
     }
@@ -448,7 +448,34 @@
       "id": "AD-HC-DIALOG",
       "story": "AD-SESSIONS",
       "state": "06-record-headcount-dialog",
-      "claim": "The count dialog draws Visitor Mode’s visitor men, visitor women and visitor children beside the adult lane, with each lane its own observation.",
+      "claim": "The count dialog selects a lane with a round chip group; Visitor Mode is one chip whose visitor men, visitor women and visitor children appear beneath it when selected.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-GRID-PATTERN",
+      "story": "AD-SESSIONS",
+      "state": "03-activity-detail-series",
+      "claim": "The detail grids use the members pattern: sentence-case headers, a date identity block, a trailing row menu and a footer count.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-IMPORT-DROP",
+      "story": "AD-SESSIONS",
+      "state": "07-import-attendance-panel",
+      "claim": "The import panel accepts a dropped file, with a browse link inside the drop zone.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-IMPORT-TEMPLATE",
+      "story": "AD-SESSIONS",
+      "state": "07-import-attendance-panel",
+      "claim": "The import panel offers a Download Excel template action.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"
@@ -457,8 +484,26 @@
       "id": "AD-IMPORT-PANEL",
       "story": "AD-SESSIONS",
       "state": "07-import-attendance-panel",
-      "claim": "The import panel on a standalone occurrence states that occurrence's capture state and lists the parsed rows, with nothing written before commit.",
+      "claim": "The import panel on the standalone occurrence previews the parsed rows before commit.",
       "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-END-SESSION",
+      "story": "AD-SESSIONS",
+      "state": "07-import-attendance-panel",
+      "claim": "The open past session shows one explicit End session action.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "AD-NO-AUTO-END",
+      "story": "AD-SESSIONS",
+      "state": "07-import-attendance-panel",
+      "claim": "Copy that says the capture or the headcount ends the session.",
+      "expect": "ABSENT",
       "class": "mock-only",
       "assert": "image"
     },
@@ -512,6 +557,24 @@
         "quote": "each recurring event shows a human-readable schedule"
       },
       "control": "spec"
+    },
+    {
+      "id": "EVA-ROW-MENU",
+      "story": "EVA-LIST",
+      "state": "01-events-list",
+      "claim": "The event name is the row link and a trailing row menu at the right edge holds the row actions.",
+      "expect": "PRESENT",
+      "class": "mock-only",
+      "assert": "image"
+    },
+    {
+      "id": "EVA-NO-OPEN",
+      "story": "EVA-LIST",
+      "state": "01-events-list",
+      "claim": "A separate Open link at the row's end.",
+      "expect": "ABSENT",
+      "class": "mock-only",
+      "assert": "image"
     },
     {
       "id": "EVC-FIELDS",
@@ -568,7 +631,7 @@
       "id": "AD-HC-VISITOR",
       "story": "AD-SESSIONS",
       "state": "06-record-headcount-dialog",
-      "claim": "Visitor Mode’s visitor men, visitor women and visitor children sit beside the adult lane.",
+      "claim": "Visitor Mode is one chip whose visitor men, visitor women and visitor children appear beneath it when selected.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
