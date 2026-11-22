@@ -2,7 +2,7 @@
 
 |                        |                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------ |
-| Status                 | OPEN                                                                                 |
+| Status                 | ACCEPTED                                                                             |
 | Tier                   | 1 — Plan                                                                             |
 | Mode                   | `unattended (auto-accept recommendations)`                                           |
 | Base                   | `db2db72`                                                                            |
@@ -55,9 +55,18 @@ gate-run 2026-11-22T22:15:10.327Z profile=fast steps=4/4 lines=4 bytes=691
 
 ## Acceptance
 
-Pending.
+| #   | Criterion                                                       | Met | Evidence                                                                                                |
+| --- | --------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------- |
+| 1   | `main` carries the signed catalogues and the re-recorded review | yes | merge `5924907`; seven signed in `v2-events`, four in `v2-shell`                                        |
+| 2   | Both round docs show the signature                              | yes | `event-parent-mocks-2.md` ACCEPTED; `event-parent-mocks.md` signs the five and marks the six superseded |
+| 3   | The two resolved rows left the backlog                          | yes | the event re-cut and audience-picker rows are gone                                                      |
+| 4   | #216 closed as superseded                                       | yes | #217 merged; #216 `CLOSED` with a pointer                                                               |
+
+Verdict: **ACCEPTED**.
 
 ## Deviations
 
 - **PR #216 is superseded.** Its branch was cut from the re-cut branch's pre-squash commit rather than `main`, so the
-  merge base made it conflict. The content is unchanged; only the base moves.
+  merge base made it conflict. The content is unchanged; only the base moves (#217), and #216 is closed with a pointer.
+- **A second commit wrote this acceptance.** The signature merge carried the round doc with its acceptance pending; this
+  small follow-up records it. No behaviour, catalogue or record change.
