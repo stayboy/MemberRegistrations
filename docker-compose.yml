@@ -74,6 +74,7 @@ services:
       target: ui
       args:
         GIT_SHA: ${GIT_SHA:-dev}
+        VITE_USSD_CONSOLE: 'true'
     ports:
       - '8080:80'
     healthcheck:

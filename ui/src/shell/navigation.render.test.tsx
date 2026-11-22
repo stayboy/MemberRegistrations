@@ -67,11 +67,11 @@ describe('USSD section render', () => {
     }
   });
 
-  it('drops the development-only Simulator in production but keeps every other item', () => {
-    const productionItems = visibleNavItems(ussdSection(), true).map((item) => item.label);
+  it('drops the development-only Simulator in a deployed build but keeps every other item', () => {
+    const deployedItems = visibleNavItems(ussdSection(), false).map((item) => item.label);
 
-    expect(productionItems).not.toContain('Simulator');
-    expect(productionItems).toEqual([
+    expect(deployedItems).not.toContain('Simulator');
+    expect(deployedItems).toEqual([
       'Codes',
       'Registrations',
       'Clocking',
@@ -81,7 +81,7 @@ describe('USSD section render', () => {
       'Claims',
     ]);
 
-    const developmentItems = visibleNavItems(ussdSection(), false).map((item) => item.label);
-    expect(developmentItems).toContain('Simulator');
+    const localItems = visibleNavItems(ussdSection(), true).map((item) => item.label);
+    expect(localItems).toContain('Simulator');
   });
 });

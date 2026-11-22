@@ -37,6 +37,9 @@ CMD ["node", "dist/index.js"]
 FROM deps AS ui-build
 ARG VITE_GATEWAY_URL=http://localhost:3000
 ENV VITE_GATEWAY_URL=$VITE_GATEWAY_URL
+# The local UI image opts in to the dev console; a deployed build never sets it.
+ARG VITE_USSD_CONSOLE=
+ENV VITE_USSD_CONSOLE=$VITE_USSD_CONSOLE
 COPY ui ./ui
 WORKDIR /app/ui
 # Local builds use base `/`; vite.config.ts only switches to
