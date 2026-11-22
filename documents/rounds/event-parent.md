@@ -156,28 +156,30 @@ Seat: consistent — spec author parent/worker `ollama-cloud/deepseek-v4.1-flash
 
 ## Verification
 
-| Gate                 | Command                                               | Result                                                |
-| -------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
-| Spec review          | `reviewer-pro:0813`                                   | ACCEPT (REWORK→fix→ACCEPT; later confirmation ACCEPT) |
-| Format               | `npx prettier --check` on the five spec files         | pass                                                  |
-| Mock catalogue guard | `npx vitest run tests/meta/mock-claims.test.ts`       | pass (after the AC alignment)                         |
-| Fast gate            | `npm run verify:fast`                                 | pass — 4/4                                            |
-| Code                 | none this round (spec, design and catalogue metadata) | n/a                                                   |
+| Gate                 | Command                                                  | Result                                                |
+| -------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Spec review          | `reviewer-pro:0813`                                      | ACCEPT (REWORK→fix→ACCEPT; later confirmation ACCEPT) |
+| Format               | `npx prettier --check` on the five spec files            | pass                                                  |
+| Mock catalogue guard | `npx vitest run tests/meta/mock-claims.test.ts`          | pass (after the AC alignment)                         |
+| Protected-doc guard  | `npx vitest run tests/meta/protected-doc-review.test.ts` | pass — 7 tests, ten hashes                            |
+| Fast gate            | `npm run verify:fast`                                    | pass — 4/4                                            |
+| Code                 | none this round (spec, design and catalogue metadata)    | n/a                                                   |
 
-gate-run 2026-11-22T19:48:34.298Z profile=fast steps=4/4 lines=4 bytes=703
+gate-run 2026-11-22T19:56:42.621Z profile=fast steps=4/4 lines=4 bytes=703
 
 ## Git writes
 
-`git-seat-budget: 12` (this round `1 branch + 1 commit + 1 push + 1 pr + 1 merge + 1 sync = 6 of 12`).
+`git-seat-budget: 12` (this round `1 branch + 2 commits + 1 push + 1 pr + 1 merge + 1 sync = 7 of 12`).
 
-| Brief | Actor                 | Verb     | Variant                        | Reason                                           |
-| ----- | --------------------- | -------- | ------------------------------ | ------------------------------------------------ |
-| 1     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `docs/event-parent` from `main`; rung 1 429  |
-| 2     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | The spec round; the round doc is the record      |
-| 3     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | Feature branch only                              |
-| 4     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                |
-| 5     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | Only after `verify`, `ui` and `ui-e2e` are green |
-| 6     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                                  |
+| Brief | Actor                 | Verb     | Variant                        | Reason                                             |
+| ----- | --------------------- | -------- | ------------------------------ | -------------------------------------------------- |
+| 1     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `docs/event-parent` from `main`; rung 1 429    |
+| 2     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | The spec round; the round doc is the record        |
+| 3     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | The protected mock-claims set and the 0813 records |
+| 4     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | Feature branch only                                |
+| 5     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                  |
+| 6     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | Only after `verify`, `ui` and `ui-e2e` are green   |
+| 7     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                                    |
 
 ## Mock sign-off
 
@@ -210,6 +212,12 @@ Verdict: **ACCEPTED**.
   form's surface/story/entry/state were removed, the standalone-import entry flipped to PRESENT, and the
   pre-change list/form/detail states are now `target` — the owner's signature is void through `target`, and
   the round-3 re-cut is in the backlog. `headcount` narrowed its pattern to the headcount page's own ACs.
+- **The mock-claim catalogues are protected (owner, 2026-11-22).** `AGENTS.md` §10a, the policy and the
+  guard add `documents/mock-claims/*.json`; the ten hashes are recorded after the `0813` review — ACCEPT,
+  with one P2 (the AC-5 e2e test name is stale against the merged detail; the test resolves and the rename
+  is the round-3 item) and the gaps recorded: the `reference` coverage value is undocumented; the
+  owner-signed coverage versus the reviewer-gated catalogue file should be stated; the glob is JSON-only;
+  and the auto-signed states await the reviewer second look at the unattended close.
 - **Worker judgement calls, reviewed and upheld:** `Visitors only` as a seed; `Everyone` =
   `allOf(membershipStatus active)` and a visitor evaluated only when the rule names it; `membership_status`
   with `archived` derived; the `visitor_identities(phone_hash → member)` link and the anonymous history

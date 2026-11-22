@@ -36,8 +36,18 @@ function skillFiles(): string[] {
     : [];
 }
 
+/** Every mock-claim catalogue (owner, 2026-11-22: the catalogues are protected). */
+function mockClaimFiles(): string[] {
+  const dir = join(repoRoot, 'documents', 'mock-claims');
+  return existsSync(dir)
+    ? readdirSync(dir)
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => `documents/mock-claims/${name}`)
+    : [];
+}
+
 function protectedPaths(): string[] {
-  const paths = [...REPO_PROTECTED, ...skillFiles()];
+  const paths = [...REPO_PROTECTED, ...skillFiles(), ...mockClaimFiles()];
   if (canonicalPresent) {
     for (const file of markdownUnder(canonicalDir)) {
       paths.push(`canonical/${relative(canonicalDir, file).replaceAll('\\', '/')}`);

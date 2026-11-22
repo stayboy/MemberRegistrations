@@ -214,7 +214,7 @@ section 17); `signed` stays owner-only, so an auto-signed state never claims the
 
 `AGENTS.md`, `documents/agents/orchestrator-policy.md`, `documents/agents/component-first.md`,
 `documents/lessons.md`, `documents/rounds/README.md`, `.github/merge-policy.md`, every markdown file
-under `.opencode/skills/`, and the canonical
+under `.opencode/skills/`, every `documents/mock-claims/*.json` mock-claim catalogue (owner, 2026-11-22), and the canonical
 orchestrator skill's markdown
 are review-gated: a change lands only after the reviewer seat reviews the exact text — `deepseek-v4-pro`
 `0813` outside the window, and `mimo-v2.6-pro` (the window seat, served by whichever configured provider
