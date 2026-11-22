@@ -7,7 +7,7 @@
   "surfaces": [
     {
       "id": "activity-detail",
-      "route": "/events/:id?kind=",
+      "route": "/events/:id",
       "spec": [
         {
           "file": "documents/specs/member-registrations-ui.md",
@@ -20,9 +20,10 @@
       ],
       "acsMatch": [
         "one page verb",
-        "the detail shows series/standalone",
+        "the detail shows the event",
         "the import panel opens on that",
-        "a series activity"
+        "schedule versions",
+        "adds a schedule version or exception"
       ]
     },
     {
@@ -41,7 +42,7 @@
       "acsMatch": [
         "one page verb",
         "a date window",
-        "each series activity shows",
+        "each recurring event shows",
         "renders against the API"
       ]
     },
@@ -55,17 +56,6 @@
         }
       ],
       "acsMatch": ["the New event form"]
-    },
-    {
-      "id": "series-create",
-      "route": "/events/series/new",
-      "spec": [
-        {
-          "file": "documents/specs/member-registrations-ui.md",
-          "section": "Acceptance Criteria"
-        }
-      ],
-      "acsMatch": ["Presbyter only"]
     }
   ],
   "states": {
@@ -76,13 +66,7 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "cccb700124cbe07ce8ae62e7b2425d58fb7167121f6bc3a82a135b3d1e1af2af",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     },
     "04-activity-detail-event": {
       "mock": {
@@ -91,13 +75,7 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "bcb0c03c6e28bf4270e73ada34d4517fcbe192cd207836297aa7bcfef03cadaf",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     },
     "05-activity-detail-cancelled": {
       "mock": {
@@ -106,13 +84,7 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "a7621b8390b222710d74a9b4acb971aa2e877c0db369172b2b2e6e53143927cb",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     },
     "01-events-list": {
       "mock": {
@@ -121,12 +93,7 @@
         "source": "mockups/v2-events/01-events-list.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "16a6249fb9c59aa87737734d78b0e6478ecf3c975f6be48058e3da7e760c0699"
-      }
+      "coverage": "target"
     },
     "10-event-create": {
       "mock": {
@@ -135,26 +102,7 @@
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "97312ae383b83b204c0fb44ac10186f09d16efd87756c02e1a5459739c76ebdd"
-      }
-    },
-    "11-series-create": {
-      "mock": {
-        "path": "mockups/v2-events/11-series-create.png",
-        "sha256": "2e872ec7e36721b9c9f07f12ef676a96e80e5ffcee03fc0cefee01e49a2dfe04",
-        "source": "mockups/v2-events/11-series-create.html"
-      },
-      "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "2e872ec7e36721b9c9f07f12ef676a96e80e5ffcee03fc0cefee01e49a2dfe04"
-      }
+      "coverage": "target"
     },
     "02-event-detail": {
       "mock": {
@@ -205,13 +153,7 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "c65614ecf3bba3482d6cced3208ac971d92a942266d8662c947adb9c0f89e641",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     },
     "07-import-attendance-panel": {
       "mock": {
@@ -220,13 +162,7 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "coverage": "target"
     }
   },
   "inventory": [
@@ -302,17 +238,12 @@
           "id": "AC-56",
           "disposition": "claimed",
           "entry": "EVC-FIELDS"
-        }
-      ]
-    },
-    {
-      "surface": "series-create",
-      "acs": [
+        },
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-57",
-          "disposition": "claimed",
-          "entry": "SYC-PRESBYTER"
+          "disposition": "deferred",
+          "backlog": "Audience picker on the event form (mock)"
         }
       ]
     }
@@ -326,7 +257,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-3",
-        "quote": "each session row offers **Record headcount**"
+        "quote": "each occurrence row offers **Record headcount**"
       }
     },
     {
@@ -337,18 +268,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-56",
-        "quote": "the request carries the FR-42a fields and one or more sessions"
-      }
-    },
-    {
-      "id": "SYC-CREATE",
-      "as": "operator",
-      "iWant": "to create a presbyter-only series from the events list",
-      "soThat": "I can set up a study that is hidden from member-facing surfaces",
-      "spec": {
-        "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-57",
-        "quote": "it offers a **Presbyter only** toggle and sends `presbyterOnly`"
+        "quote": "the request carries the FR-42a fields"
       }
     }
   ],
@@ -391,7 +311,7 @@
       "id": "AD-HEADCOUNT",
       "story": "AD-SESSIONS",
       "state": "03-activity-detail-series",
-      "claim": "A session row offers Record headcount beside View rows.",
+      "claim": "An occurrence row offers Record headcount beside View rows.",
       "expect": "PRESENT",
       "class": "spec-required",
       "assert": "image",
@@ -400,7 +320,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-3",
-        "quote": "each session row offers **Record headcount**"
+        "quote": "each occurrence row offers **Record headcount**"
       },
       "control": "spec"
     },
@@ -425,7 +345,7 @@
       "id": "AD-IMPORT",
       "story": "AD-SESSIONS",
       "state": "03-activity-detail-series",
-      "claim": "A series session row opens the attendance import panel.",
+      "claim": "A recurring event's occurrence row opens the attendance import panel.",
       "expect": "PRESENT",
       "class": "spec-required",
       "assert": "image",
@@ -439,11 +359,11 @@
       "control": "spec"
     },
     {
-      "id": "AD-NO-IMPORT-EVENT",
+      "id": "AD-IMPORT-EVENT",
       "story": "AD-SESSIONS",
       "state": "04-activity-detail-event",
-      "claim": "A standalone event’s session rows offer an import control.",
-      "expect": "ABSENT",
+      "claim": "A standalone event’s occurrence rows offer an import control.",
+      "expect": "PRESENT",
       "class": "spec-required",
       "assert": "image",
       "anchorKind": "ac",
@@ -451,7 +371,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-7",
-        "quote": "a standalone event shows no entry"
+        "quote": "A **standalone** occurrence offers the same entry"
       },
       "control": "spec"
     },
@@ -486,7 +406,7 @@
       "id": "EVA-ACTIONS",
       "story": "AD-SESSIONS",
       "state": "01-events-list",
-      "claim": "The page’s two verbs sit in one Actions menu, with Refresh leading the row.",
+      "claim": "The page’s one verb (New event) sits in one Actions menu, with Refresh leading the row.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
@@ -494,8 +414,8 @@
       "assert": "image",
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-50",
-        "quote": "one Actions menu holds them"
+        "anchor": "AC-55",
+        "quote": "one `Actions` menu holds **New event**"
       },
       "control": "spec"
     },
@@ -503,7 +423,7 @@
       "id": "EVA-ROWS",
       "story": "AD-SESSIONS",
       "state": "01-events-list",
-      "claim": "Each row names its activity, its place and its attendance and offering summaries, so a date window reads at a glance.",
+      "claim": "Each row names its event, its audience and place, and its attendance and offering summaries, so a date window reads at a glance.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
@@ -512,7 +432,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-2",
-        "quote": "series, ministry, attendance and offering summaries"
+        "quote": "audience, attendance and offering summaries"
       },
       "control": "spec"
     },
@@ -520,7 +440,7 @@
       "id": "EVA-SERIES",
       "story": "AD-SESSIONS",
       "state": "01-events-list",
-      "claim": "A series is a row like any event, showing its schedule and its next occurrence rather than living on a list of its own.",
+      "claim": "A recurring event is a row like any other, showing its schedule and its next occurrence rather than living on a list of its own.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
@@ -529,7 +449,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-events-offerings.md",
         "anchor": "AC-4",
-        "quote": "each series activity shows a human-readable schedule"
+        "quote": "each recurring event shows a human-readable schedule"
       },
       "control": "spec"
     },
@@ -546,24 +466,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-56",
-        "quote": "the request carries the FR-42a fields and one or more sessions"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "SYC-PRESBYTER",
-      "story": "SYC-CREATE",
-      "state": "11-series-create",
-      "claim": "The series form carries the Presbyter only toggle on create, with the first schedule version below it.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "anchorKind": "ac",
-      "ac": ["AC-57"],
-      "assert": "image",
-      "spec": {
-        "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-57",
-        "quote": "it offers a **Presbyter only** toggle and sends `presbyterOnly`"
+        "quote": "the request carries the FR-42a fields"
       },
       "control": "spec"
     }

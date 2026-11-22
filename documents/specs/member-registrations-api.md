@@ -2,17 +2,54 @@
 
 **Author:** Solomon Owoo
 
-|            |                                                                                                                                                                                                                |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | **Approved 2026-11-03**, amended 2026-11-04 - v1, shepherding, and the V2/V3 amendment (events, per-session attendance, offerings, session gateway). Implementation is gated by tickets 01-24 plus 11a and 15a |
-| Date       | 2026-11-02 (amended 2026-11-03 and 2026-11-04)                                                                                                                                                                 |
-| Repo       | `MemberRegistrations` (standalone repository)                                                                                                                                                                  |
-| Origin     | Conversational feature request, 2026-11-02; V2/V3 amendment 2026-11-03                                                                                                                                         |
-| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres)                                                                                                                                   |
+|            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | **Approved 2026-11-03**, amended 2026-11-04 - v1, shepherding, and the V2/V3 amendment (events, per-session attendance, offerings, session gateway). Implementation is gated by tickets 01-24 plus 11a and 15a. **2026-11-22 amendment - the event is the parent** (owner decision, 2026-11-22), and the same day's **audience, membership-status and session-offering amendment**; both texts were approved by the owner on 2026-11-22, as recorded in `documents/rounds/event-parent.md`. The audience and the person kinds are specified in `member-registrations-event-audience.md`; the session attachment is specified in `member-registrations-session-offerings.md` |
+| Date       | 2026-11-02 (amended 2026-11-03, 2026-11-04 and 2026-11-22)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Repo       | `MemberRegistrations` (standalone repository)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Origin     | Conversational feature request, 2026-11-02; V2/V3 amendment 2026-11-03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Supersedes | The Blob/local-JSON revision of this spec (persistence replaced by Postgres)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+**2026-11-22 amendment - the event is the parent.** The owner settled that an event owns its
+recurrence and its dates: the event is the first-class aggregate, a recurrence is its optional
+schedule, and an occurrence is one dated child. The **migration and the wire are named hard gates**
+for the four-round sequence: this spec round, then the migration/API round, then the UI round, then the
+downstream round. No migration or code lands in the spec round.
 
 ---
 
 ## Change log
+
+- 2026-11-22: **the event's applicability is an audience, the member gains a status, and an offering
+  attaches per session** (owner, 2026-11-22; the same grill round as the event parent, with the Q5
+  amendment). The event carries `audienceId` as its applicability field; the optional ministry and the
+  presbyter-only toggle become read-only legacy projections mapped onto seeded or combination audiences,
+  and `startDate`/`endDate` return as the parent's overall range. The member read and create carry
+  `membershipStatus` (`visitor | active | archived`), a registered visitor is promotable, and a first-time
+  visitor can be registered as a registered visitor matched by phone with the giving history kept. FR-1,
+  FR-3, FR-13, FR-14,
+  FR-42 and the new FR-32–FR-35 say so; the Member, Event and Contribution sections, the Members,
+  Reference-data and Offerings route tables and the data models carry the change. The detail is
+  `member-registrations-event-audience.md`; the per-session attachment is
+  `member-registrations-session-offerings.md`, which is a **separate round after the event-parent
+  migration**. The standalone attendance import is **settled the same day**: the restriction is lifted, a
+  standalone occurrence imports like a recurring one, and `422 series_required` retires. The migration and
+  the wire remain the named hard gates; no code or migration lands in this round.
+
+- 2026-11-22: **the event is the parent.** The owner settled that an event owns its recurrence and its
+  dates (owner, 2026-11-22: "event should carry ministry (optional), presbyter only as series mock
+  shows. all other as recommended"). The `EventSeries` template and the per-instance event stop being
+  the model: one **event** aggregate carries identity (`eventNo`, name, optional ministry), when/where
+  (dates, times, venue), tracking (`tracksMembers`, `presbyterOnly`), an optional **recurrence** and its
+  **occurrences**. Generation is per recurrence and idempotent on `(eventId, date)`; attendance and
+  imports scope to one occurrence. FR-1-FR-8, the Event/Recurrence/Occurrence domain sections, the
+  attendance rules, the Events and reference-data route tables, the event DTOs and the data models say
+  so; the `/v1/series` routes retire or alias the parent read, and the offerings attach to the parent
+  (**corrected the same day: the attachment is a per-session session offering, not the parent — see the
+  entry above and `member-registrations-session-offerings.md`**).
+  The **migration and the wire are named hard gates** for the four-round sequence (this spec round, the
+  migration/API round, the UI round, then the downstream round). No migration or code lands in this
+  round.
 
 - 2026-11-19: USSD verification is retired. Every channel (email, WhatsApp, phone) sends the code
   and a short link to the member acceptance page; the issue response is `{ destination, expiresAt }` (no
@@ -74,7 +111,8 @@
 - 2026-11-11: an attendance import is limited to series-backed events; a standalone event answers
   `422 series_required` and writes nothing. Existing standalone attendance history stays visible and
   read-only, and manual and USSD per-member attendance are unchanged. AC-31 added; the import
-  paragraph, the endpoint row and the error list say so.
+  paragraph, the endpoint row and the error list say so. **Superseded 2026-11-22:** the restriction is
+  lifted; a standalone occurrence imports like a recurring one and `422 series_required` retires.
 
 - 2026-11-11: data-model table name corrected: the attendance table is `attendance`, not
   `event_attendance` (it was renamed when attendance was rekeyed to the generated event instance).
@@ -216,14 +254,14 @@ those events.
 A standalone **Express 5 + TypeScript** API on **Node.js 24 LTS**, persisted in **Postgres (Neon)**,
 deployed to Vercel as a single function.
 
-- Attendance is **modelled, not transcribed**: an event series declares a recurrence, occurrences are
-  derived from it and refined by imported event lists, and a member's record shows
-  `attended` / `expected` per series.
-- Events are **first-class instances**: a standalone conference is an event with its own venue and
-  sessions, while a series occurrence generates an event idempotently.
+- Attendance is **modelled, not transcribed**: an event declares its own dates, or a recurrence that
+  generates them, and a member's record shows `attended` / `expected` per event.
+- **The event is the aggregate**: it is the parent of its recurrence and its occurrences. A standalone
+  conference records its dates by hand; a recurring event owns a versioned recurrence that generates
+  its dates idempotently. There is no series above the event.
 - Giving is **modelled, not bolted on**: offerings carry versioned terms, contributions and pledges are
   append-only, and visitor giving never creates a member record.
-- The domain is **behaviour-rich**: member, subscription, relationship and series aggregates own their
+- The domain is **behaviour-rich**: member, subscription, relationship and event aggregates own their
   invariants; routes only parse input and delegate.
 - Shepherding is **historical, not a checkbox**: presbyters own assignment and call histories, a
   reassignment needs explicit consent and a reason, and every call attempt is permanent.
@@ -239,15 +277,15 @@ deployed to Vercel as a single function.
 2. As a ministry leader, I want one lookup to return name parts (first, last, other names, maiden name,
    alias), date of birth, gender, residence, contacts, subscriptions, ministries, relationships and
    attendance, so that one call answers "who is this?".
-3. As a ministry leader, I want attendance shown as `attended` out of `expected` per event series
+3. As a ministry leader, I want attendance shown as `attended` out of `expected` per event
    (e.g. "Sunday Main English Service — 2 of 5"), so that the number has a definition I can explain.
 4. As an administrator, I want to create, update, archive, restore and purge registrations, so that the
    register stays correct without hand-editing files.
-5. As an administrator, I want to record and correct attendance for a member against a series and date,
+5. As an administrator, I want to record and correct attendance for a member against an event and date,
    so that manual corrections coexist with imported registries.
 6. As an administrator, I want to import the member database and attendance registry idempotently, with
    a downloadable Excel template, so that re-running a file is safe and a bad file changes nothing.
-7. As an administrator, I want ministries, series and their schedules managed through the API, so that
+7. As an administrator, I want ministries, events and their recurrences managed through the API, so that
    reference data is not hard-coded in a deployment.
 8. As an administrator, I want spouse and dependent links between real member records, so that a
    household is visible without duplicating people.
@@ -277,32 +315,41 @@ deployed to Vercel as a single function.
 
 ## Functional Requirements
 
-- FR-1: An event MUST be a first-class dated instance. A standalone event MUST NOT require a series;
-  `GET /v1/events` and `GET /v1/events/{eventId}` MUST return both standalone and series-generated
-  events.
+- FR-1: An event MUST be the first-class aggregate and the parent of its recurrence and its dates. It
+  MUST carry its identity (`eventNo`, name, `audienceId`), when and where (its overall range, default
+  start/end times and venue) and how it is tracked (`tracksMembers`), plus one of two shapes: a
+  standalone event with its dates recorded directly, or a recurring event with a recurrence that
+  generates them. A standalone event MUST NOT require a recurrence; a recurring event MUST NOT be
+  modelled as a series above a child event. `GET /v1/events` and `GET /v1/events/{eventId}` MUST return
+  both shapes.
 - FR-2: An event MUST record `venueType` as `auditorium`, `virtual` or `hybrid`; `venueName` MAY be
   supplied and MAY differ from the venue type label.
-- FR-3: An event MUST carry a non-empty `sessions` array with unique dates inside
-  `startDate`/`endDate`; a duplicate or out-of-range session MUST be rejected.
-- FR-4: A series occurrence MUST generate at most one event instance. Generation MUST be idempotent
-  and MUST honour cancelled and extra exceptions.
-- FR-5: Attendance MUST be recorded per event session; `sessionDate` MUST be one of the event's
-  sessions and the database MUST enforce it.
-- FR-6: An attendance import MUST be scoped to **one event session chosen by the operator**
+- FR-3: A standalone event MUST carry one or more occurrences with unique dates; a duplicate date MUST
+  be rejected. An event MUST expose `startDate`/`endDate` as its overall range, with every occurrence
+  inside it: a standalone event's range is the span of its occurrences, and a recurring event's is
+  derived from its recurrence and its occurrences (`endsOn` null for an unbounded recurrence). The range
+  is derived, never a second stored copy.
+- FR-4: Generation MUST run per recurrence and MUST be idempotent on `(eventId, date)`: at most one
+  occurrence per date, a cancelled exception generates none, an extra exception generates one, and a
+  re-run adds nothing. Creating an event with a recurrence MUST generate its first window atomically.
+- FR-5: Attendance MUST be recorded per occurrence; `sessionDate` MUST be the date of one of the
+  event's occurrences (`eventId` + `sessionDate`) and the database MUST enforce it.
+- FR-6: An attendance import MUST be scoped to **one occurrence chosen by the operator**
   (`eventId` + `sessionDate`), not to an event number carried on every row. Each row MUST name a member
-  and MAY repeat the session's date and an optional time; a row whose date does not match the selected
-  session MUST fail the whole batch. The batch MUST record the event and session it targeted.
+  and MAY repeat the occurrence's date and an optional time; a row whose date does not match the selected
+  occurrence MUST fail the whole batch. The batch MUST record the event and occurrence it targeted.
 - FR-6a: An import MUST be all-or-nothing, and its batch record MUST carry a checksum over the targeted
   occurrence and the rows so a capture can be audited and compared with another; the checksum no longer
   refuses a repeat, because a live capture may repeat.
 - FR-6b: An import MUST be a **capture**: the server stamps `asOf` and records `ended` (the operator may set
   it, and a capture outside the live window is the end capture). A live capture MAY repeat and replaces the
-  session's imported rows; an end capture is once per session, and any capture after the close MUST answer
-  `409 session_closed` and create nothing.
+  occurrence's imported rows; an end capture is once per occurrence, and any capture after the close MUST
+  answer `409 session_closed` and create nothing.
 - FR-7: An imported attendance row MUST NOT overwrite a manual row; deleting an imported row MUST
   write a suppression so a later import cannot resurrect it.
 - FR-8: `GET /v1/members` MUST support a list-level attendance aggregate
-  (`include=attendance&seriesId=`) so a page of members is one request, not one request per row.
+  (`include=attendance&seriesId=`) so a page of members is one request, not one request per row. The
+  parameter names the parent event; `seriesId` is the legacy name of that id during the transition.
 - FR-8a: `GET /v1/members` MUST accept `unassigned=true`, returning only active members with no active
   shepherding assignment — the same predicate the church report counts as `unassignedMembers` — and MUST
   combine it with `q` and cursor pagination. The server derives the filter; the client MUST NOT filter a
@@ -310,14 +357,22 @@ deployed to Vercel as a single function.
   `unassigned=true` combined with `status=archived` is also a `422` (the filter already implies active).
 - FR-9: An offering MUST carry versioned terms of reference; published terms MUST be immutable and an
   edit MUST create a new version.
-- FR-10: Two or more offerings MAY attach to one event; detaching MUST end the attachment
-  (`detachedOn`), never delete it.
-- FR-11: An offering MAY be skipped or opted in on a specific event or series date; `availableUntil`
-  MUST be the event end or an explicit later date.
+- FR-10: Two or more offerings MAY be attached to one event, one **session offering** per occurrence;
+  ending an attachment MUST keep the row and its history, never delete it. The session offering is the
+  attachment unit (its own terms version, availability and active flag), specified in
+  `member-registrations-session-offerings.md`.
+- FR-11: An offering MAY be skipped, opted in or adjusted on one occurrence without touching the
+  others; a session offering's effective expiry MUST be its own `availableUntil`, else the terms date,
+  else the occurrence's date.
 - FR-12: A contribution MUST store an amount in integer minor units and MUST be idempotent on a
   caller-supplied key.
-- FR-13: A visitor MUST be able to give with name and phone, receive a receipt or reference, and leave
-  no member record; the phone MUST be stored hashed.
+- FR-13: A first-time visitor MUST be able to give with name and phone, receive a receipt or reference,
+  and leave no member record; the phone MUST be stored hashed. The giving surfaces MUST distinguish the
+  three person kinds (`member-registrations-event-audience.md`): a **first-time visitor** (short form
+  **first timer**: name plus hashed phone, no record), a **registered visitor** (a member record with
+  `visitor` status, giving as themselves) and a **full member** (`active`). An administrator MUST be able
+  to register a first-time visitor as a registered visitor, matched by phone, and later promote the
+  registered visitor to `active`, with the giving and attendance history following the person id.
 - FR-14: A pledge MUST carry an expected date and exactly one follow-up officer, resolved from the
   member's active shepherd or from the active presbyter the administrator supplies with a reason,
   otherwise rejected with `422 officer_required`.
@@ -359,11 +414,37 @@ deployed to Vercel as a single function.
 - FR-31a: The `q` parameter of `GET /v1/members` MUST match only member number and name parts (first,
   last, other names, alias, maiden name), case-insensitively; it MUST NOT match owned or linked
   contact values. Contact-value lookup is the separate `contact` filter.
+- FR-32: An event's applicability MUST be one saved **audience** referenced by `audienceId`, whose rule
+  is one `allOf`/`anyOf`/`noneOf` over a closed set of member attributes (ministry membership,
+  presbyter, age band, gender, membership status). The roster (`expected`), member-facing visibility,
+  the USSD Activities and offering lists and the attendance summary MUST all evaluate that one rule, and
+  the server MUST be its only evaluator. `GET`/`POST /v1/audiences`, `GET`/`PUT /v1/audiences/{id}` own
+  the reference data; system audiences are seeded and read-only; there is no delete. The rule, the seeds
+  and the evaluation are specified in `member-registrations-event-audience.md`.
+- FR-33: Age MUST be evaluated at the occurrence date. Ministry membership, presbyter status and
+  membership status MUST read the current register, with no history: a change today changes what past
+  dates report, and that limit MUST be documented on the surfaces that show a roster.
+- FR-34: The member read and list MUST carry `membershipStatus` (`visitor | active | archived`), the
+  member create MUST accept `visitor` or `active` (default `active`), and
+  `POST /v1/members/{memberNo}/promote` MUST move a visitor to `active` with an append-only
+  `member_status_events` row. A non-visitor promotion MUST be `409 not_a_visitor`.
+- FR-35: `POST /v1/visitors` MUST register a first-time visitor as a registered visitor: normalise and
+  hash the phone, create the member with `visitor` status and an owned phone contact, and write an
+  append-only `first_time_visitor_identities` link so the giving history follows the person id without
+  rewriting any contribution row. A linked phone MUST be `409 visitor_already_registered`. Neither
+  registration nor promotion may create a second record for the person.
+- FR-36: An event MUST carry `tracksMembers` (boolean, default true) but no separate ministry or
+  presbyter flag: applicability is `audienceId` (FR-32), and the retired `ministry`/`presbyterOnly`
+  columns are read-only legacy projections during the transition and are refused on write. When
+  `tracksMembers` is false (headcount-only), per-member attendance writes, attendance imports, USSD
+  clock-ins and one-time attendance codes MUST be rejected with `422 headcount_only` (a closed event or
+  occurrence still answers its own `409`/`422` first), while headcounts remain allowed; the audience is
+  kept for visibility and no per-member roster is computed.
 
 ## Non-Functional Requirements
 
-- NFR-1: Backend dates MUST remain UTC calendar dates; `series.timezone` MAY override only the
-  definition of "today" for that series.
+- NFR-1: Backend dates MUST remain UTC calendar dates; an event's `timezone` MAY override only the
+  definition of "today" for that event.
 - NFR-2: All failures MUST use the RFC 9457 `application/problem+json` shape with a stable `code`.
 - NFR-3: Migrations MUST run identically on Neon Postgres and PGlite, and the repository suite MUST
   pass on both.
@@ -379,29 +460,36 @@ deployed to Vercel as a single function.
 
 ### Member
 
-| Field                             | Notes                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                               |
-| `firstName`, `lastName`           | Required.                                                                                              |
-| `otherNames`                      | Single free-text field.                                                                                |
-| `maidenName`, `alias`             | Optional free text.                                                                                    |
-| `dob`                             | Date, nullable.                                                                                        |
-| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                        |
-| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.                |
-| `ageMonths` (derived)             | Completed months at today (UTC), same null rule; lets a picker say `8m` rather than `0y`.              |
-| `placeOfResidence`, `addressLine` | Free text.                                                                                             |
-| `joinedOn`                        | Date; defaults to the registration date when omitted.                                                  |
-| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                         |
-| `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior.       |
-| `title`                           | Presbyter title and its optional `titledOn`; codes from `/v1/presbyter-titles`; see the officers spec. |
-| `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.                 |
-| `confirmedAt`                     | Timestamp, nullable; the officer confirmation, audited; read-only.                                     |
-| `verifiedContacts`                | The proven contacts: `{ id, channel, masked, verifiedAt }[]`; read-only.                               |
-| `archivedAt`                      | Set by archive, cleared by restore.                                                                    |
-| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                         |
+| Field                             | Notes                                                                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `memberNo`                        | Immutable, case-insensitively unique, never reused (tombstone survives).                                                    |
+| `firstName`, `lastName`           | Required.                                                                                                                   |
+| `otherNames`                      | Single free-text field.                                                                                                     |
+| `maidenName`, `alias`             | Optional free text.                                                                                                         |
+| `dob`                             | Date, nullable.                                                                                                             |
+| `gender`                          | `male` \| `female` \| `other` \| `undisclosed`.                                                                             |
+| `membershipStatus`                | `visitor` \| `active` \| `archived` (derived from `archivedAt`); default `active`; a visitor is a promotable member record. |
+| `age` (derived)                   | Completed years at today (UTC); null when `dob` is null or in the future. Never stored.                                     |
+| `ageMonths` (derived)             | Completed months at today (UTC), same null rule; lets a picker say `8m` rather than `0y`.                                   |
+| `placeOfResidence`, `addressLine` | Free text.                                                                                                                  |
+| `joinedOn`                        | Date; defaults to the registration date when omitted.                                                                       |
+| `isPresbyter`                     | Boolean, default `false`; officer eligibility for shepherding.                                                              |
+| `presbyterRank`                   | Positive integer (≥ 1), nullable; 1 = most senior. Any non-null rank makes the presbyter senior.                            |
+| `title`                           | Presbyter title and its optional `titledOn`; codes from `/v1/presbyter-titles`; see the officers spec.                      |
+| `membershipCardNo`                | Free text, nullable; 1–32 characters, trimmed, unique case-insensitively when present.                                      |
+| `confirmedAt`                     | Timestamp, nullable; the officer confirmation, audited; read-only.                                                          |
+| `verifiedContacts`                | The proven contacts: `{ id, channel, masked, verifiedAt }[]`; read-only.                                                    |
+| `archivedAt`                      | Set by archive, cleared by restore.                                                                                         |
+| `purgedAt`                        | Tombstone marker; PII is nulled and the number stays reserved.                                                              |
 
 Invariants: `memberNo` never changes; a purged member is read-only and invisible; an archived member
 is invisible to default reads but readable with `includeArchived=true`.
+
+`membershipStatus` is the person kind (`member-registrations-event-audience.md`): `visitor` is a real
+member record that an administrator promotes to `active`, `archived` is derived from `archivedAt` and is
+not a create or update value, and `purged` is the erasure tombstone, not a status. The create accepts
+`visitor` or `active` (default `active`); promotion is `POST /v1/members/{memberNo}/promote`. The
+members list's `status` filter accepts `visitor`, and the default list stays `active`.
 
 `age` is derived, never stored: completed years at today (UTC), with a 29 February birthday reached on
 1 March in a non-leap year. Every member DTO reports the member's **current** age, never the age at a
@@ -553,112 +641,179 @@ status distribution (`yes`, `no`, `unknown`, never reported).
 **Purge** deletes the member's assignments and calls in both roles. This is the one exception to the
 append-only rule: purge is a legal PII erasure, not a history-management operation.
 
-### EventSeries
+### Event (parent)
 
-`{ id, name, ministryId?, presbyterOnly, timezone, description?, archivedAt? }`
+`{ id, eventNo, name, audienceId, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: active | archived }`
 
+An **event is the parent** of its recurrence and its dates. It owns its identity, when and where it
+happens, how it is tracked, and either a recurrence that generates its dates or the dates recorded on
+it directly. There is no series above it: a **standalone** event records its occurrences by hand and
+has no recurrence; a **recurring** event owns one recurrence and the occurrences it generates.
+
+- `eventNo` is the event's identity: unique, never reused, and the value a person, a report or an export
+  names. The wire addresses the event by `eventId`. An occurrence has no number of its own. The
+  per-instance `eventNo` of the V2 model is kept as a read-only `legacyEventNo` on the occurrence during
+  the transition; no client writes it.
+- `audienceId` is the event's **applicability**: one saved audience (a named group with an
+  `allOf`/`anyOf`/`noneOf` rule over ministry, presbyter, age band, gender and membership status). It
+  decides the roster (`expected`), member-facing visibility, the USSD Activities and offering lists and
+  the attendance summary, all through one predicate. It is required on create and defaults to the seeded
+  `Everyone` audience when omitted. The audience is specified in
+  `member-registrations-event-audience.md`.
+- `ministry` and `presbyterOnly` are **read-only legacy projections** during the transition: the
+  migration maps each event's old pair onto a seeded or combination audience and writes the columns from
+  that audience. They are no longer accepted on create or update, and a client that sends one is `422
+validation_error` with the field named. A recurring event's name and audience are unique among
+  non-archived recurring events (`(lower(name), audienceId)`); a standalone event is identified by
+  `eventNo` alone, so its name is not unique.
 - `description` carries free text such as the service time.
-- `timezone` is an optional IANA override used only to decide what "today" means for that series. It
+- `timezone` is an optional IANA override used only to decide what "today" means for that event. It
   defaults to `UTC`; every other backend default and comparison uses UTC calendar dates.
-- Unique on `(lower(name), ministryId)` among non-archived series.
-- Schedules are **versioned**: `series_schedule(effectiveFrom, rrule, endsOn?)`. Editing a schedule
-  adds a version; history is never rewritten.
-- `rrule` is the RRULE body (`FREQ=WEEKLY;BYDAY=SU`); `COUNT` and `UNTIL` are rejected inside the body
-  — the end date is the `endsOn` column.
-- `series_exception(date, kind: cancelled | extra)` records a cancelled service or a one-off extra.
-- Archived, never deleted.
-- `presbyterOnly` (boolean, default false) templates generated instances; a presbyter-only series is
-  hidden from non-presbyters on every member-facing reading surface. Changing the flag affects
-  **future generated occurrences only**; already-generated events keep their own flag and their
-  history, and can be edited individually.
-
-### Event instance
-
-`{ id, eventNo?, name, seriesId?, ministryCode?, presbyterOnly, timezone, startDate, endDate, startTime, endTime?, venueType, venueName?, description?, status, source, sessions }`
-
-- An **event instance** is one dated event. It is generated from a series occurrence (`source = series`,
-  `seriesId` set) or created directly (`source = manual`, `seriesId` null). The Strategic Conference is
-  a standalone three-day event with no series.
-- `eventNo` is unique and is never reused; a series-minted instance may have none until ticket 11 assigns one.
 - `venueType` is required and is `auditorium | virtual | hybrid`; `venueName` is optional free text such
-  as "Main Auditorium" or "Auditorium + Zoom".
-- `sessions` is a JSONB array of `{ date, startTime, endTime, status, venueType? }`. The array is
-  non-empty, its dates are unique, and every date falls inside `startDate`/`endDate`. A three-day
-  conference has three sessions on one row; there is no child table.
-- `status` is `draft | scheduled | held | cancelled | archived`. Transitions use UTC. A cancelled or
-  archived event is read-only.
-- A generated event inherits the series name, ministry, timezone, `presbyterOnly` and default venue; an explicit
-  override is allowed.
-- Generation runs over a `from`/`to` window for every non-archived series. A generated event is
-  single-session (its occurrence date), `source = series`, `startTime '00:00'`, `venueType
-'auditorium'`, and gets a unique `eventNo` of the form `EVT-<year>-<NNN>` from a per-year counter.
-  Re-running adds nothing and never overwrites an existing event; it fills a missing `eventNo` so an
-  attendance import can target a series-backed instance created by the series path.
-- `event_instances` is the evolved `event_occurrences` table: the primary key moves from
-  `(series_id, occurs_on)` to `id`, and `event_no` remains unique.
-- `presbyterOnly` (boolean, default false) is inherited by a series-generated instance from its series
-  template and set directly on a manual event. Presbyter-only visibility is a **member-facing** rule:
-  the USSD member session and the member-scoped routes neither show nor open the event for a
-  non-presbyter, and the roster (register-derived `expected`) for a presbyter-only session is the
-  active presbyters. An officer's bearer read is the whole-register back office: it reads a
-  presbyter-only event, its attendance report and an attendance write like any other event, because
-  that surface carries no member identity (V2 has no per-officer authorization).
+  as "Main Auditorium" or "Auditorium + Zoom". An occurrence inherits the venue and may override its
+  type.
+- `startDate` and `endDate` are the event's **overall range** and every occurrence date falls inside it.
+  They are derived, never a second stored copy: a standalone event's range is the span of its
+  occurrences; a recurring event's `startDate` is the earlier of its first occurrence and its
+  recurrence's first `effectiveFrom`, and its `endDate` is the later of its last occurrence and the
+  recurrence's `endsOn`, or null when the recurrence is unbounded.
+- `startTime` and `endTime` are the event's default times; an occurrence inherits them or overrides its
+  own.
+- `tracksMembers` (boolean, default true): false is headcount-only, so per-member attendance, attendance
+  imports, codes and clock-ins are refused with `422 headcount_only` while headcounts still record. The
+  audience is kept for visibility; there is no per-member roster.
+- `status` is `active | archived`. Transitions use UTC. An archived event is read-only and its history
+  stays readable; it is never deleted. The list's held/upcoming/cancelled pill is **derived** from the
+  parent and its occurrences, never stored on the parent.
+- The parent is the scope for attendance, imports, offerings, contributions and pledges: `eventId` is
+  this parent, and `sessionDate` names its occurrence. An offering attaches to a session, not to the
+  parent: see `member-registrations-session-offerings.md`.
+
+### Recurrence
+
+`{ schedules: Array<{ effectiveFrom, rrule, endsOn? }>, exceptions: Array<{ date, kind: cancelled | extra, note? }> }`
+
+A recurring event's optional recurrence is the schedule that generates its occurrences. A standalone
+event has none. It belongs to the event and is read and written under it.
+
+- Schedules are **versioned**: `effectiveFrom`, `rrule`, `endsOn?`. Editing a schedule adds a version;
+  history is never rewritten.
+- `rrule` is the RRULE body (`FREQ=WEEKLY;BYDAY=SU`); `COUNT` and `UNTIL` are rejected inside the body
+  — the end date is `endsOn`.
+- An **exception** adjusts the rule on one date: `cancelled` generates no occurrence for that date,
+  `extra` generates one where the schedule would not. An exception carries an optional `note`; a
+  `cancelled` exception MUST carry a non-empty note, and an exception MAY be removed.
+- Generation expands the schedule version in force on each date of the window, removes cancelled
+  exceptions and adds extras. A schedule change affects future generation only; occurrences already
+  generated keep their dates and their history.
+
+### Occurrence
+
+`{ id, date, startTime, endTime, status: scheduled | held | cancelled, note?, venueType?, capture, present, expected, importedRows, source }`
+
+An **occurrence is the event's date**: one child row for each date the event happens, generated from the
+recurrence or recorded by hand. The parent owns the name, audience, venue, times and `tracksMembers`; an
+occurrence inherits them and carries only its date, its times, its dated status, an optional venue
+override and an optional note.
+
+- `date` is a UTC calendar date and is unique within the event. An occurrence has no `eventNo`; it is
+  addressed as `(eventId, date)`, and its `id` is the row key, never a second number.
+- `startTime` and `endTime` default to the parent's; a blank time inherits.
+- `status` is `scheduled | held | cancelled`. The stored row records cancellation; `held` and upcoming
+  are derived from the date against the event timezone and the shared capture close, never written by a
+  client. A cancelled occurrence carries a non-empty `note`; a legacy cancellation without one reads
+  "No reason recorded". A cancelled occurrence is read-only.
+- `venueType` optionally overrides the parent's venue; `note` is the cancellation reason.
+- `capture`, `present`, `expected`, `importedRows` and `source` are the occurrence's attendance summary,
+  defined in **Occurrences and attendance**.
 
 ### Occurrences and attendance
 
-An **occurrence** is still a date on which a series actually met:
+The **occurrence is the event's date**. A recurring event's dates are generated from its recurrence in
+force on each date within the window; a standalone event's dates are recorded by hand:
 
 1. Expand the schedule version in force on each date within the window.
 2. Remove `cancelled` exceptions, add `extra` exceptions.
 
-A **series occurrence generates at most one event instance**, idempotently on `(seriesId, date)`. A
-cancelled occurrence suppresses generation; an extra exception creates an event.
+Generation is **per recurrence and idempotent on `(eventId, date)`**: a second run adds nothing and never
+rewrites an existing occurrence, a cancelled exception generates none and an extra generates one. There
+is no series above the event.
 
-**Attendance row**: `{ id, memberId, eventInstanceId, sessionDate, sessionTime?, source: import | manual }`,
-unique on `(eventInstanceId, sessionDate, memberId)`.
+**Occurrence and attendance wording.** The **occurrence** is the word for a date on the wire (the
+`occurrences` array and the `EventOccurrence` type). The attendance, headcount, import and offering-count
+contracts keep `sessionDate` as the field that names it, and `eventId` is always the **parent**;
+`occurrenceId` is the attendance row's key and is not required in a request.
 
-- `sessionDate` MUST be one of the event's sessions. A database trigger enforces this, so a direct
-  write cannot bypass the API.
+**Attendance row**: `{ id, memberId, occurrenceId, sessionTime?, source: import | manual }`, unique on
+`(occurrenceId, memberId)`. The wire writes and reads it as `eventId` + `sessionDate`, which resolve the
+occurrence.
+
+- `sessionDate` MUST name one of the event's occurrences; the API resolves it to `occurrenceId`. The
+  database enforces the occurrence's integrity: a cancelled occurrence takes no rows, and an occurrence
+  date change is refused while rows reference it (EC-7).
 - `sessionTime` is optional and recorded **only when the source carried a time** — an import stores the
-  clock time the register supplied. The event session's own `startTime` remains the schedule and MUST
+  clock time the register supplied. The occurrence's own `startTime` remains the schedule and MUST
   NOT be rewritten by an import.
 - A `manual` row shadows an `import` row for the same key; a later import MUST NOT overwrite it.
 - Deleting a `manual` row deletes it. Deleting an `import` row writes a **suppression** keyed on
-  `(memberId, eventInstanceId, sessionDate)`.
-- Attendance may only be recorded for a session that was actually held. A write against a cancelled or
-  archived event is rejected, and a cancelled session is read-only; reads remain available.
+  `(memberId, occurrenceId)`.
+- Attendance may only be recorded for an occurrence that was actually held. A write against a cancelled
+  occurrence or an archived event is rejected, and a cancelled occurrence is read-only; reads remain
+  available.
 - The existing per-member attendance endpoints remain for corrections; the event attendance report is
   the V2 read path.
 
-**Per-session attendance report.** `GET /v1/events/{eventId}/attendance?date=` returns
-`{ eventId, sessionDate, present, expected, importedRows, rows }`.
+**Per-occurrence attendance report.** `GET /v1/events/{eventId}/attendance?date=` returns
+`{ eventId, sessionDate, present, expected, importedRows, rows }`; the occurrence is identified by
+`eventId` + `sessionDate`.
 
-- `present` is the number of attendance rows for that session; `rows` lists exactly those members with
-  `status: 'present'` and their `import | manual` source. The data model has no absence row, so the
-  report never invents an absent member; `expected - present` is the only absence signal.
+- `present` is the number of attendance rows for that occurrence; `rows` lists exactly those members
+  with `status: 'present'` and their `import | manual` source. A row names a **member** or a
+  **registered visitor** (a member record with `visitor` status); a **first-time visitor** is never a
+  row, because there is no member number to name — they are counted only in the headcount's `visitors`
+  lane. The data model has no absence row, so the report never invents an absent member;
+  `expected - present` is the only absence signal, and because the audience is the expected rather than a
+  gate, `present` may exceed `expected` (a row for an existing member the audience does not match is
+  accepted).
 - Each `rows` entry carries the member's `memberNo`, `name`, `gender` and `age` (current, not the age
-  at the session) alongside `id`, the **`attendance.id` primary key** (not the member id), so the UI can
-  render the identity label and call `DELETE /v1/events/{eventId}/attendance/{attendanceId}` without a
-  second lookup. The report and the delete share the same id; the events route table's `{id}` is the
-  event id.
-- `expected` is the register at the session date: members with `joined_on <= sessionDate`, not archived
-  and not purged. Each session is counted on its own date, so a multi-day event may report a different
-  denominator per day.
+  at the occurrence) alongside `id`, the **`attendance.id` primary key** (not the member id), so the UI
+  can render the identity label and call `DELETE /v1/events/{eventId}/attendance/{attendanceId}`
+  without a second lookup. The report and the delete share the same id; the events route table's `{id}`
+  is the event id. The **roster** evaluates a member's age at the occurrence date (the audience rule);
+  a row's `age` is the member's **current** age, as every member DTO reports it, and the two are
+  deliberately different numbers.
+- `expected` is the roster at the occurrence date: the members the event's **audience** matches at that
+  date (the audience rule plus `joined_on <= sessionDate`, not archived and not purged). Each occurrence
+  is counted on its own date, so a recurring event and a multi-day event may report a different
+  denominator per day. The rule and its current-state limit are specified in
+  `member-registrations-event-audience.md`.
 - A manual `POST` over an imported row for the same key converts it to `source: manual`; a second
   manual post is `409`. `DELETE` removes a manual row and writes a suppression for an imported row.
-- The report's three meanings stay separate: `present` (per-member attendance rows), `expected` (the
-  register-derived **Roster**), and the **headcount** (the latest non-superseded observation from
-  `/headcounts`). The report never merges them; `expected` keeps its wire name and is labelled
-  **Roster** on the reading surfaces. For a presbyter-only session the roster counts only active
-  presbyters. A headcount is never derived from `present` or `expected`, and never feeds either.
-- The operator's **headcount** is actual counted attendance at a moment, recorded by mode (`adults`,
-  `children` or `mixed`); see **Headcounts** in the USSD attendance subsection. `event_session_headcounts` is
-  append-only and a correction supersedes the earlier observation.
+- The report's three meanings stay separate: `present` (named attendance rows), `expected` (the
+  register-derived **Roster**), and the **headcount** (the counted gathering). The report never merges
+  them; `expected` keeps its wire name and is labelled **Roster** on the reading surfaces. The roster is
+  the event's audience evaluated at the occurrence date, so a `Presbyters` audience counts active
+  presbyters and any other group counts what its rule says. A headcount is never derived from `present`
+  or `expected`, and never feeds either.
+- The operator's **headcount** is actual counted attendance at a moment, recorded per mode (the
+  headcount specification's lanes, `member-registrations-headcount.md`); see **Headcounts** in the USSD
+  attendance subsection. `event_session_headcounts` is append-only and a correction supersedes the
+  earlier observation.
+- **The headcount covers the whole gathering, including first-time visitors.** A first-time visitor has
+  no member record and therefore no attendance row; they are counted in **Visitor Mode** — the
+  `visitors` headcount mode, whose buckets are visitor men, visitor women and visitor children
+  (`visitor-male`, `visitor-female`, `visitor-children`). A **registered visitor** is counted in Visitor
+  Mode too — not in the demographic lane — for as long as they are not a full member, and may also be an
+  attendance row because they are a member record. A member who is counted in a headcount may likewise
+  hold an attendance row. **The headcount is independent of the named attendance and never its sum**: the
+  two are reconciled (a counted figure against `present` and `expected`), never added, and a difference in
+  either direction is explained rather than summed into a fourth number. The full rule is
+  `member-registrations-event-audience.md` A-5a.
 
-The member-and-series count is unchanged; each held session counts once:
+The member-and-event count is per parent and each held occurrence counts once:
 
 ```
-windowStart = max(first schedule effectiveFrom, member.joinedOn ?? registration date)
+windowStart = max(first schedule effectiveFrom or first occurrence, member.joinedOn ?? registration date)
 windowEnd   = min(endsOn ?? today, today)
 expected    = |occurrences in [windowStart, windowEnd]|
 attended    = |occurrences in that window with at least one attendance row|
@@ -731,7 +886,7 @@ and are `no-store` on read.
   with `sessionDate` supplied only as the query parameter; `fromMemberNo` is the senior presbyter (the
   USSD session's member, or the portal's chosen senior), `toMemberNo` the delegate. Both must be active
   presbyters, the grantor senior, and the delegation is
-  unique per `(eventInstanceId, sessionDate)` while active. The delegate
+  unique per `(eventId, sessionDate)` while active. The delegate
   inherits the senior's broad clocking authority for that session only and may clock any member. The
   delegation ends with the session; `ended_at` stays null in V3 and "active" is derived from the session
   date, with no explicit end route. Errors: `not_shepherd`, `not_senior_presbyter`, `delegate_required`,
@@ -739,9 +894,14 @@ and are `no-store` on read.
   `404` for a non-presbyter grantor, while the officer bearer route — where the caller supplied
   `fromMemberNo` — answers `422 not_presbyter`.
 - **Headcounts.** A headcount is an actual count taken at a moment, never an "expected" figure. A
-  presbyter or admin records it per session, append-only, in `event_session_headcounts`; each
-  observation carries a `mode` (`adults` | `children` | `mixed`), six buckets, a `total`, an `asOf`
-  timestamp, `ended` (default false) and the recorder. **A headcount is a capture too**: the computed
+  presbyter or admin records it per session, append-only, in `event_session_headcounts`; the **lane
+  model** — the modes, their buckets, one chain per mode, the read map and the correction rules — is
+  owned by `member-registrations-headcount.md` and is not restated here. The modes are `adults`,
+  `children`, `visitors` (**Visitor Mode**: visitor men, visitor women, visitor children) and
+  `presbyters`; `mixed` is readable legacy only and is never a new observation. Each observation carries
+  its `mode`, its `lines` — one bucket code from that mode's reference data plus a count, never a fixed
+  set of named fields — a derived `total`, an `asOf` timestamp, `ended` (default false) and the
+  recorder. **A headcount is a capture too**: the computed
   live window and the End of session action follow the import capture, and the session close is shared —
   once any capture for the session is ended, a headcount write answers `409 session_closed`. A headcount's
   `asOf` stays inside the session's calendar day, and a headcount after that day is refused with `422
@@ -755,36 +915,41 @@ validation_error`. A headcount is bounded by the calendar day, not the live wind
   carries whatever capture is current, so a recorded headcount is not a precondition.
   The register-derived `expected` is a separate thing, labelled **Roster**
   on the reading surfaces, and a headcount never derives from or feeds it.
-  `GET /v1/events/{eventId}/headcounts?sessionDate` returns
-  `{ sessionDate, current: Headcount | null, observations: Headcount[] }`, `observations` newest
-  first, `no-store`; `current` is the newest non-superseded observation (by `asOf`, then
-  `recordedAt`), and `observations` keeps the superseded history. `GET
-/v1/events/{eventId}/headcounts/{headcountId}`, the `Location` target of a create or correction, returns
-  one observation with its supersession links, `no-store`; an unknown id or a row belonging to another
-  event is `404 not_found`. A superseded observation is **not
-  invalid**: it remains the valid record of the count at its `asOf`, and its `supersededBy` names the
-  correcting row. `Headcount` is
-  `{ id, eventId, sessionDate, asOf, ended, mode, adultMale, adultFemale, adultUnspecified, childMale,
-childFemale, childUnspecified, total, recordedBy, recordedAt, supersedesId, supersededBy }`. `POST` body
-  `{ sessionDate, asOf?, mode, ended?, adultMale?, adultFemale?, adultUnspecified?, childMale?,
-childFemale?, childUnspecified?, supersedesId? }` returns `201`. `asOf` is required on the row, defaults to now and
-  must fall within the session's calendar day in the event timezone. Mode validation: `adults` splits
-  adult male/female, sets `adultUnspecified` to 0 and counts children as one `childUnspecified` (both
-  child gender buckets 0); `children` splits child male/female, sets `childUnspecified` to 0 and counts
-  adults as one `adultUnspecified` (both adult gender buckets 0); `mixed` splits both, with both
-  unspecified buckets 0; `total` is the sum of the six buckets.
+  **Visitor Mode** is the `visitors` mode: it counts **visitor men**, **visitor women** and **visitor
+  children** (`visitor-male`, `visitor-female`, `visitor-children`), and it is where a first-time visitor
+  is counted; a registered visitor is counted there too while not a full member, and may also hold an
+  attendance row. A headcount is never the sum of the attendance rows (A-5a in the audience spec).
+  `GET /v1/events/{eventId}/headcounts?sessionDate&mode` returns
+  `{ sessionDate, current, observations }` with `observations` newest first and `no-store`. `current` is
+  a map keyed by mode — the four live modes always, `mixed` only when the session holds legacy rows — and
+  each entry is that lane's newest non-superseded observation (by `asOf`, then `recordedAt`) or null;
+  `?mode=` narrows `current` and `observations` to that one lane. `observations` keeps the superseded
+  history. `GET /v1/events/{eventId}/headcounts/{headcountId}`, the `Location` target of a create or
+  correction, returns one observation with its supersession links, `no-store`; an unknown id or a row
+  belonging to another event is `404 not_found`. A superseded observation is **not** invalid: it remains
+  the valid record of the count at its `asOf`, and its `supersededBy` names the correcting row.
+  `Headcount` is `{ id, eventId, sessionDate, asOf, mode, total, ended, recordedBy, recordedAt,
+supersedesId, supersededBy, lines: [{ code, label, count }] }`, where each line's `label` is joined from
+  the mode's bucket reference row. `POST` body `{ sessionDate, mode, lines: [{ code, count }], asOf?,
+ended?, supersedesId? }` returns `201`. `lines` defaults to `[]` (an all-zero observation is a real count
+  of zero) and is capped at 16 entries; `total` is derived from the lines and is never accepted from the
+  client. `asOf` is required on the row, defaults to now and must fall within the session's calendar day
+  in the event timezone. Validation is against the reference data, not a fixed field set: a line's `code`
+  MUST be one of the mode's declared buckets, a code MUST NOT repeat in one observation, each count is
+  0–10,000 and the derived total at most 30,000; an unknown code or a bucket belonging to another mode
+  is `422 validation_error`.
   **Correction is allowed, never deletion:** a correction is a new observation whose `supersedesId`
   names the row it corrects, keeps that row's `asOf` (the moment counted), and records a fresh
   `recordedBy`/`recordedAt`; the corrected row stays in history marked superseded. `supersedesId` is
   unique when present, so one row can be corrected once and corrections form a single chain. A correction
-  **may change the mode** (a wrong service mode is itself an erroneous entry): the new row validates
-  against its own mode and still keeps the target's `asOf`. `supersededBy` is derived as the unique row
-  whose `supersedesId` points at this observation, never stored twice. Errors:
-  malformed counts or
-  a mode-violating bucket, an out-of-day `asOf`, or a `supersedesId` that is unknown, already
-  superseded or from another session — `422 validation_error`; unknown event or session — `404
-not_found`. Each bucket is 0–10,000, the total is at most 30,000, and an all-zero observation is
-  allowed. Headcounts are operator-only: no member DTO, profile or summary returns them. Activities reads the current headcount for a headcount-only event through the same
+  **may change the mode** (a wrong service mode is itself an erroneous entry) only when the destination
+  lane has no current observation; otherwise it is `422 validation_error` naming that lane, and an
+  accepted move still keeps the target's `asOf` and leaves the superseded observation's lane reading
+  not recorded. `supersededBy` is derived as the unique row whose `supersedesId` points at this
+  observation, never stored twice. Errors: a bad or foreign bucket code, a duplicate code, a count out of
+  range, a total above 30,000, an out-of-day `asOf`, or a `supersedesId` that is unknown, already
+  superseded, from another session or pointing at an occupied destination lane — `422 validation_error`;
+  unknown event or session — `404 not_found`. Headcounts are operator-only: no member DTO, profile or summary returns them. Activities reads the current headcount for a headcount-only event through the same
   `GET`; at most three events are shown, so at most three reads. These routes and the table are the 2026-11-05 headcount correction, delivered by 24d; they sit beside the 24b attendance seam and replace its `/expected` route.
 - **Attendance summary.** Returns `{ from, to, attended, expected, events: [{ eventId, name,
 sessionDate }] }`: `events` lists the member's attended rows in the window newest first, never
@@ -818,13 +983,36 @@ the whole batch. A blank optional cell leaves the stored value unchanged. `phone
 contacts: an identical contact is skipped, and a value already held by another member is an error.
 Ministries, relationships and subscriptions are not imported.
 
-An **attendance import** is scoped to one session. The request names the occurrence —
+An **attendance import** is scoped to one occurrence. The request names the occurrence —
 `{ eventId, sessionDate, rows }` — and each row is `(memberNo, datetime?)`. `datetime` is optional and,
 when present, MUST fall on `sessionDate`; a time inside it is stored as the row's `sessionTime`, and its
 absence leaves `sessionTime` null. A row on another date fails the whole batch and names the row and the
-session. **The event MUST belong to a series; a standalone event answers `422 series_required` and the
-batch writes nothing.** A standalone event's existing attendance history stays visible and read-only,
-and manual and USSD per-member attendance are unchanged by this rule.
+date.
+
+**Standalone events (settled 2026-11-22).** An occurrence of a **standalone** event imports exactly like
+a recurring occurrence: the old restriction is lifted, `422 series_required` is retired from this
+contract and from every acceptance criterion, and the event detail's occurrence row offers the Import
+action on both shapes. Three rules hold for either shape:
+
+- **The audience is the expected, not a gate.** A row may name an existing member the event's audience
+  does not match; the row is accepted, and the `present`/`expected` ratio may therefore exceed 100 %. A
+  row still fails for its own reasons — an unknown, archived or purged member, or a duplicate `memberNo`
+  in the file — and the batch-level refusals below are unchanged.
+- **Who can be a row.** An attendance row names a **member** or a **registered visitor** (a member record
+  with `visitor` status). A **first-time visitor** cannot be an attendance row: there is no member record
+  to name, and that person is counted only in the headcount's `visitors` lane
+  (`member-registrations-event-audience.md` A-5a).
+- **The expected is the audience.** `expected` is the event's audience evaluated at the occurrence date
+  (`Everyone` = active members), never the file's row count. The detail is A-5a and the attendance report
+  above.
+
+A `tracksMembers = false` event still refuses the import with `422 headcount_only` before any row is
+read, and the standalone shape gets no exemption. Issuing an attendance code, a per-member clock-in and a
+clocking delegation are the same surfaces on a standalone occurrence; nothing in them depends on a
+recurrence. **This lands with the event-parent downstream/import round, after the occurrence migration**,
+so the route, the detail's Import action and its tests ship together. The tests cover: a successful
+standalone import, an unknown member, a row for an existing member outside the audience, a closed or
+cancelled occurrence, and an `expected` computed from the audience.
 
 Each import is a **capture**: the server stamps `asOf` with the clock and records `ended` (default
 false). The body may set `ended: true` to close the session; a capture that falls outside the live
@@ -860,48 +1048,63 @@ the JSON contract MUST describe the same columns.
   returns the stored name, which may be null.
 - Terms are versioned and immutable after publish. `POST /v1/offerings/{id}/terms` takes a full flat
   terms body, a required `baseVersion` and a required `reason`, and publishes version n+1; a stale base
-  is `409
-terms_version_conflict`. `PUT /v1/offerings/{id}` changes only `{ active }`; there is no delete and
-  archiving is `active: false`.
+  is `409 terms_version_conflict`. `PUT /v1/offerings/{id}` changes only `{ active }`; there is no
+  delete and archiving is `active: false`.
 - Currency is GHS and amounts are integer minor units.
 - `availableUntil` resolves per event as the attachment date (event attachments only, on or after the
   event end), else the terms date, else the event end. Expiry blocks new gifts but MUST NOT block
-  honoring a pending pledge.
-- Two or more offerings MAY attach to one event, or to a series for all its occurrences. Attaching is
-  `POST` on the collection (`/v1/events/{eventId}/offerings`, `/v1/series/{id}/offerings`); detaching is
-  `DELETE` on the item and sets `detachedOn`, keeping the row.
-- Exceptions are append-only rows on the attachment (`skip` on an event session date; `skip` or
-  `opt_in` on a series occurrence or extra date). The newest row per date is effective and there is no
-  exception delete route.
-- The event aggregate returns each attached offering with its resolved name, effective `availableUntil`,
-  `expired`, current `terms`, exceptions and stats. The full phase-1 contract is
-  `member-registrations-events-offerings.md`.
+  honoring a pending pledge. The session-offerings round resolves it per session as the session's own
+  `availableUntil`, else the terms date, else the occurrence's date.
+- In the session-offerings round, two or more offerings MAY be attached to one event, one per occurrence
+  as a **session offering** (`member-registrations-session-offerings.md`): a recurring event declares its
+  set on its recurrence, each generated occurrence receives a session offering, and an operator may skip,
+  opt in or adjust one session. Each session offering pins its terms version and its own
+  `availableUntil`. The event-level `POST /v1/events/{eventId}/offerings` route is replaced by the
+  per-session routes in that round; detaching ends the session offering and keeps the row.
+- Exceptions are no longer a separate table: the session offering's `active` flag is the skip, and its
+  history is the append-only `session_offering_events`.
+- The event aggregate returns each session offering with its resolved name, effective `availableUntil`,
+  `expired`, its pinned `terms`, and its stats. The full contract is
+  `member-registrations-events-offerings.md` (catalogue, terms, contributions, pledges, the landing) and
+  `member-registrations-session-offerings.md` (the attachment).
 
 ### Contribution
 
-- A member contribution carries `memberNo`, `offeringId`, `eventId`, `sessionDate`, amount, currency,
-  channel (`app | ussd | manual`), status, reference, a unique idempotency key and the `termsVersion`
-  it was recorded under.
-- A visitor contribution carries `visitorName` and an HMAC-SHA-256 phone hash (under
+- A member contribution carries `memberNo`, the session offering (`sessionOfferingId` once the
+  session-offerings round lands; until then `offeringId`, `eventId` and `sessionDate` are the target and
+  they keep resolving it), amount, currency, channel (`app | ussd | manual`), status, reference, a
+  unique idempotency key and the `termsVersion` it was recorded under. A registered visitor
+  (`membershipStatus: visitor`) gives as a member, with their own member number.
+- A first-time visitor contribution carries `visitorName` and an HMAC-SHA-256 phone hash (under
   `VISITOR_PHONE_PEPPER`) instead of `memberNo`; it returns a receipt reference and creates no member.
-  The raw phone is never stored, returned or logged.
-- Exactly one of member or visitor is present. Amounts are positive integer minor units; the currency
-  defaults to the offering's current terms currency and must equal it.
+  The raw phone is never stored, returned or logged. An administrator may later register that giver as a
+  registered visitor (`POST /v1/visitors`), and the history follows the person id without rewriting the
+  row (`member-registrations-event-audience.md`).
+- Exactly one of member and first-time visitor is present. Amounts are positive integer minor units; the
+  currency defaults to the offering's current terms currency and must equal it. The gift targets an
+  **active session offering**: an inactive (skipped) one is `422 offering_not_on_session`
+  (`member-registrations-session-offerings.md`).
 - `POST /v1/contributions` is idempotent by `idempotencyKey`: an identical canonical payload returns
-  `200` with the same record and reference, and a different payload under the same key is `409
-idempotency_conflict`. An unknown event or offering is `404`; an inactive offering is `422`.
-- A gift's `sessionDate` must be one of the event's session dates (`422 session_not_in_event`) and on
-  or before the effective expiry; a later date is `422 offering_expired`. A backdated manual gift
-  within the window stays recordable, and honoring a pending pledge after expiry stays allowed.
+  `200` with the same record and reference, and a different payload under the same key is
+  `409 idempotency_conflict`. An unknown event or offering is `404`; an inactive offering is `422`.
+- A gift's `sessionDate` must be the date of one of the event's occurrences
+  (`422 session_not_in_event`) and on or before the effective expiry; a later date is
+  `422 offering_expired`. A backdated manual gift within the window stays recordable, and honoring a
+  pending pledge after expiry stays allowed.
 - The server generates the unique `reference` (`MR-` plus ten uppercase base32 characters). Reads send
   `Cache-Control: no-store`.
-- Member and visitor totals are reported separately, grouped by currency, counting only `paid`
-  contribution rows (not distinct givers), with no names or contact values.
+- Member and first-time visitor totals are reported separately, grouped by currency, counting only `paid`
+  contribution rows (not distinct givers), with no names or contact values. A registered visitor's row
+  counts as a member row, because it carries a member number; only a gift given by a first-time visitor
+  is a first-timer row.
 
 ### Pledge
 
-- A pledge carries `memberNo`, `offeringId`, `eventId`, optional `sessionDate`, amount,
-  currency, `expectedOn`, exactly one follow-up officer, the `termsVersion` and an `idempotencyKey`.
+- A pledge carries `memberNo`, `offeringId`, an optional session (`sessionDate`, resolved to the
+  occurrence), amount, currency, `expectedOn`, exactly one follow-up officer, the `termsVersion` and an
+  `idempotencyKey`. A named session must resolve to an active session offering
+  (`422 offering_not_on_session`); a pledge with no session is offering-only, and its settlement
+  resolves the redemption date's session offering (`member-registrations-session-offerings.md`).
 - The officer is the member's active shepherd, or the active presbyter the administrator supplies; otherwise
   the pledge is rejected (`422 officer_required`). The supplied officer carries no justification requirement —
   `officerReason` is an optional note, not a condition of the write. A pledge always targets an
@@ -945,62 +1148,66 @@ The V2 additions are `GET /v1/events`, `GET /v1/events/{eventId}` and
 
 ### Members
 
-| Method   | Path                                                | Result                                                                                                                     |
-| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/v1/members`                                       | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `guardianEligible`, `forMemberNo`, `limit`, `cursor`) |
-| `POST`   | `/v1/members`                                       | `201` + `Location`; `409` duplicate member number                                                                          |
-| `GET`    | `/v1/members/{memberNo}`                            | Full DTO + `ETag`; `404` unknown/archived unless flagged                                                                   |
-| `PUT`    | `/v1/members/{memberNo}`                            | Update; stale `If-Match` → `409`                                                                                           |
-| `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                                                             |
-| `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                                                        |
-| `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                                                        |
-| `POST`   | `/v1/members/{memberNo}/verification/otp`           | Start a code; `202` destination + expiry; `409 no_own_contact`; `429 too_many_requests`; `503 delivery_unavailable`        |
-| `DELETE` | `/v1/members/{memberNo}/verification`               | Withdraw every contact proof and the confirmation, audited; `204`                                                          |
-| `POST`   | `/v1/members/{memberNo}/confirmation`               | Officer confirmation `{ reason }`; `201` + `confirmedAt`                                                                   |
-| `DELETE` | `/v1/members/{memberNo}/confirmation`               | Withdraw the confirmation, audited; `204`                                                                                  |
-| `POST`   | `/portal/verification/accept`                       | Public; `{ token, code }` -> `200` `{ channel, masked }`; `400` code errors; `429`                                         |
-| `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-series counts + rows                                                                                                   |
-| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                                                  | ticket 24b |
-| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                                                    | ticket 24a |
-| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                                                               | ticket 24b |
-| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                                                     | ticket 24c |
-| `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`, resolved to the event session; `422` when not held or headcount-only                                 |
-| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                                                            |
-| `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                                                      |
-| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`       | Update kind/value/order                                                                                                    |
-| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`       | Remove contact                                                                                                             |
-| `POST`   | `/v1/members/{memberNo}/contacts/link`              | Link another member's contact (dependent sharing)                                                                          |
-| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}`  | Unlink                                                                                                                     |
-| `POST`   | `/v1/members/{memberNo}/subscriptions`              | Create subscription (optional coverage)                                                                                    |
-| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                                                           |
-| `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                                                       |
-| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                                                    |
-| `POST`   | `/v1/subscriptions/{id}/renew`                      | Renew one period from `max(periodEnd, today)`                                                                              |
-| `GET`    | `/v1/subscriptions/{id}/payments`                   | List recorded member-paid periods (`no-store`)                                                                             |
-| `POST`   | `/v1/subscriptions/{id}/payments`                   | Record one member-paid period (idempotent)                                                                                 |
-| `GET`    | `/v1/subscriptions/{id}/claims`                     | List claims (`no-store`)                                                                                                   |
-| `POST`   | `/v1/subscriptions/{id}/claims`                     | Record a claim                                                                                                             |
-| `POST`   | `/v1/subscriptions/{id}/claims/{claimId}/decide`    | Decide a claim (`approved`/`rejected`/`paid`)                                                                              |
-| `GET`    | `/v1/subscription-products`                         | List products; active only unless `?includeInactive=true`                                                                  |
-| `GET`    | `/v1/subscription-products/{code}`                  | Product detail                                                                                                             |
-| `POST`   | `/v1/subscription-products`                         | Create a product; `201` + `Location`                                                                                       |
-| `PUT`    | `/v1/subscription-products/{code}`                  | Set `active` only                                                                                                          |
-| `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                                                                  |
-| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                                                   |
-| `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                                                              |
-| `POST`   | `/v1/members/{memberNo}/relationships`              | `{ relatedMemberNo, type, isDependent }`                                                                                   |
-| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`         | Remove the edge                                                                                                            |
+| Method   | Path                                                | Result                                                                                                                         |
+| -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/v1/members`                                       | Paged summary list (`q`, `contact`, `status`, `include`, `seriesId`, `guardianEligible`, `forMemberNo`, `limit`, `cursor`)     |
+| `POST`   | `/v1/members`                                       | `201` + `Location`; `409` duplicate member number                                                                              |
+| `GET`    | `/v1/members/{memberNo}`                            | Full DTO + `ETag`; `404` unknown/archived unless flagged                                                                       |
+| `PUT`    | `/v1/members/{memberNo}`                            | Update; stale `If-Match` → `409`                                                                                               |
+| `DELETE` | `/v1/members/{memberNo}`                            | Archive; `204`                                                                                                                 |
+| `POST`   | `/v1/members/{memberNo}/restore`                    | Un-archive; `409` when not archived                                                                                            |
+| `POST`   | `/v1/members/{memberNo}/promote`                    | Promote a visitor to `active`, append the status event; `409 not_a_visitor`                                                    |
+| `POST`   | `/v1/visitors`                                      | Register a first-time visitor as a registered visitor, matched by phone; `201` + `Location`; `409 visitor_already_registered`  |
+| `POST`   | `/v1/members/{memberNo}/purge`                      | Hard delete PII; body must repeat the member number                                                                            |
+| `POST`   | `/v1/members/{memberNo}/verification/otp`           | Start a code; `202` destination + expiry; `409 no_own_contact`; `429 too_many_requests`; `503 delivery_unavailable`            |
+| `DELETE` | `/v1/members/{memberNo}/verification`               | Withdraw every contact proof and the confirmation, audited; `204`                                                              |
+| `POST`   | `/v1/members/{memberNo}/confirmation`               | Officer confirmation `{ reason }`; `201` + `confirmedAt`                                                                       |
+| `DELETE` | `/v1/members/{memberNo}/confirmation`               | Withdraw the confirmation, audited; `204`                                                                                      |
+| `POST`   | `/portal/verification/accept`                       | Public; `{ token, code }` -> `200` `{ channel, masked }`; `400` code errors; `429`                                             |
+| `GET`    | `/v1/members/{memberNo}/attendance`                 | Per-event counts + rows (the parent id keeps its `seriesId` wire name during the transition)                                   |
+| `GET`    | `/v1/members/{memberNo}/attendance/summary?from&to` | Windowed attendance totals for the member                                                                                      | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/contributions/summary`      | Week/quarter/year paid totals plus the top three events                                                                        | ticket 24a |
+| `GET`    | `/v1/members/{memberNo}/profile`                    | Demographics, ministries, attendance regularity and shepherd                                                                   | ticket 24b |
+| `GET`    | `/v1/members/{memberNo}/subscriptions`              | Owned and inherited welfare cover with payer, period and claimed total                                                         | ticket 24c |
+| `POST`   | `/v1/members/{memberNo}/attendance`                 | `{ seriesId, date }`; `seriesId` is the parent event id, `date` resolves the occurrence; `422` when not held or headcount-only |
+| `DELETE` | `/v1/members/{memberNo}/attendance/{attendanceId}`  | Remove a row (writes a suppression for imports)                                                                                |
+| `POST`   | `/v1/members/{memberNo}/contacts`                   | Add contact; `409` on duplicate value                                                                                          |
+| `PUT`    | `/v1/members/{memberNo}/contacts/{contactId}`       | Update kind/value/order                                                                                                        |
+| `DELETE` | `/v1/members/{memberNo}/contacts/{contactId}`       | Remove contact                                                                                                                 |
+| `POST`   | `/v1/members/{memberNo}/contacts/link`              | Link another member's contact (dependent sharing)                                                                              |
+| `DELETE` | `/v1/members/{memberNo}/contacts/link/{contactId}`  | Unlink                                                                                                                         |
+| `POST`   | `/v1/members/{memberNo}/subscriptions`              | Create subscription (optional coverage)                                                                                        |
+| `DELETE` | `/v1/members/{memberNo}/subscriptions/{id}`         | End subscription                                                                                                               |
+| `POST`   | `/v1/subscriptions/{id}/coverage`                   | Add a covered member                                                                                                           |
+| `DELETE` | `/v1/subscriptions/{id}/coverage/{memberNo}`        | Remove a covered member                                                                                                        |
+| `POST`   | `/v1/subscriptions/{id}/renew`                      | Renew one period from `max(periodEnd, today)`                                                                                  |
+| `GET`    | `/v1/subscriptions/{id}/payments`                   | List recorded member-paid periods (`no-store`)                                                                                 |
+| `POST`   | `/v1/subscriptions/{id}/payments`                   | Record one member-paid period (idempotent)                                                                                     |
+| `GET`    | `/v1/subscriptions/{id}/claims`                     | List claims (`no-store`)                                                                                                       |
+| `POST`   | `/v1/subscriptions/{id}/claims`                     | Record a claim                                                                                                                 |
+| `POST`   | `/v1/subscriptions/{id}/claims/{claimId}/decide`    | Decide a claim (`approved`/`rejected`/`paid`)                                                                                  |
+| `GET`    | `/v1/subscription-products`                         | List products; active only unless `?includeInactive=true`                                                                      |
+| `GET`    | `/v1/subscription-products/{code}`                  | Product detail                                                                                                                 |
+| `POST`   | `/v1/subscription-products`                         | Create a product; `201` + `Location`                                                                                           |
+| `PUT`    | `/v1/subscription-products/{code}`                  | Set `active` only                                                                                                              |
+| `POST`   | `/v1/members/{memberNo}/ministries`                 | Assign by ministry `code`                                                                                                      |
+| `DELETE` | `/v1/members/{memberNo}/ministries/{code}`          | Unassign                                                                                                                       |
+| `GET`    | `/v1/members/{memberNo}/relationships`              | Spouse, dependents, guardians                                                                                                  |
+| `POST`   | `/v1/members/{memberNo}/relationships`              | `{ relatedMemberNo, type, isDependent }`                                                                                       |
+| `DELETE` | `/v1/members/{memberNo}/relationships/{id}`         | Remove the edge                                                                                                                |
 
 **Member summary.** `GET /v1/members` returns `MemberSummary` rows: identity, `isPresbyter`,
-`archivedAt`, `contactCount` (a count only; contact values are never in the list) and `ministries`.
-The identity carries `gender`, the derived `age` (nullable) and `ageMonths` (nullable; the same
-derivation in completed months); the list never carries `dob`. The detail adds `dob` and reports the
-same `age` and `ageMonths`.
+`membershipStatus`, `archivedAt`, `contactCount` (a count only; contact values are never in the list)
+and `ministries`. The identity carries `gender`, the derived `age` (nullable) and `ageMonths` (nullable;
+the same derivation in completed months); the list never carries `dob`. The detail adds `dob` and
+reports the same `age` and `ageMonths`.
 
-- `status=active|archived` selects the set; the default is `active`, and purged members are never
-  returned. `includeArchived=true` is a deprecated alias for active + archived.
+- `status=active|visitor|archived` selects the set; the default is `active` (a visitor is reached
+  deliberately by `status=visitor` or `status=all`, so it does not silently inflate the roster), and
+  purged members are never returned. `includeArchived=true` is a deprecated alias for active + archived.
 - `include=attendance&seriesId=` adds `attendance: { seriesId, seriesName, attended, expected,
-remaining, status, lastAttendedOn }`, computed for the page in one aggregate (FR-8).
+remaining, status, lastAttendedOn }`, computed for the page in one aggregate (FR-8). `seriesId` and
+  `seriesName` keep their names and now identify the event parent.
 - `include=subscriptions` adds `subscriptions: [{ id, kind, scope, status, role,
 policyholderMemberNo, coveredCount }]`, computed for the page in one query.
 
@@ -1128,102 +1335,166 @@ number is erased on the decision, and a purge erases the member's confirmation r
 
 ### Reference data
 
-| Method       | Path                                | Result                                                        |
-| ------------ | ----------------------------------- | ------------------------------------------------------------- |
-| `GET`/`POST` | `/v1/ministries`                    | List / create (`code`, `name`, …)                             |
-| `GET`/`PUT`  | `/v1/ministries/{code}`             | Read / rename (code immutable)                                |
-| `DELETE`     | `/v1/ministries/{code}`             | Deactivate, or `409` while referenced                         |
-| `GET`        | `/v1/presbyter-titles`              | Active titles: `code`, `label`, `genderRestriction`, `active` |
-| `GET`/`POST` | `/v1/series`                        | List / create                                                 |
-| `GET`/`PUT`  | `/v1/series/{id}`                   | Read / update name, ministry, description, archive            |
-| `POST`       | `/v1/series/{id}/schedule`          | Add a schedule version                                        |
-| `POST`       | `/v1/series/{id}/exceptions`        | Cancel or add a date                                          |
-| `DELETE`     | `/v1/series/{id}/exceptions/{date}` | Remove an exception                                           |
+| Method       | Path                    | Result                                                                      |
+| ------------ | ----------------------- | --------------------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/ministries`        | List / create (`code`, `name`, …)                                           |
+| `GET`/`PUT`  | `/v1/ministries/{code}` | Read / rename (code immutable)                                              |
+| `DELETE`     | `/v1/ministries/{code}` | Deactivate, or `409` while referenced                                       |
+| `GET`        | `/v1/presbyter-titles`  | Active titles: `code`, `label`, `genderRestriction`, `active`               |
+| `GET`/`POST` | `/v1/audiences`         | List (system and custom; `includeArchived`) or create a custom audience     |
+| `GET`/`PUT`  | `/v1/audiences/{id}`    | Read an audience with its rule, or edit a custom one; `409 audience_system` |
+
+The audience rule, its seeds and its evaluation are specified in
+`member-registrations-event-audience.md`. Audiences are reference data: no route deletes one, and an
+archived custom audience is hidden from the event picker while the events that reference it keep
+resolving.
+
+The `/v1/series` routes **retire**: an event is the parent (Events below), and its recurrence is read and
+written under the event. `GET /v1/series/{id}` aliases the parent read for the transition; there is no
+series list, series create or series schedule route.
 
 ### Events
 
-| Method   | Path                                             | Result                                                       |
-| -------- | ------------------------------------------------ | ------------------------------------------------------------ |
-| `GET`    | `/v1/events?from&to&seriesId&ministry&venueType` | Date-window list with attendance and offering summaries      |
-| `POST`   | `/v1/events`                                     | Create a standalone event; `201` + `Location`                |
-| `GET`    | `/v1/events/{eventId}`                           | Event detail, sessions, offerings and stats                  |
-| `PUT`    | `/v1/events/{eventId}`                           | Update; stale `If-Match` → `409`                             |
-| `POST`   | `/v1/events/{eventId}/cancel`                    | Cancel the event; history stays readable                     |
-| `GET`    | `/v1/events/{eventId}/attendance?date=`          | Present/expected and member rows for one session             |
-| `POST`   | `/v1/events/{eventId}/attendance`                | Manual row `{ memberNo, date }`; `422` when not a session    |
-| `DELETE` | `/v1/events/{eventId}/attendance/{id}`           | Remove a row; writes a suppression when the row was imported |
-| `POST`   | `/v1/events/generate?from&to`                    | Idempotent generation from series occurrences                |
+| Method   | Path                                                | Result                                                                                             |
+| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `GET`    | `/v1/events?from&to&ministry&venueType`             | Parents with their occurrences in the window and attendance/offering summaries                     |
+| `POST`   | `/v1/events`                                        | Create the parent, an optional recurrence and, without one, manual occurrences; `201` + `Location` |
+| `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                 |
+| `PUT`    | `/v1/events/{eventId}`                              | Update the parent; stale `If-Match` → `409`                                                        |
+| `POST`   | `/v1/events/{eventId}/archive`                      | Archive the parent; history stays readable                                                         |
+| `POST`   | `/v1/events/{eventId}/occurrences/{date}/cancel`    | Cancel one occurrence with a reason; history stays readable                                        |
+| `POST`   | `/v1/events/{eventId}/recurrence/versions`          | Add a schedule version                                                                             |
+| `POST`   | `/v1/events/{eventId}/recurrence/exceptions`        | Cancel or add a date                                                                               |
+| `DELETE` | `/v1/events/{eventId}/recurrence/exceptions/{date}` | Remove an exception                                                                                |
+| `GET`    | `/v1/events/{eventId}/attendance?date=`             | Present/expected and member rows for one occurrence                                                |
+| `POST`   | `/v1/events/{eventId}/attendance`                   | Manual row `{ memberNo, date }`; `422` when not an occurrence                                      |
+| `DELETE` | `/v1/events/{eventId}/attendance/{id}`              | Remove a row; writes a suppression when the row was imported                                       |
+| `POST`   | `/v1/events/generate?from&to`                       | Refresh: generate the missing occurrences of each recurrence                                       |
+
+The event-wide cancel becomes an **occurrence cancel** and the **parent archive**: there is no route that
+cancels a whole event by rewriting the parent. `POST /v1/events` with a recurrence generates its first
+window atomically; `POST /v1/events/generate` is the refresh for later windows and is idempotent on
+`(eventId, date)`. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
+**parent** and take the date. The create body carries `audienceId` (default `Everyone`) and the derived
+range is not accepted: `startDate`/`endDate` are read-only. The list's `?ministry=` filter selects events
+whose audience contains a `ministry` clause with that code (and, during the transition, the legacy
+column), so its meaning is unchanged. The retired `ministry` and `presbyterOnly` fields are refused with
+`422 validation_error`.
 
 ```ts
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
-export type EventStatus = 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived';
+export type EventStatus = 'active' | 'archived';
+/**
+ * `scheduled` and `cancelled` are the storable values. `held` is a **read-only derived value**
+ * (the occurrence's date is on or before today in the event timezone and neither it nor its parent is
+ * cancelled or archived); it is never stored and never accepted on a write.
+ */
+export type EventOccurrenceStatus = 'scheduled' | 'held' | 'cancelled';
 
-export interface EventSession {
+export interface EventRecurrence {
+  /** Versioned schedules, oldest first; an edit appends a version. */
+  schedules: Array<{ effectiveFrom: string; rrule: string; endsOn: string | null }>;
+  exceptions: Array<{ date: string; kind: 'cancelled' | 'extra'; note: string | null }>;
+}
+
+export interface EventOccurrence {
+  id: string;
   date: string;
   startTime: string;
   endTime: string | null;
-  status: 'scheduled' | 'held' | 'cancelled';
+  status: EventOccurrenceStatus;
   venueType?: VenueType;
   /**
-   * The session's capture state. `asOf` is the later `asOf` of the current (non-superseded) headcount
+   * The occurrence's capture state. `asOf` is the later `asOf` of the current (non-superseded) headcount
    * observation and the latest import batch (latest by `asOf`, then `createdAt`, then `id`); when the
    * two share an `asOf`, the one with the later recorded time (headcount `recordedAt` vs batch
-   * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the session's shared
-   * close state: `true` when any capture for the session (import or headcount, superseded rows
+   * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the occurrence's shared
+   * close state: `true` when any capture for the occurrence (import or headcount, superseded rows
    * included) carries `ended`, `false` otherwise. `asOf` is an ISO-8601 instant, never zone-shifted;
-   * the client renders it in the event timezone. Null when the session has no capture.
+   * the client renders it in the event timezone. Null when the occurrence has no capture.
    */
   capture: { asOf: string; ended: boolean } | null;
-  /** A non-empty reason when the session is cancelled; null on a legacy cancellation. */
+  /** A non-empty reason when the occurrence is cancelled; null on a legacy cancellation. */
   note: string | null;
   present: number;
   expected: number;
   importedRows: number;
   source: 'import' | 'manual' | 'mixed' | 'none';
+  /** Read-only legacy per-instance number; null once the transition retires it. */
+  legacyEventNo: string | null;
+}
+
+export interface AudienceSummary {
+  id: string;
+  name: string;
+  /** True for a seeded audience; system audiences are read-only. */
+  system: boolean;
+  /** Server-rendered, e.g. "Choir · Presbyters - ministry CHR and presbyter". Never composed by a client. */
+  summary: string;
 }
 
 export interface Event {
   id: string;
-  /** Null for a series-minted instance until ticket 11 assigns one. */
-  eventNo: string | null;
+  /** The parent's identity; unique and never reused. An occurrence has none. */
+  eventNo: string;
   name: string;
-  seriesId: string | null;
+  /** The event's applicability: one saved audience (member-registrations-event-audience.md). */
+  audienceId: string;
+  audience: AudienceSummary;
+  /** Read-only legacy projection during the transition; refused on create and update. */
   ministry: { code: string; name: string } | null;
+  /** Read-only legacy projection during the transition; refused on create and update. */
+  presbyterOnly: boolean;
   timezone: string;
-  startDate: string;
-  endDate: string;
-  startTime: string;
-  endTime: string | null;
+  description: string | null;
   venueType: VenueType;
   venueName: string | null;
-  description: string | null;
+  /** The event's overall range, derived; every occurrence date falls inside it. */
+  startDate: string;
+  /** Null when a recurring event's recurrence is unbounded. */
+  endDate: string | null;
+  startTime: string;
+  endTime: string | null;
+  tracksMembers: boolean;
   status: EventStatus;
-  source: 'series' | 'manual' | 'import';
-  sessions: EventSession[];
+  /** Null for a standalone event; the schedule for a recurring event. */
+  recurrence: EventRecurrence | null;
+  occurrences: EventOccurrence[];
   offerings: EventOffering[];
+  /** Scoped to the request's `from`/`to` when supplied; the event's lifetime otherwise. */
   stats: OfferingStats;
 }
 ```
 
+`GET /v1/events` returns one item per parent: its `occurrences` are the occurrences inside the request's
+`from`/`to`, each with its own attendance summary, so a row needs no second request. A recurring row's
+schedule is `recurrence.schedules`, and its next occurrence is the first returned occurrence on or after
+today in the event timezone; the UI MUST NOT expand the RRULE locally. The detail returns the parent, its
+recurrence and its occurrences in the requested window. Each `Event` carries its `audience` (the
+applicability rule, resolved server-side) and its derived `startDate`/`endDate`; each occurrence's
+`expected` is that audience's roster at the occurrence's date. The `offerings` array is per-session
+during the session-offerings round (`member-registrations-session-offerings.md`); until then it is the
+event-level list it is today.
+
 ### Imports
 
-| Method | Path                           | Result                                                                                                                                                                                                   |
-| ------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                                                                                                                                |
-| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }], ended? }`; captures replace the session's imported rows; `422 series_required` for a standalone event; `409 session_closed` after the end |
-| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                                                                                                                                    |
-| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                                                                                                                           |
-| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                                                                                                                             |
+| Method | Path                           | Result                                                                                                                                                                                                       |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST` | `/v1/imports/members`          | Rows `(memberNo, firstName, lastName, …)`, all-or-nothing                                                                                                                                                    |
+| `POST` | `/v1/imports/attendance`       | Body `{ eventId, sessionDate, rows: [{ memberNo, datetime? }], ended? }`; captures replace the session's imported rows; a standalone or recurring occurrence both import; `409 session_closed` after the end |
+| `GET`  | `/v1/imports/formats`          | Column contract for every import kind                                                                                                                                                                        |
+| `GET`  | `/v1/imports/templates/{kind}` | `.xlsx` template for `members` or `attendance`                                                                                                                                                               |
+| `GET`  | `/v1/imports/{batchId}`        | Batch record                                                                                                                                                                                                 |
 
 - JSON rows, 1 MB cap (~10k rows); larger files are chunked by the caller. The UI parses CSV or the
   downloaded `.xlsx` into these rows.
 - Idempotent by natural key: members on `memberNo`; an attendance **row** is unique on
-  `(eventInstanceId, sessionDate, memberId)`, while a live capture may repeat as a new batch.
-- An attendance import fails as a whole when the `eventId` is unknown, the event is `cancelled` or
-  `archived` or headcount-only (`422 headcount_only`), **the event is standalone (`422
-series_required`)**, the `sessionDate` is unlisted or its session is
-  cancelled, or a row's `datetime` falls on another date. Series are created by an administrator or by
-  generation, never by an import.
+  `(occurrenceId, memberId)`, while a live capture may repeat as a new batch.
+- An attendance import fails as a whole when the `eventId` is unknown, the event is `archived` or
+  headcount-only (`422 headcount_only`), the `sessionDate` is not an occurrence or its occurrence is
+  cancelled, or a row's `datetime` falls on another date. A recurrence is set by an administrator or by
+  generation, never by an import. A **standalone** event's occurrence imports like a recurring one (the
+  settled rule in the import section); the only shape-based refusal left is `headcount_only`.
 
 ### Offerings and giving
 
@@ -1234,14 +1505,11 @@ series_required`)**, the `sessionDate` is unlisted or its session is
 | `GET`/`POST` | `/v1/offerings/{id}/terms`                                           | List versions or publish one (`baseVersion`)                                |
 | `GET`/`POST` | `/v1/events/{eventId}/offerings`                                     | List active attachments or attach                                           |
 | `DELETE`     | `/v1/events/{eventId}/offerings/{offeringId}`                        | Detach (end, not delete)                                                    |
-| `GET`/`POST` | `/v1/series/{id}/offerings`                                          | List active attachments or attach for all occurrences                       |
-| `DELETE`     | `/v1/series/{id}/offerings/{offeringId}`                             | Detach                                                                      |
 | `GET`/`POST` | `/v1/events/{eventId}/offerings/{offeringId}/exceptions`             | List rows or append a skip/opt-in                                           |
-| `GET`/`POST` | `/v1/series/{id}/offerings/{offeringId}/exceptions`                  | List rows or append a skip/opt-in                                           |
-| `POST`       | `/v1/contributions`                                                  | Member or visitor contribution (idempotent)                                 | ticket 21  |
+| `POST`       | `/v1/contributions`                                                  | Member or first-time visitor contribution (idempotent)                      | ticket 21  |
 | `POST`       | `/v1/contributions/groups`                                           | One payment group for a split gift (one charge)                             | ticket 24a |
 | `GET`        | `/v1/contributions?memberNo&offeringId&eventId&from&to&limit&cursor` | Contribution history (`no-store`)                                           | ticket 21  |
-| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and visitor totals by currency                                       | ticket 21  |
+| `GET`        | `/v1/contributions/summary?from&to`                                  | Member and first-time visitor totals by currency                            | ticket 21  |
 | `POST`       | `/v1/pledges`                                                        | Create a pledge with a follow-up officer                                    | ticket 22  |
 | `GET`        | `/v1/pledges?status&memberNo&officerMemberNo&from&to&limit&cursor`   | Pledge list (`no-store`)                                                    | ticket 22  |
 | `POST`       | `/v1/pledges/{id}/honor`                                             | Append an honor event                                                       | ticket 22  |
@@ -1255,6 +1523,14 @@ series_required`)**, the `sessionDate` is unlisted or its session is
 | `POST`       | `/ussd/nalo`                                                         | Nalo USSD entry (`USERID` auth, not bearer); see the USSD spec              | ticket 24d |
 | `POST`       | `/dev/ussd/session`                                                  | Dev-only simulator gateway; refuses in production                           | ticket 24d |
 | `POST`       | `/v1/payments/callback`                                              | Gateway callback (signature-verified; `404` unless `PAYMENTS_ENABLED=true`) | ticket 24a |
+
+The event-level attachment rows (`GET`/`POST`/`DELETE /v1/events/{eventId}/offerings` and the nested
+`exceptions`) are the contract **until the session-offerings round**
+(`member-registrations-session-offerings.md`) replaces them with the per-occurrence routes, the
+recurrence's default set and the session's `active`/`termsVersion`/`availableUntil`. Until then the
+event-level routes, the exceptions table and the contribution/count targets stay as specified in
+`member-registrations-events-offerings.md`; that round is the one that moves them, and it is a
+**separate round after the event-parent migration**.
 
 ```ts
 export type OfferingKind = 'freewill' | 'tithe' | 'building' | 'missions' | 'other';
@@ -1409,7 +1685,7 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `unauthorized`, `invalid_json`, `payload_too_large`, `route_not_found`, `internal_error`,
 `import_failed`, `event_not_active`, `session_not_in_event`, `offering_already_attached`,
 `offering_not_on_event`, `terms_version_conflict`, `invalid_exception_date`, `offering_expired`,
-`headcount_only`, `series_required`,
+`headcount_only`,
 `idempotency_conflict`, `invalid_amount`, `invalid_expected_date`, `invalid_reminder_date`,
 `officer_required`, `pledge_already_terminal`, `payment_failed`, `contact_in_use` (`409`),
 `already_verified` (`409`), `ussd_disabled` (`503`), `code_invalid`, `code_expired`,
@@ -1419,7 +1695,9 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `period_already_paid`, `not_covered`, `claim_not_pending`, `card_in_use`, `cors_rejected`,
 `no_contact_or_guardian`, `guardian_required`, `guardian_not_eligible`, `guardian_chain_cycle`,
 `guardian_chain_unreachable`, `guardian_chain_too_long`, `no_own_contact` (`409`),
-`too_many_requests` (`429`), `delivery_unavailable` (`503`), `session_closed`.
+`too_many_requests` (`429`), `delivery_unavailable` (`503`), `session_closed`,
+`audience_system` (`409`), `audience_name_in_use` (`409`), `not_a_visitor` (`409`),
+`visitor_already_registered` (`409`), `offering_not_on_session` (`422`).
 
 ### Concurrency and caching
 
@@ -1432,28 +1710,41 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 ## Data Models
 
 All money is `bigint` minor units plus an ISO currency. History tables are append-only.
-`event_instances` is the evolved `event_occurrences`; the attendance rows move with it.
+`events` is the parent; `event_occurrences` replaces the JSONB `sessions` array and `event_instances`,
+and the attendance and giving rows key to the parent and its occurrence. The event's `startDate`/`endDate`
+range is **derived** (from its occurrences, and for a recurring event also from its recurrence), so it has
+no column of its own and cannot drift from the dates. `event_instances`, `event_series`,
+`series_schedules` and `series_exceptions` are the **legacy source** the event-parent migration replaces;
+they are not part of the target model and are dropped after the rekey (below).
 
-| Table                      | Key fields                                                                                                                                                                                                                                              | Constraints                                                                                                                                                                                                                                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event_instances`          | `id`, `event_no`, `name`, `series_id` (nullable), `timezone`, `start_date`, `end_date`, `start_time`, `end_time`, `venue_type`, `venue_name`, `description`, `status`, `source`, `tracks_members`, `presbyter_only`, `sessions` (JSONB), timestamps     | unique `event_no` (nullable until ticket 11 assigns one); end >= start; sessions non-empty, unique dates inside range; `tracks_members = false` is headcount-only; `presbyter_only` hides the event from non-presbyters and scopes its roster to active presbyters; ministry is the series' ministry, so a standalone event is general |
-| `attendance`               | `id`, `event_instance_id`, `session_date`, `member_id`, `source`, `import_batch_id`                                                                                                                                                                     | unique `(event_instance_id, session_date, member_id)`; session date in sessions                                                                                                                                                                                                                                                        |
-| `offerings`                | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                                                         |
-| `offering_terms`           | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by` | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                                                            |
-| `event_instance_offerings` | `id`, `event_instance_id` (nullable), `series_id` (nullable), `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                              | exactly one of event instance or series; one active attachment per (offering_id, event_instance_id) and per (offering_id, series_id) when `detached_on` is null                                                                                                                                                                        |
-| `offering_exceptions`      | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                             | append-only; the newest row per (attachment_id, date) is effective; index `(attachment_id, date, created_at desc)`                                                                                                                                                                                                                     |
-| `contributions`            | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `offering_id`, `event_instance_id`, `session_date`, `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by`    | unique `idempotency_key` and unique `reference`; amount > 0; member XOR visitor; `(offering_id, terms_version)` references the published terms                                                                                                                                                                                         |
-| `pledges`                  | `id`, `member_id`, `offering_id`, `event_instance_id`, `session_date` (nullable), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                    | unique `idempotency_key`; amount > 0; expected date not past at create; the offering must be attached; the officer must be an active presbyter                                                                                                                                                                                         |
-| `pledge_events`            | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                    | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                                                       |
-| `reminders`                | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                      | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                                                                     |
-| `ussd_sessions`            | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `external_id` (nullable), `last_input_seq`, `expires_at`, timestamps                                                                                                 | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present; defined in the USSD spec                                                                                                                                                                                                       |
-| `ussd_nonces`              | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                            | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                                                                                                                        |
-| `payment_groups`           | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                   | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge); defined in the USSD spec                                                                                                                                                                                     |
-| `payment_intents`          | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                             | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                                                                                                                       |
-| `officers`                 | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                           | only active officers can sign in                                                                                                                                                                                                                                                                                                       |
-| `auth_magic_links`         | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                               | single use; short TTL                                                                                                                                                                                                                                                                                                                  |
-| `auth_sessions`            | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                              | revocable; credential stored hashed                                                                                                                                                                                                                                                                                                    |
-| `auth_rate_limits`         | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                        | atomic upsert; no in-memory authority                                                                                                                                                                                                                                                                                                  |
+| Table                           | Key fields                                                                                                                                                                                                                                                                                                         | Constraints                                                                                                                                                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`                        | `id`, `event_no`, `name`, `audience_id`, `ministry_id` (nullable, legacy), `presbyter_only` (legacy), `timezone`, `description`, `venue_type`, `venue_name`, `start_time`, `end_time`, `tracks_members`, `status` (`active`/`archived`), `archived_at`, timestamps                                                 | unique `event_no`; `audience_id` references `audiences`; unique `(lower(name), audience_id)` among non-archived recurring events; the legacy `ministry_id`/`presbyter_only` are read-only projections written from the audience and retired in the downstream round; `tracks_members = false` is headcount-only |
+| `audiences`                     | `id`, `name`, `system`, `system_key` (nullable), `active`, `rule` (JSONB), `created_at`, `created_by`, `updated_at`, `updated_by`                                                                                                                                                                                  | unique `system_key` when present; unique `lower(name)`; a system row is read-only; no delete, archiving is `active = false`; the rule is validated by the API, not by a column constraint                                                                                                                       |
+| `member_status_events`          | `id`, `member_id`, `kind` (`promoted`), `from_status`, `to_status`, `reason` (nullable), `actor`, `at`                                                                                                                                                                                                             | append-only; the only status action this round is promotion, so `kind` has no `demoted` value; a status change is a new row                                                                                                                                                                                     |
+| `first_time_visitor_identities` | `phone_hash` (unique), `member_id`, `linked_by`, `linked_at`                                                                                                                                                                                                                                                       | append-only; the only link between a first-time visitor gift's phone hash and the person; never rewritten                                                                                                                                                                                                       |
+| `event_recurrence_versions`     | `id`, `event_id`, `effective_from`, `rrule`, `ends_on` (nullable), `created_at`, `created_by`                                                                                                                                                                                                                      | append-only; the version in force on a date is the newest `effective_from <= date`; `COUNT`/`UNTIL` rejected in `rrule`                                                                                                                                                                                         |
+| `event_recurrence_exceptions`   | `id`, `event_id`, `date`, `kind` (`cancelled`/`extra`), `note` (nullable), `created_at`, `created_by`                                                                                                                                                                                                              | append-only; `note` required for `cancelled`; the newest row per `(event_id, date)` is effective                                                                                                                                                                                                                |
+| `event_occurrences`             | `id`, `event_id`, `date`, `start_time`, `end_time`, `status` (`scheduled`/`held`/`cancelled`), `note`, `venue_type` (nullable), `legacy_event_no` (nullable), timestamps                                                                                                                                           | unique `(event_id, date)`; `event_id` references `events`; a cancelled row carries a note                                                                                                                                                                                                                       |
+| `attendance`                    | `id`, `occurrence_id`, `member_id`, `session_time`, `source`, `import_batch_id`                                                                                                                                                                                                                                    | unique `(occurrence_id, member_id)`; a cancelled occurrence takes no rows; its date cannot change while rows reference it                                                                                                                                                                                       |
+| `offerings`                     | `id`, `active`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                                                                                                                           | soft archive; no hard delete; `updated_by` records the last active-flag change                                                                                                                                                                                                                                  |
+| `offering_terms`                | `offering_id`, `version`, `name` (nullable), `purpose`, `kind`, `currency`, `target_minor`, `default_amount_minor`, `starts_on`, `ends_on`, `available_until`, `scripture`, `gateway_account`, `gateway_metadata`, `reason`, `created_at`, `created_by`                                                            | unique `(offering_id, version)`; immutable after publish; `reason` is null for version 1 and required after                                                                                                                                                                                                     |
+| `event_offerings`               | `id`, `event_id`, `offering_id`, `available_until`, `attached_on`, `attached_by`, `detached_on`, `detached_by`                                                                                                                                                                                                     | **Legacy during the transition:** the attachment becomes a per-occurrence `session_offerings` row in the separate session-offerings round; the table stays readable until then, then retires                                                                                                                    |
+| `offering_exceptions`           | `id`, `attachment_id`, `date`, `kind` (`skip`/`opt_in`), `note`, `created_at`, `created_by`                                                                                                                                                                                                                        | **Legacy during the transition:** replaced by the session offering's `active` flag and its append-only event history in the session-offerings round                                                                                                                                                             |
+| `session_offerings`             | `id`, `occurrence_id`, `offering_id`, `session_date`, `terms_version`, `available_until` (nullable), `active`, `origin` (`recurrence`/`added`/`migrated`), `decided_on`, `decided_by`                                                                                                                              | unique `(occurrence_id, offering_id)`; `terms_version` references a published version; the attachment unit (`member-registrations-session-offerings.md`)                                                                                                                                                        |
+| `session_offering_events`       | `id`, `session_offering_id`, `kind` (`attached`/`skipped`/`opted_in`/`adjusted`/`reterm`), `terms_version`, `available_until`, `note`, `actor`, `at`                                                                                                                                                               | append-only; the history of the current session-offering state                                                                                                                                                                                                                                                  |
+| `contributions`                 | `id`, `member_id` (nullable), `visitor_name`, `visitor_phone_hash`, `session_offering_id` (target; `event_id`, `offering_id` and `session_date` are derived/legacy until that round), `amount_minor`, `currency`, `channel`, `status`, `reference`, `idempotency_key`, `terms_version`, `created_at`, `created_by` | unique `idempotency_key` and unique `reference`; amount > 0; member XOR first-time visitor; `(offering_id, terms_version)` references the published terms; the gift targets an active session offering                                                                                                          |
+| `pledges`                       | `id`, `member_id`, `offering_id`, `event_id`, `occurrence_id` (nullable; `session_date` is derived/legacy until that round), `amount_minor`, `currency`, `expected_on`, `officer_member_id`, `status`, `reason`, `terms_version`, `idempotency_key`, `created_at`, `created_by`                                    | unique `idempotency_key`; amount > 0; expected date not past at create; a named session must be an active session offering; the officer must be an active presbyter                                                                                                                                             |
+| `pledge_events`                 | `id`, `pledge_id`, `kind` (`created`/`honored`/`dishonored`/`reassigned`), `actor`, `reason`, `from_officer_member_id`, `to_officer_member_id`, `at`                                                                                                                                                               | append-only; `from`/`to` are set on `reassigned`                                                                                                                                                                                                                                                                |
+| `reminders`                     | `id`, `pledge_id`, `scheduled_for`, `channel`, `status`, `sent_at`                                                                                                                                                                                                                                                 | unique `(pledge_id, scheduled_for, channel)`; status is `pending`, or `cancelled` for an auto-created past date; no delivery in V3                                                                                                                                                                              |
+| `ussd_sessions`                 | `id`, `phone_hash`, `member_id` (nullable), `anonymous`, `state`, `context` jsonb, `external_id` (nullable), `last_input_seq`, `expires_at`, timestamps                                                                                                                                                            | 3-minute idle TTL; no raw phone; `external_id` is the provider session id, partial unique when present; defined in the USSD spec                                                                                                                                                                                |
+| `ussd_nonces`                   | `nonce` primary key, `seen_at`, `expires_at`                                                                                                                                                                                                                                                                       | replay guard; pruned after 10 minutes; defined in the USSD spec                                                                                                                                                                                                                                                 |
+| `payment_groups`                | `id`, `reference` unique, `idempotency_key` unique, `total_minor`, `currency`, `status` (`pending`/`paid`/`failed`), `pledge_id` nullable, `created_at`, `created_by`                                                                                                                                              | one gateway charge per group; never partially paid; `pledge_id` is unique when present (one redemption group per pledge); defined in the USSD spec                                                                                                                                                              |
+| `payment_intents`               | `id`, `payment_group_id` unique, `gateway`, `reference` unique, `status` (`initiated`/`paid`/`failed`), `raw_callback_hash`                                                                                                                                                                                        | unique gateway reference; one intent per payment group; defined in the USSD spec                                                                                                                                                                                                                                |
+| `officers`                      | `id`, `email` (lower-cased, unique), `name`, `actor_id`, `active`, timestamps                                                                                                                                                                                                                                      | only active officers can sign in                                                                                                                                                                                                                                                                                |
+| `auth_magic_links`              | `id`, `officer_id`, `token_hash`, `expires_at`, `used_at`                                                                                                                                                                                                                                                          | single use; short TTL                                                                                                                                                                                                                                                                                           |
+| `auth_sessions`                 | `id`, `officer_id`, `token_hash`, `expires_at`, `revoked_at`, `last_used_at`, `created_at`                                                                                                                                                                                                                         | revocable; credential stored hashed                                                                                                                                                                                                                                                                             |
+| `auth_rate_limits`              | `key` (`email` or `ip`), `window_start`, `count`                                                                                                                                                                                                                                                                   | atomic upsert; no in-memory authority                                                                                                                                                                                                                                                                           |
 
 The 24b and 24c tables (`attendance_codes`, `registration_requests`, `clocking_delegations`,
 `subscription_products`, `subscription_payments`, `subscription_claims`) and the
@@ -1468,19 +1759,90 @@ migration `0025` adds `member_contacts.verified_at`, `member_confirmations`,
 defined in the USSD spec; the request hash remains for the rate limit and the reference, and approval
 refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at` stays inert history; `confirmedAt` and eligibility read the confirmation audit.
 
+### The event-parent migration: tables, rekey and backfill
+
+This is the migration named as a hard gate for the event-parent round; the outline below is its
+reviewable contract. It runs in one transaction and is idempotent by natural key.
+
+**Tables.** `events` (the parent), `event_recurrence_versions` and `event_recurrence_exceptions` (from
+`series_schedules` and `series_exceptions`, keyed to `event_id`), and `event_occurrences` (one dated
+child per occurrence, `unique (event_id, date)`). `event_instances` is the source; its JSONB `sessions`
+array is the standalone event's list of dates.
+
+**Parent and occurrence backfill.**
+
+- A series-backed instance (`series_id` not null) becomes an occurrence of that series' parent: the
+  parent reuses the series id, the series' schedules and exceptions move to the recurrence tables, and
+  the instance's `event_no` is preserved as the occurrence's `legacy_event_no`.
+- A standalone instance (`series_id` null) becomes a parent reusing the instance id, with **one
+  occurrence per `sessions[]` entry**: `date`, `start_time`, `end_time`, `status`, `venue_type` and
+  `note` are copied. The array's unique dates are asserted before the insert; a duplicate aborts the
+  migration rather than minting two occurrences for one date.
+- The parent's `event_no` is the standalone instance's `event_no`, or a freshly minted one for a series
+  parent. The occurrence's `legacy_event_no` stays read-only until the downstream round; an occurrence
+  has no number of its own.
+
+**Rekey, table by table.** For every child row that will carry an `occurrence_id`, the occurrence is
+resolved by the join `parent_id = coalesce(instance.series_id, instance.id)` and
+`date = session_date`; contributions and pledges resolve the **parent** only and keep `session_date`
+(the session-offerings round adds their session target later). The join cannot miss: the old session
+guard (and the standalone `sessions[]` list) refused a child whose date was not one of the event's
+sessions.
+
+| Table                           | Source key                                              | Target key                                         | Index / unique change                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attendance`                    | `(event_instance_id, session_date, member_id)`          | `(occurrence_id, member_id)`                       | unique `(occurrence_id, member_id)` replaces the triple; index on `occurrence_id`                                                                               |
+| `attendance_suppressions`       | `(member_id, event_instance_id, session_date)`          | `(member_id, occurrence_id)`                       | the primary key becomes the pair; the cascade follows the occurrence                                                                                            |
+| `event_session_headcounts`      | `(event_instance_id, session_date)` + `id`              | `occurrence_id` + `id`                             | index `(occurrence_id)`; `supersedes_id` and its unique index are unchanged                                                                                     |
+| `event_session_offering_counts` | `(event_instance_id, offering_id, session_date)` + `id` | `(occurrence_id, offering_id)` + `id`              | group index `(occurrence_id, offering_id)`; the supersession chain and its lines stay; the session-offerings round replaces the pair with `session_offering_id` |
+| `registration_requests`         | `(event_instance_id, session_date)`                     | `occurrence_id` (`session_date` kept denormalised) | index `(occurrence_id, status)`; `phone_hash`, `code_id` and `member_id` unchanged                                                                              |
+| `attendance_codes`              | `(event_instance_id, session_date)`                     | `occurrence_id` (`session_date` kept)              | the session/purpose index moves to `(occurrence_id, purpose)`                                                                                                   |
+| `clocking_delegations`          | `(event_instance_id, session_date)`                     | `occurrence_id`                                    | the active unique index becomes `(occurrence_id)` where `ended_at is null`                                                                                      |
+| `import_batches`                | `(event_instance_id, session_date)`, nullable           | `occurrence_id` (nullable)                         | legacy batches with neither stay null; no uniqueness is added                                                                                                   |
+| `contributions`, `pledges`      | `(event_instance_id, session_date)`                     | `event_id` (the parent) + `session_date`           | no occurrence column is added here; the session-offerings round later adds `session_offering_id` (and `pledges.occurrence_id`) and derives the rest             |
+
+- The append-only chains survive unchanged: headcount and offering-count corrections key row ids
+  (`supersedes_id`), not the session pair, so re-pointing a row at an occurrence keeps every chain and
+  the one-correction-per-row unique index intact. Attendance suppressions are rekeyed with their rows.
+- `session_date` stays as a derived read field on the rows whose wire or count is keyed by the date
+  (`headcounts`, `offering counts`, `registration_requests`, `attendance_codes`, `import_batches`,
+  `contributions`, `pledges`); it is derived from the occurrence and never independently written. Tables
+  that carried the pair as their primary identity (`attendance`, `attendance_suppressions`,
+  `clocking_delegations`) drop it.
+- The short-lived `ussd_sessions.context` is **not** rekeyed: sessions expire in minutes and no history
+  depends on the stored event id or date.
+- `event_offerings` and `offering_exceptions` are **not** rekeyed here. They are the session-offerings
+  round's input and stay legacy until then (`member-registrations-session-offerings.md`).
+
+**Idempotency and integrity.**
+
+- A child row whose occurrence cannot be resolved aborts the transaction with the offending key in the
+  report; the migration never guesses a date or drops a row. (The old guard made this a data defect, not
+  an expected state.)
+- Before and after the rekey, the migration asserts the row count of every table is unchanged, that each
+  `attendance` unique pair is preserved, and that every `supersedes_id` resolves to a row in the same
+  table. A failure rolls the whole migration back.
+- A second run adds nothing: each backfill writes through the natural key and `on conflict do nothing`,
+  and the parent/occurrence inserts are guarded by the same `unique (event_id, date)`.
+- After the backfill it drops `event_instances.sessions`, every `event_instance_id` column, the
+  `session_date` columns whose target key replaces them (`attendance`, `attendance_suppressions`,
+  `clocking_delegations`), the old indexes and `series_schedules`/`series_exceptions`;
+  `event_instances` itself goes when no column references it, leaving `legacy_event_no` as the only trace
+  of the old per-instance number.
+
 ## Acceptance Criteria
 
-### AC-1: **Given** a standalone conference, **When** it is created with three sessions, **Then** it returns `201`, carries no `seriesId`, and has a unique `eventNo`. (FR-1, FR-3)
+### AC-1: **Given** a standalone conference, **When** it is created with three occurrences, **Then** it returns `201` as one event parent with a unique `eventNo` and three occurrence rows, and no recurrence. (FR-1, FR-3)
 
 ### AC-2: **Given** an event, **When** `venueType` is `church`, **Then** the request fails with `422` and nothing is written. (FR-2)
 
-### AC-3: **Given** duplicate session dates or a session outside the date range, **When** the event is created, **Then** the request fails with `422`. (FR-3)
+### AC-3: **Given** duplicate occurrence dates, **When** the event is created, **Then** the request fails with `422` and nothing is written. (FR-3)
 
-### AC-4: **Given** a cancelled exception and an extra exception, **When** generation runs twice, **Then** no event exists for the cancelled date, one exists for the extra date, and the second run adds nothing. (FR-4)
+### AC-4: **Given** a cancelled exception and an extra exception, **When** generation runs twice, **Then** no occurrence exists for the cancelled date, one exists for the extra date, and the second run adds nothing. (FR-4)
 
-### AC-5: **Given** an attendance row for a date not in `sessions`, **When** it is written, **Then** the database rejects it and the API returns `422`. (FR-5)
+### AC-5: **Given** an attendance row for a date that is not one of the event's occurrences, **When** it is written, **Then** the database rejects it and the API returns `422`. (FR-5)
 
-### AC-6: **Given** an attendance import with one unknown session date, **When** it is submitted, **Then** the whole batch fails and no row is written. (FR-6)
+### AC-6: **Given** an attendance import with one unknown occurrence date, **When** it is submitted, **Then** the whole batch fails and no row is written. (FR-6)
 
 ### AC-7: **Given** a manual row and a later import for the same key, **When** the import runs, **Then** the manual row survives; deleting an imported row writes a suppression. (FR-7)
 
@@ -1494,7 +1856,7 @@ refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at
 
 ### AC-12: **Given** a contribution with an existing idempotency key, **When** it is posted again, **Then** the same contribution is returned and no second row is created. (FR-12)
 
-### AC-13: **Given** a visitor with a name and phone, **When** they give, **Then** a receipt or reference is returned, no member is created, and the phone is stored hashed. (FR-13)
+### AC-13: **Given** a visitor with a name and phone, **When** they give, **Then** a receipt or reference is returned, no member is created, and the phone is stored hashed; **Given** a registered visitor or a member, **When** they give, **Then** the gift carries their member number and history follows the person through a later promotion. (FR-13)
 
 ### AC-14: **Given** a member with no active shepherd and no administrator-supplied officer, **When** they pledge, **Then** the request fails with `422 officer_required`. (FR-14)
 
@@ -1530,7 +1892,7 @@ refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at
 
 ### AC-30: **Given** `USSD_ENABLED=false`, **When** `/ussd/session` or `/ussd/nalo` is called with no signature, with a valid signature, and with a signature made with the development default secret, **Then** every response is `503 ussd_disabled` and no HMAC or `USERID` verification or write occurs. (§ USSD attendance, codes and clocking (24b))
 
-### AC-31: **Given** a standalone event, **When** an attendance import targets one of its sessions, **Then** the response is `422 series_required` and no batch or attendance row is written; the same import against a series-backed event succeeds. (FR-6)
+### AC-31: **Given** a standalone event and one of its occurrences, **When** an attendance import names that occurrence with a known member, **Then** the batch is accepted exactly as it is for a recurring occurrence; a row naming an unknown member fails the batch with that row named; a row naming an existing member outside the event's audience is accepted and `present` may exceed `expected`; a closed or cancelled occurrence answers its existing `409 session_closed` / `409 event_not_active` and writes nothing; a `tracksMembers = false` event still answers `422 headcount_only`; and `expected` is the audience evaluated at that occurrence's date. (FR-6)
 
 ### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** an import capture outside the live window with no close, **Then** it is accepted as the end capture and closes the session. (FR-6)
 
@@ -1538,15 +1900,27 @@ refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at
 
 ### AC-33a: **Given** a session dated before today in the event timezone, or a headcount whose `asOf` falls outside the session's calendar day, **When** a headcount is recorded, **Then** the API answers `422 validation_error` and writes nothing; **Given** a session dated today or later whose calendar day contains the headcount's `asOf`, **When** it is recorded outside the live window without `ended: true`, **Then** it is accepted as written and does not close the session — `ended` is set only by the operator's `ended: true` — and only a later import capture closes a past-open session. (§ Headcounts)
 
+### AC-34: **Given** an event whose audience is `Presbyters`, **When** a non-presbyter and a presbyter read it, **Then** the roster (`expected`) is the active presbyters, the non-presbyter does not see it on the member-facing surface, and the bearer back office reads it for both. **Given** the seeded `Everyone` (`allOf(membershipStatus active)`) and `Visitors only`, **When** an active member and a registered visitor are evaluated, **Then** `Everyone` matches the active member and excludes the visitor, `Visitors only` matches the visitor and excludes the active member, and a rule such as `allOf(ministry CHR)` matches an active choir member but not a visitor in the choir. (FR-32, FR-33)
+
+### AC-35: **Given** an audience whose rule is `anyOf(age 0-12, age 13-17)`, **When** a member's age is evaluated on an occurrence date, **Then** the age is the member's completed years on that date and a member with no `dob` matches neither band. (FR-33)
+
+### AC-36: **Given** a member created as a visitor, **When** the operator promotes them, **Then** `membershipStatus` becomes `active`, a `member_status_events` row records the actor and reason, and a second promotion is `409 not_a_visitor`; a member created `active` cannot be created `archived`. (FR-34)
+
+### AC-37: **Given** a first-time visitor contribution whose phone hash matches, **When** an administrator registers the giver with `POST /v1/visitors`, **Then** a member with `visitor` status and an owned phone contact is created, the giving history follows that member, no contribution row is rewritten, and a second registration of the same phone is `409 visitor_already_registered`. (FR-35)
+
+### AC-38: **Given** a request that sends `ministry` or `presbyterOnly` on event create or update, **When** it is submitted, **Then** the field is refused with `422 validation_error` and the event's applicability is only `audienceId`. (FR-36)
+
+### AC-39: **Given** legacy `event_instances` rows — a standalone event with JSONB sessions and a series-backed instance — with attendance, suppressions, headcounts (including a correction), offering counts and registration requests, **When** the event-parent migration runs, **Then** each child row resolves to its occurrence, every table's row count is unchanged, the supersession chains still resolve, the unique keys are the target keys, and a second run adds nothing. (FR-1, FR-4, FR-5)
+
 ## Edge Cases
 
-- EC-1: A multi-day event where one session is cancelled: attendance is allowed for the remaining sessions only, and the cancelled date is visible but read-only.
-- EC-2: An import references an `event_no` whose date is not a session: the batch fails, names the event and the date, and leaves the register unchanged.
+- EC-1: A multi-day event where one occurrence is cancelled: attendance is allowed for the remaining occurrences only, and the cancelled date is visible but read-only.
+- EC-2: An import references an event and date that is not an occurrence: the batch fails, names the event and the date, and leaves the register unchanged.
 - EC-3: A pledge's shepherd is archived after the pledge is created: the pledge keeps its officer of record, and a new follow-up requires reassignment.
 - EC-4: A visitor gives twice with the same phone: two contributions and two receipts, and still no member record.
 - EC-5: An offering expires mid-event: new gifts stop at the expiry instant while pending pledges remain honorable.
-- EC-6: A series is archived after generating events: the generated events stay readable and no new generation occurs.
-- EC-7: A session date is edited after attendance exists: the update is rejected while rows reference that session.
+- EC-6: An event is archived after generating its occurrences: the occurrences stay readable and no new generation occurs.
+- EC-7: An occurrence date is edited after attendance exists: the update is rejected while rows reference that occurrence.
 
 ## Implementation Decisions
 
@@ -1560,13 +1934,13 @@ refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at
 | Database        | Postgres — Neon in production, PGlite in tests                                                                                                                                                                            |
 | Access layer    | `Db` port (`query`/`exec`/`transaction`) stays the seam; Drizzle is wired by ticket 02 as the CRUD smoke, and wider adoption is gated by the Series trial (03–04); attendance, occurrence and import queries stay raw SQL |
 | Migrations      | Embedded SQL applied by a tracked runner; the ORM never owns migrations                                                                                                                                                   |
-| Events storage  | `event_instances` with `sessions` JSONB; attendance keyed by event instance and session date                                                                                                                              |
+| Events storage  | `events` (parent), `event_recurrence_versions`/`exceptions`, `event_occurrences`; attendance keyed by occurrence                                                                                                          |
 | Money           | GHS, integer minor units (`bigint`)                                                                                                                                                                                       |
 | Idempotency     | Unique key on contributions; retry-safe generation, imports and callbacks                                                                                                                                                 |
 | Visitor privacy | Name plus hashed phone; no member record; receipt or reference returned                                                                                                                                                   |
 | Browser auth    | Same Express app: magic link via Resend, Postgres session, gateway router, bearer server-side, actor derived                                                                                                              |
 | Recurrence      | `rrule` package, dates handled as calendar dates                                                                                                                                                                          |
-| Date handling   | All defaults and "today" are UTC; `series.timezone` is an optional override                                                                                                                                               |
+| Date handling   | All defaults and "today" are UTC; the event `timezone` is an optional override                                                                                                                                            |
 | Testing         | Vitest 5 + Supertest 7 + PGlite                                                                                                                                                                                           |
 | Logging         | Pino 10 (JSON)                                                                                                                                                                                                            |
 | Lint / format   | ESLint 10 flat config + Prettier 3                                                                                                                                                                                        |
@@ -1582,9 +1956,10 @@ refuses a number owned elsewhere with `409 contact_in_use`; `members.verified_at
   only, behind the repository boundary: ticket 02 wires the schema and both drivers and migrates the
   Ministries repository as the smoke, while wider adoption is gated by the Series trial (03–04). It
   never owns migrations or the engine queries. This keeps the seam explicit and the revert cheap.
-- **Events, not a dummy series**: a standalone conference is an event with no `seriesId`. Sessions live
-  in one JSONB array because they are read and written as a set, and a three-day event is one row, not
-  three parent-child round trips. A trigger keeps attendance honest when a date is not a session.
+- **Events, not a dummy series**: the event is the parent of its recurrence and its dates. A
+  standalone conference records its occurrences directly, and a recurring event owns a recurrence that
+  generates them idempotently on `(eventId, date)`. An occurrence is a row, not an array element, so
+  attendance keys to it and a date the event does not hold cannot enter the register.
 - **Offerings as versioned terms**: the public appeal can change without rewriting what was promised.
   Contributions and pledges are append-only, and visitor giving never creates a member record.
 - **PGlite for tests**: real Postgres semantics in-process, so `generate_series`, date arithmetic and
@@ -1762,6 +2137,11 @@ exists`) is retained**, so the `true` requirements apply only once a future aggr
 - OS-10: Shepherding cadence targets and overdue flags; pledge reminders are in scope.
 - OS-11: Bulk assignment in one request.
 - OS-12: Email/SMS delivery for shepherding.
+- OS-13: A named member-list clause, nested audience rules, membership/ministry/presbyter history,
+  per-audience reports, per-officer authorization, audiences on offerings and self-service visitor
+  registration. They are the exclusions of `member-registrations-event-audience.md`.
+- OS-14: The per-session offering attachment. It is a separate round after the event-parent migration
+  (`member-registrations-session-offerings.md`) and no part of it lands with this amendment.
 
 ## Changelog
 
