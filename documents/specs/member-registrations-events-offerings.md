@@ -482,18 +482,20 @@ keep a separate Attendance section, that is Q1.
 - FR-4a: An occurrence written with `status = 'cancelled'` MUST carry a non-empty reason in its `note`;
   the API rejects one without it with `422 reason_required`. A legacy row without a reason is displayed
   as "No reason recorded".
-- FR-4b: The event detail MUST show, per occurrence, the latest capture's time and whether it ended the
-  occurrence — "Live · 11 Nov 10:42" while the occurrence's window is current, "Not started · 11 Nov
-  10:42" for an open occurrence on or after today whose window has not begun, "Past session · 11 Nov
-  10:42" for an open occurrence whose window has passed, or "End of session · 11 Nov 11:05" once ended.
-  The day is always shown because the closing capture may fall on a later day, and the stamp is the
-  event timezone's wall clock with no zone suffix (the header names the zone), never the browser's. The
-  time and ended-ness come from the occurrence's `capture` field (the latest capture of either channel,
-  import or headcount); the live/not-started/past split is computed from the occurrence's date and
-  start/end window against the clock in the event timezone, per the live definition in the API spec's
-  import section. An occurrence with no capture shows "No capture yet", and a cancelled occurrence never
-  shows "Live"; one that is not ended shows "Cancelled · 10:42 GMT" with its capture time. The UI MUST
-  NOT read a stored live flag or ask the operator to declare "live".
+- FR-4b: The event detail MUST show, per occurrence, the latest capture's time and whether an
+  administrator has explicitly ended the occurrence — "Live · 11 Nov 10:42" while the occurrence's
+  window is current, "Not started · 11 Nov 10:42" for an open occurrence on or after today whose window
+  has not begun, "Past session · 11 Nov 10:42" for an open occurrence whose window has passed, or "End of
+  session · 11 Nov 11:05" once ended. A capture never ends the occurrence, so an open past occurrence
+  keeps "Past session" until the explicit **End session**. The day is always shown because the closing
+  capture may fall on a later day, and the stamp is the event timezone's wall clock with no zone suffix
+  (the header names the zone), never the browser's. The time and ended-ness come from the occurrence's
+  `capture` field (the latest capture of either channel, import or headcount); the live/not-started/past
+  split is computed from the occurrence's date and start/end window against the clock in the event
+  timezone, per the live definition in the API spec's import section. An occurrence with no capture shows
+  "No capture yet", and a cancelled occurrence never shows "Live"; one that is not ended shows
+  "Cancelled · 10:42 GMT" with its capture time. The UI MUST NOT read a stored live flag or ask the
+  operator to declare "live".
 - FR-5: A recurring event MUST appear as **one row** with a **Repeats** mark, showing its name, audience,
   a human-readable schedule and archived state from `GET /v1/events`, and its **next occurrence** from
   the occurrences that read returns: the first occurrence on or after today in the event timezone,
@@ -538,15 +540,20 @@ keep a separate Attendance section, that is Q1.
   not from the other dates.
   An archived event still shows the tiles, read-only (AC-10). The mock's attached-offerings rail and the
   per-occurrence attendance/offering columns are separate queued work, not part of this requirement.
-- FR-6f: An attendance import MUST be a capture. The page MUST show the computed state — "Live · recorded
-  10:42" with one **End of session** action while live, "Not started - this capture will end it" for an
-  open occurrence on or after today whose window has not begun, "Past session — this capture will end
-  it" for an open occurrence whose window has passed, or "End of session · recorded 11:05" once closed
-  with the action disabled; with no capture yet the state shows without a time — "Live", "Not started —
-  this capture will end it" or "Past session — this capture will end it". It MUST NOT ask the operator
-  to choose "live". An import capture outside the live window is the end capture (a headcount never
-  auto-ends), live captures may repeat, and after the close the page MUST refuse another capture with
-  the API's `409 session_closed`. A cancelled occurrence is read-only and offers no capture.
+- FR-6f: An attendance import MUST be a capture that never ends the session. The page MUST show the
+  computed state — "Live · recorded 10:42", "Not started · 10:42" for an open occurrence on or after
+  today whose window has not begun, "Past session · recorded 10:42" for an open occurrence whose window
+  has passed, or "End of session · recorded 11:05" once an administrator ended it — with one **End
+  session** action on every open **member-tracking** occurrence, live or past, disabled once closed;
+  with no capture yet the state shows without a time. It MUST NOT ask the operator to choose "live",
+  and it MUST NOT present an
+  import or a headcount as ending the session: a capture outside the live window is still an open
+  capture, and captures may repeat. The close is the operator's explicit **End session** (the end-only
+  attendance capture) and only after it does the page refuse another capture with the API's `409
+session_closed`. The close is optional and nothing enforces it: an occurrence may stay open
+  indefinitely, and the page MUST NOT nag, auto-close or block on it. A `tracksMembers = false`
+  occurrence offers no end action and stays open. A cancelled occurrence is read-only and offers no
+  capture.
 - FR-7: “Add schedule version”, “Add exception”, “Remove exception” and “Archive event” MUST use the
   documented event endpoints (`/v1/events/{eventId}/recurrence/versions`, `…/exceptions` and
   `…/archive`). A `cancelled` exception MUST carry a non-empty reason in `note`; the API rejects one
@@ -785,7 +792,7 @@ events and imports queries. A **standalone** occurrence offers the same entry an
 recurring one; only a `tracksMembers = false` event refuses, with `422 headcount_only`. There is no
 standalone attendance import page. (FR-8)
 
-### AC-7a: **Given** a live occurrence, **When** an import is captured without ending it, **Then** the page shows "Live" with the capture time and one **End of session** action, and another capture may replace it; **Given** a past open occurrence, **Then** the page reads "Past session — this capture will end it"; **Given** an import captured outside the live window with no prior close, **Then** it is accepted as the end capture and the occurrence closes; **Given** an ended occurrence, **Then** the page shows "End of session" with the action disabled and a further capture is refused; **Given** a not-yet-started open occurrence, **Then** the page reads "Not started — this capture will end it"; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled occurrence, **Then** the page offers no capture. (FR-6f)
+### AC-7a: **Given** a live occurrence, **When** an import is captured, **Then** the page shows "Live" with the capture time and one **End session** action, the session stays open, and another capture may replace it; **Given** a past open occurrence, **Then** the page reads "Past session" with the **End session** action and the occurrence stays open; **Given** an import captured outside the live window with no close, **Then** it is accepted as an open capture and does not close the occurrence; **Given** the administrator presses **End session**, **Then** the page shows "End of session" with the action disabled and a further capture is refused; **Given** a not-yet-started open occurrence, **Then** the page reads "Not started" with the **End session** action; **Given** a `tracksMembers = false` occurrence, **Then** the page offers no **End session** action and the occurrence stays open; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled occurrence, **Then** the page offers no capture. (FR-6f)
 
 ### AC-8: **Given** an event attendance report, **When** it loads, **Then** one aggregate request returns present/expected and optional member rows; no per-member requests are made. (FR-10, FR-11)
 
@@ -919,8 +926,8 @@ export interface EventOccurrence {
    * observation and the latest import batch (latest by `asOf`, then `createdAt`, then `id`); when the
    * two share an `asOf`, the one with the later recorded time (headcount `recordedAt` vs batch
    * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the occurrence's shared
-   * close state: `true` when any capture for the occurrence (import or headcount, superseded rows
-   * included) carries `ended`, `false` otherwise. `asOf` is an ISO-8601 instant, never zone-shifted;
+   * explicit close state: `true` when an end-only attendance import for the occurrence (superseded
+   * batches included) carries `ended`, `false` otherwise; a capture never sets it by timing. `asOf` is an ISO-8601 instant, never zone-shifted;
    * the client renders it in the event timezone. Null when the occurrence has no capture. The detail
    * takes the capture time and ended-ness from it and computes live/past from the occurrence's date and
    * window (FR-4b).
@@ -1493,6 +1500,13 @@ recurrence. S-Q3, S-Q4, S-Q6, S-Q7 and S-Q8 stand.
   spec.
 
 ## Change log
+
+- 2026-11-22: **a capture never ends a session** (owner, 2026-11-22: "import or capture should not end
+  session. have admin alternative explicit action to end it... this feature should not be enforced").
+  The detail never shows an import as ending an occurrence: an outside-the-window capture is an open
+  capture, and the close is the explicit **End session** action offered on every open occurrence, live
+  or past. The close is optional and nothing enforces it. FR-4b, FR-6f, AC-7a and the occurrence
+  `capture` DTO comment say so; the API and headcount specs are amended in the same change.
 
 - 2026-11-22: **the event's applicability is an audience and an offering attaches per session** (owner,
   2026-11-22; the same grill round, with the Q5 amendment). The event carries `audienceId` and its

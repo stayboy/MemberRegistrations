@@ -20,6 +20,17 @@ downstream round. No migration or code lands in the spec round.
 
 ## Change log
 
+- 2026-11-22: **a capture never ends a session** (owner, 2026-11-22: "import or capture should not end
+  session. have admin alternative explicit action to end it... this feature should not be enforced").
+  The automatic end on an outside-the-window capture is removed: an import outside the live window is
+  still an open capture. The close is the operator's explicit end-only capture (`rows: []` with
+  `ended: true`, labelled **End session**), offered on any open occurrence, and it is optional — nothing
+  enforces it and an occurrence may stay open indefinitely. After the explicit close, any capture or
+  per-member write still answers `409 session_closed`. FR-6b, the import paragraph, the Headcounts
+  paragraph, AC-32 and AC-33a say so; this supersedes the automatic end in the 2026-11-11 capture model.
+  The headcount and attendance specs are amended in the same change. No route or schema changes: the
+  existing `ended` input carries the explicit action and an end-only capture already accepts no rows.
+
 - 2026-11-22: **the event's applicability is an audience, the member gains a status, and an offering
   attaches per session** (owner, 2026-11-22; the same grill round as the event parent, with the Q5
   amendment). The event carries `audienceId` as its applicability field; the optional ministry and the
@@ -93,7 +104,9 @@ downstream round. No migration or code lands in the spec round.
   answers `409 session_closed`, not `422 validation_error`. A redeemed `attendance_punch` is a per-member
   write and obeys §Clocking — today-only (`422`) and not after a close (`409`) — and neither refusal
   consumes the code; the USSD glossary reports those as `Closed` / `Not today`, never `Bad code`. No new
-  acceptance criterion. Approved by the owner 2026-11-11 after the window-seat grill.
+  acceptance criterion. Approved by the owner 2026-11-11 after the window-seat grill. **Superseded
+  2026-11-22:** "closed by a late import" reads "closed by an explicit end"; no import closes a session
+  by timing.
 
 - 2026-11-11: attendance is a **capture** model. An import or headcount stamps `asOf` and carries `ended`;
   live is computed from the session date and its time window in the event timezone, so the user only
@@ -106,7 +119,9 @@ downstream round. No migration or code lands in the spec round.
   with a `now()` default, backfills it from each batch's `created_at`, then applies `not null`; it adds
   `ended boolean not null default false` to `import_batches` and `event_session_headcounts`, so existing
   rows read `ended = false`. A headcount after the session's calendar day is refused with
-  `422 validation_error`, so only a late import closes a past session.
+  `422 validation_error`, so only a late import closes a past session. **Superseded 2026-11-22:** a
+  capture never ends a session, including one outside the live window; only the operator's explicit end
+  action does, and nothing enforces it.
 
 - 2026-11-11: an attendance import is limited to series-backed events; a standalone event answers
   `422 series_required` and writes nothing. Existing standalone attendance history stays visible and
@@ -341,10 +356,16 @@ deployed to Vercel as a single function.
 - FR-6a: An import MUST be all-or-nothing, and its batch record MUST carry a checksum over the targeted
   occurrence and the rows so a capture can be audited and compared with another; the checksum no longer
   refuses a repeat, because a live capture may repeat.
-- FR-6b: An import MUST be a **capture**: the server stamps `asOf` and records `ended` (the operator may set
-  it, and a capture outside the live window is the end capture). A live capture MAY repeat and replaces the
-  occurrence's imported rows; an end capture is once per occurrence, and any capture after the close MUST
-  answer `409 session_closed` and create nothing.
+- FR-6b: An import MUST be a **capture**: the server stamps `asOf` and records `ended` only when the
+  operator explicitly ends the session — a capture never ends it, and a capture outside the live window
+  is still an open capture. A capture MAY repeat and replaces the occurrence's imported rows; an
+  end-only capture (`rows: []` with `ended: true`) records the close without rows. Once the session is
+  closed, any further capture MUST answer `409 session_closed` and create nothing. Nothing ends a
+  session automatically: an occurrence may stay open indefinitely, and the close is optional.
+  The close is the **attendance** channel's: the end-only capture is an attendance import, offered on
+  every member-tracking occurrence, live or past, from the import panel and the headcount dialog alike,
+  and its `asOf` is the clock (a closing capture may fall on a later day). A `tracksMembers = false`
+  occurrence has no attendance session, is never closed, and offers no end action.
 - FR-7: An imported attendance row MUST NOT overwrite a manual row; deleting an imported row MUST
   write a suppression so a later import cannot resurrect it.
 - FR-8: `GET /v1/members` MUST support a list-level attendance aggregate
@@ -901,18 +922,18 @@ and are `no-store` on read.
   `presbyters`; `mixed` is readable legacy only and is never a new observation. Each observation carries
   its `mode`, its `lines` — one bucket code from that mode's reference data plus a count, never a fixed
   set of named fields — a derived `total`, an `asOf` timestamp, `ended` (default false) and the
-  recorder. **A headcount is a capture too**: the computed
-  live window and the End of session action follow the import capture, and the session close is shared —
-  once any capture for the session is ended, a headcount write answers `409 session_closed`. A headcount's
-  `asOf` stays inside the session's calendar day, and a headcount after that day is refused with `422
-validation_error`. A headcount is bounded by the calendar day, not the live window: within the day it is
-  accepted as written and `ended` comes only from the operator's `ended: true`; the import's
-  outside-the-window auto-end does not apply to a headcount, so only a late import closes a past session.
-  The close is checked before the calendar-day rule, so a past session already closed by a late import
-  answers `409 session_closed`, not `422 validation_error`; the `422` applies only while no close exists.
-  The headcount surface follows the same three action states as the import page: **End of session**
-  enabled while the session is live, disabled once it is closed, and not offered otherwise; a close
-  carries whatever capture is current, so a recorded headcount is not a precondition.
+  recorder. **A headcount is a capture too**: it shares the session's explicit close — once an end has
+  been recorded for the session, a headcount write answers `409 session_closed` — but a headcount never
+  ends the session. A headcount's `asOf` stays inside the session's calendar day, and a headcount after
+  that day is refused with `422 validation_error`; the calendar day bounds the stamp, never the close.
+  `ended` comes only from the operator's explicit end action, never from a capture's timing. The close
+  is checked before the calendar-day rule, so a past session already ended answers `409 session_closed`,
+  not `422 validation_error`; the `422` applies only while no close exists.
+  The headcount surface offers one **End session** action on any open **member-tracking** occurrence —
+  live or past — disabled once the session is closed, where the action is the end-only attendance
+  capture; it is optional and nothing enforces it. A `tracksMembers = false` occurrence has no
+  attendance session, is never closed and offers no end action. A close carries whatever
+  capture is current, so a recorded headcount is not a precondition.
   The register-derived `expected` is a separate thing, labelled **Roster**
   on the reading surfaces, and a headcount never derives from or feeds it.
   **Visitor Mode** is the `visitors` mode: it counts **visitor men**, **visitor women** and **visitor
@@ -929,9 +950,12 @@ validation_error`. A headcount is bounded by the calendar day, not the live wind
   belonging to another event is `404 not_found`. A superseded observation is **not** invalid: it remains
   the valid record of the count at its `asOf`, and its `supersededBy` names the correcting row.
   `Headcount` is `{ id, eventId, sessionDate, asOf, mode, total, ended, recordedBy, recordedAt,
-supersedesId, supersededBy, lines: [{ code, label, count }] }`, where each line's `label` is joined from
+supersedesId, supersededBy, lines: [{ code, label, count }] }` (`ended` is legacy read-only: a new
+  headcount row always reads `false`), where each line's `label` is joined from
   the mode's bucket reference row. `POST` body `{ sessionDate, mode, lines: [{ code, count }], asOf?,
-ended?, supersedesId? }` returns `201`. `lines` defaults to `[]` (an all-zero observation is a real count
+supersedesId? }` returns `201`; the headcount write carries **no** `ended` — the close is the end-only
+  attendance import (FR-6b), so a headcount can never end a session, and the field's removal from this
+  request lands with the implementation round as a wire change. `lines` defaults to `[]` (an all-zero observation is a real count
   of zero) and is capped at 16 entries; `total` is derived from the lines and is never accepted from the
   client. `asOf` is required on the row, defaults to now and must fall within the session's calendar day
   in the event timezone. Validation is against the reference data, not a fixed field set: a line's `code`
@@ -1014,14 +1038,16 @@ so the route, the detail's Import action and its tests ship together. The tests 
 standalone import, an unknown member, a row for an existing member outside the audience, a closed or
 cancelled occurrence, and an `expected` computed from the audience.
 
-Each import is a **capture**: the server stamps `asOf` with the clock and records `ended` (default
-false). The body may set `ended: true` to close the session; a capture that falls outside the live
-window — session date today in the event timezone and the clock inside the session's start/end (a
-session with no end time is live for its whole date) — is treated as the end capture even when `ended`
-is omitted. A capture replaces that session's imported rows; manual rows and suppressions survive. Live
-captures may repeat, and the same rows may be captured again as a new observation; an end capture is
-once per session. **The close is any ended capture for that event and session — import or headcount —**
-and any further capture or per-member write answers `409 session_closed`. The batch records the event
+Each import is a **capture**: the server stamps `asOf` with the clock and records `ended` only when the
+body sets `ended: true` — an explicit end, never an inference from the clock. A capture that falls
+outside the live window — session date today in the event timezone and the clock inside the session's
+start/end (a session with no end time is live for its whole date) — is still an open capture and does
+not close the session. An end-only capture sends no rows (`rows: []` with `ended: true`). A capture
+replaces that session's imported rows; manual rows and suppressions survive. Captures may repeat, and
+the same rows may be captured again as a new observation; the close is once per session. **The close
+is only the operator's explicit end action — import or headcount —** and any further capture or
+per-member write answers `409 session_closed`. Nothing ends a session automatically: an occurrence may
+stay open indefinitely and the close is optional. The batch records the event
 and session it targeted and the checksum covers the occurrence plus the rows. The result reports rows written and rows skipped — skipped because a
 suppression exists or because a manual row already holds that session — so an operator can tell an
 import that wrote ten rows from one that skipped ten.
@@ -1409,8 +1435,8 @@ export interface EventOccurrence {
    * observation and the latest import batch (latest by `asOf`, then `createdAt`, then `id`); when the
    * two share an `asOf`, the one with the later recorded time (headcount `recordedAt` vs batch
    * `createdAt`) wins, and if those also tie, the import batch wins. `ended` is the occurrence's shared
-   * close state: `true` when any capture for the occurrence (import or headcount, superseded rows
-   * included) carries `ended`, `false` otherwise. `asOf` is an ISO-8601 instant, never zone-shifted;
+   * explicit close state: `true` when an end-only attendance import for the occurrence (superseded
+   * batches included) carries `ended`, `false` otherwise; a capture never sets it by timing. `asOf` is an ISO-8601 instant, never zone-shifted;
    * the client renders it in the event timezone. Null when the occurrence has no capture.
    */
   capture: { asOf: string; ended: boolean } | null;
@@ -1894,11 +1920,11 @@ sessions.
 
 ### AC-31: **Given** a standalone event and one of its occurrences, **When** an attendance import names that occurrence with a known member, **Then** the batch is accepted exactly as it is for a recurring occurrence; a row naming an unknown member fails the batch with that row named; a row naming an existing member outside the event's audience is accepted and `present` may exceed `expected`; a closed or cancelled occurrence answers its existing `409 session_closed` / `409 event_not_active` and writes nothing; a `tracksMembers = false` event still answers `422 headcount_only`; and `expected` is the audience evaluated at that occurrence's date. (FR-6)
 
-### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** an import capture outside the live window with no close, **Then** it is accepted as the end capture and closes the session. (FR-6)
+### AC-32: **Given** a live session, **When** an import captures it twice without `ended`, **Then** both are accepted, each stamped with `asOf`, and the second replaces the first's imported rows while manual rows survive; **Given** an import capture outside the live window with no `ended`, **Then** it is accepted as an open capture and the session stays open; **Given** an end-only capture (`rows: []` with `ended: true`), **Then** the session closes; **Given** any later capture, **Then** it is refused with `409 session_closed`. (FR-6)
 
-### AC-33: **Given** a session closed by any ended capture, **When** a per-member manual write, an import or a headcount is attempted, **Then** each answers `409 session_closed` and writes nothing; a per-member manual write for a session not dated today in the event timezone is refused while no close exists. (FR-6, §Clocking)
+### AC-33: **Given** a session closed by the explicit end, **When** a per-member manual write, an import or a headcount is attempted, **Then** each answers `409 session_closed` and writes nothing; a per-member manual write for a session not dated today in the event timezone is refused while no close exists. (FR-6, §Clocking)
 
-### AC-33a: **Given** a session dated before today in the event timezone, or a headcount whose `asOf` falls outside the session's calendar day, **When** a headcount is recorded, **Then** the API answers `422 validation_error` and writes nothing; **Given** a session dated today or later whose calendar day contains the headcount's `asOf`, **When** it is recorded outside the live window without `ended: true`, **Then** it is accepted as written and does not close the session — `ended` is set only by the operator's `ended: true` — and only a later import capture closes a past-open session. (§ Headcounts)
+### AC-33a: **Given** a session dated before today in the event timezone, or a headcount whose `asOf` falls outside the session's calendar day, **When** a headcount is recorded while no close exists, **Then** the API answers `422 validation_error` and writes nothing; **Given** a session dated today or later whose calendar day contains the headcount's `asOf`, **When** it is recorded outside the live window without `ended: true`, **Then** it is accepted as written and does not close the session — no capture closes by timing, only the operator's explicit end does — and a session may stay open indefinitely. (§ Headcounts)
 
 ### AC-34: **Given** an event whose audience is `Presbyters`, **When** a non-presbyter and a presbyter read it, **Then** the roster (`expected`) is the active presbyters, the non-presbyter does not see it on the member-facing surface, and the bearer back office reads it for both. **Given** the seeded `Everyone` (`allOf(membershipStatus active)`) and `Visitors only`, **When** an active member and a registered visitor are evaluated, **Then** `Everyone` matches the active member and excludes the visitor, `Visitors only` matches the visitor and excludes the active member, and a rule such as `allOf(ministry CHR)` matches an active choir member but not a visitor in the choir. (FR-32, FR-33)
 
