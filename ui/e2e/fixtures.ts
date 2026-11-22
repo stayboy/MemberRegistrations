@@ -4,6 +4,7 @@ import type {
   EventItem,
   EventOfferingItem,
   EventOfferingStatsItem,
+  EventVenueType,
   OfferingTermsItem,
 } from '../src/api/events';
 import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
@@ -1083,6 +1084,7 @@ const SERIES: readonly SeriesDto[] = [
     timezone: 'UTC',
     description: 'Weekly worship service.',
     archivedAt: null,
+    presbyterOnly: false,
     schedules: [
       { effectiveFrom: '2025-01-05', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
       {
@@ -1104,6 +1106,7 @@ const SERIES: readonly SeriesDto[] = [
     timezone: 'Africa/Accra',
     description: null,
     archivedAt: null,
+    presbyterOnly: false,
     schedules: [{ effectiveFrom: '2025-02-19', rrule: 'FREQ=MONTHLY;BYMONTHDAY=15', endsOn: null }],
     exceptions: [],
   },
@@ -1496,6 +1499,88 @@ function createdContacts(
   });
 }
 
+function venueTypeOf(value: unknown): EventVenueType {
+  return value === 'virtual' || value === 'hybrid' ? value : 'auditorium';
+}
+
+/**
+ * The create body as the API's own answer (FR-42a, AC-56): the id is derived
+ * from the typed number, the status is `scheduled`, the source is `manual`, and
+ * a blank session time inherits the event's. Nothing in the body may seed
+ * `status` or `source`; the form never sends them.
+ */
+function createdEvent(body: unknown): EventItem {
+  const record = asRecord(body);
+  const eventNo = text(record.eventNo);
+  const startTime = text(record.startTime);
+  const endTime = optionalText(record.endTime);
+  const rawSessions = Array.isArray(record.sessions) ? record.sessions : [];
+  const sessions: EventItem['sessions'][number][] = rawSessions.map((entry) => {
+    const row = asRecord(entry);
+    return {
+      date: text(row.date),
+      startTime: optionalText(row.startTime) ?? startTime,
+      endTime: row.endTime === null ? null : (optionalText(row.endTime) ?? endTime),
+      status: 'scheduled',
+      note: null,
+      present: 0,
+      expected: 0,
+      importedRows: 0,
+      capture: null,
+      source: 'none',
+    };
+  });
+
+  return {
+    id: `created-${eventNo}`,
+    eventNo,
+    name: text(record.name),
+    seriesId: null,
+    ministry: null,
+    timezone: text(record.timezone) || 'UTC',
+    startDate: text(record.startDate),
+    endDate: text(record.endDate),
+    startTime,
+    endTime,
+    venueType: venueTypeOf(record.venueType),
+    venueName: optionalText(record.venueName),
+    description: optionalText(record.description),
+    status: 'scheduled',
+    source: 'manual',
+    tracksMembers: record.tracksMembers !== false,
+    presbyterOnly: record.presbyterOnly === true,
+    sessions,
+    offerings: [],
+    stats: EMPTY_OFFERING_STATS,
+  };
+}
+
+/** The create body as the API's series detail answer (FR-42). */
+function createdSeriesFromBody(body: unknown, id: string): SeriesDto {
+  const record = asRecord(body);
+  const schedule = asRecord(record.schedule);
+  const ministryCode = text(record.ministryCode);
+  const ministry = MINISTRIES.find((candidate) => candidate.code === ministryCode);
+
+  return {
+    id,
+    name: text(record.name),
+    ministry: ministry ? { code: ministry.code, name: ministry.name } : null,
+    timezone: text(record.timezone) || 'UTC',
+    description: optionalText(record.description),
+    archivedAt: null,
+    presbyterOnly: record.presbyterOnly === true,
+    schedules: [
+      {
+        effectiveFrom: text(schedule.effectiveFrom),
+        rrule: text(schedule.rrule),
+        endsOn: optionalText(schedule.endsOn),
+      },
+    ],
+    exceptions: [],
+  };
+}
+
 /**
  * The API's uniqueness rule, mirrored: a contact value belongs to exactly one
  * member, so an entered value another member already owns fails the whole create
@@ -1518,8 +1603,12 @@ const OWNED_CONTACT_VALUES: ReadonlySet<string> = new Set(
  */
 function buildRoutes(
   created: Map<string, MemberDetail>,
+  createdEvents: Map<string, EventItem>,
+  createdSeries: Map<string, SeriesDto>,
   actionStatesEnabled: () => boolean,
   importReplyFor: (commit: ImportCommit) => ImportStubReply | null,
+  recordEventCreate: (body: unknown) => void,
+  recordSeriesCreate: (body: unknown) => void,
 ): readonly RouteEntry[] {
   // The action-state events exist for the capture-state tests; they are opt-in so a
   // session dated today cannot win another surface's "next session" selection.
@@ -1783,7 +1872,24 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/events$/,
-      handle: () => reply({ items: currentEvents() }),
+      handle: () => reply({ items: [...currentEvents(), ...createdEvents.values()] }),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events$/,
+      handle: (call) => {
+        recordEventCreate(call.body);
+        const event = createdEvent(call.body);
+        if (!event.eventNo) return problem(422, 'eventNo is required');
+        const duplicate = [...currentEvents(), ...createdEvents.values()].some(
+          (candidate) => candidate.eventNo === event.eventNo,
+        );
+        if (duplicate) {
+          return problem(409, `Event number ${event.eventNo} is already in use`);
+        }
+        createdEvents.set(event.id, event);
+        return reply(event, 201, { Location: `/v1/events/${event.id}` });
+      },
     },
     {
       method: 'GET',
@@ -1818,7 +1924,9 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/events\/([^/]+)$/,
       handle: (_call, [eventId]) => {
-        const event = currentEvents().find((candidate) => candidate.id === eventId);
+        const event =
+          createdEvents.get(eventId!) ??
+          currentEvents().find((candidate) => candidate.id === eventId);
         if (!event) return problem(404, `Event ${eventId} was not found`);
         return reply(event, 200, { ETag: '"e2e-event"' });
       },
@@ -2066,7 +2174,18 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/series$/,
-      handle: () => reply({ items: SERIES }),
+      handle: () => reply({ items: [...SERIES, ...createdSeries.values()] }),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/series$/,
+      handle: (call) => {
+        recordSeriesCreate(call.body);
+        const series = createdSeriesFromBody(call.body, `created-series-${createdSeries.size + 1}`);
+        if (!series.name.trim()) return problem(422, 'name is required');
+        createdSeries.set(series.id, series);
+        return reply(series, 201, { Location: `/v1/series/${series.id}` });
+      },
     },
     {
       method: 'GET',
@@ -2099,7 +2218,8 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/series\/([^/]+)$/,
       handle: (_call, [seriesId]) => {
-        const series = SERIES.find((candidate) => candidate.id === seriesId);
+        const series =
+          createdSeries.get(seriesId!) ?? SERIES.find((candidate) => candidate.id === seriesId);
         if (!series) return problem(404, `Series ${seriesId} was not found`);
         return reply(series);
       },
@@ -2164,8 +2284,18 @@ function buildRoutes(
 
 class GatewayStub {
   private readonly created = new Map<string, MemberDetail>();
+  /** Events the create route accepted; the detail read finds them here too. */
+  private readonly createdEvents = new Map<string, EventItem>();
+  /** Series the create route accepted, read back by the activity detail. */
+  private readonly createdSeries = new Map<string, SeriesDto>();
   /** Opt-in: the action-state events a capture-state test asks for. */
   includeActionStates = false;
+  /**
+   * The last create bodies, so a test can assert the wire the browser sent
+   * rather than the stub's own re-derivation (AC-56, AC-57).
+   */
+  lastEventCreate: unknown = null;
+  lastSeriesCreate: unknown = null;
   /**
    * Opt-in: the reply the confirmed import POSTs give. Unset, the stub accepts the rows and reports
    * one batch. The behavioural ACs assert the summary and the `422 import_failed` body, so the test
@@ -2174,8 +2304,16 @@ class GatewayStub {
   importReply: ((commit: ImportCommit) => ImportStubReply) | null = null;
   private readonly routes: readonly RouteEntry[] = buildRoutes(
     this.created,
+    this.createdEvents,
+    this.createdSeries,
     () => this.includeActionStates,
     (commit) => this.importReply?.(commit) ?? null,
+    (body) => {
+      this.lastEventCreate = body;
+    },
+    (body) => {
+      this.lastSeriesCreate = body;
+    },
   );
   private readonly unmatched: string[] = [];
 

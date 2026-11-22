@@ -27,6 +27,7 @@ const SERIES: SeriesDto = {
   timezone: 'UTC',
   description: null,
   archivedAt: null,
+  presbyterOnly: false,
   schedules: [{ effectiveFrom: '2026-01-01', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
   exceptions: [{ date: '2026-11-08', kind: 'cancelled', note: 'Conference' }],
 };
@@ -178,6 +179,19 @@ describe('series authoring', () => {
     });
   });
 
+  it('forwards presbyterOnly when the create body carries it', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...SERIES, presbyterOnly: true }, 201));
+
+    const created = await createSeries(BASE, TOKEN, {
+      name: 'Presbyters',
+      presbyterOnly: true,
+      schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
+    });
+
+    expect(JSON.parse(String(requestOptions(0).body))).toMatchObject({ presbyterOnly: true });
+    expect(created.presbyterOnly).toBe(true);
+  });
+
   it('rejects an empty create response body', async () => {
     fetchMock.mockResolvedValue(jsonResponse(null, 201));
 
@@ -227,6 +241,14 @@ describe('series authoring', () => {
 
     await updateSeries(BASE, TOKEN, 'series-1', { archived: false });
     expect(JSON.parse(String(requestOptions(1).body))).toEqual({ archived: false });
+  });
+
+  it('forwards presbyterOnly on update', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...SERIES, presbyterOnly: true }));
+
+    await updateSeries(BASE, TOKEN, 'series-1', { presbyterOnly: true });
+
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({ presbyterOnly: true });
   });
 
   it('rejects an empty update response body', async () => {

@@ -14,6 +14,28 @@ test('the retired series list redirects to the events list', async ({ page }) =>
   await expect(page.getByRole('link', { name: 'Series' })).toHaveCount(0);
 });
 
+test('the series form offers Presbyter only and sends it on create', async ({ page, gateway }) => {
+  await open(page, '/events/series/new');
+
+  const toggle = page.getByRole('switch', { name: 'Presbyter only' });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+
+  await page.getByLabel(/^Name/).fill('Presbyter study');
+  await page.getByLabel('Effective from').fill('2026-01-07');
+  await page.getByLabel('Recurrence rule').fill('FREQ=WEEKLY;BYDAY=WE');
+
+  await page.getByRole('button', { name: 'Create series' }).click();
+
+  await expect(page).toHaveURL(/\/events\/created-series-1\?kind=series$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Presbyter study' })).toBeVisible();
+  // AC-57: the recorded wire carries the toggle.
+  expect(gateway.lastSeriesCreate).toMatchObject({
+    name: 'Presbyter study',
+    presbyterOnly: true,
+  });
+});
+
 test('the series detail shows versions, exceptions and the occurrence window', async ({ page }) => {
   await open(page, '/events/series-1?kind=series');
 

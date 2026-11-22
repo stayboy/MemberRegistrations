@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_EVENT_LIMIT,
+  createEvent,
   deleteEventAttendance,
   eventAttendancePath,
   eventAttendanceRowPath,
@@ -202,6 +203,58 @@ describe('listEvents', () => {
 describe('eventDetailPath', () => {
   it('encodes the event id as one path segment', () => {
     expect(eventDetailPath('event/with space')).toBe('/gateway/v1/events/event%2Fwith%20space');
+  });
+});
+
+describe('createEvent', () => {
+  it('POSTs the create body to the events path and returns the EventItem', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...EVENT, status: 'scheduled' }, 201));
+
+    const created = await createEvent(BASE, TOKEN, {
+      eventNo: 'E-2',
+      name: 'Leaders retreat',
+      timezone: 'UTC',
+      startDate: '2026-11-10',
+      endDate: '2026-11-11',
+      startTime: '09:00',
+      venueType: 'auditorium',
+      sessions: [{ date: '2026-11-10' }],
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/events`);
+    expect(requestOptions(0).method).toBe('POST');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      eventNo: 'E-2',
+      name: 'Leaders retreat',
+      timezone: 'UTC',
+      startDate: '2026-11-10',
+      endDate: '2026-11-11',
+      startTime: '09:00',
+      venueType: 'auditorium',
+      sessions: [{ date: '2026-11-10' }],
+    });
+    expect(created.id).toBe('event-1');
+    expect(created.status).toBe('scheduled');
+  });
+
+  it('rejects an empty response body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null, 201));
+
+    await expect(
+      createEvent(BASE, TOKEN, {
+        eventNo: 'E-2',
+        name: 'Leaders retreat',
+        startDate: '2026-11-10',
+        endDate: '2026-11-11',
+        startTime: '09:00',
+        venueType: 'auditorium',
+        sessions: [{ date: '2026-11-10' }],
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: 'The created event response was empty.',
+    });
   });
 });
 

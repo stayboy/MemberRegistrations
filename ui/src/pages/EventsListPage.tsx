@@ -15,10 +15,14 @@ import {
   TableRow,
   Text,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular } from '@fluentui/react-icons';
+import {
+  ArrowClockwiseRegular,
+  CalendarAddRegular,
+  CalendarMonthRegular,
+} from '@fluentui/react-icons';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   DEFAULT_EVENT_LIMIT,
@@ -77,6 +81,7 @@ function statusColor(status: EventStatus): BadgeColor {
  */
 export function EventsListPage() {
   const styles = useEventStyles();
+  const navigate = useNavigate();
   const { baseUrl, session, signOut } = useSession();
   const { formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
@@ -142,6 +147,20 @@ export function EventsListPage() {
       submenu="Events"
       description="Every dated event, whether generated from a series or created for a one-off conference. Attendance is per event date."
       actions={[
+        {
+          id: 'new-event',
+          kind: 'verb',
+          label: 'New event',
+          icon: <CalendarAddRegular />,
+          onSelect: () => navigate('/events/new'),
+        },
+        {
+          id: 'new-series',
+          kind: 'verb',
+          label: 'New series',
+          icon: <CalendarMonthRegular />,
+          onSelect: () => navigate('/events/series/new'),
+        },
         {
           id: 'refresh',
           kind: 'utility',

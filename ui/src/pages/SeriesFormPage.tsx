@@ -8,6 +8,7 @@ import {
   MessageBarTitle,
   Option,
   Spinner,
+  Switch,
   Text,
   Textarea,
   makeStyles,
@@ -24,8 +25,6 @@ import { createSeries, getSeries, updateSeries, type SeriesDto } from '../api/se
 import { useSession } from '../auth/SessionProvider';
 import { PageFrame } from '../components/PageFrame';
 import {
-  SERIES_TIMEZONE_OPTIONS,
-  SERIES_TIMEZONE_OTHER,
   createEmptySeriesForm,
   fromSeriesDetail,
   toCreateSeriesPayload,
@@ -67,6 +66,12 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
     gap: tokens.spacingHorizontalL,
     alignItems: 'start',
+  },
+  toggle: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: tokens.spacingVerticalXS,
   },
   helper: {
     color: tokens.colorNeutralForeground3,
@@ -135,9 +140,6 @@ function SeriesFormView({
   const ministryLabel = selectedMinistry
     ? `${selectedMinistry.code} · ${selectedMinistry.name}`
     : values.ministryCode || 'No ministry';
-  const timezoneLabel =
-    SERIES_TIMEZONE_OPTIONS.find((option) => option.value === values.timezoneSelection)?.label ??
-    'Other timezone';
 
   useEffect(() => {
     if (isUnauthorized(ministriesQuery.error)) void signOut();
@@ -149,28 +151,6 @@ function SeriesFormView({
       if (!current[key]) return current;
       const next = { ...current };
       delete next[key];
-      return next;
-    });
-  }
-
-  function selectTimezone(selection: string): void {
-    if (selection === SERIES_TIMEZONE_OTHER) {
-      setValues((current) => ({
-        ...current,
-        timezoneSelection: SERIES_TIMEZONE_OTHER,
-        timezone: '',
-      }));
-    } else {
-      setValues((current) => ({
-        ...current,
-        timezoneSelection: selection,
-        timezone: selection,
-      }));
-    }
-    setErrors((current) => {
-      if (!current.timezone) return current;
-      const next = { ...current };
-      delete next.timezone;
       return next;
     });
   }
@@ -271,8 +251,8 @@ function SeriesFormView({
             <MessageBar intent="warning">
               <MessageBarBody>
                 <MessageBarTitle>This series is archived</MessageBarTitle>
-                Restore it from the series detail before editing. Its name, ministry, timezone,
-                description, schedule versions and exceptions are kept.
+                Restore it from the series detail before editing. Its name, ministry, description,
+                schedule versions and exceptions are kept.
               </MessageBarBody>
             </MessageBar>
           ) : null}
@@ -290,8 +270,7 @@ function SeriesFormView({
                 Identity
               </h2>
               <Text size={200} className={styles.helper}>
-                The name is unique per ministry. The timezone decides which calendar date counts as
-                today for this series.
+                The name is unique per ministry.
               </Text>
             </div>
 
@@ -337,46 +316,6 @@ function SeriesFormView({
                   ))}
                 </Dropdown>
               </Field>
-
-              <Field
-                label="Timezone"
-                required
-                validationState={errors.timezone ? 'error' : 'none'}
-                validationMessage={errors.timezone}
-                hint="The series uses this timezone only to decide today; dates stay UTC calendar dates."
-              >
-                <Dropdown
-                  value={readOnly ? values.timezone : timezoneLabel}
-                  selectedOptions={[values.timezoneSelection]}
-                  disabled={readOnly}
-                  onOptionSelect={(_, data) => selectTimezone(data.optionValue ?? 'UTC')}
-                >
-                  {SERIES_TIMEZONE_OPTIONS.map((option) => (
-                    <Option key={option.value} value={option.value}>
-                      {option.label}
-                    </Option>
-                  ))}
-                  <Option value={SERIES_TIMEZONE_OTHER}>Other timezone…</Option>
-                </Dropdown>
-              </Field>
-
-              {values.timezoneSelection === SERIES_TIMEZONE_OTHER ? (
-                <Field
-                  label="Custom timezone"
-                  required
-                  validationState={errors.timezone ? 'error' : 'none'}
-                  validationMessage={errors.timezone}
-                  hint="An IANA name such as Asia/Tokyo or Africa/Accra."
-                >
-                  <Input
-                    value={values.timezone}
-                    maxLength={64}
-                    disabled={readOnly}
-                    placeholder="Asia/Tokyo"
-                    onChange={(_, data) => setField('timezone', data.value)}
-                  />
-                </Field>
-              ) : null}
             </div>
 
             <Field
@@ -394,6 +333,18 @@ function SeriesFormView({
                 onChange={(_, data) => setField('description', data.value)}
               />
             </Field>
+
+            <div className={styles.toggle}>
+              <Switch
+                checked={values.presbyterOnly}
+                disabled={readOnly}
+                onChange={(_, data) => setField('presbyterOnly', data.checked)}
+                label="Presbyter only"
+              />
+              <Text size={200} className={styles.helper}>
+                Hidden on member-facing surfaces and rosters the presbyters.
+              </Text>
+            </div>
 
             {ministriesQuery.isError ? (
               <MessageBar intent="warning">

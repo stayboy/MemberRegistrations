@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SERIES_TIMEZONE_OTHER,
   createEmptySeriesForm,
   fromSeriesDetail,
   toCreateSeriesPayload,
@@ -13,8 +12,7 @@ import type { SeriesDto } from '../api/series';
 const VALID: SeriesFormValues = {
   name: 'Sunday service',
   ministryCode: 'CHOIR',
-  timezone: 'Africa/Lagos',
-  timezoneSelection: 'Africa/Lagos',
+  presbyterOnly: false,
   description: 'Weekly worship',
   effectiveFrom: '2026-11-08',
   rrule: 'FREQ=WEEKLY;BYDAY=SU',
@@ -28,6 +26,7 @@ const SERIES: SeriesDto = {
   timezone: 'Africa/Lagos',
   description: 'Weekly worship',
   archivedAt: null,
+  presbyterOnly: false,
   schedules: [{ effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
   exceptions: [],
 };
@@ -97,13 +96,6 @@ describe('validateSeriesForm', () => {
     ).toBeUndefined();
   });
 
-  it('requires a timezone within the 64-character limit', () => {
-    expect(validateSeriesForm({ ...VALID, timezone: ' ' }).timezone).toBe('Timezone is required.');
-    expect(validateSeriesForm({ ...VALID, timezone: 'x'.repeat(65) }).timezone).toBe(
-      'Timezone must be 64 characters or fewer.',
-    );
-  });
-
   it('caps the description at 500 characters', () => {
     expect(validateSeriesForm({ ...VALID, description: 'x'.repeat(501) }).description).toBe(
       'Description must be 500 characters or fewer.',
@@ -124,40 +116,42 @@ describe('validateSeriesForm', () => {
 });
 
 describe('series form defaults', () => {
-  it('defaults a new series to Africa/Lagos and today in UTC', () => {
+  it('defaults a new series to today in UTC', () => {
     expect(createEmptySeriesForm('2026-11-05')).toMatchObject({
       name: '',
       ministryCode: '',
-      timezone: 'Africa/Lagos',
-      timezoneSelection: 'Africa/Lagos',
+      presbyterOnly: false,
       effectiveFrom: '2026-11-05',
       rrule: '',
       endsOn: '',
     });
   });
 
-  it('prefills identity from the detail and marks an unknown timezone as Other', () => {
+  it('prefills identity from the detail', () => {
     expect(fromSeriesDetail(SERIES)).toMatchObject({
       name: 'Sunday service',
       ministryCode: 'CHOIR',
-      timezone: 'Africa/Lagos',
-      timezoneSelection: 'Africa/Lagos',
+      presbyterOnly: false,
       description: 'Weekly worship',
     });
 
-    const custom = fromSeriesDetail({ ...SERIES, timezone: 'Asia/Tokyo', description: null });
-    expect(custom.timezone).toBe('Asia/Tokyo');
-    expect(custom.timezoneSelection).toBe(SERIES_TIMEZONE_OTHER);
+    const custom = fromSeriesDetail({ ...SERIES, description: null });
     expect(custom.description).toBe('');
+  });
+
+  it('carries the presbyter-only flag from the detail into the edit form', () => {
+    expect(fromSeriesDetail({ ...SERIES, presbyterOnly: true }).presbyterOnly).toBe(true);
   });
 });
 
 describe('series payload builders', () => {
   it('includes the first schedule version on create', () => {
-    expect(toCreateSeriesPayload(VALID)).toEqual({
+    const payload = toCreateSeriesPayload(VALID);
+
+    expect(payload).toEqual({
       name: 'Sunday service',
       ministryCode: 'CHOIR',
-      timezone: 'Africa/Lagos',
+      presbyterOnly: false,
       description: 'Weekly worship',
       schedule: {
         effectiveFrom: '2026-11-08',
@@ -165,6 +159,7 @@ describe('series payload builders', () => {
         endsOn: '2027-11-08',
       },
     });
+    expect(payload).not.toHaveProperty('timezone');
   });
 
   it('turns blank optional fields into null and trims the rest', () => {
@@ -179,7 +174,7 @@ describe('series payload builders', () => {
     ).toEqual({
       name: 'Sunday service',
       ministryCode: null,
-      timezone: 'Africa/Lagos',
+      presbyterOnly: false,
       description: null,
       schedule: {
         effectiveFrom: '2026-11-08',
@@ -189,16 +184,22 @@ describe('series payload builders', () => {
     });
   });
 
-  it('omits the schedule on edit', () => {
+  it('sends the presbyter-only flag on create and edit', () => {
+    expect(toCreateSeriesPayload({ ...VALID, presbyterOnly: true }).presbyterOnly).toBe(true);
+    expect(toUpdateSeriesPayload({ ...VALID, presbyterOnly: true }).presbyterOnly).toBe(true);
+  });
+
+  it('omits the schedule and timezone on edit', () => {
     const payload = toUpdateSeriesPayload(VALID);
 
     expect(payload).toEqual({
       name: 'Sunday service',
       ministryCode: 'CHOIR',
-      timezone: 'Africa/Lagos',
+      presbyterOnly: false,
       description: 'Weekly worship',
     });
     expect(payload).not.toHaveProperty('schedule');
+    expect(payload).not.toHaveProperty('timezone');
   });
 
   it('trims the identity fields and turns blanks into null on edit', () => {
@@ -207,13 +208,12 @@ describe('series payload builders', () => {
         ...VALID,
         name: '  Sunday service  ',
         ministryCode: ' ',
-        timezone: ' Africa/Lagos ',
         description: ' ',
       }),
     ).toEqual({
       name: 'Sunday service',
       ministryCode: null,
-      timezone: 'Africa/Lagos',
+      presbyterOnly: false,
       description: null,
     });
   });

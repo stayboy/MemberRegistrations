@@ -120,6 +120,42 @@ export interface EventListItem {
   readonly sessions: readonly EventSessionSummary[];
 }
 
+/**
+ * One session as the create request writes it. `startTime` and `endTime` are
+ * omitted to inherit the event's times; `endTime: null` would mean a session
+ * with no end, which the form does not offer (FR-42b).
+ */
+export interface CreateEventSessionInput {
+  readonly date: string;
+  readonly startTime?: string;
+  readonly endTime?: string | null;
+}
+
+/** Mirrors `createEventSchema`; `status` and `source` are the API's to derive (FR-42a, FR-42b). */
+export interface CreateEventInput {
+  readonly eventNo: string;
+  readonly name: string;
+  readonly timezone?: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly startTime: string;
+  readonly endTime?: string | null;
+  readonly venueType: EventVenueType;
+  readonly venueName?: string | null;
+  readonly description?: string | null;
+  readonly tracksMembers?: boolean;
+  readonly presbyterOnly?: boolean;
+  readonly sessions: readonly CreateEventSessionInput[];
+}
+
+/**
+ * The write body the form builds: an all-whitespace `eventNo` is omitted rather
+ * than sent, so an invalid draft can never reach the API as an empty number.
+ */
+export type CreateEventPayload = Omit<CreateEventInput, 'eventNo'> & {
+  readonly eventNo?: string;
+};
+
 /** The detail body plus the `ETag` header; the API sends the event itself. */
 export interface EventDetail {
   readonly event: EventItem;
@@ -192,6 +228,24 @@ export async function listEvents(
   });
   if (!result) throw new ApiError(500, 'The event list response was empty.');
   return [...(result.items ?? [])];
+}
+
+/**
+ * `POST /v1/events`: the standalone event and its sessions in one request.
+ * The API answers `201` with the `EventItem` body, not a wrapper (FR-42a).
+ */
+export async function createEvent(
+  baseUrl: string,
+  sessionToken: string,
+  input: CreateEventPayload,
+): Promise<EventItem> {
+  const result = await gatewayRequest<EventItem>(baseUrl, EVENTS_PATH, {
+    method: 'POST',
+    sessionToken,
+    body: input,
+  });
+  if (!result) throw new ApiError(500, 'The created event response was empty.');
+  return result;
 }
 
 /** `GET /v1/events/:id`; the id is encoded for the path segment. */

@@ -49,6 +49,9 @@ const EventsListPage = lazy(() =>
 const EventDetailPage = lazy(() =>
   import('../pages/EventDetailPage').then(({ EventDetailPage: page }) => ({ default: page })),
 );
+const EventFormPage = lazy(() =>
+  import('../pages/EventFormPage').then(({ EventFormPage: page }) => ({ default: page })),
+);
 const SeriesDetailPage = lazy(() =>
   import('../pages/SeriesDetailPage').then(({ SeriesDetailPage: page }) => ({ default: page })),
 );
@@ -178,6 +181,7 @@ export const router = createHashRouter([
           { path: 'members/:memberNo', element: <MemberDetailPage /> },
           { path: 'members/:memberNo/edit', element: <MemberFormPage /> },
           { path: 'events', element: <EventsListPage /> },
+          { path: 'events/new', element: <EventFormPage /> },
           { path: 'events/series', element: <Navigate to="/events" replace /> },
           { path: 'events/series/new', element: <SeriesFormPage /> },
           { path: 'events/series/:id', element: <SeriesRedirect /> },
