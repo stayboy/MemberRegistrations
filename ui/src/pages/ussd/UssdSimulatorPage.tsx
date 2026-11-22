@@ -119,7 +119,7 @@ function callbackPayload(
 export function UssdSimulatorPage() {
   const styles = useUssdStyles();
   const { baseUrl, signOut } = useSession();
-  const [provider, setProvider] = useState<UssdProvider>('hmac');
+  const [provider, setProvider] = useState<UssdProvider>('nalo');
   const [phone, setPhone] = useState('0240000000');
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);

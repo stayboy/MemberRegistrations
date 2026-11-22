@@ -30,6 +30,9 @@ export async function executeUssdAdapter(
   await adapter.authenticator(request);
   const frame = await adapter.toFrame(request);
   const render = await runUssdFrame(frame, deps, {
+    // The frame's budget is the adapter's declared cap, never a global constant:
+    // the dev player and both provider routes share this seam.
+    budget: adapter.maxMsgChars,
     pageSize: adapter.pageSize,
     ip: request.ip,
   });

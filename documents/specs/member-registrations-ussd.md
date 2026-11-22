@@ -591,6 +591,8 @@ adapter plus one registration; nothing else changes.
 - `toFrame` — maps the provider wire to the internal frame.
 - `toWire` — maps the internal render to the provider wire DTO.
 - `maxMsgChars` — the provider's published per-message character cap, overridable in configuration.
+  It is also the **budget** the machine renders that provider's screens to (see "Message limits and
+  truncation").
 - `pageSize` — how many paged rows the channel renders, per list: `{ events, offerings }` is
   `{ 3, 5 }` for the 182 reference and `{ 2, 3 }` for Nalo's 120. The machine renders exactly the
   supplied size; it never inspects a message cap.
@@ -599,6 +601,53 @@ adapter plus one registration; nothing else changes.
 adapter** — the current `POST /ussd/session` entry, which authenticates with the HMAC-SHA-256 signature
 over `timestamp + nonce + body` using `USSD_GATEWAY_SECRET` and keeps its nonce replay guard. The
 simulator offers both in a provider dropdown.
+
+**Provider table.** Every provider the pipeline can be pointed at, with the one number that decides
+whether a screen fits. `ships` is what the code declares today; `option` is a prospective row — its
+route and config names are the ones adoption would use, and nothing by those names exists yet —
+specified so the next provider is one adapter and one registration, not a redesign.
+
+| id       | route                             | auth                                                                 | `maxMsgChars`                                    | `pageSize` | status |
+| -------- | --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ | ---------- | ------ |
+| `hmac`   | `POST /ussd/session`              | HMAC-SHA-256 over `timestamp + nonce + body` (`USSD_GATEWAY_SECRET`) | 182 — the GSM 7-bit USSD payload                 | `{ 3, 5 }` | ships  |
+| `nalo`   | `POST /ussd/nalo`                 | configured `USERID`, no signature                                    | 120, `USSD_NALO_MAX_MSG_CHARS` (1–182)           | `{ 2, 3 }` | ships  |
+| `hubtel` | when adopted: `POST /ussd/hubtel` | **not settled** — see the option below                               | 182; planned `USSD_HUBTEL_MAX_MSG_CHARS` (1–182) | `{ 3, 5 }` | option |
+
+**Hubtel (option, not adopted).** Hubtel is a candidate aggregator, specified here so the choice is a
+row rather than a rediscovery. This row adds **no route, no config and no migration**: adoption is one
+adapter, one registration and one `.env` entry, exactly as the declaration contract above promises.
+
+- **The number is 182, and it is published.** Hubtel's Mobile Messaging Terms define a USSD message as
+  a "182-character alphanumeric (including spaces) session-based message" and require that anything
+  longer "will be cut off at the valid number of characters" — an enforced ceiling, not a style guide.
+  The v1 API reference is read here **through a mirror**: `code.hubtel.com` answered 403 to the network
+  that did this reading, so every claim about that reference in this row is a mirror claim, not a
+  direct quotation. On that reading the reference states no cap for the `Message` field at all, which
+  leaves the terms as the only attested figure; 120 is **not** a Hubtel number and must not be cited
+  as one.
+- **182 is also the channel baseline.** USSD user data is 160 octets, which is 182 characters under
+  GSM 7-bit packing (`(160 × 8) / 7 = 182.8`). That is why the HMAC reference and the machine's
+  internal budget already use 182; Hubtel coincides with the reference rather than narrowing it.
+- **7 bit is the assumption.** The same 160 octets hold only 80 characters outside GSM-7, so a screen
+  with a non-GSM glyph fits half as much at the channel, whatever `maxMsgChars` says;
+  `truncateMessage` counts code units and would not notice, so a Hubtel adapter has to keep screens
+  ASCII rather than lean on the cut. The mirrored v1 guide warns the same way: a single `É` in
+  `Message` returns the platform's `UUE` invalid-response error.
+- **No prefix tax.** The wire shape assumed here is `Type`, `Sequence`, `ClientState`, `SessionId`,
+  `Message` — taken from Hubtel's .NET SDK README and a third-party Ghanaian developer doc, **not**
+  from the mirrored reference, so it is a working assumption to confirm. On that shape Hubtel
+  continues or releases with a JSON `Type` (`response` or `release`; requests are `Initiation`,
+  `Response` or `Timeout`), not with a `CON `/`END ` prefix, so the whole 182 characters are display
+  text; `\n` is the line break and is assumed to spend one character, which the open items below
+  test. `Sequence` and the echoed `ClientState` carry session state, and the gateway `SessionId`
+  maps to `ussd_sessions.external_id` under `(provider, external_id)`, as `nalo` does with
+  `SESSIONID`.
+- **Open until a sandbox answers them.** The exact cut-off (send 150, 182, 183 and 200 characters and
+  see whether Hubtel truncates or paginates — at least one Ghanaian platform answers a long screen
+  with a "99. Next" page); whether a newline spends one character or none; the inbound authentication
+  contract, which the mirrored reference does not describe; and the five-second response deadline the
+  SDK README states for the application. Until the first and third are answered the row is an option,
+  not a decision.
 
 **Nalo adapter** (`POST /ussd/nalo`, provider Nalo Solutions). The inbound request is JSON and carries
 `USERID` (the Nalo-issued client id), `MSISDN` (the caller number), `USERDATA` (the keypress/text, at
@@ -634,13 +683,50 @@ unauthorized`; a malformed body answers `422 validation_error`; neither writes a
   `maxMsgChars` (Nalo publishes 120) with `…` when it is longer. `MSGTYPE` is `!done`: `true` keeps the
   session open, `false` releases it.
 
-**Message limits and truncation.** The machine renders to the internal budget (menu label ≤ 16, prompt
-line ≤ 60, screen ≤ 182 including the footer). It is unaware of provider message caps; the channel
-supplies its declared `pageSize`, and an adapter truncates its `MSG` to its own `maxMsgChars` with `…`
-**only** as a fallback when the cap is smaller than the rendered text. Screens are laid out so a
-correctly declared page size never drops an action. Nalo's published cap is 120, overridable by
-`USSD_NALO_MAX_MSG_CHARS` (integer 1–182, default 120). The simulator shows the real truncation, not an
-idealised one.
+**Message limits and truncation.** The screen budget is **not** a constant: the adapter that owns a
+frame supplies its `maxMsgChars` as the frame's `budget`, so the machine lays every screen out to the
+provider it is answering, within the internal ceiling (menu label ≤ 16, prompt line ≤ 60, screen
+≤ 182 including the footer). `budget` is **per frame and never persisted**: it belongs beside
+`pageSize` on the session info the adapter rebuilds on every call, not on the stored session context,
+so a session that began on one provider cannot carry a stale budget into another. A frame with no
+declared cap renders to 182, which is the HMAC reference's budget. The channel also supplies its
+declared `pageSize` (`{ 3, 5 }` at 182, `{ 2, 3 }` at Nalo's 120): `pageSize` is an adapter field, **not**
+derived from `budget`, and the machine renders exactly the supplied size. The machine receives both
+numbers as supplied and reads no cap to derive either.
+
+**A screen that reaches the cut at a declared budget is a defect.** `truncateMessage` stays: an adapter
+must still fit its `MSG` to the provider's cap, and `USSD_NALO_MAX_MSG_CHARS` lets an operator lower
+Nalo's 120 (1–182). At the two **declared** budgets, 182 and 120, a renderer is expected to fit the
+budget it was given, so a delivered screen ending in the truncation marker is a layout bug, not a
+provider limitation — and the guard below pins exactly those two. A configured cap below a screen's
+minimum re-admits the cut, and there the marker is the documented fallback rather than a bug; that
+configuration is a deliberate narrowing, not the shipped layout. The 2026-11-22 defect that made this
+a rule: the profile screen emitted 169 characters in its short form, a Nalo frame cut it at 120
+mid-word, and `1 Verify contact` — the only route to a member's verification — was the line the cut
+removed, so on the default provider the action was undiscoverable.
+
+**Fixed order under pressure.** Every screen declares its line order, and four sections are protected:
+the action lines, the navigation footer (`9 Back`, `00 Main menu`, `0 More`), the `done` screen's
+confirmation and the **subject of a confirm screen** — the amount, or the amounts, it is confirming and
+their total. The profile renders its identity line (name, gender, age), then the action lines
+(`1 Verify contact`), then the data lines (member number, ministries, attendance, shepherd). When a
+budget cannot hold every line, whole lines are dropped from the **end of the data section upward**;
+no line is cut mid-word, and neither the action lines nor the footer are ever dropped to make room. A
+screen whose protected sections alone exceed a declared budget is a defect in that screen's design,
+not a truncation. A confirm screen whose full sentence does not fit renders its **compact** subject
+instead: the amounts in selection order, then the total, on one line (`GHS 30.00, GHS 20.00 · Total
+GHS 50.00`). The offering names may be omitted there — the selection screen named them a keypress
+earlier — but an amount and the total are never dropped, and a confirm screen never shows its actions
+without its subject. The same rule binds every action-bearing screen — Offerings, Activities, Attendance,
+Welfare & Services, Payments — where the action line precedes the data it would otherwise compete
+with, and it binds the screens without actions by dropping their data lines whole.
+
+**The guard.** A property test renders every state the menu tree can reach at budgets 182 and 120 and
+asserts two things: the text fits the budget, and every **action the state accepts** — every key in the
+rendered `options`, navigation keys included — is named in the text. A state that accepts no keys
+(`done`, a terminal `error`) passes the action half vacuously and is still held to the budget. A new screen, or a longer label, fails it before a member
+meets the cut. Nalo's published cap remains 120, overridable by `USSD_NALO_MAX_MSG_CHARS` (integer
+1–182, default 120).
 
 **`POST /dev/ussd/session` — the dev-only gateway.** This entry plays the gateway for the simulator. Its
 request is `{ provider: 'nalo' | 'hmac', phone, input, sessionId?, seq? }`, where `sessionId` is the value
@@ -662,7 +748,8 @@ until a real aggregator contract exists. `POST /dev/ussd/session` additionally r
 above. Both gates are tested.
 
 **The Simulator page.** A dev-only page in the operator app offers a provider dropdown (Nalo, HMAC
-reference) and a handset-style display. It posts each keypress to `POST /dev/ussd/session`, renders the
+reference) and a handset-style display. It opens on `nalo` — the provider whose budget shapes the
+layout — and HMAC stays selectable; the default is a demonstration choice, not a cap. It posts each keypress to `POST /dev/ussd/session`, renders the
 returned screen text as a caller would see it — including the provider's real truncation — and exposes
 the stub payment gateway's callback so a commit can be completed end to end: it shows the commit
 reference, the callback body and a signed-callback shell template, while the signature itself stays
@@ -898,3 +985,17 @@ remains a review artifact.
   carry explicit statuses; a group is never partially paid.
 - 2026-11-05: the display-glossary table is shared across 24a–24c; each part ships the keys its screens
   use and the completeness test covers the shipped set.
+- 2026-11-22: 24d gains a **provider table** and a **Hubtel** row marked `option`. Hubtel publishes 182
+  characters in its messaging terms as an enforced truncation point (its API reference, read through a
+  mirror, states no cap),
+  which coincides with the GSM 7-bit USSD payload the HMAC reference already models; the row adds no
+  route, config or migration, and its inbound authenticator and exact cut-off behaviour are recorded as
+  open until a sandbox probe answers them. Nalo's 120 and the reference 182 are unchanged.
+- 2026-11-22: the screen budget becomes per-provider. An adapter supplies its `maxMsgChars` as the render
+  frame's `budget` (default 182) and the machine lays out to it; a screen that reaches the cut at a
+  declared budget is a defect rather than a provider limitation (a configured cap below a screen's
+  minimum keeps the cut as the documented fallback), because Nalo's 120-character frame cut the profile
+  at `Shepherd Kwame …` and removed `1 Verify contact`. The profile renders identity, then
+  the action, then the data, dropping whole lines instead of cutting them, and a property test pins
+  every reachable state to 182 and 120 with its actions named. The console opens on `nalo` again; HMAC
+  stays selectable.

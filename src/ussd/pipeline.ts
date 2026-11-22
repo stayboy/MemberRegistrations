@@ -37,6 +37,8 @@ export interface UssdPipelineDeps {
 
 export interface UssdPipelineOptions {
   pageSize: { events: number; offerings: number };
+  /** The adapter's declared per-message cap; a frame that declares none renders to 182. */
+  budget: number;
   ip?: string;
 }
 
@@ -70,6 +72,7 @@ function sessionInfo(
   phoneHash: string,
   member: Awaited<ReturnType<UssdRepository['findOwnedMember']>>,
   pageSize: { events: number; offerings: number },
+  budget: number,
 ): UssdSessionInfo {
   return {
     phone,
@@ -77,6 +80,7 @@ function sessionInfo(
     member,
     anonymous: member === null,
     pageSize,
+    budget,
   };
 }
 
@@ -104,7 +108,7 @@ export async function runUssdFrame(
   }
 
   const member = await repo.findOwnedMember(phone);
-  const info = sessionInfo(phone, phoneHash, member, options.pageSize);
+  const info = sessionInfo(phone, phoneHash, member, options.pageSize, options.budget);
   const input = frame.input.trim();
 
   let session: UssdSessionRow | null = null;

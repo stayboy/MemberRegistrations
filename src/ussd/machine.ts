@@ -242,6 +242,13 @@ export interface UssdSessionInfo {
   anonymous: boolean;
   /** The channel's declared paged-list sizes; the reference is 3 events and 5 offerings. */
   pageSize?: { events: number; offerings: number };
+  /**
+   * The provider's per-message cap for this frame. It travels beside `pageSize`
+   * on the session info the adapter rebuilds on every call; it is never stored
+   * on the session context or in the session row, so a session that began on
+   * one provider cannot carry a stale budget into another.
+   */
+  budget?: number;
 }
 
 /** The destination a member-initiated code went to; the notice's only member data. */
@@ -766,39 +773,87 @@ function screen(
   return { state, context, text: lines.join('\n'), done, options };
 }
 
+/** The reference channel's budget when a frame declares none. */
+const DEFAULT_SCREEN_BUDGET = 182;
+
+function screenBudget(session: UssdSessionInfo): number {
+  return session.budget ?? DEFAULT_SCREEN_BUDGET;
+}
+
+interface ScreenSegments {
+  /** Always rendered: notices, headings and the identity the screen opens with. */
+  head: string[];
+  /** Always rendered: the lines an accepted key names. */
+  actions: string[];
+  /** Dropped whole from the end when the budget is tight; never cut mid-line. */
+  data: string[];
+  /** The options that name the `actions`; the footer options are added here. */
+  options?: UssdOption[];
+  /** Whether the footer offers `0 More`. */
+  more?: boolean;
+}
+
+/**
+ * Lay a screen out to the frame's budget. The head, the action lines and the
+ * navigation footer (`9 Back`, `00 Main menu`, `0 More`) are protected; whole
+ * data lines are dropped from the end until the joined text fits. A screen
+ * whose protected sections alone exceed the budget is returned unchanged, so
+ * the guard reports it as a defect in that screen's design rather than the code
+ * hiding it. A `done` screen never comes through here: its confirmation is
+ * protected and is never trimmed.
+ */
+function fittedScreen(
+  state: UssdState,
+  context: UssdContext,
+  session: UssdSessionInfo,
+  segments: ScreenSegments,
+): Rendered {
+  const nav = navLines(state, context, segments.more ?? false);
+  const data = [...segments.data];
+  const assemble = (lines: string[]): string =>
+    [...segments.head, ...segments.actions, ...lines, ...nav.lines].join('\n');
+  while (data.length > 0 && assemble(data).length > screenBudget(session)) data.pop();
+  return screen(
+    state,
+    context,
+    [...segments.head, ...segments.actions, ...data, ...nav.lines],
+    [...(segments.options ?? []), ...nav.options],
+  );
+}
+
 function offeringById(context: UssdContext, id: string): UssdOffering | undefined {
   return context.offerings?.find((offering) => offering.id === id);
 }
 
-function renderedOfferings(context: UssdContext, anonymous: boolean): Rendered {
+function renderedOfferings(context: UssdContext, session: UssdSessionInfo): Rendered {
   const event = context.event;
-  const lines = [...noticeLines(context), truncate('event', event?.name ?? '')];
+  const head = [...noticeLines(context), truncate('event', event?.name ?? '')];
+  const actions: string[] = [`1 ${t('action.give')}`];
   const options: UssdOption[] = [{ key: '1', label: t('action.give') }];
-  lines.push(`1 ${t('action.give')}`);
-  if (!anonymous) {
-    lines.push(`2 ${t('action.pledge')}`);
-    lines.push(`3 ${t('action.my_pledges')}`);
-    lines.push(`4 ${t('action.my_payments')}`);
+  if (!session.anonymous) {
+    actions.push(
+      `2 ${t('action.pledge')}`,
+      `3 ${t('action.my_pledges')}`,
+      `4 ${t('action.my_payments')}`,
+    );
     options.push(
       { key: '2', label: t('action.pledge') },
       { key: '3', label: t('action.my_pledges') },
       { key: '4', label: t('action.my_payments') },
     );
   }
-  const nav = navLines('offerings', context, false);
-  return screen('offerings', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  return fittedScreen('offerings', context, session, { head, actions, data: [], options });
 }
 
-function renderedAmount(context: UssdContext): Rendered {
+function renderedAmount(context: UssdContext, session: UssdSessionInfo): Rendered {
   const heading = context.flow === 'pledge' ? t('action.pledge') : t('action.give');
-  const lines = [
+  const head = [
     ...noticeLines(context),
     heading,
     truncate('event', context.event?.name ?? ''),
     t('prompt.amount'),
   ];
-  const nav = navLines('offerings.amount', context, false);
-  return screen('offerings.amount', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('offerings.amount', context, session, { head, actions: [], data: [] });
 }
 
 function renderedSelect(context: UssdContext, session: UssdSessionInfo): Rendered {
@@ -807,38 +862,37 @@ function renderedSelect(context: UssdContext, session: UssdSessionInfo): Rendere
   const size = offeringPageSize(session);
   const visible = all.slice(page * size, (page + 1) * size);
   const more = all.length > (page + 1) * size;
-  const lines = [...noticeLines(context), t('prompt.offerings')];
+  const head = [...noticeLines(context), t('prompt.offerings')];
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   visible.forEach((offering, index) => {
     const key = String(index + 1);
     const name = truncate('offering', offering.name);
-    lines.push(`${key} ${name}`);
+    actions.push(`${key} ${name}`);
     options.push({ key, label: name });
   });
-  const nav = navLines('offerings.select', context, more);
-  return screen(
-    'offerings.select',
-    context,
-    [...lines, ...nav.lines],
-    [...options, ...nav.options],
-  );
+  return fittedScreen('offerings.select', context, session, {
+    head,
+    actions,
+    data: [],
+    options,
+    more,
+  });
 }
 
-function renderedSplit(context: UssdContext): Rendered {
-  const lines = [...noticeLines(context), t('prompt.split')];
+function renderedSplit(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [...noticeLines(context), t('prompt.split')];
+  const data: string[] = [];
   (context.selected ?? []).forEach((id, index) => {
-    lines.push(`${index + 1} ${truncate('offering', offeringById(context, id)?.name ?? '')}`);
+    data.push(`${index + 1} ${truncate('offering', offeringById(context, id)?.name ?? '')}`);
   });
-  lines.push(`${t('label.total')} ${money(context.amountMinor ?? 0, context.currency)}`);
-  const nav = navLines('offerings.split', context, false);
-  return screen('offerings.split', context, [...lines, ...nav.lines], nav.options);
+  data.push(`${t('label.total')} ${money(context.amountMinor ?? 0, context.currency)}`);
+  return fittedScreen('offerings.split', context, session, { head, actions: [], data });
 }
 
 function giftConfirmLines(context: UssdContext): string[] {
+  const { amounts, total, currency } = confirmedAmounts(context);
   const selected = context.selected ?? [];
-  const amounts = selected.map((_id, index) => context.split?.[index] ?? context.amountMinor ?? 0);
-  const total = amounts.reduce((sum, amount) => sum + amount, 0);
-  const currency = context.currency ?? 'GHS';
   if (selected.length === 1) {
     const name = truncate('offering', offeringById(context, selected[0]!)?.name ?? '');
     return [
@@ -859,31 +913,78 @@ function giftConfirmLines(context: UssdContext): string[] {
   ];
 }
 
-function renderedConfirm(context: UssdContext): Rendered {
-  const lines = [...noticeLines(context)];
+/** The amounts a gift or pledge is confirming, in selection order, and their total. */
+function confirmedAmounts(context: UssdContext): {
+  amounts: number[];
+  total: number;
+  currency: string;
+} {
+  const selected = context.selected ?? [];
+  const amounts = selected.map((_id, index) => context.split?.[index] ?? context.amountMinor ?? 0);
+  const total = amounts.reduce((sum, amount) => sum + amount, 0);
+  return { amounts, total, currency: context.currency ?? 'GHS' };
+}
+
+/**
+ * §24d: the compact confirm subject keeps every amount and the total on one
+ * line and may omit the offering names the selection screen already named.
+ */
+function compactConfirmSubject(amounts: number[], total: number, currency: string): string[] {
+  return [
+    `${amounts.map((amount) => money(amount, currency)).join(', ')} · ${t('label.total')} ${money(total, currency)}`,
+  ];
+}
+
+/** Whether the protected head, subject and actions still fit this frame's budget. */
+function fitsBudget(
+  state: UssdState,
+  context: UssdContext,
+  session: UssdSessionInfo,
+  head: string[],
+  subject: string[],
+  actions: string[],
+): boolean {
+  const nav = navLines(state, context, false);
+  return [...head, ...subject, ...actions, ...nav.lines].join('\n').length <= screenBudget(session);
+}
+
+function renderedConfirm(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [...noticeLines(context)];
+  const actions = [`1 ${t('action.accept')}`, `2 ${t('action.change')}`];
+  const options: UssdOption[] = [
+    { key: '1', label: t('action.accept') },
+    { key: '2', label: t('action.change') },
+  ];
+  // §24d: a confirm screen's subject — the amounts it is confirming and their
+  // total — is protected. The full sentence keeps the names; when it does not
+  // fit, the compact subject keeps every amount and the total and drops only
+  // the names, so the screen never shows its actions without its subject.
+  const { amounts, total, currency } = confirmedAmounts(context);
+  const compact = compactConfirmSubject(amounts, total, currency);
+  let subject: string[];
   if (context.flow === 'pledge') {
     const offering = offeringById(context, context.selected?.[0] ?? '');
-    lines.push(
+    const full = [
       t('action.pledge'),
       truncate('offering', offering?.name ?? ''),
       money(context.amountMinor ?? 0, context.currency),
       `${t('prompt.expected_date')} ${shortDate(context.expectedOn ?? '')}`,
-    );
+    ];
+    subject = fitsBudget('offerings.confirm', context, session, head, full, actions)
+      ? full
+      : compact;
   } else {
-    lines.push(...giftConfirmLines(context));
+    const full = giftConfirmLines(context);
+    subject = fitsBudget('offerings.confirm', context, session, head, full, actions)
+      ? full
+      : compact;
   }
-  lines.push(`1 ${t('action.accept')}`, `2 ${t('action.change')}`);
-  const nav = navLines('offerings.confirm', context, false);
-  return screen(
-    'offerings.confirm',
-    context,
-    [...lines, ...nav.lines],
-    [
-      { key: '1', label: t('action.accept') },
-      { key: '2', label: t('action.change') },
-      ...nav.options,
-    ],
-  );
+  return fittedScreen('offerings.confirm', context, session, {
+    head: [...head, ...subject],
+    actions,
+    data: [],
+    options,
+  });
 }
 
 function renderedDone(state: 'offerings.done' | 'pledges.done', context: UssdContext): Rendered {
@@ -898,96 +999,105 @@ function renderedDone(state: 'offerings.done' | 'pledges.done', context: UssdCon
   return screen(state, context, lines, [], true);
 }
 
-function renderedPledgeDate(context: UssdContext): Rendered {
+function renderedPledgeDate(context: UssdContext, session: UssdSessionInfo): Rendered {
   const offering = offeringById(context, context.selected?.[0] ?? '');
-  const lines = [
+  const head = [
     ...noticeLines(context),
     t('action.pledge'),
     truncate('offering', offering?.name ?? ''),
     money(context.amountMinor ?? 0, context.currency),
     t('prompt.date'),
   ];
-  const nav = navLines('offerings.pledge_date', context, false);
-  return screen('offerings.pledge_date', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('offerings.pledge_date', context, session, { head, actions: [], data: [] });
 }
 
-function renderedPledgeConfirm(context: UssdContext): Rendered {
+function renderedPledgeConfirm(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [...noticeLines(context)];
+  const actions = [`1 ${t('action.accept')}`, `2 ${t('action.change')}`];
+  const options: UssdOption[] = [
+    { key: '1', label: t('action.accept') },
+    { key: '2', label: t('action.change') },
+  ];
   const offering = offeringById(context, context.selected?.[0] ?? '');
-  const lines = [
-    ...noticeLines(context),
+  const full = [
     t('action.pledge'),
     truncate('offering', offering?.name ?? ''),
     money(context.amountMinor ?? 0, context.currency),
     `${t('prompt.expected_date')} ${shortDate(context.expectedOn ?? '')}`,
   ];
-  const nav = navLines('offerings.pledge_confirm', context, false);
-  return screen(
-    'offerings.pledge_confirm',
-    context,
-    [...lines, `1 ${t('action.accept')}`, `2 ${t('action.change')}`, ...nav.lines],
-    [
-      { key: '1', label: t('action.accept') },
-      { key: '2', label: t('action.change') },
-      ...nav.options,
-    ],
-  );
+  // §24d: the amount and its total are the confirm screen's subject and are
+  // never dropped; the compact form gives up the name and the due date first.
+  const { amounts, total, currency } = confirmedAmounts(context);
+  const compact = compactConfirmSubject(amounts, total, currency);
+  const subject = fitsBudget('offerings.pledge_confirm', context, session, head, full, actions)
+    ? full
+    : compact;
+  return fittedScreen('offerings.pledge_confirm', context, session, {
+    head: [...head, ...subject],
+    actions,
+    data: [],
+    options,
+  });
 }
 
-function renderedPledges(context: UssdContext): Rendered {
+function renderedPledges(context: UssdContext, session: UssdSessionInfo): Rendered {
   const page = context.pledgePage ?? 0;
   const all = context.pledges ?? [];
   const visible = all.slice(page * PLEDGE_PAGE_SIZE, (page + 1) * PLEDGE_PAGE_SIZE);
   const more = all.length > (page + 1) * PLEDGE_PAGE_SIZE;
-  const lines = [...noticeLines(context), t('action.my_pledges')];
+  const head = [...noticeLines(context), t('action.my_pledges')];
+  const actions: string[] = [];
+  const data: string[] = [];
   const options: UssdOption[] = [];
   visible.forEach((pledge, index) => {
     const key = String(index + 1);
     const name = truncate('offering', pledge.offeringName);
-    lines.push(
-      `${key} ${name}`,
-      `${money(pledge.amountMinor, pledge.currency)} ${shortDate(pledge.expectedOn)}`,
-    );
+    actions.push(`${key} ${name}`);
+    data.push(`${money(pledge.amountMinor, pledge.currency)} ${shortDate(pledge.expectedOn)}`);
     options.push({ key, label: name });
   });
-  const nav = navLines('pledges.list', context, more);
-  return screen('pledges.list', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  return fittedScreen('pledges.list', context, session, {
+    head,
+    actions,
+    data,
+    options,
+    more,
+  });
 }
 
-function renderedPledgeConfirmOne(context: UssdContext): Rendered {
+function renderedPledgeConfirmOne(context: UssdContext, session: UssdSessionInfo): Rendered {
   const pledge = context.selectedPledge;
-  const lines = [
+  const head = [
     ...noticeLines(context),
     t('action.pay'),
     truncate('offering', pledge?.offeringName ?? ''),
     money(pledge?.amountMinor ?? 0, pledge?.currency),
     `${t('prompt.expected_date')} ${shortDate(pledge?.expectedOn ?? '')}`,
-    `1 ${t('action.pay')}`,
   ];
-  const nav = navLines('pledges.confirm', context, false);
-  return screen(
-    'pledges.confirm',
-    context,
-    [...lines, ...nav.lines],
-    [{ key: '1', label: t('action.pay') }, ...nav.options],
-  );
+  return fittedScreen('pledges.confirm', context, session, {
+    head,
+    actions: [`1 ${t('action.pay')}`],
+    data: [],
+    options: [{ key: '1', label: t('action.pay') }],
+  });
 }
 
-function renderedPayments(context: UssdContext): Rendered {
+function renderedPayments(context: UssdContext, session: UssdSessionInfo): Rendered {
   const summary = context.summary;
   const currency = summary?.currency ?? 'GHS';
-  const lines = [...noticeLines(context)];
+  const head = [...noticeLines(context)];
+  const data: string[] = [];
   if (summary) {
-    lines.push(
+    data.push(
       `${t('label.week')} ${money(summary.week.paidMinor, currency)}`,
       `${t('label.quarter')} ${money(summary.quarter.paidMinor, currency)}`,
       `${t('label.year')} ${money(summary.year.paidMinor, currency)}`,
     );
     for (const event of summary.topEvents) {
-      lines.push(`${truncate('event', event.name)} ${money(event.paidMinor, currency)}`);
+      data.push(`${truncate('event', event.name)} ${money(event.paidMinor, currency)}`);
     }
   }
-  const nav = navLines('payments.summary', context, false);
-  return screen('payments.summary', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('payments.summary', context, session, { head, actions: [], data });
 }
 
 /** Spouse renders Husband/Wife from the policyholder's gender; other types stay as named. */
@@ -1008,7 +1118,7 @@ function welfareCoverLabel(covers: 'individual' | 'household'): string {
   return covers === 'household' ? 'Household' : 'Individual';
 }
 
-function renderedWelfareList(context: UssdContext): Rendered {
+function renderedWelfareList(context: UssdContext, session: UssdSessionInfo): Rendered {
   const page = context.welfarePage ?? 0;
   const all = context.welfareProducts ?? [];
   const visible = all.slice(
@@ -1016,79 +1126,89 @@ function renderedWelfareList(context: UssdContext): Rendered {
     (page + 1) * WELFARE_PRODUCT_PAGE_SIZE,
   );
   const more = all.length > (page + 1) * WELFARE_PRODUCT_PAGE_SIZE;
-  const lines = [...noticeLines(context), t('menu.welfare')];
+  const head = [...noticeLines(context), t('menu.welfare')];
+  const actions: string[] = [];
+  const data: string[] = [];
   const options: UssdOption[] = [];
   if (all.length === 0) {
-    lines.push(t('welfare.not_eligible'));
+    data.push(t('welfare.not_eligible'));
   } else {
     visible.forEach((product, index) => {
       const key = String(index + 1);
       const name = truncate('offering', product.name);
-      lines.push(`${key} ${name}`);
+      actions.push(`${key} ${name}`);
       options.push({ key, label: name });
     });
   }
   if (more) {
-    lines.push(`0 ${t('nav.more')}`);
+    actions.push(`0 ${t('nav.more')}`);
     options.push({ key: '0', label: t('nav.more') });
   }
-  lines.push(`8 ${t('welfare.my_services')}`);
+  actions.push(`8 ${t('welfare.my_services')}`);
   options.push({ key: '8', label: t('welfare.my_services') });
-  const nav = navLines('welfare.list', context, false);
-  return screen('welfare.list', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  return fittedScreen('welfare.list', context, session, {
+    head,
+    actions,
+    data,
+    options,
+  });
 }
 
-function renderedWelfareProduct(context: UssdContext): Rendered {
+function renderedWelfareProduct(context: UssdContext, session: UssdSessionInfo): Rendered {
   const product = context.welfareProduct;
-  const lines = [
+  const head = [
     ...noticeLines(context),
     truncate('event', product?.name ?? ''),
     `${t('welfare.premium')} ${money(product?.premiumMinor ?? 0, product?.currency)}`,
     `${t('welfare.cover')} ${welfareCoverLabel(product?.covers ?? 'individual')} · ${
       product?.periodMonths ?? 1
     } ${t('label.month')}`,
-    `1 ${t('welfare.subscribe')}`,
   ];
-  const nav = navLines('welfare.product', context, false);
-  return screen(
-    'welfare.product',
-    context,
-    [...lines, ...nav.lines],
-    [{ key: '1', label: t('welfare.subscribe') }, ...nav.options],
-  );
+  return fittedScreen('welfare.product', context, session, {
+    head,
+    actions: [`1 ${t('welfare.subscribe')}`],
+    data: [],
+    options: [{ key: '1', label: t('welfare.subscribe') }],
+  });
 }
 
-function renderedWelfareDependents(context: UssdContext): Rendered {
+function renderedWelfareDependents(context: UssdContext, session: UssdSessionInfo): Rendered {
   const phase = context.welfareDependentsPhase ?? 'none';
-  const lines = [...noticeLines(context), t('welfare.cover_dependents')];
+  const head = [...noticeLines(context), t('welfare.cover_dependents')];
+  const data: string[] = [];
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   if (phase === 'none') {
-    lines.push(t('welfare.no_dependents'), `1 ${t('welfare.subscribe')}`);
+    head.push(t('welfare.no_dependents'));
+    actions.push(`1 ${t('welfare.subscribe')}`);
     options.push({ key: '1', label: t('welfare.subscribe') });
   } else if (phase === 'ask') {
-    lines.push(`1 ${t('action.yes')}`, `2 ${t('action.no')}`);
+    actions.push(`1 ${t('action.yes')}`, `2 ${t('action.no')}`);
     options.push({ key: '1', label: t('action.yes') }, { key: '2', label: t('action.no') });
   } else {
     (context.welfareDependents ?? []).forEach((dependent, index) => {
       const key = String(index + 1);
       const name = truncate('member', dependent.name);
-      lines.push(`${key} ${name}`);
+      actions.push(`${key} ${name}`);
       options.push({ key, label: name });
     });
   }
-  const nav = navLines('welfare.dependents', context, false);
-  return screen(
-    'welfare.dependents',
-    context,
-    [...lines, ...nav.lines],
-    [...options, ...nav.options],
-  );
+  return fittedScreen('welfare.dependents', context, session, {
+    head,
+    actions,
+    data,
+    options,
+  });
 }
 
-function renderedWelfareConfirm(context: UssdContext): Rendered {
+function renderedWelfareConfirm(context: UssdContext, session: UssdSessionInfo): Rendered {
   const product = context.welfareProduct;
   const selected = context.welfareSelectedDependents ?? [];
-  const lines = [
+  // §24d: the product and its premium are the confirm screen's protected
+  // subject, so they travel in `head` and are never trimmed. This full subject
+  // fits 120; one that did not would be the design defect the guard reports,
+  // not a second compact form.
+  const head = [
     ...noticeLines(context),
     t('welfare.subscribe'),
     truncate('offering', product?.name ?? ''),
@@ -1096,20 +1216,16 @@ function renderedWelfareConfirm(context: UssdContext): Rendered {
     `${t('welfare.cover')} ${welfareCoverLabel(product?.covers ?? 'individual')}${
       selected.length > 0 ? ` (${selected.length})` : ''
     }`,
-    `1 ${t('action.accept')}`,
-    `2 ${t('action.change')}`,
   ];
-  const nav = navLines('welfare.confirm', context, false);
-  return screen(
-    'welfare.confirm',
-    context,
-    [...lines, ...nav.lines],
-    [
+  return fittedScreen('welfare.confirm', context, session, {
+    head,
+    actions: [`1 ${t('action.accept')}`, `2 ${t('action.change')}`],
+    data: [],
+    options: [
       { key: '1', label: t('action.accept') },
       { key: '2', label: t('action.change') },
-      ...nav.options,
     ],
-  );
+  });
 }
 
 function renderedWelfareDone(context: UssdContext): Rendered {
@@ -1136,9 +1252,10 @@ function renderedWelfareServices(context: UssdContext, session: UssdSessionInfo)
   const page = context.welfareServicesPage ?? 0;
   const visible = all.slice(page * size, (page + 1) * size);
   const more = all.length > (page + 1) * size;
-  const lines = [...noticeLines(context), t('welfare.my_services')];
+  const head = [...noticeLines(context), t('welfare.my_services')];
+  const data: string[] = [];
   if (all.length === 0) {
-    lines.push(t('welfare.no_services'));
+    data.push(t('welfare.no_services'));
   }
   for (const [index, service] of visible.entries()) {
     const relationship =
@@ -1146,13 +1263,13 @@ function renderedWelfareServices(context: UssdContext, session: UssdSessionInfo)
         ? welfareRelationshipLabel(service.relationship, service.policyholder)
         : null;
     const status = service.status === 'expired' ? ` ${t('welfare.expired')}` : '';
-    lines.push(
+    data.push(
       `${index + 1} ${truncate('offering', service.name)}${
         relationship ? ` (${relationship})` : ''
       }${status}`,
     );
     if (service.source === 'inherited' && service.policyholder) {
-      lines.push(
+      data.push(
         identityLabel(
           truncate('member', service.policyholder.name),
           service.policyholder.gender,
@@ -1167,21 +1284,25 @@ function renderedWelfareServices(context: UssdContext, session: UssdSessionInfo)
           ? t('welfare.payer_member')
           : '';
     const until = service.periodEnd ? shortDate(service.periodEnd) : '-';
-    lines.push(`${payer ? `${payer} · ` : ''}${t('welfare.until')} ${until}`);
-    lines.push(
+    data.push(`${payer ? `${payer} · ` : ''}${t('welfare.until')} ${until}`);
+    data.push(
       `${t('welfare.claimed')} ${money(service.claimedTotalMinor, service.currency ?? 'GHS')}`,
     );
   }
-  const nav = navLines('welfare.services', context, more);
-  return screen('welfare.services', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('welfare.services', context, session, {
+    head,
+    actions: [],
+    data,
+    more,
+  });
 }
 
-function renderedError(context: UssdContext): Rendered {
+function renderedError(context: UssdContext, session: UssdSessionInfo): Rendered {
   const done = context.terminal ?? false;
-  const lines = [t(context.messageKey ?? 'error.try_again')];
-  if (done) return screen('error', context, lines, [], true);
-  const nav = navLines('error', context, false);
-  return screen('error', context, [...lines, ...nav.lines], nav.options);
+  const head = [t(context.messageKey ?? 'error.try_again')];
+  // A terminal error is a done screen: its message is protected, not trimmed.
+  if (done) return screen('error', context, head, [], true);
+  return fittedScreen('error', context, session, { head, actions: [], data: [] });
 }
 
 function activityLine(index: number, activity: UssdActivity): string {
@@ -1203,6 +1324,7 @@ function nextEventLine(next: { date: string; count: number }, base: string): str
 function listActivities(
   state: 'activities' | 'activities.week',
   context: UssdContext,
+  session: UssdSessionInfo,
   all: UssdActivity[],
   page: number,
   size: number,
@@ -1218,43 +1340,42 @@ function listActivities(
       : (context.activitiesDate ?? todayIso()) === todayIso()
         ? t('activities.today')
         : shortDate(context.activitiesDate ?? todayIso());
-  const lines = [...noticeLines(context), heading];
+  const head = [...noticeLines(context), heading];
+  const actions: string[] = [];
   const options: UssdOption[] = [];
 
   if (zero) {
     if (state === 'activities.week') {
-      lines.push(`1 ${t('activities.a_date')}`);
+      actions.push(`1 ${t('activities.a_date')}`);
       options.push({ key: '1', label: t('activities.a_date') });
     } else {
       if (context.activitiesNext) {
-        lines.push(nextEventLine(context.activitiesNext, context.activitiesDate ?? todayIso()));
-        lines.push(`1 ${t('action.view')}`);
+        head.push(nextEventLine(context.activitiesNext, context.activitiesDate ?? todayIso()));
+        actions.push(`1 ${t('action.view')}`);
         options.push({ key: '1', label: t('action.view') });
       } else {
-        lines.push(t('label.no_upcoming'));
+        head.push(t('label.no_upcoming'));
       }
-      lines.push(`2 ${t('activities.this_week')}`);
+      actions.push(`2 ${t('activities.this_week')}`);
       options.push({ key: '2', label: t('activities.this_week') });
     }
-    const nav = navLines(state, context, false);
-    return screen(state, context, [...lines, ...nav.lines], [...options, ...nav.options]);
+    return fittedScreen(state, context, session, { head, actions, data: [], options });
   }
 
   all.slice(page * size, (page + 1) * size).forEach((activity, index) => {
     const key = String(index + 1);
-    lines.push(activityLine(index + 1, activity));
+    actions.push(activityLine(index + 1, activity));
     options.push({ key, label: truncate('event', activity.name) });
   });
   if (all.length > (page + 1) * size || more) {
-    lines.push(`0 ${t('nav.more')}`);
+    actions.push(`0 ${t('nav.more')}`);
     options.push({ key: '0', label: t('nav.more') });
   }
   if (state === 'activities') {
-    lines.push(`8 ${t('activities.a_date')}`);
+    actions.push(`8 ${t('activities.a_date')}`);
     options.push({ key: '8', label: t('activities.a_date') });
   }
-  const nav = navLines(state, context, false);
-  return screen(state, context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  return fittedScreen(state, context, session, { head, actions, data: [], options });
 }
 
 function attendanceCountLines(summary: UssdAttendance | undefined): string[] {
@@ -1272,19 +1393,25 @@ function noAttendance(summary: UssdAttendance | undefined): boolean {
   return !summary || (summary.expected === 0 && summary.events.length === 0);
 }
 
-function renderedAttendance(context: UssdContext, withActions: boolean): Rendered {
+function renderedAttendance(
+  context: UssdContext,
+  session: UssdSessionInfo,
+  withActions: boolean,
+): Rendered {
   const summary = withActions
     ? (context.attendanceToday ?? context.attendanceSummary)
     : context.attendanceSummary;
-  const lines = [...noticeLines(context), t('menu.attendance')];
+  const head = [...noticeLines(context), t('menu.attendance')];
+  const data: string[] = [];
   if (noAttendance(summary)) {
-    lines.push(t('attendance.no_data'));
+    data.push(t('attendance.no_data'));
   } else {
-    lines.push(...attendanceCountLines(summary));
+    data.push(...attendanceCountLines(summary));
   }
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   if (withActions) {
-    lines.push(
+    actions.push(
       `1 ${t('attendance.day')}`,
       `2 ${t('attendance.period')}`,
       `3 ${t('attendance.present')}`,
@@ -1295,42 +1422,32 @@ function renderedAttendance(context: UssdContext, withActions: boolean): Rendere
       { key: '3', label: t('attendance.present') },
     );
     if (context.memberContext?.isPresbyter) {
-      lines.push(`4 ${t('attendance.clocking')}`);
+      actions.push(`4 ${t('attendance.clocking')}`);
       options.push({ key: '4', label: t('attendance.clocking') });
     }
-    const nav = navLines('attendance', context, false);
-    return screen('attendance', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+    return fittedScreen('attendance', context, session, { head, actions, data, options });
   }
-  const nav = navLines('attendance.status', context, false);
-  return screen('attendance.status', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('attendance.status', context, session, { head, actions: [], data });
 }
 
-function renderedAttendancePeriod(context: UssdContext): Rendered {
-  const lines = [
-    ...noticeLines(context),
-    t('attendance.period'),
-    `1 ${t('label.month')}`,
-    `2 ${t('label.quarter')}`,
-    `3 ${t('label.year')}`,
-  ];
-  const nav = navLines('attendance.period', context, false);
-  return screen(
-    'attendance.period',
-    context,
-    [...lines, ...nav.lines],
-    [
+function renderedAttendancePeriod(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [...noticeLines(context), t('attendance.period')];
+  return fittedScreen('attendance.period', context, session, {
+    head,
+    actions: [`1 ${t('label.month')}`, `2 ${t('label.quarter')}`, `3 ${t('label.year')}`],
+    data: [],
+    options: [
       { key: '1', label: t('label.month') },
       { key: '2', label: t('label.quarter') },
       { key: '3', label: t('label.year') },
-      ...nav.options,
     ],
-  );
+  });
 }
 
 function renderedAttendanceEvent(context: UssdContext, session: UssdSessionInfo): Rendered {
   const event = context.attendanceSession;
   const report = context.attendanceEvent;
-  const lines = [
+  const head = [
     ...noticeLines(context),
     t('menu.attendance'),
     truncate('event', event?.name ?? ''),
@@ -1340,38 +1457,38 @@ function renderedAttendanceEvent(context: UssdContext, session: UssdSessionInfo)
   const member = session.member;
   if (member) {
     const label = memberName(member.firstName, member.lastName);
-    lines.push(
+    head.push(
       `${truncate('member', label)}${report?.memberPresent ? ` ${t('label.attended')}` : ''}`,
     );
   }
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   if (!report?.memberPresent) {
-    lines.push(`1 ${t('attendance.present')}`);
+    actions.push(`1 ${t('attendance.present')}`);
     options.push({ key: '1', label: t('attendance.present') });
   }
-  const nav = navLines('attendance.event', context, false);
-  return screen(
-    'attendance.event',
-    context,
-    [...lines, ...nav.lines],
-    [...options, ...nav.options],
-  );
+  return fittedScreen('attendance.event', context, session, {
+    head,
+    actions,
+    data: [],
+    options,
+  });
 }
 
 function renderedProfile(context: UssdContext, session: UssdSessionInfo): Rendered {
   const profile = context.profile;
-  const lines = [...noticeLines(context)];
+  const head = [...noticeLines(context)];
+  const data: string[] = [];
   if (profile) {
-    lines.push(
-      identityLabel(truncate('member', profile.name), profile.gender, profile.age),
-      `${t('profile.member_no')} ${profile.memberNo}`,
-    );
+    // Identity opens the screen; the action follows it, then the data section.
+    head.push(identityLabel(truncate('member', profile.name), profile.gender, profile.age));
+    data.push(`${t('profile.member_no')} ${profile.memberNo}`);
     if (profile.ministries.length > 0) {
-      lines.push(`${t('profile.ministries')} ${truncate('member', profile.ministries.join(', '))}`);
+      data.push(`${t('profile.ministries')} ${truncate('member', profile.ministries.join(', '))}`);
     }
     const attendance = profile.attendance;
     if (attendance.expected === 0 && attendance.attended === 0 && !attendance.lastAttendedOn) {
-      lines.push(t('attendance.no_data'));
+      data.push(t('attendance.no_data'));
     } else {
       const status =
         attendance.status === 'regular'
@@ -1380,9 +1497,9 @@ function renderedProfile(context: UssdContext, session: UssdSessionInfo): Render
             ? t('status.non_regular')
             : t('status.not_enough_data');
       const date = attendance.lastAttendedOn ? ` · ${shortDate(attendance.lastAttendedOn)}` : '';
-      lines.push(`${status} · ${attendance.attended} of ${attendance.expected}${date}`);
+      data.push(`${status} · ${attendance.attended} of ${attendance.expected}${date}`);
     }
-    lines.push(
+    data.push(
       `${t('profile.shepherd')} ${
         profile.shepherd
           ? identityLabel(
@@ -1394,25 +1511,24 @@ function renderedProfile(context: UssdContext, session: UssdSessionInfo): Render
       }`,
     );
   }
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   // MR-54/MR-55: the action is offered only while an owned contact is still
   // unproven and no officer confirmation is active.
   if (session.member && session.member.hasUnprovenContact && !session.member.confirmed) {
-    lines.push(`1 ${full('action.verify_contact')}`);
+    actions.push(`1 ${full('action.verify_contact')}`);
     options.push({ key: '1', label: full('action.verify_contact') });
   }
-  const nav = navLines('profile', context, false);
-  return screen('profile', context, [...lines, ...nav.lines], [...options, ...nav.options]);
+  return fittedScreen('profile', context, session, { head, actions, data, options });
 }
 
 /** MR-54: the notice after a member-initiated send; it accepts no digits. */
-function renderedVerifySent(context: UssdContext): Rendered {
-  const lines = [...noticeLines(context)];
+function renderedVerifySent(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [...noticeLines(context)];
   if (context.verification) {
-    lines.push(full('status.verification_sent').replace('<mask>', context.verification.masked));
+    head.push(full('status.verification_sent').replace('<mask>', context.verification.masked));
   }
-  const nav = navLines('verify.sent', context, false);
-  return screen('verify.sent', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('verify.sent', context, session, { head, actions: [], data: [] });
 }
 
 function renderedAttendanceDone(context: UssdContext): Rendered {
@@ -1430,53 +1546,49 @@ function renderedAttendanceDone(context: UssdContext): Rendered {
   return screen('attendance.done', context, lines, [], true);
 }
 
-function renderedClocking(context: UssdContext): Rendered {
-  const lines = [
-    ...noticeLines(context),
-    t('attendance.clocking'),
-    `1 ${t('attendance.clock_in')}`,
-    `2 ${t('attendance.headcount')}`,
-    `3 ${t('attendance.delegate')}`,
-  ];
-  const nav = navLines('attendance.clocking', context, false);
-  return screen(
-    'attendance.clocking',
-    context,
-    [...lines, ...nav.lines],
-    [
+function renderedClocking(context: UssdContext, session: UssdSessionInfo): Rendered {
+  return fittedScreen('attendance.clocking', context, session, {
+    head: [...noticeLines(context), t('attendance.clocking')],
+    actions: [
+      `1 ${t('attendance.clock_in')}`,
+      `2 ${t('attendance.headcount')}`,
+      `3 ${t('attendance.delegate')}`,
+    ],
+    data: [],
+    options: [
       { key: '1', label: t('attendance.clock_in') },
       { key: '2', label: t('attendance.headcount') },
       { key: '3', label: t('attendance.delegate') },
-      ...nav.options,
     ],
-  );
+  });
 }
 
-function renderedHeadcount(context: UssdContext): Rendered {
+function renderedHeadcount(context: UssdContext, session: UssdSessionInfo): Rendered {
   const headcount = context.headcount ?? null;
-  const lines = [...noticeLines(context), t('attendance.headcount')];
+  const head = [...noticeLines(context), t('attendance.headcount')];
+  const data: string[] = [];
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   if (headcount) {
     const buckets = headcountBucketLine(headcount);
-    lines.push(`${headcountModeLabel(headcount.mode)} · ${clockTime(headcount.asOf)}`);
-    if (buckets) lines.push(buckets);
-    lines.push(`${t('label.total')} ${headcount.total}`);
+    data.push(`${headcountModeLabel(headcount.mode)} · ${clockTime(headcount.asOf)}`);
+    if (buckets) data.push(buckets);
+    data.push(`${t('label.total')} ${headcount.total}`);
   } else {
-    lines.push(t('status.no_headcount'));
+    data.push(t('status.no_headcount'));
   }
-  lines.push(`1 ${t('action.new_count')}`);
+  actions.push(`1 ${t('action.new_count')}`);
   options.push({ key: '1', label: t('action.new_count') });
   if (headcount) {
-    lines.push(`2 ${t('action.correct')}`);
+    actions.push(`2 ${t('action.correct')}`);
     options.push({ key: '2', label: t('action.correct') });
   }
-  const nav = navLines('attendance.headcount', context, false);
-  return screen(
-    'attendance.headcount',
-    context,
-    [...lines, ...nav.lines],
-    [...options, ...nav.options],
-  );
+  return fittedScreen('attendance.headcount', context, session, {
+    head,
+    actions,
+    data,
+    options,
+  });
 }
 
 function headcountLastMode(context: UssdContext): 'adults' | 'children' {
@@ -1484,89 +1596,93 @@ function headcountLastMode(context: UssdContext): 'adults' | 'children' {
   return context.headcount?.mode === 'children' ? 'children' : 'adults';
 }
 
-function renderedHeadcountMode(context: UssdContext): Rendered {
+function renderedHeadcountMode(context: UssdContext, session: UssdSessionInfo): Rendered {
   const last = headcountLastMode(context);
-  const lines = [
+  const head = [
     ...noticeLines(context),
     t('attendance.headcount'),
     `${t('label.last_mode')} ${headcountModeLabel(last)}`,
   ];
+  const actions: string[] = [];
   const options: UssdOption[] = [];
   HEADCOUNT_ENTRIES.forEach((entry, index) => {
     const key = String(index + 1);
     const label = t(entry.label);
-    lines.push(`${key} ${label}`);
+    actions.push(`${key} ${label}`);
     options.push({ key, label });
   });
-  const nav = navLines('attendance.headcount.mode', context, false);
-  return screen(
-    'attendance.headcount.mode',
-    context,
-    [...lines, ...nav.lines],
-    [...options, ...nav.options],
-  );
+  return fittedScreen('attendance.headcount.mode', context, session, {
+    head,
+    actions,
+    data: [],
+    options,
+  });
 }
 
-function renderedHeadcountEntry(context: UssdContext): Rendered {
+function renderedHeadcountEntry(context: UssdContext, session: UssdSessionInfo): Rendered {
   const mode = context.headcountMode ?? 'adults';
   return renderedPrompt(
     'attendance.headcount.entry',
     context,
+    session,
     headcountModeLabel(mode),
     t(headcountEntry(mode).prompt),
   );
 }
 
-function renderedHeadcountConfirm(context: UssdContext): Rendered {
+function renderedHeadcountConfirm(context: UssdContext, session: UssdSessionInfo): Rendered {
   const pending = context.headcountPending;
-  const lines = [
+  const head = [
     ...noticeLines(context),
     t('attendance.headcount'),
     headcountModeLabel(pending?.mode ?? context.headcountMode ?? 'adults'),
   ];
+  // §24d: the bucket restatement and its total are the confirm screen's
+  // protected subject, so they travel in `head` and are never trimmed.
   if (pending) {
-    lines.push(headcountPendingLine(pending));
+    head.push(headcountPendingLine(pending));
     const total = pending.counts.reduce((sum, count) => sum + count, 0);
-    lines.push(`${t('label.total')} ${total}`);
+    head.push(`${t('label.total')} ${total}`);
   }
-  lines.push(`1 ${t('action.save')}`, `2 ${t('action.change')}`);
-  const nav = navLines('attendance.headcount.confirm', context, false);
-  return screen(
-    'attendance.headcount.confirm',
-    context,
-    [...lines, ...nav.lines],
-    [
+  return fittedScreen('attendance.headcount.confirm', context, session, {
+    head,
+    actions: [`1 ${t('action.save')}`, `2 ${t('action.change')}`],
+    data: [],
+    options: [
       { key: '1', label: t('action.save') },
       { key: '2', label: t('action.change') },
-      ...nav.options,
     ],
-  );
+  });
 }
 
-function renderedHeadcountDone(context: UssdContext): Rendered {
-  const lines = [
+function renderedHeadcountDone(context: UssdContext, session: UssdSessionInfo): Rendered {
+  const head = [
     ...noticeLines(context),
     t('status.headcount_recorded'),
     `${t('label.total')} ${context.headcountTotal ?? 0}`,
   ];
-  const nav = navLines('attendance.headcount.done', context, false);
-  return screen('attendance.headcount.done', context, [...lines, ...nav.lines], nav.options);
+  return fittedScreen('attendance.headcount.done', context, session, {
+    head,
+    actions: [],
+    data: [],
+  });
 }
 
 function renderedPrompt(
   state: UssdState,
   context: UssdContext,
+  session: UssdSessionInfo,
   heading: string,
   prompt: string,
 ): Rendered {
-  const lines = [...noticeLines(context), heading, prompt];
-  const nav = navLines(state, context, false);
-  return screen(state, context, [...lines, ...nav.lines], nav.options);
+  const head = [...noticeLines(context), heading, prompt];
+  return fittedScreen(state, context, session, { head, actions: [], data: [] });
 }
 
 function renderedRegister(
   state: 'register.code' | 'register.first' | 'register.last' | 'register.done',
   context: UssdContext,
+  session: UssdSessionInfo,
 ): Rendered {
   if (state === 'register.done') {
     const lines = [
@@ -1579,6 +1695,7 @@ function renderedRegister(
   return renderedPrompt(
     state,
     context,
+    session,
     t('menu.register'),
     state === 'register.code' ? t('prompt.code') : t('prompt.name'),
   );
@@ -1596,8 +1713,7 @@ export function render(
 ): Rendered {
   switch (state) {
     case 'main': {
-      const lines = [...noticeLines(context), t('nav.main')];
-      const options: UssdOption[] = [];
+      const head = [...noticeLines(context), t('nav.main')];
       const entries = session.anonymous
         ? [
             { key: '1', label: t('menu.register') },
@@ -1614,51 +1730,49 @@ export function render(
             { key: '5', label: t('menu.profile') },
             { key: '6', label: t('menu.exit') },
           ];
-      for (const entry of entries) lines.push(`${entry.key} ${entry.label}`);
-      options.push(...entries);
-      return screen('main', context, lines, options);
+      const actions = entries.map((entry) => `${entry.key} ${entry.label}`);
+      return fittedScreen('main', context, session, { head, actions, data: [], options: entries });
     }
     case 'offerings':
-      return renderedOfferings(context, session.anonymous);
+      return renderedOfferings(context, session);
     case 'offerings.name': {
-      const lines = [
+      const head = [
         ...noticeLines(context),
         truncate('event', context.event?.name ?? ''),
         t('prompt.name'),
       ];
-      const nav = navLines('offerings.name', context, false);
-      return screen('offerings.name', context, [...lines, ...nav.lines], nav.options);
+      return fittedScreen('offerings.name', context, session, { head, actions: [], data: [] });
     }
     case 'offerings.amount':
-      return renderedAmount(context);
+      return renderedAmount(context, session);
     case 'offerings.select':
       return renderedSelect(context, session);
     case 'offerings.split':
-      return renderedSplit(context);
+      return renderedSplit(context, session);
     case 'offerings.confirm':
-      return renderedConfirm(context);
+      return renderedConfirm(context, session);
     case 'offerings.done':
       return renderedDone('offerings.done', context);
     case 'offerings.pledge_date':
-      return renderedPledgeDate(context);
+      return renderedPledgeDate(context, session);
     case 'offerings.pledge_confirm':
-      return renderedPledgeConfirm(context);
+      return renderedPledgeConfirm(context, session);
     case 'pledges.list':
-      return renderedPledges(context);
+      return renderedPledges(context, session);
     case 'pledges.confirm':
-      return renderedPledgeConfirmOne(context);
+      return renderedPledgeConfirmOne(context, session);
     case 'pledges.done':
       return renderedDone('pledges.done', context);
     case 'payments.summary':
-      return renderedPayments(context);
+      return renderedPayments(context, session);
     case 'welfare.list':
-      return renderedWelfareList(context);
+      return renderedWelfareList(context, session);
     case 'welfare.product':
-      return renderedWelfareProduct(context);
+      return renderedWelfareProduct(context, session);
     case 'welfare.dependents':
-      return renderedWelfareDependents(context);
+      return renderedWelfareDependents(context, session);
     case 'welfare.confirm':
-      return renderedWelfareConfirm(context);
+      return renderedWelfareConfirm(context, session);
     case 'welfare.done':
       return renderedWelfareDone(context);
     case 'welfare.services':
@@ -1667,6 +1781,7 @@ export function render(
       return listActivities(
         'activities',
         context,
+        session,
         context.activities ?? [],
         context.activitiesPage ?? 0,
         activityPageSize(session),
@@ -1676,6 +1791,7 @@ export function render(
       return listActivities(
         'activities.week',
         context,
+        session,
         context.weekActivities ?? [],
         context.weekPage ?? 0,
         activityPageSize(session),
@@ -1683,58 +1799,76 @@ export function render(
           ((context.weekPage ?? 0) + 1) * activityPageSize(session),
       );
     case 'activities.date':
-      return renderedPrompt('activities.date', context, t('activities.a_date'), t('prompt.date'));
-    case 'activities.event':
-      return screen(
-        'activities.event',
+      return renderedPrompt(
+        'activities.date',
         context,
-        [
+        session,
+        t('activities.a_date'),
+        t('prompt.date'),
+      );
+    case 'activities.event':
+      return fittedScreen('activities.event', context, session, {
+        head: [
           ...noticeLines(context),
           truncate('event', context.activity?.name ?? ''),
           shortDate(context.activity?.sessionDate ?? ''),
-          `1 ${t('action.give')}`,
-          `2 ${t('menu.attendance')}`,
         ],
-        [
+        actions: [`1 ${t('action.give')}`, `2 ${t('menu.attendance')}`],
+        data: [],
+        options: [
           { key: '1', label: t('action.give') },
           { key: '2', label: t('menu.attendance') },
         ],
-      );
+      });
     case 'attendance':
-      return renderedAttendance(context, true);
+      return renderedAttendance(context, session, true);
     case 'attendance.day':
-      return renderedPrompt('attendance.day', context, t('attendance.day'), t('prompt.date'));
+      return renderedPrompt(
+        'attendance.day',
+        context,
+        session,
+        t('attendance.day'),
+        t('prompt.date'),
+      );
     case 'attendance.period':
-      return renderedAttendancePeriod(context);
+      return renderedAttendancePeriod(context, session);
     case 'attendance.status':
-      return renderedAttendance(context, false);
+      return renderedAttendance(context, session, false);
     case 'attendance.event':
       return renderedAttendanceEvent(context, session);
     case 'attendance.code':
-      return renderedPrompt('attendance.code', context, t('attendance.present'), t('prompt.code'));
+      return renderedPrompt(
+        'attendance.code',
+        context,
+        session,
+        t('attendance.present'),
+        t('prompt.code'),
+      );
     case 'attendance.clocking':
-      return renderedClocking(context);
+      return renderedClocking(context, session);
     case 'attendance.clock':
       return renderedPrompt(
         'attendance.clock',
         context,
+        session,
         t('attendance.clock_in'),
         t('profile.member_no'),
       );
     case 'attendance.headcount':
-      return renderedHeadcount(context);
+      return renderedHeadcount(context, session);
     case 'attendance.headcount.mode':
-      return renderedHeadcountMode(context);
+      return renderedHeadcountMode(context, session);
     case 'attendance.headcount.entry':
-      return renderedHeadcountEntry(context);
+      return renderedHeadcountEntry(context, session);
     case 'attendance.headcount.confirm':
-      return renderedHeadcountConfirm(context);
+      return renderedHeadcountConfirm(context, session);
     case 'attendance.headcount.done':
-      return renderedHeadcountDone(context);
+      return renderedHeadcountDone(context, session);
     case 'attendance.delegate':
       return renderedPrompt(
         'attendance.delegate',
         context,
+        session,
         t('attendance.delegate'),
         t('profile.member_no'),
       );
@@ -1742,6 +1876,7 @@ export function render(
       return renderedPrompt(
         'attendance.delegate_reason',
         context,
+        session,
         t('attendance.delegate'),
         t('prompt.reason'),
       );
@@ -1750,14 +1885,14 @@ export function render(
     case 'profile':
       return renderedProfile(context, session);
     case 'verify.sent':
-      return renderedVerifySent(context);
+      return renderedVerifySent(context, session);
     case 'register.code':
     case 'register.first':
     case 'register.last':
     case 'register.done':
-      return renderedRegister(state, context);
+      return renderedRegister(state, context, session);
     case 'error':
-      return renderedError(context);
+      return renderedError(context, session);
   }
 }
 

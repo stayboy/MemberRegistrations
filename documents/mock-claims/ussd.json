@@ -18,7 +18,7 @@
     "console": {
       "mock": {
         "path": "mockups/ussd/44-ussd-console.png",
-        "sha256": "10af5801e3c64b0c92176bf09dfed25b30f7898d6db237be9302ca91b3cbd97d",
+        "sha256": "f805a6f36b3f6ab077db1405c157f71e1762e436b6bec2c45805f41a5924663e",
         "source": "mockups/ussd/console.html"
       },
       "baseline": null,
@@ -26,7 +26,7 @@
       "signed": {
         "by": "owner",
         "at": "2026-11-22",
-        "sha256": "10af5801e3c64b0c92176bf09dfed25b30f7898d6db237be9302ca91b3cbd97d"
+        "sha256": "f805a6f36b3f6ab077db1405c157f71e1762e436b6bec2c45805f41a5924663e"
       }
     }
   },
@@ -74,8 +74,13 @@
       "ac": ["AC-50"],
       "control": "spec",
       "target": {
-        "mock": { "selector": ".action-row .btn" },
-        "build": { "role": "button", "name": "Actions" }
+        "mock": {
+          "selector": ".action-row .btn"
+        },
+        "build": {
+          "role": "button",
+          "name": "Actions"
+        }
       },
       "test": "ui/src/pages/ussd/UssdSimulatorPage.dom.test.tsx::starts a new session and clears the log from the action row"
     }
