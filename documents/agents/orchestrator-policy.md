@@ -87,7 +87,7 @@ and the parent's own context is the one that already knows what it meant.
 
 The git executor runs only the verb quoted in the parent's brief — branch create, commit (with the file list), push a named branch, PR create, squash merge, tag, and the post-merge pull — and the parent verifies every result.
 One brief authorises one verb; the seat never infers consent.
-Consent is `AGENTS.md` section 9's and section 17's, never the budget's: a round's git spend is capped at **12 briefs by default**, the round doc states the arithmetic at open (`1 branch + N commits + 1 push + 1 pr + 1 merge`), and a `git-seat-budget:` line may only lower that default or raise it, with `0` parking every verb.
+Consent is `AGENTS.md` section 9's and section 17's, never the budget's: a round's git spend is capped at **12 briefs by default**, the round doc states the arithmetic at open (`1 branch + 1 merge`), and a `git-seat-budget:` line may only lower that default or raise it, with `0` parking every verb.
 Auto-accept never sets a number: **the parent writes the default into the round doc's `git-seat-budget:` line at open**, a metered brief that carries no amount is refused, and nothing else infers the amount (owner, 2026-11-17).
 The round doc declares `Verbs this round needs:` at open and the owner's go names them, so the brief quotes an approval that contains the verb by construction.
 `branch` MAY be cut when every modified or untracked path is this round's own `documents/rounds/<slug>.md`, and that file MUST appear in the round's first commit; any other dirty path refuses.
@@ -135,6 +135,12 @@ why (the catalog conflates the 1M context window with the output cap).
 - `npm run verify:skill` checks the installed canonical skill (files, hashes, seat model ids) and the
   repo pointer below. In CI the canonical is absent, so CI checks only the repo-side pointer and the
   script reports the canonical check as skipped.
+- The Tier 2 review and the parent's gate start **together** on the same frozen tree — no worker edit for the
+  duration of both. A fix that lands after either result voids that result: the parent re-runs the gate, and the
+  review re-reads the changed diff and its interactions with the rest of the change, before the commit.
+- A PR body is authored by the parent in `.gates/pr-body.md` (git-ignored) and delivered with `--body-file`; the
+  seat never re-types prose through the shell. The parent verifies the rendered body, title, base and head once
+  with `gh pr view`.
 
 ## Mock parity
 
