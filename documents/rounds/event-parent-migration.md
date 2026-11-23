@@ -162,20 +162,20 @@ read.
 
 `git-seat-budget: 12` (two chains: `2 × (1 branch + 1 commit + 1 push + 1 pr + 1 merge + 1 sync) = 12`).
 
-| Brief | Actor                 | Verb     | Variant                        | Reason                                        |
-| ----- | --------------------- | -------- | ------------------------------ | --------------------------------------------- |
-| 1     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-migration`; rung 1 429 |
-| 2     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | Slice 2a: migrations, rekey, schema, tests    |
-| 3     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | Slice 2a branch only                          |
-| 4     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | Slice 2a PR against `main`                    |
-| 5     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | Slice 2a, after the checks                    |
-| 6     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                               |
-| 7     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-api` from `main`       |
-| 8     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | 2b-read: read API, contract, snapshot, tests  |
-| 9     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | 2b-read branch only                           |
-| 10    | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | 2b-read PR against `main`                     |
-| 11    | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | 2b-read, after the checks                     |
-| 12    | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                               |
+| Brief | Actor                 | Verb     | Variant                        | Reason                                                                                                                                                 |
+| ----- | --------------------- | -------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-migration`; rung 1 429                                                                                                          |
+| 2     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | Slice 2a: migrations, rekey, schema, tests                                                                                                             |
+| 3     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | Slice 2a branch only                                                                                                                                   |
+| 4     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | Slice 2a PR against `main`                                                                                                                             |
+| 5     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | Slice 2a, after the checks                                                                                                                             |
+| 6     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                                                                                                                                        |
+| 7     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-api` from `main`                                                                                                                |
+| 8     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | 2b-read: read API, contract, snapshot, tests                                                                                                           |
+| 9     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | 2b-read branch only                                                                                                                                    |
+| 10    | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | 2b-read PR against `main`                                                                                                                              |
+| 11    | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | 2b-read, after the checks                                                                                                                              |
+| 12    | `parent`              | `sync`   | —                              | `main` is checked out in the `ussd-budget` worktree, so the seat's `switch main` cannot run here; the parent ran `git -C …/ussd-budget pull --ff-only` |
 
 ## Acceptance
 
@@ -218,3 +218,9 @@ Verdict: **ACCEPTED** by the parent after the Tier 2 confirmation round. Slice 2
   predicate exists yet; the spec keeps the legacy pair until the downstream "nothing reads them" round. Recorded in
   `documents/backlog.md` under "Audience-derived `expected` on the parent read", and pinned by a test so the
   downstream round flips it with a failing test rather than a silent change.
+- **The 2b-read commit body on `main` carries one escaping artefact.** GitHub's squash default copies the branch
+  commit body, and the seat's PowerShell here-string wrote `today'"'"'s` where the brief read `today's`. Cosmetic; the
+  subject is clean, the branch is deleted, and `--amend` is a forbidden verb. Recorded rather than repaired.
+- **The parent ran the 2b-read sync.** `main` lives in the `ussd-budget` worktree, so the seat's `sync` cannot switch
+  to it here; the parent's `git -C … pull --ff-only` produced the same result, and the write table names the parent
+  row with the reason.

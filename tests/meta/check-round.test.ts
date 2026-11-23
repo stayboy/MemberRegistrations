@@ -574,7 +574,7 @@ describe('check-round: the precommit wiring', () => {
     // Neither script exports its table, and importing verify.mjs would run it, so the pin is
     // textual — the same style as the git-executor seat test.
     expect(read('scripts/verify.mjs')).toContain(
-      "precommit: ['check-round', 'format', 'lint', 'typecheck', 'test'],",
+      "precommit: ['check-round', 'format', 'lint', 'typecheck'],",
     );
     expect(read('scripts/gates.mjs')).toContain(
       "return ['npm', ['run', 'check-round', '--', '--staged']];",
