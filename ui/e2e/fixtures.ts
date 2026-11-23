@@ -1,4 +1,5 @@
 import { expect, test as base, type Page, type Request } from 'playwright/test';
+import type { AudienceClauseInput, AudienceItem, AudienceOperator } from '../src/api/audiences';
 import type {
   EventAttendance,
   EventAudienceItem,
@@ -8,6 +9,7 @@ import type {
   EventOfferingStatsItem,
   EventParentItem,
   EventParentStatus,
+  EventRecurrence,
   EventSessionStatus,
   EventVenueType,
   OfferingTermsItem,
@@ -1225,12 +1227,118 @@ const AUDIENCE_CHOIR: EventAudienceItem = {
   summary: 'Choir - all of ministry CHR',
 };
 
+/**
+ * `GET /v1/audiences`: the seeded groups plus one custom row, shaped from the
+ * contract's examples. `summary` is the server's sentence; no fixture composes
+ * one at read time.
+ */
+const PRESBYTERS_AUDIENCE: AudienceItem = {
+  id: 'aud-presbyters',
+  name: 'Presbyters',
+  system: true,
+  systemKey: 'presbyters',
+  active: true,
+  rule: { operator: 'allOf', clauses: [{ attribute: 'presbyter', value: true }] },
+  summary: 'Presbyters - all of presbyter',
+  createdAt: '2026-11-22T09:00:00.000Z',
+  createdBy: 'migration',
+  updatedAt: '2026-11-22T09:00:00.000Z',
+  updatedBy: 'migration',
+};
+
+const EVERYONE_AUDIENCE: AudienceItem = {
+  id: AUDIENCE_EVERYONE.id,
+  name: AUDIENCE_EVERYONE.name,
+  system: true,
+  systemKey: 'everyone',
+  active: true,
+  rule: { operator: 'allOf', clauses: [{ attribute: 'membershipStatus', value: 'active' }] },
+  summary: AUDIENCE_EVERYONE.summary,
+  createdAt: '2026-11-22T09:00:00.000Z',
+  createdBy: 'migration',
+  updatedAt: '2026-11-22T09:00:00.000Z',
+  updatedBy: 'migration',
+};
+
+const CHOIR_AUDIENCE: AudienceItem = {
+  id: AUDIENCE_CHOIR.id,
+  name: AUDIENCE_CHOIR.name,
+  system: true,
+  systemKey: 'ministry:CHR',
+  active: true,
+  rule: { operator: 'allOf', clauses: [{ attribute: 'ministry', ministryCode: 'CHR' }] },
+  summary: AUDIENCE_CHOIR.summary,
+  createdAt: '2026-11-22T09:00:00.000Z',
+  createdBy: 'migration',
+  updatedAt: '2026-11-22T09:00:00.000Z',
+  updatedBy: 'migration',
+};
+
+/** The custom audience the contract's create example returns. */
+const YOUNG_ADULTS_AUDIENCE: AudienceItem = {
+  id: '2e6c8a4b-7d1f-4a3c-8b5e-9f0a1c2d3e4f',
+  name: 'Young Adults',
+  system: false,
+  systemKey: null,
+  active: true,
+  rule: { operator: 'allOf', clauses: [{ attribute: 'ageBand', minYears: 18, maxYears: 35 }] },
+  summary: 'Young Adults - all of age 18-35',
+  createdAt: '2026-11-23T10:15:00.000Z',
+  createdBy: 'officer_ada',
+  updatedAt: '2026-11-23T10:15:00.000Z',
+  updatedBy: 'officer_ada',
+};
+
+const AUDIENCES: readonly AudienceItem[] = [
+  EVERYONE_AUDIENCE,
+  PRESBYTERS_AUDIENCE,
+  CHOIR_AUDIENCE,
+  YOUNG_ADULTS_AUDIENCE,
+];
+
+const CLAUSE_LABELS: Readonly<Record<AudienceClauseInput['attribute'], string>> = {
+  ministry: 'ministry',
+  presbyter: 'presbyter',
+  ageBand: 'age',
+  gender: 'gender',
+  membershipStatus: 'membership status',
+};
+
+const OPERATOR_LABELS: Readonly<Record<AudienceOperator, string>> = {
+  allOf: 'all of',
+  anyOf: 'any of',
+  noneOf: 'none of',
+};
+
+function clausePhrase(clause: AudienceClauseInput): string {
+  if (clause.attribute === 'ministry') return `ministry ${clause.ministryCode}`;
+  if (clause.attribute === 'presbyter') return 'presbyter';
+  if (clause.attribute === 'ageBand') {
+    return clause.maxYears === null
+      ? `age ${clause.minYears}+`
+      : `age ${clause.minYears}-${clause.maxYears}`;
+  }
+  return `${CLAUSE_LABELS[clause.attribute]} ${clause.value}`;
+}
+
+/**
+ * The fixture's stand-in for `renderAudienceSummary`, used only to answer
+ * `POST /v1/audiences` with a sentence in the server's own format. Clients still
+ * receive it and never compose one (FR-42c).
+ */
+function renderAudienceSummary(
+  name: string,
+  rule: { operator: AudienceOperator; clauses: readonly AudienceClauseInput[] },
+): string {
+  const phrases = rule.clauses.map(clausePhrase).join(' and ');
+  return `${name} - ${OPERATOR_LABELS[rule.operator]} ${phrases}`;
+}
+
 function recurrenceOf(series: SeriesDto): NonNullable<EventParentItem['recurrence']> {
   return { schedules: series.schedules, exceptions: series.exceptions };
 }
 
-/** One dated occurrence of a parent, with every field the detail row reads. */
-function occurrence(
+/** One dated occurrence of a parent, with every field the detail row reads. */ function occurrence(
   eventId: string,
   fields: {
     readonly date: string;
@@ -1563,113 +1671,142 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
   };
 }
 
-/** A created standalone event reads back as a draft parent with its own dated occurrences. */
-function parentFromCreatedEvent(event: EventItem, from: string, to: string): EventParentItem {
-  const occurrences = event.sessions.map((session) =>
-    occurrence(event.id, {
-      date: session.date,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      status: session.status,
-      present: session.present,
-      expected: session.expected,
-      importedRows: session.importedRows,
-      source: session.source,
-      note: session.note,
-      capture: session.capture,
-    }),
-  );
+/** A created parent's occurrences, as the create body's date rows write them. */
+function occurrencesFromBody(
+  input: unknown,
+  eventId: string,
+  startTime: string,
+  endTime: string | null,
+): readonly EventOccurrenceItem[] {
+  const record = asRecord(input);
+  const rows = Array.isArray(record.occurrences) ? record.occurrences : [];
 
-  return {
-    id: event.id,
-    eventNo: event.eventNo ?? '',
-    name: event.name,
-    audienceId: AUDIENCE_EVERYONE.id,
-    audience: AUDIENCE_EVERYONE,
-    ministry: event.ministry,
-    presbyterOnly: event.presbyterOnly,
-    timezone: event.timezone,
-    description: event.description,
-    venueType: event.venueType,
-    venueName: event.venueName,
-    startDate: event.startDate,
-    endDate: event.endDate,
-    startTime: event.startTime,
-    endTime: event.endTime,
-    tracksMembers: event.tracksMembers,
-    status: 'draft',
-    recurrence: null,
-    occurrences,
-    offerings: event.offerings,
-    stats: event.stats,
-    summary: windowSummaryFor(occurrences, {
-      from,
-      to,
-      nextOccurrence: null,
-      offerings: EMPTY_SUMMARY.offerings,
-    }),
-  };
+  return rows.map((entry) => {
+    const row = asRecord(entry);
+    return occurrence(eventId, {
+      date: text(row.date),
+      startTime: optionalText(row.startTime) ?? startTime,
+      endTime: row.endTime === null ? null : (optionalText(row.endTime) ?? endTime),
+      status: 'scheduled',
+      present: 0,
+      expected: 0,
+      importedRows: 0,
+      source: 'none',
+    });
+  });
 }
 
-/** A created series is the same parent read behind the series alias. */
-function parentFromCreatedSeries(series: SeriesDto, from: string, to: string): EventParentItem {
-  const [firstSchedule] = [...series.schedules].sort((left, right) =>
-    left.effectiveFrom.localeCompare(right.effectiveFrom),
-  );
+const LEGACY_EVENT_KEYS = ['sessions', 'startDate', 'endDate', 'ministry', 'presbyterOnly'];
+
+/** The parent read's own key on a create body; the retired shape is refused. */
+function legacyCreateProblem(body: unknown): string | null {
+  const record = asRecord(body);
+  const legacy = LEGACY_EVENT_KEYS.filter((key) => key in record);
+  if (legacy.length > 0)
+    return `the retired fields are not part of the payload: ${legacy.join(', ')}`;
+
+  const hasOccurrences = Array.isArray(record.occurrences) && record.occurrences.length > 0;
+  const hasRecurrence = record.recurrence !== undefined;
+  if (hasOccurrences && hasRecurrence) return 'supply either occurrences or a recurrence, not both';
+  if (!hasOccurrences && !hasRecurrence) {
+    return 'a standalone event requires at least one occurrence, or supply a recurrence';
+  }
+  if (!text(record.name).trim()) return 'name is required';
+  if (!text(record.venueType)) return 'venueType is required';
+  if (!text(record.startTime)) return 'startTime is required';
+  return null;
+}
+
+/**
+ * The `POST /v1/events` body as the contract's `EventParent` answer: a draft,
+ * its audience resolved from the id, its occurrences or recurrence echoed, and
+ * the number minted when the body omitted it (FR-42a, AC-56).
+ */
+function createdEventParent(body: unknown, eventNo: string): EventParentItem {
+  const record = asRecord(body);
+  const startTime = text(record.startTime);
+  const endTime = optionalText(record.endTime);
+  const audience =
+    AUDIENCES.find((candidate) => candidate.id === text(record.audienceId)) ?? EVERYONE_AUDIENCE;
+  const occurrences = occurrencesFromBody(body, `created-${eventNo}`, startTime, endTime);
+  const recurrenceInput = asRecord(record.recurrence);
+  const schedules = Array.isArray(recurrenceInput.schedules)
+    ? recurrenceInput.schedules.map((entry) => {
+        const row = asRecord(entry);
+        return {
+          effectiveFrom: text(row.effectiveFrom),
+          rrule: text(row.rrule),
+          endsOn: optionalText(row.endsOn),
+        };
+      })
+    : [];
+
+  const startDates = occurrences.map((row) => row.date).sort();
+  const startDate = startDates[0] ?? (schedules[0] ? text(schedules[0].effectiveFrom) : '');
+  const endDate = startDates.at(-1) ?? null;
 
   return {
-    id: series.id,
-    eventNo: '',
-    name: series.name,
-    audienceId: AUDIENCE_EVERYONE.id,
-    audience: AUDIENCE_EVERYONE,
-    ministry: series.ministry,
-    presbyterOnly: series.presbyterOnly,
-    timezone: series.timezone,
-    description: series.description,
-    venueType: 'auditorium',
-    venueName: null,
-    startDate: firstSchedule?.effectiveFrom ?? '',
-    endDate: firstSchedule?.endsOn ?? null,
-    startTime: '',
-    endTime: null,
-    tracksMembers: true,
-    status: series.archivedAt ? 'archived' : 'draft',
-    recurrence: recurrenceOf(series),
-    occurrences: [],
+    id: `created-${eventNo}`,
+    eventNo,
+    name: text(record.name),
+    audienceId: audience.id,
+    audience: {
+      id: audience.id,
+      name: audience.name,
+      system: audience.system,
+      summary: audience.summary,
+    },
+    ministry: null,
+    presbyterOnly: false,
+    timezone: text(record.timezone) || 'UTC',
+    description: optionalText(record.description),
+    venueType: venueTypeOf(record.venueType),
+    venueName: optionalText(record.venueName),
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    tracksMembers: record.tracksMembers !== false,
+    status: 'draft',
+    recurrence: schedules.length > 0 ? { schedules, exceptions: [] } : null,
+    occurrences,
     offerings: [],
     stats: EMPTY_OFFERING_STATS,
-    summary: windowSummaryFor([], {
-      from,
-      to,
-      nextOccurrence: null,
+    summary: windowSummaryFor(occurrences, {
+      from: startDate,
+      to: endDate ?? startDate,
+      nextOccurrence: startDate || null,
       offerings: EMPTY_SUMMARY.offerings,
     }),
   };
 }
 
+/**
+ * One parent by id: a write's override wins over a created parent, which wins
+ * over the seed. The window summary is recomputed from the occurrences on every
+ * read, so an invalidation after a write shows the new state.
+ */
 function parentForId(
   id: string,
   from: string,
   to: string,
-  createdEvents: ReadonlyMap<string, EventItem>,
+  createdEvents: ReadonlyMap<string, EventParentItem>,
+  overrides: ReadonlyMap<string, EventParentItem>,
 ): EventParentItem | null {
-  const created = createdEvents.get(id);
-  if (created) return parentFromCreatedEvent(created, from, to);
-  const seed = PARENT_SEEDS[id];
-  return seed ? parentOf(seed, from, to) : null;
-}
+  const stored = overrides.get(id) ?? createdEvents.get(id);
+  const seed = stored ? null : PARENT_SEEDS[id];
+  const source = stored ?? (seed ? parentOf(seed, '', '') : null);
+  if (!source) return null;
 
-function seriesParentForId(
-  id: string,
-  from: string,
-  to: string,
-  createdSeries: ReadonlyMap<string, SeriesDto>,
-): EventParentItem | null {
-  const created = createdSeries.get(id);
-  if (created) return parentFromCreatedSeries(created, from, to);
-  const seed = PARENT_SEEDS[id];
-  return seed ? parentOf(seed, from, to) : null;
+  return {
+    ...source,
+    summary: windowSummaryFor(source.occurrences, {
+      from,
+      to,
+      nextOccurrence: source.summary.nextOccurrence,
+      offerings: source.summary.offerings,
+    }),
+  };
 }
 
 const OFFICER = {
@@ -1843,6 +1980,21 @@ interface GatewayCall {
   readonly body: unknown;
 }
 
+/** FR-42e: the event writes a test can assert, recorded by kind. */
+export type EventWriteKind = 'archive' | 'cancel' | 'version' | 'exception' | 'exceptionDelete';
+
+export interface EventWrite {
+  readonly eventId: string;
+  /** The path's date, for the routes that carry one. */
+  readonly date?: string;
+  /** The request body, verbatim; undefined where the route takes none. */
+  readonly body?: unknown;
+}
+
+export type EventWriteRecorder = (kind: EventWriteKind, write: EventWrite) => void;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 interface GatewayReply {
   readonly status?: number;
   readonly body?: unknown;
@@ -1860,7 +2012,7 @@ export interface ImportCommit {
 export type ImportStubReply = GatewayReply;
 
 interface RouteEntry {
-  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly pattern: RegExp;
   readonly handle: (call: GatewayCall, params: readonly string[]) => GatewayReply;
 }
@@ -1871,6 +2023,14 @@ function reply(body: unknown, status = 200, headers: Record<string, string> = {}
 
 function problem(status: number, detail: string): GatewayReply {
   return reply({ type: 'about:blank', title: 'Request failed', status, detail }, status);
+}
+
+/**
+ * A refusal the UI maps by its problem+json `code`, never by the message text
+ * (FR-42g/AC-64). The event writes use this wherever the contract names a code.
+ */
+function codedProblem(status: number, code: string, detail: string): GatewayReply {
+  return reply({ type: 'about:blank', title: 'Request failed', status, code, detail }, status);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -1977,80 +2137,74 @@ function venueTypeOf(value: unknown): EventVenueType {
 }
 
 /**
- * The create body as the API's own answer (FR-42a, AC-56): the id is derived
- * from the typed number, the status is `scheduled`, the source is `manual`, and
- * a blank session time inherits the event's. Nothing in the body may seed
- * `status` or `source`; the form never sends them.
+ * A created audience as `POST /v1/audiences` answers it: `201` with the row and
+ * the server-format summary. The stub mirrors the API's name uniqueness
+ * (`409 audience_name_in_use`) and its rule shape (`422 validation_error`).
  */
-function createdEvent(body: unknown): EventItem {
+function createdAudience(
+  body: unknown,
+  id: string,
+  existing: readonly AudienceItem[],
+): AudienceItem | string {
   const record = asRecord(body);
-  const eventNo = text(record.eventNo);
-  const startTime = text(record.startTime);
-  const endTime = optionalText(record.endTime);
-  const rawSessions = Array.isArray(record.sessions) ? record.sessions : [];
-  const sessions: EventItem['sessions'][number][] = rawSessions.map((entry) => {
-    const row = asRecord(entry);
-    return {
-      date: text(row.date),
-      startTime: optionalText(row.startTime) ?? startTime,
-      endTime: row.endTime === null ? null : (optionalText(row.endTime) ?? endTime),
-      status: 'scheduled',
-      note: null,
-      present: 0,
-      expected: 0,
-      importedRows: 0,
-      capture: null,
-      source: 'none',
-    };
-  });
+  const name = text(record.name).trim();
+  const rule = asRecord(record.rule);
+  const operator = text(rule.operator);
+  if (!name) return 'name is required';
+  if (!['allOf', 'anyOf', 'noneOf'].includes(operator))
+    return 'rule.operator must be allOf, anyOf or noneOf';
+  const rawClauses = Array.isArray(rule.clauses) ? rule.clauses : [];
+  if (rawClauses.length === 0) return 'rule.clauses needs at least one clause';
 
-  return {
-    id: `created-${eventNo}`,
-    eventNo,
-    name: text(record.name),
-    seriesId: null,
-    ministry: null,
-    timezone: text(record.timezone) || 'UTC',
-    startDate: text(record.startDate),
-    endDate: text(record.endDate),
-    startTime,
-    endTime,
-    venueType: venueTypeOf(record.venueType),
-    venueName: optionalText(record.venueName),
-    description: optionalText(record.description),
-    status: 'scheduled',
-    source: 'manual',
-    tracksMembers: record.tracksMembers !== false,
-    presbyterOnly: record.presbyterOnly === true,
-    sessions,
-    offerings: [],
-    stats: EMPTY_OFFERING_STATS,
-  };
-}
+  const clauses: AudienceClauseInput[] = [];
+  for (const entry of rawClauses) {
+    const clause = asRecord(entry);
+    const attribute = text(clause.attribute);
+    if (attribute === 'ministry') {
+      if (!text(clause.ministryCode)) return 'clauses.ministryCode is required';
+      clauses.push({ attribute: 'ministry', ministryCode: text(clause.ministryCode) });
+    } else if (attribute === 'presbyter') {
+      clauses.push({ attribute: 'presbyter', value: true });
+    } else if (attribute === 'ageBand') {
+      const minYears = Number(clause.minYears);
+      const maxYears = clause.maxYears === null ? null : Number(clause.maxYears);
+      if (!Number.isInteger(minYears) || minYears < 0)
+        return 'clauses.minYears must be a non-negative integer';
+      if (maxYears !== null && (!Number.isInteger(maxYears) || maxYears < minYears)) {
+        return 'clauses.maxYears must not be below minYears';
+      }
+      clauses.push({ attribute: 'ageBand', minYears, maxYears });
+    } else if (attribute === 'gender') {
+      if (clause.value !== 'male' && clause.value !== 'female')
+        return 'clauses.value must be male or female';
+      clauses.push({ attribute: 'gender', value: clause.value });
+    } else if (attribute === 'membershipStatus') {
+      if (clause.value !== 'visitor' && clause.value !== 'active') {
+        return 'clauses.value must be visitor or active';
+      }
+      clauses.push({ attribute: 'membershipStatus', value: clause.value });
+    } else {
+      return 'clauses.attribute is not a known attribute';
+    }
+  }
 
-/** The create body as the API's series detail answer (FR-42). */
-function createdSeriesFromBody(body: unknown, id: string): SeriesDto {
-  const record = asRecord(body);
-  const schedule = asRecord(record.schedule);
-  const ministryCode = text(record.ministryCode);
-  const ministry = MINISTRIES.find((candidate) => candidate.code === ministryCode);
+  if (existing.some((candidate) => candidate.name.trim().toLowerCase() === name.toLowerCase())) {
+    return 'name_in_use';
+  }
 
+  const typedOperator = operator as AudienceOperator;
   return {
     id,
-    name: text(record.name),
-    ministry: ministry ? { code: ministry.code, name: ministry.name } : null,
-    timezone: text(record.timezone) || 'UTC',
-    description: optionalText(record.description),
-    archivedAt: null,
-    presbyterOnly: record.presbyterOnly === true,
-    schedules: [
-      {
-        effectiveFrom: text(schedule.effectiveFrom),
-        rrule: text(schedule.rrule),
-        endsOn: optionalText(schedule.endsOn),
-      },
-    ],
-    exceptions: [],
+    name,
+    system: false,
+    systemKey: null,
+    active: true,
+    rule: { operator: typedOperator, clauses },
+    summary: renderAudienceSummary(name, { operator: typedOperator, clauses }),
+    createdAt: FIXED_INSTANT,
+    createdBy: 'officer-1',
+    updatedAt: FIXED_INSTANT,
+    updatedBy: 'officer-1',
   };
 }
 
@@ -2076,12 +2230,13 @@ const OWNED_CONTACT_VALUES: ReadonlySet<string> = new Set(
  */
 function buildRoutes(
   created: Map<string, MemberDetail>,
-  createdEvents: Map<string, EventItem>,
-  createdSeries: Map<string, SeriesDto>,
+  createdEvents: Map<string, EventParentItem>,
+  parentOverrides: Map<string, EventParentItem>,
   actionStatesEnabled: () => boolean,
   importReplyFor: (commit: ImportCommit) => ImportStubReply | null,
   recordEventCreate: (body: unknown) => void,
-  recordSeriesCreate: (body: unknown) => void,
+  recordEventPatch: (body: unknown) => void,
+  recordWrite: EventWriteRecorder,
 ): readonly RouteEntry[] {
   // The action-state events exist for the capture-state tests; they are opt-in so a
   // session dated today cannot win another surface's "next session" selection.
@@ -2110,9 +2265,52 @@ function buildRoutes(
     [...DETAILS].map(([memberNo, detail]) => [memberNo, [...detail.contacts]]),
   );
 
+  /** FR-42c: a custom audience created through the dialog reads back in the picker. */
+  const createdAudiences = new Map<string, AudienceItem>();
+
   /** The API's uniqueness key, mirrored: email compares lower-cased, phones by digits. */
   const matchesValue = (row: MemberContact, value: string) =>
     contactKey(row.kind, value) === contactKey(row.kind, row.value);
+
+  /**
+   * FR-42e: the detail's writes must be visible to the refetch the page makes,
+   * or the invalidate-and-refetch would prove nothing. A write stores the whole
+   * parent it produced; every read recomputes the window summary from it.
+   */
+  const currentParent = (eventId: string): EventParentItem | null => {
+    const base = parentForId(eventId, '', '', createdEvents, parentOverrides);
+    if (!base) return null;
+    return parentForId(
+      eventId,
+      base.startDate,
+      base.endDate ?? base.startDate,
+      createdEvents,
+      parentOverrides,
+    );
+  };
+
+  const storeParent = (parent: EventParentItem): void => {
+    parentOverrides.set(parent.id, parent);
+  };
+
+  /** The recurrence a recurrence write answers with, or the refusal it earns. */
+  const recurrenceOfParent = (
+    current: EventParentItem,
+  ): { readonly recurrence: EventRecurrence } | { readonly refusal: GatewayReply } => {
+    if (current.status === 'archived') {
+      return { refusal: codedProblem(409, 'status', 'An archived event is read-only') };
+    }
+    if (!current.recurrence) {
+      return {
+        refusal: codedProblem(
+          409,
+          'recurrence',
+          'This event records its dates by hand, so it has no recurrence to change',
+        ),
+      };
+    }
+    return { recurrence: current.recurrence };
+  };
 
   return [
     {
@@ -2352,18 +2550,22 @@ function buildRoutes(
           const from = call.search.get('from') ?? '';
           const to = call.search.get('to') ?? '';
           const seriesFilter = call.search.get('seriesId');
-          const items: EventParentItem[] = [
-            ...PARENT_LIST_IDS.map((id) => parentForId(id, from, to, createdEvents)).filter(
-              (item): item is EventParentItem => item !== null,
-            ),
-            ...[...createdEvents.values()].map((event) => parentFromCreatedEvent(event, from, to)),
-            ...[...createdSeries.values()].map((series) =>
-              parentFromCreatedSeries(series, from, to),
-            ),
-          ].filter((item) => !seriesFilter || item.id === seriesFilter);
+          const ids = [
+            ...new Set<string>([
+              ...PARENT_LIST_IDS,
+              ...createdEvents.keys(),
+              ...parentOverrides.keys(),
+            ]),
+          ];
+          const items: EventParentItem[] = ids
+            .map((id) => parentForId(id, from, to, createdEvents, parentOverrides))
+            .filter((item): item is EventParentItem => item !== null)
+            .filter((item) => !seriesFilter || item.id === seriesFilter);
           return reply({ items });
         }
-        return reply({ items: [...currentEvents(), ...createdEvents.values()] });
+        // A parent created through the new route is not a legacy per-instance
+        // row: the legacy list serves only the seeded instances.
+        return reply({ items: [...currentEvents()] });
       },
     },
     {
@@ -2371,16 +2573,221 @@ function buildRoutes(
       pattern: /^\/gateway\/v1\/events$/,
       handle: (call) => {
         recordEventCreate(call.body);
-        const event = createdEvent(call.body);
-        if (!event.eventNo) return problem(422, 'eventNo is required');
+
+        // The handler validates the parent body, so a legacy shape fails here the
+        // way it fails on the real route rather than being quietly accepted.
+        const invalid = legacyCreateProblem(call.body);
+        if (invalid) return problem(422, invalid);
+
+        const record = asRecord(call.body);
+        const typedNumber = text(record.eventNo).trim();
+        const minted =
+          typedNumber || `EVT-2026-${String(900 + createdEvents.size + 1).padStart(3, '0')}`;
         const duplicate = [...currentEvents(), ...createdEvents.values()].some(
-          (candidate) => candidate.eventNo === event.eventNo,
+          (candidate) => candidate.eventNo === minted,
         );
-        if (duplicate) {
-          return problem(409, `Event number ${event.eventNo} is already in use`);
+        if (duplicate) return problem(409, `Event number ${minted} is already in use`);
+
+        const parent = createdEventParent(call.body, minted);
+        createdEvents.set(parent.id, parent);
+        return reply(parent, 201, { Location: `/v1/events/${parent.id}` });
+      },
+    },
+    {
+      method: 'PATCH',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)$/,
+      handle: (call, [eventId]) => {
+        recordEventPatch(call.body);
+        // A seeded parent can be patched too: the override is stored under its id
+        // and wins over the seed on every later read.
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+
+        const body = asRecord(call.body);
+        if ('eventNo' in body) return problem(422, 'eventNo is immutable and is not a PATCH field');
+        if ('occurrences' in body || 'recurrence' in body) {
+          return problem(422, 'an update carries no occurrence set and no recurrence');
         }
-        createdEvents.set(event.id, event);
-        return reply(event, 201, { Location: `/v1/events/${event.id}` });
+
+        const status = optionalText(body.status);
+        if (status === 'archived') {
+          return codedProblem(409, 'status', 'a parent is archived through its archive route');
+        }
+        if (status !== null && status !== 'draft' && status !== 'active') {
+          return problem(422, 'status must be draft or active');
+        }
+
+        const audience =
+          AUDIENCES.find(
+            (candidate) => candidate.id === (text(body.audienceId) || current.audienceId),
+          ) ?? EVERYONE_AUDIENCE;
+
+        const updated: EventParentItem = {
+          ...current,
+          name: optionalText(body.name) ?? current.name,
+          audienceId: audience.id,
+          audience: {
+            id: audience.id,
+            name: audience.name,
+            system: audience.system,
+            summary: audience.summary,
+          },
+          description:
+            body.description === null
+              ? null
+              : (optionalText(body.description) ?? current.description),
+          venueType: body.venueType === undefined ? current.venueType : venueTypeOf(body.venueType),
+          venueName:
+            body.venueName === null ? null : (optionalText(body.venueName) ?? current.venueName),
+          startTime: optionalText(body.startTime) ?? current.startTime,
+          endTime: body.endTime === null ? null : (optionalText(body.endTime) ?? current.endTime),
+          status: status === null ? current.status : (status as EventParentStatus),
+        };
+
+        storeParent(updated);
+        return reply(updated, 200, { ETag: '"e2e-event-parent"' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/archive$/,
+      handle: (_call, [eventId]) => {
+        recordWrite('archive', { eventId: eventId! });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        // The archive route is the only path to `archived` and the move is
+        // forward-only, so a second archive is the `status` conflict.
+        if (current.status === 'archived') {
+          return codedProblem(409, 'status', 'The event is already archived');
+        }
+
+        const archived: EventParentItem = { ...current, status: 'archived' };
+        storeParent(archived);
+        return reply(archived, 200, { ETag: '"e2e-event-parent"' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/occurrences\/([^/]+)\/cancel$/,
+      handle: (call, [eventId, date]) => {
+        recordWrite('cancel', { eventId: eventId!, date: date!, body: call.body });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        // AC-62: a draft cannot cancel a date; the UI disables the row control
+        // and the API refuses it as `event_draft`.
+        if (current.status === 'draft') {
+          return codedProblem(409, 'event_draft', 'Activate the event before cancelling a date');
+        }
+        if (current.status === 'archived') {
+          return codedProblem(409, 'status', 'An archived event is read-only');
+        }
+
+        const note = text(asRecord(call.body).note).trim();
+        if (!note) {
+          return codedProblem(422, 'reason_required', 'A cancellation reason is required');
+        }
+
+        const occurrence = current.occurrences.find((row) => row.date === date);
+        if (!occurrence) return problem(404, `Event ${eventId} has no occurrence on ${date}`);
+        if (occurrence.status === 'cancelled') {
+          return codedProblem(409, 'status', 'The occurrence is already cancelled');
+        }
+
+        const cancelled: EventOccurrenceItem = { ...occurrence, status: 'cancelled', note };
+        storeParent({
+          ...current,
+          occurrences: current.occurrences.map((row) => (row.date === date ? cancelled : row)),
+        });
+        return reply(cancelled);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/recurrence\/versions$/,
+      handle: (call, [eventId]) => {
+        recordWrite('version', { eventId: eventId!, body: call.body });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        const existing = recurrenceOfParent(current);
+        if ('refusal' in existing) return existing.refusal;
+
+        const body = asRecord(call.body);
+        const effectiveFrom = text(body.effectiveFrom);
+        const rrule = text(body.rrule).trim();
+        const endsOn = optionalText(body.endsOn);
+        if (!ISO_DATE.test(effectiveFrom)) {
+          return codedProblem(422, 'validation_error', 'effectiveFrom must be a date');
+        }
+        if (rrule.length < 6 || rrule.length > 200) {
+          return codedProblem(422, 'validation_error', 'rrule must be an RFC 5545 body');
+        }
+        if (/(?:^|;)(COUNT|UNTIL)=/i.test(rrule)) {
+          return codedProblem(422, 'validation_error', 'rrule must not carry COUNT or UNTIL');
+        }
+        if (endsOn && endsOn < effectiveFrom) {
+          return codedProblem(422, 'validation_error', 'endsOn must not be before effectiveFrom');
+        }
+
+        const recurrence: EventRecurrence = {
+          schedules: [...existing.recurrence.schedules, { effectiveFrom, rrule, endsOn }],
+          exceptions: [...existing.recurrence.exceptions],
+        };
+        storeParent({ ...current, recurrence });
+        return reply(recurrence, 201);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/recurrence\/exceptions$/,
+      handle: (call, [eventId]) => {
+        recordWrite('exception', { eventId: eventId!, body: call.body });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        const existing = recurrenceOfParent(current);
+        if ('refusal' in existing) return existing.refusal;
+
+        const body = asRecord(call.body);
+        const date = text(body.date);
+        const kind = text(body.kind);
+        const note = optionalText(body.note);
+        if (!ISO_DATE.test(date)) {
+          return codedProblem(422, 'validation_error', 'date must be a date');
+        }
+        if (kind !== 'cancelled' && kind !== 'extra') {
+          return codedProblem(422, 'validation_error', 'kind must be cancelled or extra');
+        }
+        if (kind === 'cancelled' && !note) {
+          return codedProblem(422, 'reason_required', 'A cancelled exception needs a reason');
+        }
+
+        // The newest directive per date is the effective one.
+        const recurrence: EventRecurrence = {
+          schedules: [...existing.recurrence.schedules],
+          exceptions: [
+            ...existing.recurrence.exceptions.filter((row) => row.date !== date),
+            { date, kind, note },
+          ],
+        };
+        storeParent({ ...current, recurrence });
+        return reply(recurrence, 201);
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/recurrence\/exceptions\/([^/]+)$/,
+      handle: (_call, [eventId, date]) => {
+        recordWrite('exceptionDelete', { eventId: eventId!, date: date! });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        const existing = recurrenceOfParent(current);
+        if ('refusal' in existing) return existing.refusal;
+
+        const recurrence: EventRecurrence = {
+          schedules: [...existing.recurrence.schedules],
+          exceptions: existing.recurrence.exceptions.filter((row) => row.date !== date),
+        };
+        storeParent({ ...current, recurrence });
+        return reply(recurrence);
       },
     },
     {
@@ -2424,13 +2831,14 @@ function buildRoutes(
             call.search.get('from') ?? '',
             call.search.get('to') ?? '',
             createdEvents,
+            parentOverrides,
           );
           if (!parent) return problem(404, `Event ${eventId} was not found`);
           return reply(parent, 200, { ETag: '"e2e-event-parent"' });
         }
-        const event =
-          createdEvents.get(eventId!) ??
-          currentEvents().find((candidate) => candidate.id === eventId);
+        // The legacy per-instance read serves only the seeded instances; a parent
+        // created through the new route is read with `view=parent`.
+        const event = currentEvents().find((candidate) => candidate.id === eventId);
         if (!event) return problem(404, `Event ${eventId} was not found`);
         return reply(event, 200, { ETag: '"e2e-event"' });
       },
@@ -2678,18 +3086,7 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/series$/,
-      handle: () => reply({ items: [...SERIES, ...createdSeries.values()] }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/gateway\/v1\/series$/,
-      handle: (call) => {
-        recordSeriesCreate(call.body);
-        const series = createdSeriesFromBody(call.body, `created-series-${createdSeries.size + 1}`);
-        if (!series.name.trim()) return problem(422, 'name is required');
-        createdSeries.set(series.id, series);
-        return reply(series, 201, { Location: `/v1/series/${series.id}` });
-      },
+      handle: () => reply({ items: SERIES }),
     },
     {
       method: 'GET',
@@ -2722,22 +3119,48 @@ function buildRoutes(
       method: 'GET',
       pattern: /^\/gateway\/v1\/series\/([^/]+)$/,
       handle: (call, [seriesId]) => {
-        // A series is the event parent, so the detail reads the same body behind
-        // the alias (FR-1). The edit form still reads the legacy `SeriesDto`.
+        // A series is the event parent: the alias serves the parent read, and the
+        // UI keeps no series write (AC-65). Only the read routes are stubbed.
         if (call.search.get('view') === 'parent') {
-          const parent = seriesParentForId(
+          const parent = parentForId(
             seriesId!,
             call.search.get('from') ?? '',
             call.search.get('to') ?? '',
-            createdSeries,
+            createdEvents,
+            parentOverrides,
           );
           if (!parent) return problem(404, `Series ${seriesId} was not found`);
           return reply(parent, 200, { ETag: '"e2e-series-parent"' });
         }
-        const series =
-          createdSeries.get(seriesId!) ?? SERIES.find((candidate) => candidate.id === seriesId);
+        const series = SERIES.find((candidate) => candidate.id === seriesId);
         if (!series) return problem(404, `Series ${seriesId} was not found`);
         return reply(series);
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/audiences$/,
+      handle: () => reply({ items: AUDIENCES }),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/audiences$/,
+      handle: (call) => {
+        const audience = createdAudience(call.body, `aud-created-${createdAudiences.size + 1}`, [
+          ...AUDIENCES,
+          ...createdAudiences.values(),
+        ]);
+        if (typeof audience === 'string') {
+          if (audience === 'name_in_use') {
+            return problem(
+              409,
+              `An audience named ${text(asRecord(call.body).name)} already exists`,
+            );
+          }
+          return problem(422, audience);
+        }
+        createdAudiences.set(audience.id, audience);
+        return reply(audience, 201, { Location: `/v1/audiences/${audience.id}` });
       },
     },
     {
@@ -2800,18 +3223,24 @@ function buildRoutes(
 
 class GatewayStub {
   private readonly created = new Map<string, MemberDetail>();
-  /** Events the create route accepted; the detail read finds them here too. */
-  private readonly createdEvents = new Map<string, EventItem>();
-  /** Series the create route accepted, read back by the activity detail. */
-  private readonly createdSeries = new Map<string, SeriesDto>();
+  /** Event parents the create route accepted; the detail read finds them here too. */
+  private readonly createdEvents = new Map<string, EventParentItem>();
+  /** FR-42e: the parent each detail write produced; a later read resolves it. */
+  private readonly parentOverrides = new Map<string, EventParentItem>();
   /** Opt-in: the action-state events a capture-state test asks for. */
   includeActionStates = false;
   /**
-   * The last create bodies, so a test can assert the wire the browser sent
-   * rather than the stub's own re-derivation (AC-56, AC-57).
+   * The last create and patch bodies, so a test can assert the wire the browser
+   * sent rather than the stub's own re-derivation (AC-56, AC-57).
    */
   lastEventCreate: unknown = null;
-  lastSeriesCreate: unknown = null;
+  lastEventPatch: unknown = null;
+  /** The detail's write verbs, recorded per kind (FR-42e, AC-62/AC-63). */
+  lastEventArchive: EventWrite | null = null;
+  lastOccurrenceCancel: EventWrite | null = null;
+  lastScheduleVersion: EventWrite | null = null;
+  lastException: EventWrite | null = null;
+  lastExceptionDelete: EventWrite | null = null;
   /**
    * Opt-in: the reply the confirmed import POSTs give. Unset, the stub accepts the rows and reports
    * one batch. The behavioural ACs assert the summary and the `422 import_failed` body, so the test
@@ -2821,14 +3250,21 @@ class GatewayStub {
   private readonly routes: readonly RouteEntry[] = buildRoutes(
     this.created,
     this.createdEvents,
-    this.createdSeries,
+    this.parentOverrides,
     () => this.includeActionStates,
     (commit) => this.importReply?.(commit) ?? null,
     (body) => {
       this.lastEventCreate = body;
     },
     (body) => {
-      this.lastSeriesCreate = body;
+      this.lastEventPatch = body;
+    },
+    (kind, write) => {
+      if (kind === 'archive') this.lastEventArchive = write;
+      else if (kind === 'cancel') this.lastOccurrenceCancel = write;
+      else if (kind === 'version') this.lastScheduleVersion = write;
+      else if (kind === 'exception') this.lastException = write;
+      else this.lastExceptionDelete = write;
     },
   );
   private readonly unmatched: string[] = [];

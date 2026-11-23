@@ -42,3 +42,14 @@ export async function toApiError(response: Response): Promise<ApiError> {
 export function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
+
+/**
+ * The problem+json `code` a surface maps by (FR-42g). The status alone is not
+ * enough: several `409`s mean different things, so a surface reads the code and
+ * never the message text. Null when the body carried none.
+ */
+export function problemCode(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+  const code = error.problem?.code;
+  return typeof code === 'string' && code.trim() ? code : null;
+}

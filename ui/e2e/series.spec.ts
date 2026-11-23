@@ -4,8 +4,12 @@ test.beforeEach(async ({ page }) => {
   await seedSession(page);
 });
 
-// A series is an activity in the events list, so its own list retires and the route redirects
-// (spec 4.3, AC-51). The list's own assertions move to the events list in the round that merges it.
+/**
+ * AC-51/AC-65: the series screens retired with the event-as-parent amendment. A
+ * series is the event parent now, so every series route resolves to the event's
+ * own route: the list to the events list, new to the event form, the detail to
+ * the event detail and the edit form to the event edit form.
+ */
 test('the retired series list redirects to the events list', async ({ page }) => {
   await open(page, '/events/series');
 
@@ -14,66 +18,30 @@ test('the retired series list redirects to the events list', async ({ page }) =>
   await expect(page.getByRole('link', { name: 'Series' })).toHaveCount(0);
 });
 
-test('the series form offers Presbyter only and sends it on create', async ({ page, gateway }) => {
+test('the retired New series route opens the New event form', async ({ page }) => {
   await open(page, '/events/series/new');
 
-  const toggle = page.getByRole('switch', { name: 'Presbyter only' });
-  await expect(toggle).not.toBeChecked();
-  await toggle.click();
-
-  await page.getByLabel(/^Name/).fill('Presbyter study');
-  await page.getByLabel('Effective from').fill('2026-01-07');
-  await page.getByLabel('Recurrence rule').fill('FREQ=WEEKLY;BYDAY=WE');
-
-  await page.getByRole('button', { name: 'Create series' }).click();
-
-  await expect(page).toHaveURL(/\/events\/created-series-1\?kind=series$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Presbyter study' })).toBeVisible();
-  // AC-57: the recorded wire carries the toggle.
-  expect(gateway.lastSeriesCreate).toMatchObject({
-    name: 'Presbyter study',
-    presbyterOnly: true,
-  });
+  await expect(page).toHaveURL(/\/events\/new$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+  // The retired Presbyter-only toggle is gone with the series form (FR-42).
+  await expect(page.getByRole('switch', { name: 'Presbyter only' })).toHaveCount(0);
 });
 
-test('the series detail shows versions, exceptions and the occurrence window', async ({ page }) => {
-  await open(page, '/events/series-1?kind=series');
+test('the retired series detail opens the event detail', async ({ page }) => {
+  await open(page, '/events/series/series-1');
 
+  await expect(page).toHaveURL(/\/events\/series-1$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Event occurrences' })).toBeVisible();
+});
 
-  const versions = page.getByRole('table', { name: 'Schedule versions' });
-  await expect(versions).toBeVisible();
-  // Two append-only versions plus the header row.
-  await expect(versions.getByRole('row')).toHaveCount(3);
-  await expect(versions.getByText('Weekly on Sunday')).toHaveCount(2);
-  await expect(versions.getByText('Jan 5, 2025', { exact: true })).toBeVisible();
-  await expect(versions.getByText('Jan 4, 2026', { exact: true })).toBeVisible();
-  await expect(versions.getByText('Dec 27, 2026', { exact: true })).toBeVisible();
+test('the retired series edit form opens the event edit form', async ({ page }) => {
+  await open(page, '/events/series/series-1/edit');
 
-  const exceptions = page.getByRole('table', { name: 'Series exceptions' });
-  await expect(exceptions.getByText('Cancelled')).toHaveCount(2);
-  await expect(exceptions.getByText('Public holiday')).toBeVisible();
-  // A legacy cancellation carries no reason; the table says so rather than a dash.
-  await expect(exceptions.getByText('No reason recorded')).toBeVisible();
-
-  await expect(page.getByRole('group', { name: 'Series occurrence window' })).toBeVisible();
-  const occurrences = page.getByRole('table', { name: 'Series occurrences' });
-  await expect(occurrences).toBeVisible();
-  await expect(occurrences.getByRole('row')).toHaveCount(4); // header plus three dates
-  await expect(occurrences.getByRole('link', { name: 'View events' })).toHaveCount(3);
-  await expect(occurrences.getByText('Jan 18, 2026', { exact: true })).toBeVisible();
-
-  // FR-6e: one summary request feeds three tiles; the Occurrences tile counts the
-  // same list the table renders, so it always agrees with the rows beneath it.
-  const summary = page.getByRole('region', { name: 'Series summary' });
-  await expect(summary).toBeVisible();
-  await expect(summary.getByText('Next occurrence')).toBeVisible();
-  await expect(summary.getByText('Jan 4, 2026', { exact: true })).toBeVisible();
-  await expect(summary.getByText('Occurrences')).toBeVisible();
-  await expect(summary.getByText('in this window')).toBeVisible();
-  await expect(summary.getByText('75%')).toBeVisible();
-  // The tiles carry the Roster label, never the bare "of" the retired caption used.
-  await expect(summary.getByText('3 present · Roster 4 on Jan 25, 2026')).toBeVisible();
-  await expect(summary.getByText('2', { exact: true })).toBeVisible();
-  await expect(summary.getByText('paid this window')).toBeVisible();
+  await expect(page).toHaveURL(/\/events\/series-1\/edit$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
+  // FR-42b: the event number is read-only in edit mode and members tracking is not editable.
+  await expect(page.getByLabel(/^Event number/)).toHaveAttribute('readonly');
+  await expect(page.getByRole('switch', { name: 'Members tracking' })).toBeDisabled();
+  await expect(page.getByRole('switch', { name: 'Presbyter only' })).toHaveCount(0);
 });

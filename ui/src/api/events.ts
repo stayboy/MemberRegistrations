@@ -206,40 +206,76 @@ export interface EventListItem {
 }
 
 /**
- * One session as the create request writes it. `startTime` and `endTime` are
- * omitted to inherit the event's times; `endTime: null` would mean a session
- * with no end, which the form does not offer (FR-42b).
+ * The create body's date row (FR-42b): a UTC date and optional times. A blank
+ * time inherits the event's, so the form omits it.
  */
-export interface CreateEventSessionInput {
+export interface CreateEventOccurrenceInput {
   readonly date: string;
   readonly startTime?: string;
   readonly endTime?: string | null;
 }
 
-/** Mirrors `createEventSchema`; `status` and `source` are the API's to derive (FR-42a, FR-42b). */
-export interface CreateEventInput {
-  readonly eventNo: string;
-  readonly name: string;
-  readonly timezone?: string;
-  readonly startDate: string;
-  readonly endDate: string;
-  readonly startTime: string;
-  readonly endTime?: string | null;
-  readonly venueType: EventVenueType;
-  readonly venueName?: string | null;
-  readonly description?: string | null;
-  readonly tracksMembers?: boolean;
-  readonly presbyterOnly?: boolean;
-  readonly sessions: readonly CreateEventSessionInput[];
+/** One schedule version, as `POST /v1/events` writes its first recurrence. */
+export interface CreateEventScheduleInput {
+  readonly effectiveFrom: string;
+  readonly rrule: string;
+  readonly endsOn?: string | null;
 }
 
 /**
- * The write body the form builds: an all-whitespace `eventNo` is omitted rather
- * than sent, so an invalid draft can never reach the API as an empty number.
+ * Mirrors `eventRecurrenceInputSchema`: a recurring event's first schedule
+ * version. `rrule` is the body only — `COUNT`/`UNTIL` are refused, `endsOn` ends
+ * it. The API generates the first window from it.
  */
-export type CreateEventPayload = Omit<CreateEventInput, 'eventNo'> & {
+export interface CreateEventRecurrenceInput {
+  readonly schedules: readonly CreateEventScheduleInput[];
+  readonly exceptions?: readonly {
+    readonly date: string;
+    readonly kind: 'cancelled' | 'extra';
+    readonly note?: string | null;
+  }[];
+}
+
+/**
+ * Mirrors `createEventParentSchema` (FR-42a): the parent as a draft with either
+ * manual `occurrences` or one `recurrence`, never both. `eventNo` is optional —
+ * the API mints `EVT-<year>-<sequence>` — and the retired `ministry`,
+ * `presbyterOnly` and the derived range are not part of the payload.
+ */
+export interface CreateEventParentInput {
   readonly eventNo?: string;
-};
+  readonly name: string;
+  readonly audienceId?: string;
+  readonly timezone?: string;
+  readonly description?: string | null;
+  readonly venueType: EventVenueType;
+  readonly venueName?: string | null;
+  readonly startTime: string;
+  readonly endTime?: string | null;
+  readonly tracksMembers?: boolean;
+  readonly occurrences?: readonly CreateEventOccurrenceInput[];
+  readonly recurrence?: CreateEventRecurrenceInput;
+}
+
+export type CreateEventParentPayload = CreateEventParentInput;
+
+/**
+ * Mirrors `updateEventParentSchema`: the same parent fields without the
+ * recurrence, all optional. `eventNo` is immutable and absent; `status` is the
+ * activate/archive move.
+ */
+export interface UpdateEventParentInput {
+  readonly name?: string;
+  readonly audienceId?: string;
+  readonly timezone?: string;
+  readonly description?: string | null;
+  readonly venueType?: EventVenueType;
+  readonly venueName?: string | null;
+  readonly startTime?: string;
+  readonly endTime?: string | null;
+  readonly tracksMembers?: boolean;
+  readonly status?: EventParentStatus;
+}
 
 /** The detail body plus the `ETag` header; the API sends the event itself. */
 export interface EventDetail {
@@ -341,20 +377,41 @@ export async function listEventParents(
 }
 
 /**
- * `POST /v1/events`: the standalone event and its sessions in one request.
- * The API answers `201` with the `EventItem` body, not a wrapper (FR-42a).
+ * `POST /v1/events`: the parent, a draft, with either its manual occurrences or
+ * its first recurrence version. The API answers `201` with the `EventParent`
+ * body — not a wrapper — and mints the number when it is omitted (FR-42a).
  */
-export async function createEvent(
+export async function createEventParent(
   baseUrl: string,
   sessionToken: string,
-  input: CreateEventPayload,
-): Promise<EventItem> {
-  const result = await gatewayRequest<EventItem>(baseUrl, EVENTS_PATH, {
+  input: CreateEventParentPayload,
+): Promise<EventParentItem> {
+  const result = await gatewayRequest<EventParentItem>(baseUrl, EVENTS_PATH, {
     method: 'POST',
     sessionToken,
     body: input,
   });
   if (!result) throw new ApiError(500, 'The created event response was empty.');
+  return result;
+}
+
+/**
+ * `PATCH /v1/events/:id`: the parent's partial update. The form sends the
+ * identity fields; activation is `{ status: 'active' }` alone (FR-42b). The API
+ * answers `200` with the parent.
+ */
+export async function updateEventParent(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  input: UpdateEventParentInput,
+): Promise<EventParentItem> {
+  const result = await gatewayRequest<EventParentItem>(baseUrl, eventDetailPath(eventId), {
+    method: 'PATCH',
+    sessionToken,
+    body: input,
+  });
+  if (!result) throw new ApiError(500, 'The updated event response was empty.');
   return result;
 }
 
@@ -406,6 +463,154 @@ export async function getEventParent(
     { sessionToken, signal: options.signal },
   );
   if (!result) throw new ApiError(500, 'The event response was empty.');
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// The detail's write verbs (FR-42e): archive, occurrence cancel and the
+// recurrence's append-only versions and exceptions. Each answers with the body
+// the merged contract documents, so the caller can read the new state back.
+// ---------------------------------------------------------------------------
+
+/** `POST /v1/events/:id/archive`: 200 with the archived parent. */
+export function eventArchivePath(eventId: string): string {
+  return `${eventDetailPath(eventId)}/archive`;
+}
+
+export async function archiveEventParent(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+): Promise<EventParentItem> {
+  const result = await gatewayRequest<EventParentItem>(baseUrl, eventArchivePath(eventId), {
+    method: 'POST',
+    sessionToken,
+  });
+  if (!result) throw new ApiError(500, 'The archived event response was empty.');
+  return result;
+}
+
+/**
+ * `POST /v1/events/:id/occurrences/:date/cancel`: 200 with the cancelled
+ * occurrence. `note` is the required reason (FR-42e/AC-64); a draft parent is
+ * refused with `409 event_draft`.
+ */
+export interface CancelOccurrenceInput {
+  readonly note: string;
+}
+
+export function eventOccurrenceCancelPath(eventId: string, date: string): string {
+  return `${eventDetailPath(eventId)}/occurrences/${encodeURIComponent(date)}/cancel`;
+}
+
+export async function cancelEventOccurrence(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  date: string,
+  input: CancelOccurrenceInput,
+): Promise<EventOccurrenceItem> {
+  const result = await gatewayRequest<EventOccurrenceItem>(
+    baseUrl,
+    eventOccurrenceCancelPath(eventId, date),
+    { method: 'POST', sessionToken, body: input },
+  );
+  if (!result) throw new ApiError(500, 'The cancelled occurrence response was empty.');
+  return result;
+}
+
+/** One appended schedule version; `rrule` is a body, never a `COUNT`/`UNTIL`. */
+export interface AddEventScheduleVersionInput {
+  readonly effectiveFrom: string;
+  readonly rrule: string;
+  readonly endsOn?: string | null;
+}
+
+export function eventRecurrenceVersionsPath(eventId: string): string {
+  return `${eventDetailPath(eventId)}/recurrence/versions`;
+}
+
+/** `POST …/recurrence/versions`: 201 with the recurrence, the version appended. */
+export async function addEventScheduleVersion(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  input: AddEventScheduleVersionInput,
+): Promise<EventRecurrence> {
+  const result = await gatewayRequest<EventRecurrence>(
+    baseUrl,
+    eventRecurrenceVersionsPath(eventId),
+    {
+      method: 'POST',
+      sessionToken,
+      body: {
+        effectiveFrom: input.effectiveFrom,
+        rrule: input.rrule,
+        endsOn: input.endsOn ?? null,
+      },
+    },
+  );
+  if (!result) throw new ApiError(500, 'The schedule version response was empty.');
+  return result;
+}
+
+/** One exception directive; the UI authors `extra` only (FR-42e). */
+export interface AddEventExceptionInput {
+  readonly date: string;
+  readonly kind: 'cancelled' | 'extra';
+  readonly note?: string | null;
+}
+
+export function eventRecurrenceExceptionsPath(eventId: string): string {
+  return `${eventDetailPath(eventId)}/recurrence/exceptions`;
+}
+
+/** The remove path; the date is a UTC calendar date, encoded as one segment. */
+export function eventRecurrenceExceptionPath(eventId: string, date: string): string {
+  return `${eventRecurrenceExceptionsPath(eventId)}/${encodeURIComponent(date)}`;
+}
+
+/** `POST …/recurrence/exceptions`: 201 with the recurrence, the directive appended. */
+export async function addEventRecurrenceException(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  input: AddEventExceptionInput,
+): Promise<EventRecurrence> {
+  const result = await gatewayRequest<EventRecurrence>(
+    baseUrl,
+    eventRecurrenceExceptionsPath(eventId),
+    {
+      method: 'POST',
+      sessionToken,
+      body: {
+        date: input.date,
+        kind: input.kind,
+        note: input.note ?? null,
+      },
+    },
+  );
+  if (!result) throw new ApiError(500, 'The recurrence exception response was empty.');
+  return result;
+}
+
+/**
+ * `DELETE …/recurrence/exceptions/:date`: 200 with the recurrence, every
+ * directive for that date removed. An exception is a schedule instruction, not
+ * a record with history.
+ */
+export async function removeEventRecurrenceException(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  date: string,
+): Promise<EventRecurrence> {
+  const result = await gatewayRequest<EventRecurrence>(
+    baseUrl,
+    eventRecurrenceExceptionPath(eventId, date),
+    { method: 'DELETE', sessionToken },
+  );
+  if (!result) throw new ApiError(500, 'The recurrence exception response was empty.');
   return result;
 }
 

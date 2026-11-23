@@ -28,7 +28,7 @@ export interface ExchangeResult {
 }
 
 export interface RequestOptions {
-  readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly body?: unknown;
   readonly sessionToken?: string;
   readonly signal?: AbortSignal;

@@ -178,6 +178,21 @@ export const useEventStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalL,
   },
+  // The recurrence panel's own failure banner, between the panel header and the
+  // tables: it belongs to the surface the write acted on (FR-42g).
+  panelBanner: {
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+  },
+  // A row's controls: View rows and, where the parent allows it, Cancel. The
+  // draft reason sits beside the disabled button and wraps under it on a narrow
+  // table rather than stretching the cell (AC-62).
+  rowActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    flexWrap: 'wrap',
+    maxWidth: '220px',
+  },
   metrics: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',

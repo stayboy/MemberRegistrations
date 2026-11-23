@@ -2,12 +2,12 @@
 
 |                        |                                                                                                 |
 | ---------------------- | ----------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                            |
+| Status                 | CLOSED                                                                                          |
 | Tier                   | 2                                                                                               |
 | Mode                   | `unattended (auto-accept recommendations)` — grill question 13, this round only                 |
 | Base                   | `c3ae9e9`                                                                                       |
-| Review rounds          | 0                                                                                               |
-| Gate runs in parent    | 0                                                                                               |
+| Review rounds          | 1                                                                                               |
+| Gate runs in parent    | 1                                                                                               |
 | Spec                   | `documents/specs/member-registrations-ui.md` (FR-42, FR-42a-42g, AC-51, AC-56, AC-58, AC-62-65) |
 | Workers                | `single` (two dispatches: the form and picker, then the detail verbs)                           |
 | Implementer            | worker ollama-cloud/deepseek-v4.1-flash:1017 (dispatches a and b)                               |
@@ -141,8 +141,20 @@ Acceptance criteria:
 | -------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Fast gate (spec amendment) | `npm run verify:fast`                                                                        | pass — 4/4                                                                                                                                           |
 | Seat rule change           | the two seat files and `.github/merge-policy.md` re-read against the widened `branch` clause | the seat files carry identical text; the glossary defines `branch` as cutting from `main` and does not restate the dirty-tree rule, so no edit there |
+| Full gate                  | `npm run verify`                                                                             | pass — 7/7 (skill, check-round, format, lint, typecheck, test, build)                                                                                |
+| UI DOM lane                | `npm --prefix ui run test:dom`                                                               | pass — 25 files, 236 tests                                                                                                                           |
+| UI end to end              | `npm --prefix ui run e2e`                                                                    | pass — 89 tests, 87 passed, 2 skipped (the two parked `fixme` cases)                                                                                 |
+| Capture                    | `npm --prefix ui run capture`                                                                | pass — 29/29; nine baselines recorded                                                                                                                |
+| Mock catalogue guard       | `npx vitest run tests/meta/mock-claims.test.ts`                                              | pass — 77/77                                                                                                                                         |
+| Protected-document guard   | `npx vitest run tests/meta/protected-doc-review.test.ts`                                     | pass — 7/7                                                                                                                                           |
 
-gate-run 2026-11-23T10:26:59.889Z profile=fast steps=4/4 lines=4 bytes=691
+Two flakes, both re-run once (§8's two automatic re-runs, now spent for the round): `tests/db/event-parent-migration.test.ts`
+"aborts and rolls back when a child date is not an occurrence" timed out at 15 s under the gate's 80 workers, and
+`tests/api/events-write.test.ts` "cancels an occurrence with its reason…" answered `ETIMEDOUT` from supertest on a
+later fast run. Each passed alone immediately (9/9 in 4.8 s; 21/21) and each full lane then passed. Recorded as
+contention under parallel load, not as a defect — the same two tests pass in the full gate of this round.
+
+gate-run 2026-11-23T11:36:06.948Z profile=full steps=7/7 lines=7 bytes=965
 
 ## Review
 
@@ -169,6 +181,26 @@ The **spec review** returned REWORK on three P1s and four P2s. Fixed in the same
 The confirmation returned **ACCEPT**: all eight items satisfied, no new contradiction, every AC testable. The
 spec's status line carries the verdict, the reviewer, the revision and the owner's approval of this frontier.
 
+The **Tier 2 review** (same seat, one pass covering the code and the protected catalogue, as the fast close
+allowed) returned **ACCEPT** on both. No P1. Two P2s:
+
+- **AC-62's wording, not the build.** AC-62 said **Activate** was "the primary action in the `Actions` menu"
+  while MR-1 defines a page's primary action as a visible button beside it. The build was right; the AC now
+  says "beside the `Actions` menu", with a changelog line (a clarifying edit).
+- **`audience_system` binds to the dialog's banner rather than a named field.** AC-64/FR-42g require it "against
+  the dialog", which it meets; recorded, not changed.
+
+The review also confirmed the worker's two out-of-list decisions: the per-row **Remove** for exceptions is
+in scope (FR-42 says "adding/removing exceptions"), and the detail's `Activate` rendering beside the menu is
+correct.
+
+The **protected-document review** of `documents/mock-claims/v2-events.json` returned **ACCEPT** with the
+record's `reason` and `attestation` stored verbatim in `documents/agents/protected-doc-reviews.json`
+(`sha256` of the reviewed text `1be4456…`, the guard recomputes it and passes). It verified the re-cut
+against the shipped form, and that the AC-5 repoint is proved by a new e2e case rather than standing in for
+one. It noted, without treating it as a defect, that AC-5's "the `Occurrences` tile counts the same list"
+sub-clause stays unproven end to end.
+
 ## Git writes
 
 | Brief | Actor                 | Verb   | Variant                        | Reason                                                                                                                                                                                                                                                                                                       |
@@ -188,23 +220,57 @@ builds on.
 
 ## Mock sign-off
 
-`10-event-create` is the owner's signature and this round **voids** it: the mock draws one `Create event`
-button while grill answer 1 of the write round requires **Save draft** and **Save and activate**. Its
-coverage drops to `target` and only the owner restores it. The re-cut state and the rebuilt `02-event-detail`
-are `auto-signed` as `target` under §17 and are listed at the close for inspection.
+| Surface        | Mock                                    | Capture                            | Signer       | Date       | Verdict                                                                                                                                       |
+| -------------- | --------------------------------------- | ---------------------------------- | ------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| New event form | `mockups/v2-events/10-event-create.png` | `ui/e2e/baseline/events-new.png`   | `unattended` | 2026-11-23 | auto-signed — target re-cut for FR-42b's two commit controls; the owner's 2026-11-22 signature is void and only the owner restores it         |
+| Event detail   | `mockups/v2-events/02-event-detail.png` | `ui/e2e/baseline/event-detail.png` | `unattended` | 2026-11-15 | auto-signed — the drawing is stale on the tile set, the columns and this round's verbs; the capture is recorded and parity is **not** claimed |
 
 ## Mock parity
 
-The parity line lands with the baselines.
+No probe ran: neither changed surface has a current drawing to pair against. `02-event-detail` is stale on the
+tile set, the columns and the verbs this round added, and `10-event-create` was re-cut today and is an unsigned
+`target`. The build is captured, not compared — claiming PRESENT here would be a claim with no artefact. Parity
+for both is in the backlog ("Rebuild `02-event-detail` on the shared shell", "Draw the audience picker and its
+inline create dialog").
 
-Mock coverage: pending — set when the states are cut.
+The edit route (`#/events/:id/edit`) is a new surface with a capture and **no mock**; the baseline README records
+it as `none (no edit-state drawing)` rather than pairing it with the create state, whose read-only fields differ.
+
+Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
 
 ## Acceptance
 
-| #   | Criterion | Met | Evidence |
-| --- | --------- | --- | -------- |
+| #   | Criterion                                                                                                                                                          | Met | Evidence                                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The form sends the parent body only, one commit control per FR-42b, and a create through the real handler succeeds; the stub that accepted the legacy body is gone | yes | `ui/src/format/event-form.ts`, `ui/src/pages/EventFormPage.tsx`; the fixture stub now refuses `sessions`/`startDate`/`endDate`/`ministry`/`presbyterOnly` |
+| 2   | `#/events/:id/edit` updates a parent and renders **Event number** and **Members tracking** read-only                                                               | yes | `EventFormPage.dom.test.tsx`; the update carries neither                                                                                                  |
+| 3   | The picker offers the active audiences with the server's `summary`, creates one inline, and surfaces the audience codes in the dialog                              | yes | `AudiencePicker.tsx`, `AudienceDialog.tsx`, 6 DOM tests                                                                                                   |
+| 4   | The detail's verbs match AC-62 on `draft`, `active` and `archived`, with no **Restore**                                                                            | yes | `EventDetailPage.dom.test.tsx` (14 write-verb cases), `events.spec.ts`                                                                                    |
+| 5   | Cancelling an occurrence collects a reason and shows `cancelled` with its note; **Add exception** offers extra dates only                                          | yes | `CancelOccurrenceDialog.tsx`, `AddExceptionDialog.tsx`; the blank reason never reaches the API                                                            |
+| 6   | A schedule version authored from the closed vocabulary round-trips                                                                                                 | yes | `ui/src/format/rrule.test.ts` (11 cases, both directions)                                                                                                 |
+| 7   | The three series pages are gone and their routes redirect                                                                                                          | yes | `router.tsx`; `series.spec.ts` rewritten as the four redirects                                                                                            |
+| 8   | Each recorded stub validates against the frozen contract                                                                                                           | yes | the stubs are derived from `src/openapi.ts`'s examples and refuse what the handlers refuse; `mock-claims` 77/77 and the new AC-5 case                     |
+| 9   | No migration, no API change, no public route deleted                                                                                                               | yes | `git diff main -- src openapi.json` empty; `/v1/series` still live                                                                                        |
 
 ## Deviations
+
+- **The two code dispatches landed as one commit.** They both edit `ui/e2e/fixtures.ts` and the detail page,
+  so splitting them would have needed hunk staging for no review benefit. The chain used seven briefs of its
+  declared eight.
+- **Two baselines were stale when the worker finished** (`events-list.png`, `series-detail.png`): they were outside
+  its dispatch boundary. The parent recaptured them here; `shepherding-roster.png` drifted and was reverted, and
+  `events-new.png`, `event-edit.png` and `event-detail.png` are this round's.
+- **One flake, one re-run.** `tests/db/event-parent-migration.test.ts` timed out under the gate's 80 workers; alone
+  it passed 9/9 in 4.8 s and the full gate then passed 7/7. Within §8's two re-runs.
+- **The worker added a per-row `Remove` for exceptions**, beyond the dispatch's numbered list, because FR-42
+  requires "adding/removing exceptions". The review accepted it as in scope.
+- **AC-62's wording was corrected after the review** ("beside the `Actions` menu"): the build was right and the AC
+  was not. A clarifying edit, recorded in the changelog.
+- **`190b543` carries no `Model-Seat`/`Fallback-Reason` trailer.** The seat's amend was permission-denied four
+  times; the squash merge composes its own message from the PR body, so the actor record is the PR body and the
+  git-write table.
+- **Four mock-debt rows are in the backlog**: the `02-event-detail` rebuild, the picker/dialog drawing, the retired
+  series states, and the voided `10-event-create` signature.
 
 - **The first `branch` brief was cut from the wrong start point and refused twice.** `main` (`c3ae9e9`) is
   held by the `ussd-budget` worktree while this worktree stood on the pre-squash `f973d71`, so the single-arg
