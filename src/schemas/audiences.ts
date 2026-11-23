@@ -37,9 +37,42 @@ export const audienceClauseSchema = z.discriminatedUnion('attribute', [
   membershipStatusClauseSchema,
 ]);
 
-export const audienceRuleSchema = z.object({
-  operator: z.enum(AUDIENCE_OPERATORS),
-  clauses: z.array(audienceClauseSchema).min(1),
+export const audienceRuleSchema = z
+  .object({
+    operator: z.enum(AUDIENCE_OPERATORS),
+    clauses: z.array(audienceClauseSchema).min(1),
+  })
+  .superRefine((rule, ctx) => {
+    for (const [index, clause] of rule.clauses.entries()) {
+      if (
+        clause.attribute === 'ageBand' &&
+        clause.maxYears !== null &&
+        clause.maxYears < clause.minYears
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['clauses', index, 'maxYears'],
+          message: 'maxYears must not be below minYears',
+        });
+      }
+    }
+  });
+
+/**
+ * The audience write contract. A system audience is seeded and read-only, so
+ * the handler refuses POST/PUT against one with `409 audience_system`
+ * (member-registrations-event-audience.md A-6). There is no delete: a custom
+ * audience is archived with `{ active: false }`.
+ */
+export const createAudienceSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  rule: audienceRuleSchema,
+});
+
+export const updateAudienceSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  rule: audienceRuleSchema.optional(),
+  active: z.boolean().optional(),
 });
 
 export const audienceSummarySchema = z.object({
@@ -81,3 +114,5 @@ export type AudienceClause = z.infer<typeof audienceClauseSchema>;
 export type AudienceRule = z.infer<typeof audienceRuleSchema>;
 export type AudienceSummary = z.infer<typeof audienceSummarySchema>;
 export type Audience = z.infer<typeof audienceSchema>;
+export type CreateAudienceInput = z.infer<typeof createAudienceSchema>;
+export type UpdateAudienceInput = z.infer<typeof updateAudienceSchema>;

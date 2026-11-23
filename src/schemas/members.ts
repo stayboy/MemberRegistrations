@@ -16,6 +16,14 @@ export const contactInputSchema = z.object({
   displayOrder: z.number().int().min(1).max(999).optional(),
 });
 
+/** The person kind on reads; `archived` is derived from `archivedAt` (MR-34). */
+export const MEMBERSHIP_STATUSES = ['visitor', 'active', 'archived'] as const;
+/** `archived` is not a create or update value; the archive action owns it. */
+export const MEMBERSHIP_WRITE_STATUSES = ['visitor', 'active'] as const;
+
+export const membershipStatusSchema = z.enum(MEMBERSHIP_STATUSES);
+export const membershipStatusInputSchema = z.enum(MEMBERSHIP_WRITE_STATUSES);
+
 export const createMemberSchema = z.object({
   memberNo: memberNoParamSchema,
   firstName: z.string().min(1).max(100),
@@ -25,6 +33,7 @@ export const createMemberSchema = z.object({
   alias: z.string().max(100).nullable().optional(),
   dob: dateStringSchema.nullable().optional(),
   gender: z.enum(GENDERS).optional(),
+  membershipStatus: membershipStatusInputSchema.default('active'),
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),
@@ -55,6 +64,7 @@ export const updateMemberSchema = z.object({
   alias: z.string().max(100).nullable().optional(),
   dob: dateStringSchema.nullable().optional(),
   gender: z.enum(GENDERS).optional(),
+  membershipStatus: membershipStatusInputSchema.optional(),
   placeOfResidence: z.string().max(200).nullable().optional(),
   addressLine: z.string().max(300).nullable().optional(),
   joinedOn: dateStringSchema.nullable().optional(),

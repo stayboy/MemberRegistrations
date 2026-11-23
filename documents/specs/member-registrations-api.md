@@ -20,6 +20,11 @@ downstream round. No migration or code lands in the spec round.
 
 ## Change log
 
+- 2026-11-23: **the parent write is `PATCH`, and the create body is `occurrences` XOR one `recurrence`** (owner:
+  "all as recommended", write round). The route table's `PUT` becomes the legacy per-instance write kept only for the
+  deployed form, and `PATCH` carries the parent's partial update with the same `If-Match` rule. The create body accepts
+  `eventNo` (optional; the server mints it when absent) and either manual occurrences or one recurrence, never both;
+  the derived range stays read-only.
 - 2026-11-23: **the read transition** (owner: unattended, 2026-11-23): `/v1/events`, `/v1/events/:id` and
   `/v1/series/:id` keep their legacy shapes as the default and serve the parent read with `view=parent`; the flag
   and the legacy serialisers retire in the downstream round, when the default flips. This keeps the deployed UI
@@ -1415,7 +1420,8 @@ is the plain alias. There is no series list, series create or series schedule ro
 | `GET`    | `/v1/events?from&to&ministry&venueType`             | Parents with their occurrences in the window and attendance/offering summaries                     |
 | `POST`   | `/v1/events`                                        | Create the parent, an optional recurrence and, without one, manual occurrences; `201` + `Location` |
 | `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                 |
-| `PUT`    | `/v1/events/{eventId}`                              | Update the parent; stale `If-Match` → `409`                                                        |
+| `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); stale `If-Match` → `409`                                              |
+| `PUT`    | `/v1/events/{eventId}`                              | The legacy per-instance update during the transition; it retires when the UI moves                 |
 | `POST`   | `/v1/events/{eventId}/archive`                      | Archive the parent; history stays readable                                                         |
 | `POST`   | `/v1/events/{eventId}/occurrences/{date}/cancel`    | Cancel one occurrence with a reason; history stays readable                                        |
 | `POST`   | `/v1/events/{eventId}/recurrence/versions`          | Add a schedule version                                                                             |
@@ -1429,9 +1435,12 @@ is the plain alias. There is no series list, series create or series schedule ro
 The event-wide cancel becomes an **occurrence cancel** and the **parent archive**: there is no route that
 cancels a whole event by rewriting the parent. `POST /v1/events` with a recurrence generates its first
 window atomically; `POST /v1/events/generate` is the refresh for later windows and is idempotent on
-`(eventId, date)`. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
-**parent** and take the date. The create body carries `audienceId` (default `Everyone`) and the derived
-range is not accepted: `startDate`/`endDate` are read-only. The list's `?ministry=` filter selects events
+`(eventId, date)`. The create body carries `audienceId` (default `Everyone`), `eventNo` (optional; the
+server mints it when absent) and either **manual `occurrences`** or **one `recurrence`**, never both: the derived
+range is not accepted, and `startDate`/`endDate` are read-only. `PATCH` carries the parent fields (no recurrence, no
+`eventNo`, no occurrence set) and is the write the UI uses; `PUT` stays only for the legacy per-instance form until
+that form moves. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
+**parent** and take the date. The list's `?ministry=` filter selects events
 whose audience contains a `ministry` clause with that code (and, during the transition, the legacy
 column), so its meaning is unchanged. The retired `ministry` and `presbyterOnly` fields are refused with
 `422 validation_error`.
