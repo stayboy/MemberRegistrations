@@ -122,28 +122,16 @@
         "sha256": "95cfe3582c615639a1e790a1506ee8d63399768317a694a1db46a310a360103c",
         "source": "mockups/v2-events/10-event-create.html"
       },
-      "baseline": "events-new.png",
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-23",
-        "sha256": "95cfe3582c615639a1e790a1506ee8d63399768317a694a1db46a310a360103c",
-        "basis": "§17 target re-cut for FR-42b's two commit controls; the owner's 2026-11-22 signature is void and only the owner restores it"
-      }
+      "baseline": null,
+      "coverage": "target"
     },
     "02-event-detail": {
       "mock": {
         "path": "mockups/v2-events/02-event-detail.png",
         "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51"
       },
-      "baseline": "event-detail.png",
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
-      }
+      "baseline": null,
+      "coverage": "target"
     },
     "05-offerings-landing": {
       "mock": {

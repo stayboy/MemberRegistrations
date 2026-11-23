@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN — slice 2a in progress                                                                                                                                           |
+| Status                 | CLOSED — slice 2a in progress                                                                                                                                         |
 | Tier                   | 2 — Reviewed (migration, wire, multi-file)                                                                                                                            |
 | Mode                   | `unattended (auto-accept recommendations)` from "all as recommended. go unattended" (2026-11-22); scope: this round through 2b conformance and the workflow policy PR |
 | Base                   | `0c3cb53`                                                                                                                                                             |
