@@ -392,31 +392,27 @@ const conferenceBody = {
   eventNo: 'SC-2026',
   name: 'Strategic Conference',
   timezone: 'Africa/Lagos',
-  startDate: '2026-10-13',
-  endDate: '2026-10-15',
   startTime: '17:30',
   endTime: '20:00',
   venueType: 'auditorium',
   venueName: 'Main Auditorium',
   description: 'Annual strategic conference',
-  sessions: [{ date: '2026-10-13' }, { date: '2026-10-14' }, { date: '2026-10-15' }],
+  occurrences: [{ date: '2026-10-13' }, { date: '2026-10-14' }, { date: '2026-10-15' }],
 };
 
 const validBody = {
   eventNo: 'SC-VALID',
   name: 'Validation Event',
-  startDate: '2026-12-01',
-  endDate: '2026-12-03',
   startTime: '18:00',
   venueType: 'auditorium',
-  sessions: [{ date: '2026-12-01' }],
+  occurrences: [{ date: '2026-12-01' }],
 };
 
 let conferenceId: string;
 let conferenceEtag: string;
 
 describe('POST /v1/events', () => {
-  it('creates the Strategic Conference standalone with three 17:30 sessions', async () => {
+  it('creates the Strategic Conference draft with three 17:30 occurrences', async () => {
     const response = await createEvent(conferenceBody);
 
     expect(response.status).toBe(201);
@@ -425,13 +421,13 @@ describe('POST /v1/events', () => {
     expect(response.headers.etag).toMatch(/^"e[0-9a-f]+"$/);
 
     conferenceId = response.body.id as string;
-    conferenceEtag = response.headers.etag as string;
 
     expect(response.body).toMatchObject({
       eventNo: 'SC-2026',
       name: 'Strategic Conference',
-      seriesId: null,
+      audienceId: response.body.audience.id,
       ministry: null,
+      presbyterOnly: false,
       timezone: 'Africa/Lagos',
       startDate: '2026-10-13',
       endDate: '2026-10-15',
@@ -440,63 +436,51 @@ describe('POST /v1/events', () => {
       venueType: 'auditorium',
       venueName: 'Main Auditorium',
       description: 'Annual strategic conference',
-      status: 'active',
-      source: 'manual',
+      tracksMembers: true,
+      status: 'draft',
+      recurrence: null,
       offerings: [],
       stats: emptyStats,
     });
-    expect(response.body.sessions).toEqual([
-      {
-        date: '2026-10-13',
-        startTime: '17:30',
-        endTime: '20:00',
-        status: 'scheduled',
-        capture: null,
-        note: null,
-        present: 0,
-        expected: 0,
-        importedRows: 0,
-        source: 'none',
-      },
-      {
-        date: '2026-10-14',
-        startTime: '17:30',
-        endTime: '20:00',
-        status: 'scheduled',
-        capture: null,
-        note: null,
-        present: 0,
-        expected: 0,
-        importedRows: 0,
-        source: 'none',
-      },
-      {
-        date: '2026-10-15',
-        startTime: '17:30',
-        endTime: '20:00',
-        status: 'scheduled',
-        capture: null,
-        note: null,
-        present: 0,
-        expected: 0,
-        importedRows: 0,
-        source: 'none',
-      },
-    ]);
+    expect(response.body.occurrences).toHaveLength(3);
+    expect(response.body.occurrences[0]).toMatchObject({
+      date: '2026-10-13',
+      startTime: '17:30',
+      endTime: '20:00',
+      status: 'scheduled',
+      capture: null,
+      note: null,
+      present: 0,
+      expected: 0,
+      importedRows: 0,
+      source: 'none',
+    });
+
+    // The legacy detail and update tests below read an active parent; the new
+    // create is a draft, so activate it through PATCH and take the legacy ETag.
+    const activated = await request(harness.app)
+      .patch(`/v1/events/${conferenceId}`)
+      .set({ ...writeHeaders, 'If-Match': response.headers.etag as string })
+      .send({ status: 'active' });
+    expect(activated.status).toBe(200);
+
+    const legacy = await readEvent(conferenceId);
+    expect(legacy.status).toBe(200);
+    conferenceEtag = legacy.headers.etag as string;
   });
 
-  it('rejects an empty session list', async () => {
-    const response = await createEvent({ ...validBody, eventNo: 'SC-EMPTY', sessions: [] });
+  it('rejects an empty occurrence list', async () => {
+    const response = await createEvent({ ...validBody, eventNo: 'SC-EMPTY', occurrences: [] });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('validation_error');
   });
 
-  it('rejects duplicate session dates', async () => {
+  it('rejects duplicate occurrence dates', async () => {
     const response = await createEvent({
       ...validBody,
       eventNo: 'SC-DUPLICATE',
-      sessions: [{ date: '2026-12-01' }, { date: '2026-12-01' }],
+      occurrences: [{ date: '2026-12-01' }, { date: '2026-12-01' }],
     });
 
     expect(response.status).toBe(422);
@@ -504,19 +488,21 @@ describe('POST /v1/events', () => {
     expect(response.body.detail).toContain('2026-12-01');
   });
 
-  it('rejects a session outside the event date range and writes nothing', async () => {
+  it('rejects a request carrying both occurrences and a recurrence', async () => {
     const response = await createEvent({
       ...validBody,
-      eventNo: 'SC-OUTSIDE',
-      sessions: [{ date: '2026-11-30' }],
+      eventNo: 'SC-BOTH',
+      recurrence: {
+        schedules: [{ effectiveFrom: '2026-12-06', rrule: 'FREQ=WEEKLY;BYDAY=SU' }],
+      },
     });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('validation_error');
-    expect(response.body.detail).toContain('2026-11-30');
+    expect(response.body.detail).toContain('recurrence');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from events where event_no = 'SC-OUTSIDE'",
+      "select count(*)::int as count from events where event_no = 'SC-BOTH'",
     );
     expect(Number(row!.count)).toBe(0);
   });
@@ -537,18 +523,16 @@ describe('POST /v1/events', () => {
     expect(Number(row!.count)).toBe(0);
   });
 
-  it('rejects a missing event number', async () => {
+  it('mints an event number when the body omits it', async () => {
     const response = await createEvent({
       name: 'No Number',
-      startDate: '2026-12-01',
-      endDate: '2026-12-01',
       startTime: '18:00',
       venueType: 'auditorium',
-      sessions: [{ date: '2026-12-01' }],
+      occurrences: [{ date: '2026-12-01' }],
     });
 
-    expect(response.status).toBe(422);
-    expect(response.body.code).toBe('validation_error');
+    expect(response.status).toBe(201);
+    expect(response.body.eventNo).toMatch(/^EVT-\d{4}-\d{3}$/);
   });
 
   it('rejects a duplicate event number with 409', async () => {
@@ -567,10 +551,8 @@ describe('POST /v1/events', () => {
       eventNo: 'SC-HEADCOUNT',
       name: 'Headcount-only Rally',
       timezone: 'UTC',
-      startDate: day(0),
-      endDate: day(0),
       startTime: '00:00',
-      sessions: [{ date: day(0) }],
+      occurrences: [{ date: day(0) }],
       tracksMembers: false,
     });
     expect(created.status).toBe(201);
@@ -606,10 +588,12 @@ describe('POST /v1/events', () => {
     });
     expect(created.status).toBe(201);
 
+    // PUT is the legacy per-instance write and quotes its own content ETag.
+    const legacy = await readEvent(created.body.id as string);
     const renamed = await updateEvent(
       created.body.id as string,
       { name: 'Still headcount-only' },
-      created.headers.etag as string,
+      legacy.headers.etag as string,
     );
     expect(renamed.status).toBe(200);
     expect(renamed.body.tracksMembers).toBe(false);
@@ -922,11 +906,9 @@ describe('POST /v1/events/generate', () => {
         eventNo: 'EVT-2026-777',
         name: 'Manual Collision Event',
         timezone: 'UTC',
-        startDate: '2026-06-01',
-        endDate: '2026-06-01',
         startTime: '17:00',
         venueType: 'auditorium',
-        sessions: [{ date: '2026-06-01' }],
+        occurrences: [{ date: '2026-06-01' }],
       });
     expect(manual.status).toBe(201);
 

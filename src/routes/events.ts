@@ -1,9 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { actorOf } from '../actor.js';
-import { BadRequestError, NotFoundError } from '../errors/domain-errors.js';
+import { BadRequestError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
+import { dateStringSchema } from '../schemas/common.js';
 import {
-  createEventSchema,
+  cancelOccurrenceSchema,
+  createEventParentSchema,
   delegationInputSchema,
   eventAttendanceInputSchema,
   eventAttendanceQuerySchema,
@@ -14,7 +16,10 @@ import {
   eventViewQuerySchema,
   headcountInputSchema,
   headcountListQuerySchema,
+  recurrenceExceptionInputSchema,
+  recurrenceScheduleInputSchema,
   sessionDateQuerySchema,
+  updateEventParentSchema,
   updateEventSchema,
 } from '../schemas/events.js';
 import { offeringCountInputSchema, offeringCountQuerySchema } from '../schemas/offering-counts.js';
@@ -38,6 +43,35 @@ function sendEvent(res: Response, detail: EventDetail, status = 200): void {
   res.setHeader('ETag', detail.etag);
   res.setHeader('Cache-Control', 'no-store');
   res.status(status).json(detail.event);
+}
+
+/**
+ * Zod strips an unknown key, so a retired `ministry` or `presbyterOnly` in the
+ * raw body would vanish silently. Refuse it by name instead (FR-36).
+ */
+function refuseLegacyProjections(body: unknown): void {
+  if (!body || typeof body !== 'object') return;
+  const record = body as Record<string, unknown>;
+  for (const field of ['ministry', 'presbyterOnly']) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
+      throw new ValidationError(
+        `${field}: is not accepted on the event write; use audienceId`,
+        'validation_error',
+      );
+    }
+  }
+}
+
+async function sendParent(
+  repo: EventRepository,
+  res: Response,
+  parent: { id: string },
+  status = 200,
+): Promise<void> {
+  const etag = await repo.parentEtag(parent.id);
+  if (etag) res.setHeader('ETag', etag);
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(status).json(parent);
 }
 
 function assertWindow(from: string, to: string): void {
@@ -71,11 +105,11 @@ export function eventsRouter(
   });
 
   router.post('/', async (req, res) => {
-    const input = createEventSchema.parse(req.body);
-    actorOf(req);
-    const detail = await repo.create(input);
-    res.setHeader('Location', `/v1/events/${encodeURIComponent(detail.event.id)}`);
-    sendEvent(res, detail, 201);
+    refuseLegacyProjections(req.body);
+    const input = createEventParentSchema.parse(req.body);
+    const parent = await repo.createParent(input, actorOf(req));
+    res.setHeader('Location', `/v1/events/${encodeURIComponent(parent.id)}`);
+    await sendParent(repo, res, parent, 201);
   });
 
   // Defined before /:id so the generation path can never be shadowed.
@@ -189,6 +223,56 @@ export function eventsRouter(
     res.status(201).json(delegation);
   });
 
+  router.post('/:id/archive', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    actorOf(req);
+    const parent = await repo.archiveParent(id);
+    await sendParent(repo, res, parent);
+  });
+
+  router.post('/:id/occurrences/:date/cancel', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const date = dateStringSchema.parse(req.params.date);
+    const actor = actorOf(req);
+    // The contract's reason is `note`; an empty one is `reason_required`, not a
+    // generic schema failure.
+    if (
+      typeof (req.body as { note?: unknown } | undefined)?.note !== 'string' ||
+      (req.body as { note: string }).note.trim() === ''
+    ) {
+      throw new ValidationError('note: a cancellation reason is required', 'reason_required');
+    }
+    const input = cancelOccurrenceSchema.parse(req.body);
+    const occurrence = await repo.cancelOccurrence(id, date, input.note, actor);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(occurrence);
+  });
+
+  router.post('/:id/recurrence/versions', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = recurrenceScheduleInputSchema.parse(req.body);
+    const recurrence = await repo.addRecurrenceVersion(id, input, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(recurrence);
+  });
+
+  router.post('/:id/recurrence/exceptions', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = recurrenceExceptionInputSchema.parse(req.body);
+    const recurrence = await repo.setRecurrenceException(id, input, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json(recurrence);
+  });
+
+  router.delete('/:id/recurrence/exceptions/:date', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const date = dateStringSchema.parse(req.params.date);
+    actorOf(req);
+    const recurrence = await repo.removeRecurrenceException(id, date);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(recurrence);
+  });
+
   router.get('/:id', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
     const { view } = eventViewQuerySchema.parse(req.query);
@@ -197,6 +281,8 @@ export function eventsRouter(
       assertWindow(query.from, query.to);
       const parent = await repo.getParent(id, query.from, query.to);
       if (!parent) throw new NotFoundError(`Event ${id} was not found`);
+      const etag = await repo.parentEtag(id);
+      if (etag) res.setHeader('ETag', etag);
       res.setHeader('Cache-Control', 'no-store');
       res.json(parent);
       return;
@@ -204,6 +290,15 @@ export function eventsRouter(
     const detail = await repo.get(id);
     if (!detail) throw new NotFoundError(`Event ${id} was not found`);
     sendEvent(res, detail);
+  });
+
+  router.patch('/:id', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    actorOf(req);
+    refuseLegacyProjections(req.body);
+    const input = updateEventParentSchema.parse(req.body);
+    const parent = await repo.updateParent(id, input, expectedEtag(req));
+    await sendParent(repo, res, parent);
   });
 
   router.put('/:id', async (req, res) => {

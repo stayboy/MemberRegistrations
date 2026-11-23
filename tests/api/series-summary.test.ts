@@ -465,33 +465,40 @@ describe('series window summary', () => {
     });
   });
 
-  it('requires a reason on a cancelled event session and returns it', async () => {
-    const base = {
-      eventNo: 'SUM-EVT-REASON',
-      name: 'Reason Event',
-      timezone: 'UTC',
-      startDate: upcomingDate,
-      endDate: upcomingDate,
-      startTime: '09:00',
-      venueType: 'auditorium',
-    };
-
-    const refused = await request(harness.app)
+  it('requires a reason on a cancelled event occurrence and returns it', async () => {
+    const created = await request(harness.app)
       .post('/v1/events')
       .set(writeHeaders)
-      .send({ ...base, sessions: [{ date: upcomingDate, status: 'cancelled' }] });
+      .send({
+        eventNo: 'SUM-EVT-REASON',
+        name: 'Reason Event',
+        timezone: 'UTC',
+        startTime: '09:00',
+        venueType: 'auditorium',
+        occurrences: [{ date: upcomingDate }],
+      });
+    expect(created.status).toBe(201);
+    const eventId = created.body.id as string;
+
+    const activated = await request(harness.app)
+      .patch(`/v1/events/${eventId}`)
+      .set({ ...writeHeaders, 'If-Match': created.headers.etag as string })
+      .send({ status: 'active' });
+    expect(activated.status).toBe(200);
+
+    const refused = await request(harness.app)
+      .post(`/v1/events/${eventId}/occurrences/${upcomingDate}/cancel`)
+      .set(writeHeaders)
+      .send({ note: '' });
     expect(refused.status).toBe(422);
     expect(refused.body.code).toBe('reason_required');
 
     const accepted = await request(harness.app)
-      .post('/v1/events')
+      .post(`/v1/events/${eventId}/occurrences/${upcomingDate}/cancel`)
       .set(writeHeaders)
-      .send({
-        ...base,
-        sessions: [{ date: upcomingDate, status: 'cancelled', note: 'Venue flooded' }],
-      });
-    expect(accepted.status).toBe(201);
-    expect(accepted.body.sessions[0]).toMatchObject({
+      .send({ note: 'Venue flooded' });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body).toMatchObject({
       status: 'cancelled',
       note: 'Venue flooded',
     });

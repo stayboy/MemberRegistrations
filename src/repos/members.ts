@@ -291,6 +291,8 @@ export interface CreateMemberInput {
   alias?: string | null;
   dob?: string | null;
   gender?: Gender;
+  /** `visitor` or `active`; `archived` is derived from `archivedAt` (MR-34). */
+  membershipStatus?: 'visitor' | 'active';
   placeOfResidence?: string | null;
   addressLine?: string | null;
   joinedOn?: string | null;
@@ -1084,6 +1086,7 @@ export class MemberRepository {
           alias: optionalText(input.alias),
           dob,
           gender,
+          membershipStatus: input.membershipStatus ?? 'active',
           placeOfResidence: optionalText(input.placeOfResidence),
           addressLine: optionalText(input.addressLine),
           joinedOn,
@@ -1173,6 +1176,9 @@ export class MemberRepository {
         throw new ValidationError('gender is not recognised');
       }
       fields.gender = input.gender;
+    }
+    if (input.membershipStatus !== undefined) {
+      fields.membershipStatus = input.membershipStatus;
     }
     if (input.placeOfResidence !== undefined) fields.placeOfResidence = input.placeOfResidence;
     if (input.addressLine !== undefined) fields.addressLine = input.addressLine;

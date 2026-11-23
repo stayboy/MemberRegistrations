@@ -69,21 +69,28 @@ async function createEvent(
   startTime = '10:00',
   extra: Record<string, unknown> = {},
 ): Promise<string> {
+  const { presbyterOnly, ...rest } = extra;
+  const [audience] = presbyterOnly
+    ? await harness.db.query<{ id: string }>(
+        `select id from audiences where system_key = 'presbyters'`,
+      )
+    : [];
   const response = await request(harness.app)
     .post('/v1/events')
     .set(writeHeaders)
     .send({
       eventNo,
       name: eventNo,
-      startDate: date,
-      endDate: date,
       startTime,
       venueType: 'auditorium',
-      sessions: [{ date }],
-      ...extra,
+      occurrences: [{ date }],
+      ...(audience ? { audienceId: audience.id } : {}),
+      ...rest,
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 async function createMinistryEvent(

@@ -63,14 +63,14 @@ async function createOverviewEvent(date: string, name: string): Promise<string> 
     .send({
       eventNo: `OVR-${overviewEventNo}`,
       name,
-      startDate: date,
-      endDate: date,
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: [{ date }],
+      occurrences: [{ date }],
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 /** History is seeded directly: per-member writes accept only a session dated today. */

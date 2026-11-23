@@ -31,14 +31,15 @@ async function createEvent(dates: string[]): Promise<string> {
       name: `Code event ${eventNo}`,
       // UTC so a session dated today is today in the event timezone.
       timezone: 'UTC',
-      startDate: dates[0],
-      endDate: dates[dates.length - 1],
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: dates.map((date) => ({ date })),
+      occurrences: dates.map((date) => ({ date })),
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  // The write creates a draft; these fixtures exercise the session routes.
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 async function createMember(memberNo: string): Promise<string> {

@@ -203,17 +203,28 @@ async function runScenario() {
     body: JSON.stringify({
       eventNo: 'SMOKE-9001',
       name: 'Smoke Offering Event',
-      startDate: '2999-01-01',
-      endDate: '2999-01-01',
-      startTime: '09:00',
       venueType: 'auditorium',
-      sessions: [{ date: '2999-01-01', startTime: '09:00' }],
+      startTime: '09:00',
+      occurrences: [{ date: '2999-01-01', startTime: '09:00' }],
     }),
   });
   check(
     'smoke event created',
     smokeEvent.status === 201 && Boolean(smokeEvent.body.id),
     JSON.stringify(smokeEvent.body),
+  );
+
+  // A created parent is a draft; the offering attach below needs it live.
+  // The handler treats an absent If-Match as "any current version".
+  const smokeActivated = await request(`/v1/events/${smokeEvent.body.id}`, {
+    method: 'PATCH',
+    headers: write,
+    body: JSON.stringify({ status: 'active' }),
+  });
+  check(
+    'smoke event activated',
+    smokeActivated.status === 200 && smokeActivated.body.status === 'active',
+    JSON.stringify(smokeActivated.body),
   );
 
   const attached = await request(`/v1/events/${smokeEvent.body.id}/offerings`, {
@@ -229,17 +240,26 @@ async function runScenario() {
     body: JSON.stringify({
       eventNo: 'SMOKE-TODAY',
       name: 'Smoke Today Event',
-      startDate: TODAY,
-      endDate: TODAY,
-      startTime: '09:00',
       venueType: 'auditorium',
-      sessions: [{ date: TODAY, startTime: '09:00' }],
+      startTime: '09:00',
+      occurrences: [{ date: TODAY, startTime: '09:00' }],
     }),
   });
   check(
     'today event created',
     todayEvent.status === 201 && Boolean(todayEvent.body.id),
     JSON.stringify(todayEvent.body),
+  );
+
+  const todayActivated = await request(`/v1/events/${todayEvent.body.id}`, {
+    method: 'PATCH',
+    headers: write,
+    body: JSON.stringify({ status: 'active' }),
+  });
+  check(
+    'today event activated',
+    todayActivated.status === 200 && todayActivated.body.status === 'active',
+    JSON.stringify(todayActivated.body),
   );
 
   const todayAttached = await request(`/v1/events/${todayEvent.body.id}/offerings`, {
@@ -254,7 +274,18 @@ async function runScenario() {
   );
 
   // Headcount: append, correct, read back the chain, and prove the retired
-  // /expected route is gone. The presbyter-only roster is the active presbyters.
+  // /expected route is gone. The Presbyters audience gives the presbyter-only
+  // roster: the active presbyters.
+  const audiences = await request('/v1/audiences', { headers: read });
+  const presbytersAudience = audiences.body.items?.find(
+    (audience) => audience.system && audience.name === 'Presbyters',
+  );
+  check(
+    'presbyters audience found',
+    audiences.status === 200 && Boolean(presbytersAudience?.id),
+    JSON.stringify(audiences.body),
+  );
+
   const headcountEventDate = shiftDate(TODAY, -1);
   const headcountEvent = await request('/v1/events', {
     method: 'POST',
@@ -265,12 +296,10 @@ async function runScenario() {
       // Dated yesterday so it never competes with today's giving event in the
       // USSD activity picker; the headcount writes below target the today event,
       // because a headcount is only accepted for the session's own day.
-      startDate: headcountEventDate,
-      endDate: headcountEventDate,
-      startTime: '09:00',
       venueType: 'auditorium',
-      presbyterOnly: true,
-      sessions: [{ date: headcountEventDate, startTime: '09:00' }],
+      startTime: '09:00',
+      audienceId: presbytersAudience.id,
+      occurrences: [{ date: headcountEventDate, startTime: '09:00' }],
     }),
   });
   check(

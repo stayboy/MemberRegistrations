@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db, DbClient } from '../db/sql.js';
+import type { Db, DbClient, Row } from '../db/sql.js';
 import {
   ConflictError,
   NotFoundError,
@@ -9,7 +9,7 @@ import {
 import { sqlState } from '../errors/sqlstate.js';
 import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
-import { todayIn } from '../domain/series.js';
+import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
 import { sessionIsClosed } from './captures.js';
 import type { Gender } from './members.js';
@@ -23,7 +23,14 @@ import { parentWindowSummary } from './series.js';
 import { renderAudienceSummary } from '../domain/audiences.js';
 import type { AudienceRule } from '../schemas/audiences.js';
 import type { SeriesSummary } from '../schemas/reference.js';
-import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
+import type {
+  CreateEventParentInput,
+  EventListQuery,
+  RecurrenceExceptionInput,
+  RecurrenceScheduleInput,
+  UpdateEventInput,
+  UpdateEventParentInput,
+} from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
 export type EventStatus = 'draft' | 'active' | 'archived';
@@ -376,16 +383,6 @@ ${EVENT_FROM}
 where e.id = $1
 `;
 
-const INSERT_SQL = `
-insert into events (
-  event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
-  venue_type, venue_name, start_time, end_time, tracks_members, status
-) values (
-  $1, $2, $3, null, $4, $5, $6, $7, $8, $9, $10, $11, 'active'
-)
-returning id
-`;
-
 const UPDATE_SQL = `
 update events
 set name = $2,
@@ -583,6 +580,229 @@ async function audienceIdFor(db: DbClient, presbyterOnly: boolean): Promise<stri
   );
   if (!audience) throw new Error(`The ${systemKey} audience is missing`);
   return audience.id;
+}
+
+/** The first window a create generates: 90 days from the earliest schedule. */
+const FIRST_WINDOW_DAYS = 90;
+
+const STATUS_RANK: Record<EventStatus, number> = { draft: 0, active: 1, archived: 2 };
+
+interface ParentCoreRow extends Row {
+  id: string;
+  event_no: string | null;
+  name: string;
+  audience_id: string;
+  ministry_id: string | null;
+  presbyter_only: boolean;
+  timezone: string;
+  description: string | null;
+  venue_type: string;
+  venue_name: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  tracks_members: boolean;
+  status: string;
+  archived_at: unknown;
+}
+
+interface NormalizedSchedule {
+  effectiveFrom: string;
+  rrule: string;
+  endsOn: string | null;
+}
+
+function currentUtcYear(): number {
+  return Number(new Date().toISOString().slice(0, 4));
+}
+
+/**
+ * Mint `EVT-<year>-<NNN>` from the per-year counter, skipping a number an
+ * operator already typed. It is the loop migration 0026 and the series path use.
+ */
+async function mintParentEventNo(db: DbClient, year: number): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const [counter] = await db.query<{ last_value: number | string }>(
+      `insert into event_no_counters (year, last_value)
+       values ($1::int, 1)
+       on conflict (year) do update set last_value = event_no_counters.last_value + 1
+       returning last_value`,
+      [year],
+    );
+    const eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
+    const [taken] = await db.query('select 1 from events where event_no = $1', [eventNo]);
+    if (!taken) return eventNo;
+  }
+  throw new ConflictError(`Could not mint a unique event number for ${year}`);
+}
+
+async function loadAudience(
+  db: DbClient,
+  id: string,
+): Promise<{ id: string; active: boolean; rule: AudienceRule } | null> {
+  const [row] = await db.query<{ id: string; active: boolean; rule: unknown }>(
+    'select id, active, rule from audiences where id = $1',
+    [id],
+  );
+  if (!row) return null;
+  return { id: row.id, active: row.active, rule: parseAudienceRule(row.rule) };
+}
+
+/**
+ * The legacy `ministry_id`/`presbyter_only` pair is only faithful for an
+ * `allOf` over ministry and presbyter clauses. Any other operator or attribute
+ * (age, gender, membership status, `anyOf`) has no legacy expression, so the
+ * projections stay null/false.
+ */
+function legacyProjection(rule: AudienceRule): {
+  ministryCode: string | null;
+  presbyterOnly: boolean;
+} {
+  if (rule.operator !== 'allOf') return { ministryCode: null, presbyterOnly: false };
+  if (
+    rule.clauses.some(
+      (clause) => clause.attribute !== 'ministry' && clause.attribute !== 'presbyter',
+    )
+  ) {
+    return { ministryCode: null, presbyterOnly: false };
+  }
+  const ministries = rule.clauses.filter((clause) => clause.attribute === 'ministry');
+  if (ministries.length > 1) return { ministryCode: null, presbyterOnly: false };
+  const ministryClause = ministries[0];
+  return {
+    ministryCode:
+      ministryClause && ministryClause.attribute === 'ministry'
+        ? ministryClause.ministryCode
+        : null,
+    presbyterOnly: rule.clauses.some((clause) => clause.attribute === 'presbyter'),
+  };
+}
+
+async function ministryIdFor(db: DbClient, code: string): Promise<string | null> {
+  const [ministry] = await db.query<{ id: string }>(
+    'select id from ministries where lower(code) = lower($1)',
+    [code],
+  );
+  return ministry?.id ?? null;
+}
+
+/** A supplied `audienceId` must exist and be active; the current one may be re-sent. */
+async function assertAudienceUsable(
+  db: DbClient,
+  id: string,
+  currentId?: string,
+): Promise<{ id: string; active: boolean; rule: AudienceRule }> {
+  const audience = await loadAudience(db, id);
+  if (!audience) {
+    throw new ValidationError(`audienceId: audience ${id} was not found`, 'validation_error');
+  }
+  if (!audience.active && audience.id !== currentId) {
+    throw new ValidationError(
+      'audienceId: an archived audience cannot be picked for an event',
+      'validation_error',
+    );
+  }
+  return audience;
+}
+
+function normalizeSchedule(input: RecurrenceScheduleInput): NormalizedSchedule {
+  const effectiveFrom = assertDate(input.effectiveFrom, 'effectiveFrom');
+  const endsOn = input.endsOn ? assertDate(input.endsOn, 'endsOn') : null;
+  if (endsOn && endsOn < effectiveFrom) {
+    throw new ValidationError('endsOn must not be before effectiveFrom');
+  }
+  return { effectiveFrom, rrule: validateRrule(input.rrule), endsOn };
+}
+
+function assertOccurrenceDates(dates: string[]): void {
+  const seen = new Set<string>();
+  for (const date of dates) {
+    const value = assertDate(date, 'occurrences.date');
+    if (seen.has(value)) {
+      throw new ValidationError(`occurrences: the date ${value} appears more than once`);
+    }
+    seen.add(value);
+  }
+}
+
+/** The first generated window: from the earliest schedule, at most 90 days. */
+function firstWindow(schedules: NormalizedSchedule[]): { from: string; to: string } {
+  const from = [...schedules].map((schedule) => schedule.effectiveFrom).sort()[0]!;
+  const horizon = shiftDate(from, FIRST_WINDOW_DAYS - 1);
+  const bounded = schedules
+    .map((schedule) => schedule.endsOn)
+    .filter((value): value is string => value !== null)
+    .sort();
+  const lastBound = bounded[bounded.length - 1];
+  return { from, to: lastBound && lastBound < horizon ? lastBound : horizon };
+}
+
+async function hasRecurrence(db: DbClient, id: string): Promise<boolean> {
+  const [row] = await db.query<{ present: boolean }>(
+    'select exists (select 1 from event_recurrence_versions where event_id = $1) as present',
+    [id],
+  );
+  return row?.present === true;
+}
+
+/**
+ * A manually dated parent has no schedule rows, so a recurrence write would
+ * give it both shapes. Every recurrence write refuses the same standalone
+ * parent with the same code.
+ */
+async function assertRecurrenceWritable(db: DbClient, id: string): Promise<void> {
+  if (!(await hasRecurrence(db, id))) {
+    throw new ConflictError(
+      'recurrence: the event was created with manual occurrences and has no recurrence',
+      'recurrence',
+    );
+  }
+}
+
+/**
+ * A recurring event's name and audience are unique among non-archived recurring
+ * events. A standalone event is identified by `eventNo` alone, so it is exempt.
+ */
+async function assertRecurringNameFree(
+  db: DbClient,
+  name: string,
+  audienceId: string,
+  excludeId: string | null,
+): Promise<void> {
+  const [conflict] = await db.query<{ id: string }>(
+    `select e.id
+       from events e
+      where lower(e.name) = lower($1)
+        and e.audience_id = $2
+        and e.status <> 'archived'
+        and ($3::uuid is null or e.id <> $3::uuid)
+        and exists (select 1 from event_recurrence_versions rv where rv.event_id = e.id)
+      limit 1`,
+    [name, audienceId, excludeId],
+  );
+  if (conflict) {
+    throw new ConflictError(
+      'name: a recurring event with this name already exists for that audience',
+    );
+  }
+}
+
+function parentEtagFor(row: ParentCoreRow): string {
+  const payload = JSON.stringify([
+    row.event_no,
+    row.name,
+    row.audience_id,
+    row.ministry_id,
+    row.presbyter_only,
+    row.timezone,
+    row.description,
+    row.venue_type,
+    row.venue_name,
+    row.start_time,
+    row.end_time,
+    row.tracks_members,
+    row.status,
+  ]);
+  return `"e${createHash('sha256').update(payload).digest('hex').slice(0, 24)}"`;
 }
 
 export interface EventOccurrenceItem {
@@ -996,6 +1216,432 @@ export class EventRepository {
     });
   }
 
+  /**
+   * `POST /v1/events`: one draft parent with either manual occurrences or one
+   * first recurrence version. The response is the parent read; the route quotes
+   * the ETag from {@link parentEtag}.
+   */
+  async createParent(input: CreateEventParentInput, actor: string): Promise<EventParentItem> {
+    if (!input.occurrences && !input.recurrence) {
+      throw new ValidationError('occurrences: an event needs occurrences or a recurrence');
+    }
+    if (input.occurrences && input.recurrence) {
+      throw new ValidationError('recurrence: supply either occurrences or a recurrence, not both');
+    }
+
+    const name = input.name.trim();
+    if (!name) throw new ValidationError('name: name is required');
+    const timezone = input.timezone ?? 'UTC';
+    todayIn(timezone);
+
+    const audience = input.audienceId
+      ? await assertAudienceUsable(this.db, input.audienceId)
+      : await assertAudienceUsable(this.db, await audienceIdFor(this.db, false));
+    const projection = legacyProjection(audience.rule);
+    const ministryId = projection.ministryCode
+      ? await ministryIdFor(this.db, projection.ministryCode)
+      : null;
+
+    const schedules = (input.recurrence?.schedules ?? []).map(normalizeSchedule);
+    const occurrences = input.occurrences ?? [];
+    if (occurrences.length === 0 && schedules.length === 0) {
+      throw new ValidationError('occurrences: an event needs occurrences or a recurrence');
+    }
+    assertOccurrenceDates(occurrences.map((occurrence) => occurrence.date));
+
+    const year = schedules.length
+      ? Number(
+          schedules
+            .map((schedule) => schedule.effectiveFrom)
+            .sort()[0]!
+            .slice(0, 4),
+        )
+      : currentUtcYear();
+
+    const id = await this.db.transaction(async (tx) => {
+      const eventNo = input.eventNo?.trim() || (await mintParentEventNo(tx, year));
+      if (schedules.length) await assertRecurringNameFree(tx, name, audience.id, null);
+
+      let created: { id: string } | undefined;
+      try {
+        [created] = await tx.query<{ id: string }>(
+          `insert into events (
+             event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
+             venue_type, venue_name, start_time, end_time, tracks_members, status
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft')
+           returning id`,
+          [
+            eventNo,
+            name,
+            audience.id,
+            ministryId,
+            projection.presbyterOnly,
+            timezone,
+            input.description ?? null,
+            input.venueType,
+            input.venueName ?? null,
+            input.startTime,
+            input.endTime ?? null,
+            input.tracksMembers,
+          ],
+        );
+      } catch (error) {
+        if (sqlState(error) === '23505') {
+          throw new ConflictError(`eventNo: ${eventNo} is already in use`);
+        }
+        throw error;
+      }
+
+      const eventId = created!.id;
+      for (const schedule of schedules) {
+        try {
+          await tx.query(
+            `insert into event_recurrence_versions (
+               event_id, effective_from, rrule, ends_on, created_by
+             ) values ($1,$2,$3,$4,$5)`,
+            [eventId, schedule.effectiveFrom, schedule.rrule, schedule.endsOn, actor],
+          );
+        } catch (error) {
+          if (sqlState(error) === '23505') {
+            throw new ConflictError(
+              `effectiveFrom: a schedule already starts on ${schedule.effectiveFrom}`,
+            );
+          }
+          throw error;
+        }
+      }
+      for (const exception of input.recurrence?.exceptions ?? []) {
+        await tx.query(
+          `insert into event_recurrence_exceptions (event_id, date, kind, note, created_by)
+           values ($1,$2,$3,$4,$5)`,
+          [
+            eventId,
+            assertDate(exception.date, 'date'),
+            exception.kind,
+            exception.note ?? null,
+            actor,
+          ],
+        );
+      }
+
+      if (occurrences.length > 0) {
+        for (const occurrence of occurrences) {
+          await tx.query(
+            `insert into event_occurrences (
+               event_id, date, start_time, end_time, status
+             ) values ($1,$2,$3,$4,'scheduled')
+             on conflict (event_id, date) do nothing`,
+            [
+              eventId,
+              assertDate(occurrence.date, 'occurrences.date'),
+              occurrence.startTime ?? input.startTime,
+              occurrence.endTime === undefined ? (input.endTime ?? null) : occurrence.endTime,
+            ],
+          );
+        }
+      } else {
+        const window = firstWindow(schedules);
+        const dates = await resolveSeriesOccurrences(tx, eventId, window.from, window.to);
+        for (const date of dates) {
+          await tx.query(
+            `insert into event_occurrences (
+               event_id, date, start_time, end_time, status
+             ) values ($1,$2,$3,$4,'scheduled')
+             on conflict (event_id, date) do nothing`,
+            [eventId, date, input.startTime, input.endTime ?? null],
+          );
+        }
+      }
+
+      return eventId;
+    });
+
+    const window = await this.parentWindow(id);
+    return (await this.getParent(id, window.from, window.to))!;
+  }
+
+  /**
+   * `PATCH /v1/events/{eventId}`: the parent fields only. Status moves forward
+   * from `draft` to `active`; `archived` is the archive route's job, and an
+   * archived parent is read-only.
+   */
+  async updateParent(
+    id: string,
+    input: UpdateEventParentInput,
+    expectedEtag: string | null,
+  ): Promise<EventParentItem> {
+    const current = await this.loadParentCore(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'archived') {
+      throw new ConflictError('An archived event is read-only');
+    }
+    if (input.status === 'archived') {
+      throw new ConflictError('status: use the archive route to archive an event', 'status');
+    }
+    if (expectedEtag && expectedEtag !== parentEtagFor(current)) {
+      throw new ConflictError('The event has changed since it was read; refetch it and retry');
+    }
+
+    if (input.timezone !== undefined) todayIn(input.timezone);
+    const timezone = input.timezone ?? current.timezone;
+    const audience = await assertAudienceUsable(
+      this.db,
+      input.audienceId ?? current.audience_id,
+      current.audience_id,
+    );
+    const projection = legacyProjection(audience.rule);
+    const ministryId = projection.ministryCode
+      ? await ministryIdFor(this.db, projection.ministryCode)
+      : null;
+
+    const name = input.name !== undefined ? input.name.trim() : current.name;
+    if (!name) throw new ValidationError('name: name is required');
+
+    const nextStatus = input.status ?? asStatus(current.status);
+    if (
+      input.status &&
+      input.status !== current.status &&
+      STATUS_RANK[input.status] < STATUS_RANK[asStatus(current.status)]
+    ) {
+      throw new ConflictError(
+        `The event cannot move from ${current.status} back to ${input.status}`,
+      );
+    }
+
+    if (
+      nextStatus !== 'archived' &&
+      (input.name !== undefined || input.audienceId !== undefined) &&
+      (await hasRecurrence(this.db, id))
+    ) {
+      await assertRecurringNameFree(this.db, name, audience.id, id);
+    }
+
+    await this.db.query(
+      `update events
+          set name = $2,
+              audience_id = $3,
+              ministry_id = $4,
+              presbyter_only = $5,
+              timezone = $6,
+              description = $7,
+              venue_type = $8,
+              venue_name = $9,
+              start_time = $10,
+              end_time = $11,
+              tracks_members = $12,
+              status = $13,
+              archived_at = case when $13 = 'archived' then now() else archived_at end,
+              updated_at = now()
+        where id = $1`,
+      [
+        id,
+        name,
+        audience.id,
+        ministryId,
+        projection.presbyterOnly,
+        timezone,
+        input.description !== undefined ? input.description : current.description,
+        input.venueType ?? asVenueType(current.venue_type),
+        input.venueName !== undefined ? input.venueName : current.venue_name,
+        input.startTime ?? current.start_time,
+        input.endTime !== undefined ? input.endTime : current.end_time,
+        input.tracksMembers ?? current.tracks_members,
+        nextStatus,
+      ],
+    );
+
+    const window = await this.parentWindow(id);
+    return (await this.getParent(id, window.from, window.to))!;
+  }
+
+  /** `POST /v1/events/{eventId}/archive`: history stays readable; a second archive is a conflict. */
+  async archiveParent(id: string): Promise<EventParentItem> {
+    const current = await this.loadParentCore(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'archived') {
+      throw new ConflictError(`Event ${id} is already archived`);
+    }
+    await this.db.query(
+      `update events set status = 'archived', archived_at = now(), updated_at = now()
+        where id = $1`,
+      [id],
+    );
+    const window = await this.parentWindow(id);
+    return (await this.getParent(id, window.from, window.to))!;
+  }
+
+  /** The parent's current validator, or null when it does not exist. */
+  async parentEtag(id: string): Promise<string | null> {
+    const row = await this.loadParentCore(id);
+    return row ? parentEtagFor(row) : null;
+  }
+
+  /**
+   * `POST /v1/events/{eventId}/occurrences/{date}/cancel`: the reason becomes
+   * the occurrence's note. A cancelled occurrence is read-only, and a draft
+   * parent has no published occurrence to cancel.
+   */
+  async cancelOccurrence(
+    id: string,
+    date: string,
+    note: string,
+    _actor: string,
+  ): Promise<EventOccurrenceItem> {
+    const sessionDate = assertDate(date, 'date');
+    const reason = note.trim();
+    if (!reason) {
+      throw new ValidationError('note: a cancellation reason is required', 'reason_required');
+    }
+
+    await this.db.transaction(async (tx) => {
+      const [event] = await tx.query<{ status: string }>(
+        'select status from events where id = $1',
+        [id],
+      );
+      if (!event) throw new NotFoundError(`Event ${id} was not found`);
+      if (event.status === 'archived') {
+        throw new ConflictError('An archived event is read-only');
+      }
+      if (event.status === 'draft') {
+        throw new ConflictError(
+          'event_draft: a draft event is not published; activate it before cancelling an occurrence',
+          'event_draft',
+        );
+      }
+
+      const [occurrence] = await tx.query<{ id: string; status: string }>(
+        'select id, status from event_occurrences where event_id = $1 and date = $2',
+        [id, sessionDate],
+      );
+      if (!occurrence) {
+        throw new NotFoundError(`Event ${id} has no occurrence on ${sessionDate}`);
+      }
+      if (occurrence.status === 'cancelled') {
+        throw new ConflictError(`The occurrence on ${sessionDate} is cancelled and read-only`);
+      }
+
+      await tx.query(
+        `update event_occurrences
+            set status = 'cancelled', note = $3, updated_at = now()
+          where id = $1 and event_id = $2`,
+        [occurrence.id, id, reason],
+      );
+    });
+
+    const parent = await this.getParent(id, sessionDate, sessionDate);
+    const cancelled = parent?.occurrences.find((occurrence) => occurrence.date === sessionDate);
+    if (!cancelled) throw new NotFoundError(`Event ${id} has no occurrence on ${sessionDate}`);
+    return cancelled;
+  }
+
+  /** `POST /v1/events/{eventId}/recurrence/versions`: append a schedule version. */
+  async addRecurrenceVersion(
+    id: string,
+    input: RecurrenceScheduleInput,
+    actor: string,
+  ): Promise<NonNullable<EventParentItem['recurrence']>> {
+    const current = await this.loadParentCore(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'archived') throw new ConflictError('An archived event is read-only');
+    await assertRecurrenceWritable(this.db, id);
+
+    const schedule = normalizeSchedule(input);
+    try {
+      await this.db.query(
+        `insert into event_recurrence_versions (
+           event_id, effective_from, rrule, ends_on, created_by
+         ) values ($1,$2,$3,$4,$5)`,
+        [id, schedule.effectiveFrom, schedule.rrule, schedule.endsOn, actor],
+      );
+    } catch (error) {
+      if (sqlState(error) === '23505') {
+        throw new ConflictError(
+          `effectiveFrom: a schedule already starts on ${schedule.effectiveFrom}`,
+        );
+      }
+      throw error;
+    }
+    return this.recurrenceFor(id);
+  }
+
+  /** `POST /v1/events/{eventId}/recurrence/exceptions`: append the newest exception for a date. */
+  async setRecurrenceException(
+    id: string,
+    input: RecurrenceExceptionInput,
+    actor: string,
+  ): Promise<NonNullable<EventParentItem['recurrence']>> {
+    const current = await this.loadParentCore(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'archived') throw new ConflictError('An archived event is read-only');
+    await assertRecurrenceWritable(this.db, id);
+
+    const note = input.note?.trim() || null;
+    if (input.kind === 'cancelled' && note === null) {
+      throw new ValidationError('note: a cancelled exception needs a reason', 'reason_required');
+    }
+    await this.db.query(
+      `insert into event_recurrence_exceptions (event_id, date, kind, note, created_by)
+       values ($1,$2,$3,$4,$5)`,
+      [id, assertDate(input.date, 'date'), input.kind, note, actor],
+    );
+    return this.recurrenceFor(id);
+  }
+
+  /** `DELETE /v1/events/{eventId}/recurrence/exceptions/{date}`: remove the date's exceptions. */
+  async removeRecurrenceException(
+    id: string,
+    date: string,
+  ): Promise<NonNullable<EventParentItem['recurrence']>> {
+    const current = await this.loadParentCore(id);
+    if (!current) throw new NotFoundError(`Event ${id} was not found`);
+    if (current.status === 'archived') throw new ConflictError('An archived event is read-only');
+    await assertRecurrenceWritable(this.db, id);
+
+    const sessionDate = assertDate(date, 'date');
+    const deleted = await this.db.query<{ id: string }>(
+      `delete from event_recurrence_exceptions
+        where event_id = $1 and date = $2
+        returning id`,
+      [id, sessionDate],
+    );
+    if (deleted.length === 0) {
+      throw new NotFoundError(`Event ${id} has no recurrence exception on ${sessionDate}`);
+    }
+    return this.recurrenceFor(id);
+  }
+
+  /** The recomputed recurrence after a write; the event must exist. */
+  private async recurrenceFor(id: string): Promise<NonNullable<EventParentItem['recurrence']>> {
+    return (await this.parentRecurrence(id, true))!;
+  }
+
+  private async loadParentCore(id: string): Promise<ParentCoreRow | null> {
+    const [row] = await this.db.query<ParentCoreRow>(
+      `select id, event_no, name, audience_id, ministry_id, presbyter_only, timezone,
+              description, venue_type, venue_name, start_time, end_time, tracks_members,
+              status, archived_at
+         from events
+        where id = $1`,
+      [id],
+    );
+    return row ?? null;
+  }
+
+  /** The derived range actually backed by generated occurrences, for a write response. */
+  private async parentWindow(id: string): Promise<{ from: string; to: string }> {
+    const range = await this.parentRange(id);
+    const [row] = await this.db.query<{ last_occ: unknown }>(
+      'select max(o.date) as last_occ from event_occurrences o where o.event_id = $1',
+      [id],
+    );
+    const lastOccurrence = isoOptionalDate(row?.last_occ);
+    const ends = [range.endDate, lastOccurrence]
+      .filter((value): value is string => value !== null)
+      .sort();
+    const to = ends.length > 0 ? ends[ends.length - 1]! : range.startDate;
+    return { from: range.startDate, to: to < range.startDate ? range.startDate : to };
+  }
+
   async list(query: EventListQuery): Promise<EventItem[]> {
     const rows = await this.db.query<EventRow>(LIST_SQL, [
       query.from ?? null,
@@ -1025,60 +1671,6 @@ export class EventRepository {
       event: this.toItem(row, today, offeringsByEvent.get(id) ?? []),
       etag: etagFor(row),
     };
-  }
-
-  async create(input: CreateEventInput): Promise<EventDetail> {
-    const eventNo = input.eventNo.trim();
-    if (!eventNo) throw new ValidationError('eventNo is required');
-    const name = input.name.trim();
-    if (!name) throw new ValidationError('name is required');
-    const timezone = input.timezone ?? 'UTC';
-    todayIn(timezone);
-
-    const startDate = assertDate(input.startDate, 'startDate');
-    const endDate = assertDate(input.endDate, 'endDate');
-    const sessions = normalizeSessions(input.sessions, input.startTime, input.endTime ?? null);
-    validateEventShape({ startDate, endDate, sessions });
-    validateSessionReasons(sessions);
-    const audienceId = await audienceIdFor(this.db, input.presbyterOnly);
-
-    let id: string;
-    try {
-      id = await this.db.transaction(async (tx) => {
-        const [row] = await tx.query<{ id: string }>(INSERT_SQL, [
-          eventNo,
-          name,
-          audienceId,
-          input.presbyterOnly,
-          timezone,
-          input.description ?? null,
-          input.venueType,
-          input.venueName ?? null,
-          input.startTime,
-          input.endTime ?? null,
-          input.tracksMembers,
-        ]);
-        for (const session of sessions) {
-          await tx.query(INSERT_OCCURRENCE_SQL, [
-            row!.id,
-            isoDate(session.date),
-            session.start_time ?? input.startTime,
-            session.end_time ?? null,
-            asSessionStatus(session.status),
-            session.note ?? null,
-            session.venue_type ?? null,
-          ]);
-        }
-        return row!.id;
-      });
-    } catch (error) {
-      if (sqlState(error) === '23505') {
-        throw new ConflictError(`Event number ${eventNo} is already in use`);
-      }
-      throw error;
-    }
-
-    return (await this.get(id))!;
   }
 
   /**
