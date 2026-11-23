@@ -19,6 +19,7 @@ export const VENUE_LABELS: Record<EventVenueType, string> = {
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   draft: 'Draft',
+  active: 'Active',
   scheduled: 'Scheduled',
   held: 'Held',
   cancelled: 'Cancelled',

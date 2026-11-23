@@ -536,11 +536,12 @@ keep a separate Attendance section, that is Q1.
   and first-time visitor gifts are reported separately.
 - FR-6e: The summary MUST render as four tiles above Schedule versions: **Next occurrence** (the date;
   caption "None in 90 days" when null), **Occurrences** (the window count; caption "in this window"),
-  **Attendance** (the ratio as a percentage; caption "{present} of {expected} on {lastHeld.date}", or
-  "No held sessions in this window"), and **Offerings** (the attached count; caption "{currency} {paid}
-  paid this window", or "No offerings attached"). The attached count is the number of distinct offerings
-  active on at least one occurrence in the window; a session's skip removes the offering from that date,
-  not from the other dates.
+  **Attendance** (the ratio as a percentage; caption "{present} present · Roster {expected} on
+  {lastHeld.date}" — the expected figure is the roster, labelled **Roster** and never merged with the
+  present count — or "No held sessions in this window"), and **Offerings** (the attached count; caption
+  "{currency} {paid} paid this window", or "No offerings attached"). The attached count is the number of
+  distinct offerings active on at least one occurrence in the window; a session's skip removes the offering
+  from that date, not from the other dates.
   An archived event still shows the tiles, read-only (AC-10). The mock's attached-offerings rail and the
   per-occurrence attendance/offering columns are separate queued work, not part of this requirement.
 - FR-6f: An attendance import MUST be a capture that never ends the session. The page MUST show the
@@ -1504,6 +1505,12 @@ recurrence. S-Q3, S-Q4, S-Q6, S-Q7 and S-Q8 stand.
 
 ## Change log
 
+- 2026-11-23: **the attendance tile's caption names the roster** (owner: "all as recommended", UI read round): the
+  caption becomes "{present} present · Roster {expected} on {date}" rather than "{present} of {expected} on {date}",
+  because the expected figure **is** the roster and the wire name stays `expected`; both detail pages label it the same
+  way. The value is the transitional legacy count until the audience-evaluation round (`documents/backlog.md`,
+  "Audience-derived `expected` on the parent read"), and the label is what keeps the figure from reading as an audience
+  count.
 - 2026-11-22: **the parent status gains `draft` and the legacy attachment rekeys to the occurrence** (owner: "all as
   recommended", migration round). A legacy `draft` instance keeps `draft` on the parent, and `event_offerings` gains a
   nullable `occurrence_id`: a series-level attachment stays event-level, an attachment on a series-backed instance

@@ -28,10 +28,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
+import type { EventParentStatus, EventVenueType } from '../api/events';
 import {
-  getSeries,
-  getSeriesOccurrences,
-  getSeriesSummary,
+  getSeriesParent,
   removeSeriesException,
   updateSeries,
   type SeriesExceptionDto,
@@ -41,13 +40,8 @@ import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
-import { ministryLabel } from '../format/events';
-import {
-  exceptionKindLabel,
-  exceptionNoteLabel,
-  scheduleLabel,
-  seriesStatusLabel,
-} from '../format/series';
+import { eventStatusLabel, ministryLabel, offeringsLabel, venueLabel } from '../format/events';
+import { exceptionKindLabel, exceptionNoteLabel, scheduleLabel } from '../format/series';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { AddScheduleVersionDialog } from './AddScheduleVersionDialog';
 import { SeriesExceptionDialog } from './SeriesExceptionDialog';
@@ -61,8 +55,16 @@ function errorMessage(error: unknown): string {
   return 'Check the API connection and try again.';
 }
 
-function statusColor(archivedAt: string | null): BadgeColor {
-  return archivedAt ? 'subtle' : 'success';
+function statusColor(status: EventParentStatus): BadgeColor {
+  if (status === 'active') return 'success';
+  if (status === 'archived') return 'subtle';
+  return 'informative';
+}
+
+function venueColor(venueType: EventVenueType): BadgeColor {
+  if (venueType === 'hybrid') return 'brand';
+  if (venueType === 'virtual') return 'subtle';
+  return 'informative';
 }
 
 function exceptionColor(kind: SeriesExceptionKind): BadgeColor {
@@ -76,11 +78,13 @@ function eventsForOccurrence(seriesId: string, date: string): string {
 }
 
 /**
- * Events → Series detail (FR-6, FR-7, FR-13, FR-42, FR-43). Schedule versions
- * and exceptions are read from the API and appended, never rewritten. Occurrences
- * come from `GET /v1/series/:id/occurrences` for the chosen UTC window; the screen
- * links each date to the filtered events list because the endpoint returns dates,
- * not event ids.
+ * Events → Series detail (FR-1, FR-6, FR-7, FR-13, FR-42, FR-43). A series is
+ * the event parent, so the page reads the same parent body as the event detail
+ * through `GET /v1/series/:id?view=parent&from&to`: identity, audience,
+ * recurrence, window occurrences and the one `summary` that feeds the tiles.
+ * Schedule versions and exceptions stay append-only and are read from that
+ * parent's `recurrence`; occurrences come from the parent's window list, so the
+ * table and the Occurrences tile cannot disagree.
  */
 export function SeriesDetailPage() {
   const styles = useEventStyles();
@@ -88,7 +92,7 @@ export function SeriesDetailPage() {
   const queryClient = useQueryClient();
   const { id = '' } = useParams<{ id: string }>();
   const { baseUrl, session, signOut } = useSession();
-  const { formatDate, formatInstant, formatInstantTitle } = useDateTimeFormat();
+  const { formatDate, formatTime, formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
   const [window, setWindow] = useDateWindow();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
@@ -98,27 +102,10 @@ export function SeriesDetailPage() {
   const [archiveTarget, setArchiveTarget] = useState<boolean | null>(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
 
-  const seriesQuery = useQuery({
-    queryKey: ['series', baseUrl, 'detail', id],
-    queryFn: ({ signal }) => getSeries(baseUrl, token, id, signal),
-    enabled: Boolean(token) && id.length > 0,
-  });
-
-  const occurrencesQuery = useQuery({
-    queryKey: ['series', baseUrl, 'occurrences', id, window.from, window.to],
+  const parentQuery = useQuery({
+    queryKey: ['series', baseUrl, 'parent', id, window.from, window.to],
     queryFn: ({ signal }) =>
-      getSeriesOccurrences(baseUrl, token, id, {
-        from: window.from,
-        to: window.to,
-        signal,
-      }),
-    enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
-  });
-
-  const summaryQuery = useQuery({
-    queryKey: ['series', baseUrl, 'summary', id, window.from, window.to],
-    queryFn: ({ signal }) =>
-      getSeriesSummary(baseUrl, token, id, {
+      getSeriesParent(baseUrl, token, id, {
         from: window.from,
         to: window.to,
         signal,
@@ -135,14 +122,8 @@ export function SeriesDetailPage() {
   });
 
   useEffect(() => {
-    if (
-      isUnauthorized(seriesQuery.error) ||
-      isUnauthorized(occurrencesQuery.error) ||
-      isUnauthorized(summaryQuery.error)
-    ) {
-      void signOut();
-    }
-  }, [seriesQuery.error, occurrencesQuery.error, summaryQuery.error, signOut]);
+    if (isUnauthorized(parentQuery.error)) void signOut();
+  }, [parentQuery.error, signOut]);
 
   function invalidateSeries(): void {
     // Detail, list, occurrences and the list's per-row next-occurrence queries
@@ -168,13 +149,13 @@ export function SeriesDetailPage() {
     });
   }
 
-  const series = seriesQuery.data;
-  const archived = Boolean(series?.archivedAt);
-  const versions = [...(series?.schedules ?? [])].sort((left, right) =>
+  const parent = parentQuery.data;
+  const archived = parent?.status === 'archived';
+  const versions = [...(parent?.recurrence?.schedules ?? [])].sort((left, right) =>
     right.effectiveFrom.localeCompare(left.effectiveFrom),
   );
-  const exceptions = series?.exceptions ?? [];
-  const occurrences = occurrencesQuery.data?.dates ?? [];
+  const exceptions = parent?.recurrence?.exceptions ?? [];
+  const occurrences = parent?.occurrences ?? [];
   const exceptionByDate = new Map(exceptions.map((exception) => [exception.date, exception]));
 
   function confirmArchive(): void {
@@ -200,9 +181,9 @@ export function SeriesDetailPage() {
   return (
     <PageFrame
       sectionId="events"
-      title={series?.name ?? 'Series'}
-      submenu={series?.name ?? 'Series detail'}
-      description="Schedule versions, exceptions and the dates the API generates for this series."
+      title={parent?.name ?? 'Series'}
+      submenu={parent?.name ?? 'Series detail'}
+      description="The event parent, its recurrence and the dates the API generates for this window."
       controls={
         <Button
           icon={<ArrowLeftRegular />}
@@ -253,26 +234,23 @@ export function SeriesDetailPage() {
           label: 'Refresh',
           icon: <ArrowClockwiseRegular />,
           onSelect: () => {
-            void seriesQuery.refetch();
-            void occurrencesQuery.refetch();
-            void summaryQuery.refetch();
+            void parentQuery.refetch();
           },
-          disabled:
-            seriesQuery.isFetching || occurrencesQuery.isFetching || summaryQuery.isFetching,
+          disabled: parentQuery.isFetching,
         },
       ]}
     >
       <div className={styles.page}>
-        {seriesQuery.isError ? (
+        {parentQuery.isError ? (
           <MessageBar intent="error">
             <MessageBarBody>
               <MessageBarTitle>The series could not be loaded</MessageBarTitle>
-              {errorMessage(seriesQuery.error)}
+              {errorMessage(parentQuery.error)}
               <Button
                 size="small"
                 appearance="transparent"
                 onClick={() => {
-                  void seriesQuery.refetch();
+                  void parentQuery.refetch();
                 }}
               >
                 Retry
@@ -292,53 +270,87 @@ export function SeriesDetailPage() {
           </MessageBar>
         ) : null}
 
-        {seriesQuery.isPending ? (
+        {parentQuery.isPending ? (
           <div className={styles.state}>
             <Spinner label="Loading the series…" />
           </div>
-        ) : seriesQuery.isError || !series ? null : (
+        ) : parentQuery.isError || !parent ? null : (
           <>
+            <div className={styles.toolbar}>
+              <DateWindowControl
+                value={window}
+                onChange={setWindow}
+                label="Series occurrence window"
+                hint="UTC dates · the API resolves the RRULE; the screen never does."
+              />
+            </div>
+
             <Card className={styles.meta}>
               <div className={styles.metaRows}>
                 <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Event number</Text>
+                  <Text className={styles.metaValue}>{parent.eventNo || 'No number yet'}</Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Audience</Text>
+                  <Text className={styles.metaValue}>{parent.audience.summary}</Text>
+                </div>
+                <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Ministry</Text>
-                  <Text className={styles.metaValue}>{ministryLabel(series.ministry)}</Text>
+                  <Text className={styles.metaValue}>{ministryLabel(parent.ministry)}</Text>
                 </div>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Timezone</Text>
-                  <Text className={styles.metaValue}>{series.timezone}</Text>
+                  <Text className={styles.metaValue}>{parent.timezone}</Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Venue</Text>
+                  <div className={styles.metaValue}>
+                    <Badge appearance="tint" color={venueColor(parent.venueType)} size="small">
+                      {venueLabel(parent.venueType)}
+                    </Badge>
+                    {parent.venueName ? (
+                      <Text size={200} className={styles.muted}>
+                        {parent.venueName}
+                      </Text>
+                    ) : null}
+                  </div>
                 </div>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Status</Text>
                   <div className={styles.metaValue}>
-                    <Badge
-                      appearance="tint"
-                      color={statusColor(series.archivedAt)}
-                      size="small"
-                      title={series.archivedAt ? formatInstantTitle(series.archivedAt) : undefined}
-                    >
-                      {seriesStatusLabel(series.archivedAt)}
+                    <Badge appearance="tint" color={statusColor(parent.status)} size="small">
+                      {eventStatusLabel(parent.status)}
                     </Badge>
                   </div>
                 </div>
                 <div className={styles.metaRow}>
-                  <Text className={styles.metaLabel}>Archived</Text>
+                  <Text className={styles.metaLabel}>Dates</Text>
                   <Text className={styles.metaValue}>
-                    {series.archivedAt ? (
-                      <span title={formatInstantTitle(series.archivedAt)}>
-                        {formatInstant(series.archivedAt)}
-                      </span>
-                    ) : (
-                      'Not archived'
-                    )}
+                    {parent.endDate
+                      ? formatRange(parent.startDate, parent.endDate)
+                      : `${formatDate(parent.startDate)} · ongoing`}
+                  </Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Times</Text>
+                  <Text className={styles.metaValue}>
+                    {formatTime(parent.startTime)}
+                    {parent.endTime ? `–${formatTime(parent.endTime)}` : ''} · {parent.timezone}
+                  </Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Offerings</Text>
+                  <Text className={styles.metaValue}>
+                    {offeringsLabel(parent.offerings.length)}
                   </Text>
                 </div>
               </div>
-              {series.description ? (
+              {parent.description ? (
                 <>
                   <Divider />
                   <Text className={styles.metaLabel}>Description</Text>
-                  <p className={styles.description}>{series.description}</p>
+                  <p className={styles.description}>{parent.description}</p>
                 </>
               ) : null}
             </Card>
@@ -352,35 +364,24 @@ export function SeriesDetailPage() {
               </MessageBar>
             ) : null}
 
-            {summaryQuery.isError ? (
-              <MessageBar intent="error">
-                <MessageBarBody>
-                  <MessageBarTitle>The summary could not be loaded</MessageBarTitle>
-                  {errorMessage(summaryQuery.error)}
-                  <Button
-                    size="small"
-                    appearance="transparent"
-                    onClick={() => {
-                      void summaryQuery.refetch();
-                    }}
-                  >
-                    Retry
-                  </Button>
-                </MessageBarBody>
-              </MessageBar>
-            ) : summaryQuery.isPending || !summaryQuery.data ? (
-              <div className={styles.state}>
-                <Spinner label="Loading the summary…" />
-              </div>
-            ) : (
-              <SeriesSummaryTiles
-                summary={summaryQuery.data}
-                occurrenceCount={occurrences.length}
-                formatDate={formatDate}
-              />
-            )}
+            <SeriesSummaryTiles
+              summary={parent.summary}
+              occurrenceCount={occurrences.length}
+              formatDate={formatDate}
+              label="Series summary"
+              expectedLabel="Roster"
+            />
 
-            <section className={styles.panel} aria-label="Schedule versions">
+            <section className={styles.panel} aria-label="Recurrence">
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.panelTitle}>Recurrence</h2>
+                <Text size={200} className={styles.muted}>
+                  {parent.recurrence
+                    ? `${versions.length} schedule version${versions.length === 1 ? '' : 's'} · ${exceptions.length} exception${exceptions.length === 1 ? '' : 's'}`
+                    : 'Standalone event'}
+                </Text>
+              </div>
+
               <div className={styles.sectionHeader}>
                 <Text className={styles.emptyTitle}>Schedule versions</Text>
                 {archived ? null : (
@@ -397,7 +398,8 @@ export function SeriesDetailPage() {
                 <div className={styles.empty}>
                   <Text className={styles.emptyTitle}>No schedule</Text>
                   <Text size={200} className={styles.muted}>
-                    This series has no schedule version, so the API generates no occurrences.
+                    This event has no schedule version, so the API generates no occurrences from
+                    one.
                   </Text>
                 </div>
               ) : (
@@ -428,9 +430,7 @@ export function SeriesDetailPage() {
                   </Table>
                 </div>
               )}
-            </section>
 
-            <section className={styles.panel} aria-label="Series exceptions">
               <div className={styles.sectionHeader}>
                 <Text className={styles.emptyTitle}>Exceptions</Text>
                 {archived ? null : (
@@ -536,38 +536,7 @@ export function SeriesDetailPage() {
                 </Text>
               </div>
 
-              <div className={styles.meta}>
-                <DateWindowControl
-                  value={window}
-                  onChange={setWindow}
-                  label="Series occurrence window"
-                  hint="UTC dates · the API resolves the RRULE; the screen never does."
-                />
-              </div>
-
-              {occurrencesQuery.isError ? (
-                <div className={styles.meta}>
-                  <MessageBar intent="error">
-                    <MessageBarBody>
-                      <MessageBarTitle>Occurrences could not be loaded</MessageBarTitle>
-                      {errorMessage(occurrencesQuery.error)}
-                      <Button
-                        size="small"
-                        appearance="transparent"
-                        onClick={() => {
-                          void occurrencesQuery.refetch();
-                        }}
-                      >
-                        Retry
-                      </Button>
-                    </MessageBarBody>
-                  </MessageBar>
-                </div>
-              ) : occurrencesQuery.isPending ? (
-                <div className={styles.state}>
-                  <Spinner label="Loading occurrences…" />
-                </div>
-              ) : occurrences.length === 0 ? (
+              {occurrences.length === 0 ? (
                 <div className={styles.empty}>
                   <Text className={styles.emptyTitle}>No occurrences in this window</Text>
                   <Text size={200} className={styles.muted}>
@@ -585,11 +554,11 @@ export function SeriesDetailPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {occurrences.map((date) => {
-                        const exception = exceptionByDate.get(date);
+                      {occurrences.map((occurrence) => {
+                        const exception = exceptionByDate.get(occurrence.date);
                         return (
-                          <TableRow key={date}>
-                            <TableCell>{formatDate(date)}</TableCell>
+                          <TableRow key={occurrence.id}>
+                            <TableCell>{formatDate(occurrence.date)}</TableCell>
                             <TableCell>
                               {exception ? (
                                 <Badge
@@ -608,7 +577,7 @@ export function SeriesDetailPage() {
                             <TableCell>
                               <Link
                                 className={styles.link}
-                                to={eventsForOccurrence(series.id, date)}
+                                to={eventsForOccurrence(parent.id, occurrence.date)}
                               >
                                 View events
                               </Link>
@@ -625,17 +594,17 @@ export function SeriesDetailPage() {
         )}
       </div>
 
-      {series && scheduleDialogOpen ? (
+      {parent && scheduleDialogOpen ? (
         <AddScheduleVersionDialog
-          seriesId={series.id}
+          seriesId={parent.id}
           onClose={() => setScheduleDialogOpen(false)}
           onSaved={invalidateSeries}
         />
       ) : null}
 
-      {series && exceptionDialogOpen ? (
+      {parent && exceptionDialogOpen ? (
         <SeriesExceptionDialog
-          seriesId={series.id}
+          seriesId={parent.id}
           onClose={() => setExceptionDialogOpen(false)}
           onSaved={invalidateSeries}
         />

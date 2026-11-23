@@ -190,13 +190,13 @@ test('events new', async ({ page }) => {
 test('event detail', async ({ page }) => {
   await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Event sessions' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Event occurrences' })).toBeVisible();
   await capture(page, 'event-detail');
 });
 
 test('attendance dialog', async ({ page }) => {
   await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
-  await page.getByRole('button', { name: /View rows for/ }).click();
+  await page.getByRole('button', { name: 'View rows for Jan 4, 2026' }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();

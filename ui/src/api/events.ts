@@ -1,15 +1,21 @@
 import { ApiError } from './errors';
 import { gatewayRequest, gatewayRequestWithMeta } from './gateway';
 import type { Gender } from './members';
+import type { SeriesSummaryDto } from './series';
 
 /**
  * Wire types mirror `src/schemas/events.ts` and the event DTOs in
  * `src/repos/events.ts`. The event list is used by the attendance import picker
  * and the events screen, so the base `EventListItem` keeps the picker's subset
  * and `EventItem` adds the fields the list and detail render.
+ *
+ * The parent read (`view=parent`, FR-4/FR-5/FR-6) is a separate shape: one row
+ * per event with its audience, recurrence, window occurrences and summary.
  */
 
-export type EventStatus = 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived';
+export type EventStatus = 'draft' | 'active' | 'scheduled' | 'held' | 'cancelled' | 'archived';
+/** The parent read's stored status; the derived occurrence status is per date. */
+export type EventParentStatus = 'draft' | 'active' | 'archived';
 export type EventSessionStatus = 'scheduled' | 'held' | 'cancelled';
 export type EventVenueType = 'auditorium' | 'virtual' | 'hybrid';
 export type EventSource = 'series' | 'manual' | 'import';
@@ -106,6 +112,85 @@ export interface EventItem extends EventListItem {
   readonly stats: EventOfferingStatsItem;
 }
 
+/** Mirrors `audienceSummarySchema`; `summary` is rendered by the server. */
+export interface EventAudienceItem {
+  readonly id: string;
+  readonly name: string;
+  readonly system: boolean;
+  /** Server-rendered by `renderAudienceSummary`; never composed by a client. */
+  readonly summary: string;
+}
+
+/** Mirrors `eventRecurrenceSchema.schedules`. */
+export interface EventRecurrenceSchedule {
+  readonly effectiveFrom: string;
+  readonly rrule: string;
+  readonly endsOn: string | null;
+}
+
+/** Mirrors `eventRecurrenceSchema.exceptions`. */
+export interface EventRecurrenceException {
+  readonly date: string;
+  readonly kind: 'cancelled' | 'extra';
+  readonly note: string | null;
+}
+
+/** Mirrors `eventRecurrenceSchema`; null on a standalone event. */
+export interface EventRecurrence {
+  readonly schedules: readonly EventRecurrenceSchedule[];
+  readonly exceptions: readonly EventRecurrenceException[];
+}
+
+/**
+ * Mirrors `eventOccurrenceSchema`: a dated child of the event. `status` is the
+ * API's derived status, `expected` is the transitional roster count and
+ * `legacyEventNo` is read-only history.
+ */
+export interface EventOccurrenceItem {
+  readonly id: string;
+  readonly date: string;
+  readonly startTime: string;
+  readonly endTime: string | null;
+  readonly status: EventSessionStatus;
+  readonly venueType?: EventVenueType;
+  readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
+  readonly note: string | null;
+  readonly present: number;
+  readonly expected: number;
+  readonly importedRows: number;
+  readonly source: SessionSource;
+  readonly legacyEventNo: string | null;
+}
+
+/** Mirrors `eventWindowSummarySchema` (the `seriesSummarySchema` shape). */
+export type EventWindowSummary = SeriesSummaryDto;
+
+/** Mirrors `eventParentSchema`: one row per event parent. */
+export interface EventParentItem {
+  readonly id: string;
+  readonly eventNo: string;
+  readonly name: string;
+  readonly audienceId: string;
+  readonly audience: EventAudienceItem;
+  readonly ministry: { readonly code: string; readonly name: string } | null;
+  readonly presbyterOnly: boolean;
+  readonly timezone: string;
+  readonly description: string | null;
+  readonly venueType: EventVenueType;
+  readonly venueName: string | null;
+  readonly startDate: string;
+  readonly endDate: string | null;
+  readonly startTime: string;
+  readonly endTime: string | null;
+  readonly tracksMembers: boolean;
+  readonly status: EventParentStatus;
+  readonly recurrence: EventRecurrence | null;
+  readonly occurrences: readonly EventOccurrenceItem[];
+  readonly offerings: readonly EventOfferingItem[];
+  readonly stats: EventOfferingStatsItem;
+  readonly summary: EventWindowSummary;
+}
+
 export interface EventListItem {
   readonly id: string;
   /** Null for a series-minted instance that has not been numbered yet. */
@@ -190,9 +275,15 @@ interface EventListResponse {
   readonly items: readonly EventItem[];
 }
 
+interface EventParentListResponse {
+  readonly items: readonly EventParentItem[];
+}
+
 export interface ListEventsOptions {
   readonly from: string;
   readonly to: string;
+  /** `view=parent` reads one row per event parent (FR-1/FR-5) and retires at the flip. */
+  readonly view?: 'parent';
   /** Limits the list to one series; the series occurrence link seeds it (FR-43). */
   readonly seriesId?: string;
   /** The API caps the window at 100; the screens ask for one page of that size. */
@@ -210,6 +301,7 @@ export function eventsListPath(options: ListEventsOptions): string {
   const params = new URLSearchParams();
   params.set('from', options.from);
   params.set('to', options.to);
+  if (options.view) params.set('view', options.view);
   if (options.seriesId) params.set('seriesId', options.seriesId);
   params.set('limit', String(options.limit ?? DEFAULT_EVENT_LIMIT));
   if (options.offset !== undefined) params.set('offset', String(options.offset));
@@ -226,6 +318,24 @@ export async function listEvents(
     sessionToken,
     signal: options.signal,
   });
+  if (!result) throw new ApiError(500, 'The event list response was empty.');
+  return [...(result.items ?? [])];
+}
+
+/**
+ * `GET /v1/events?view=parent&from&to&limit`: one row per event parent with its
+ * audience, recurrence, window occurrences and summary (FR-1/FR-5).
+ */
+export async function listEventParents(
+  baseUrl: string,
+  sessionToken: string,
+  options: ListEventsOptions,
+): Promise<EventParentItem[]> {
+  const result = await gatewayRequest<EventParentListResponse>(
+    baseUrl,
+    eventsListPath({ ...options, view: 'parent' }),
+    { sessionToken, signal: options.signal },
+  );
   if (!result) throw new ApiError(500, 'The event list response was empty.');
   return [...(result.items ?? [])];
 }
@@ -248,9 +358,21 @@ export async function createEvent(
   return result;
 }
 
-/** `GET /v1/events/:id`; the id is encoded for the path segment. */
-export function eventDetailPath(eventId: string): string {
-  return `${EVENTS_PATH}/${encodeURIComponent(eventId)}`;
+/** The detail path; the id is encoded for the path segment. `view=parent` carries the window. */
+export interface EventParentDetailQuery {
+  readonly view: 'parent';
+  readonly from: string;
+  readonly to: string;
+}
+
+export function eventDetailPath(eventId: string, query?: EventParentDetailQuery): string {
+  const path = `${EVENTS_PATH}/${encodeURIComponent(eventId)}`;
+  if (!query) return path;
+  const params = new URLSearchParams();
+  params.set('view', query.view);
+  params.set('from', query.from);
+  params.set('to', query.to);
+  return `${path}?${params.toString()}`;
 }
 
 export async function getEvent(
@@ -265,6 +387,26 @@ export async function getEvent(
   });
   if (!result.data) throw new ApiError(500, 'The event response was empty.');
   return { event: result.data, etag: result.headers.get('ETag') };
+}
+
+/**
+ * `GET /v1/events/:id?view=parent&from&to`: the event parent and its window
+ * occurrences and summary (FR-4/FR-6a). This is a plain parent body, not the
+ * legacy `{ event, etag? }` wrapper.
+ */
+export async function getEventParent(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  options: { readonly from: string; readonly to: string; readonly signal?: AbortSignal },
+): Promise<EventParentItem> {
+  const result = await gatewayRequest<EventParentItem>(
+    baseUrl,
+    eventDetailPath(eventId, { view: 'parent', from: options.from, to: options.to }),
+    { sessionToken, signal: options.signal },
+  );
+  if (!result) throw new ApiError(500, 'The event response was empty.');
+  return result;
 }
 
 /** `GET /v1/events/:id/attendance?date=YYYY-MM-DD`. */

@@ -144,10 +144,35 @@ export interface Occurrence {
   readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
 }
 
-export function occurrenceFrom(event: EventListItem, session: EventSessionSummary): Occurrence {
+/**
+ * The event fields an occurrence snapshot needs. Both the legacy event read
+ * (`EventListItem`) and the parent read (`EventParentItem`) satisfy it, so the
+ * adapter did not fork when the detail moved to occurrence rows.
+ */
+export interface OccurrenceEvent {
+  readonly id: string;
+  readonly eventNo: string | null;
+  readonly name: string;
+  readonly timezone: string;
+}
+
+/**
+ * The session fields an occurrence snapshot needs. Both the legacy
+ * `EventSessionSummary` and the parent read's `EventOccurrenceItem` satisfy it.
+ */
+export interface OccurrenceSession {
+  readonly date: string;
+  readonly startTime: string;
+  readonly endTime: string | null;
+  readonly status: EventSessionSummary['status'];
+  readonly capture: { readonly asOf: string; readonly ended: boolean } | null;
+}
+
+export function occurrenceFrom(event: OccurrenceEvent, session: OccurrenceSession): Occurrence {
   return {
     eventId: event.id,
-    eventNo: event.eventNo,
+    // The parent read types a missing number as ''; the snapshot's badge is absent for either.
+    eventNo: event.eventNo || null,
     eventName: event.name,
     date: session.date,
     startTime: session.startTime,

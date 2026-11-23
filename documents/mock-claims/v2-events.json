@@ -66,7 +66,7 @@
         "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
-      "baseline": null,
+      "baseline": "series-detail.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
@@ -108,7 +108,7 @@
         "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da",
         "source": "mockups/v2-events/01-events-list.html"
       },
-      "baseline": null,
+      "baseline": "events-list.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
@@ -135,7 +135,7 @@
         "path": "mockups/v2-events/02-event-detail.png",
         "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51"
       },
-      "baseline": null,
+      "baseline": "event-detail.png",
       "coverage": "auto-signed",
       "signed": {
         "by": "unattended",
@@ -178,7 +178,7 @@
         "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
-      "baseline": null,
+      "baseline": "event-headcount-dialog.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
@@ -192,7 +192,7 @@
         "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
-      "baseline": null,
+      "baseline": "event-import-panel.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
