@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
@@ -43,27 +44,20 @@ function yearStartOf(date: string): string {
 }
 
 async function insertEvent(name: string, date: string): Promise<string> {
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,null,$2,'UTC',$3,$3,'09:00',null,'auditorium',null,null,'scheduled','manual',$4::jsonb)
-     returning id`,
-    [
-      `SUM-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}-${seeded.length}`,
-      name,
-      date,
-      JSON.stringify([{ date, startTime: '09:00', endTime: null, status: 'scheduled' }]),
-    ],
-  );
+  const seededEvent = await seedEvent(harness.db, {
+    eventNo: `SUM-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}-${seeded.length}`,
+    name,
+    startDate: date,
+    endDate: date,
+    startTime: '09:00',
+    sessions: [{ date, startTime: '09:00', endTime: null, status: 'scheduled' }],
+  });
   await harness.db.query(
-    `insert into event_instance_offerings (
-       event_instance_id, series_id, offering_id, available_until, attached_by
-     ) values ($1,null,$2,null,'test')`,
-    [row!.id, offeringId],
+    `insert into event_offerings (event_id, offering_id, available_until, attached_by)
+     values ($1,$2,null,'test')`,
+    [seededEvent.eventId, offeringId],
   );
-  return row!.id;
+  return seededEvent.eventId;
 }
 
 async function seedContribution(seed: SeedContribution): Promise<void> {

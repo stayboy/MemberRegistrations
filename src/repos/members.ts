@@ -786,7 +786,7 @@ export class MemberRepository {
            select e.id as event_id, e.name, sum(c.amount_minor)::bigint as paid
              from contributions c
              join members m on m.id = c.member_id
-             join event_instances e on e.id = c.event_instance_id
+             join events e on e.id = c.event_id
              cross join bounds b
              cross join chosen ch
             where lower(m.member_no) = lower($2)
@@ -964,40 +964,37 @@ export class MemberRepository {
     }>(
       `select e.id as event_id,
               e.name,
-              (session->>'date')::date as session_date,
+              o.date as session_date,
               e.start_time,
               exists (
                 select 1 from attendance a
-                 where a.event_instance_id = e.id
-                   and a.session_date = (session->>'date')::date
+                 where a.occurrence_id = o.id
                    and a.member_id = m.id
               ) as attended
          from members m
-         join event_instances e on true
-         left join event_series se on se.id = e.series_id
-         cross join lateral jsonb_array_elements(e.sessions) session
+         join events e on true
+         join event_occurrences o on o.event_id = e.id
         where m.id = $1
-          and e.status not in ('cancelled', 'archived')
+          and e.status = 'active'
           and coalesce(e.tracks_members, true)
           and (not e.presbyter_only or m.is_presbyter)
-          and coalesce(session->>'status', 'scheduled') <> 'cancelled'
-          and (session->>'date')::date <= (now() at time zone e.timezone)::date
-          and ($2::date is null or (session->>'date')::date >= $2::date)
-          and ($3::date is null or (session->>'date')::date <= $3::date)
-          and (m.joined_on is null or m.joined_on <= (session->>'date')::date)
+          and o.status <> 'cancelled'
+          and o.date <= (now() at time zone e.timezone)::date
+          and ($2::date is null or o.date >= $2::date)
+          and ($3::date is null or o.date <= $3::date)
+          and (m.joined_on is null or m.joined_on <= o.date)
           and (
-            se.id is null
-            or se.ministry_id is null
+            e.ministry_id is null
             or exists (
               select 1 from member_ministries mm
               join ministries mi on mi.id = mm.ministry_id
                where mm.member_id = m.id
-                 and mm.ministry_id = se.ministry_id
-                 and mm.assigned_on <= (session->>'date')::date
+                 and mm.ministry_id = e.ministry_id
+                 and mm.assigned_on <= o.date
                  and mi.active
             )
           )
-        order by (session->>'date')::date desc,
+        order by o.date desc,
                  coalesce(e.start_time, '') desc,
                  e.id desc
         ${limit === null ? '' : 'limit $4'}`,
@@ -2024,7 +2021,14 @@ export class MemberRepository {
     const date = assertDate(input.date);
 
     const [series] = await this.db.query<{ name: string; timezone: string }>(
-      'select name, timezone from event_series where id = $1 and archived_at is null',
+      `select e.name, e.timezone
+         from events e
+        where e.id = $1
+          and e.archived_at is null
+          and e.status = 'active'
+          and exists (
+            select 1 from event_recurrence_versions rv where rv.event_id = e.id
+          )`,
       [input.seriesId],
     );
     if (!series) throw new NotFoundError(`Series ${input.seriesId} was not found`);
@@ -2036,12 +2040,12 @@ export class MemberRepository {
 
     // The shared close is checked before the today rule, so a closed past
     // session answers `session_closed`, not a date refusal (AC-33). This path
-    // only reads the occurrence; the instance is minted inside the transaction.
+    // only reads the occurrence; the occurrence is minted inside the transaction.
     const [closedTarget] = await this.db.query<{ id: string }>(
-      'select id from event_instances where series_id = $1 and start_date = $2',
+      'select id from event_occurrences where event_id = $1 and date = $2',
       [input.seriesId, date],
     );
-    if (closedTarget && (await sessionIsClosed(this.db, closedTarget.id, date))) {
+    if (closedTarget && (await sessionIsClosed(this.db, input.seriesId, date))) {
       throw new SessionClosedError(
         `The session on ${date} is closed; no further per-member write is accepted`,
       );
@@ -2056,34 +2060,36 @@ export class MemberRepository {
     }
 
     try {
-      const eventInstanceId = await this.db.transaction(async (tx) => {
-        const [instance] = await tx.query<{ id: string }>(
-          `insert into event_instances (
-             series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
+      const eventId = await this.db.transaction(async (tx) => {
+        const [occurrence] = await tx.query<{ id: string }>(
+          `with inserted as (
+             insert into event_occurrences (event_id, date, start_time, end_time, status)
+             values ($1, $2, null, null, 'scheduled')
+             on conflict (event_id, date) do nothing
+             returning id
            )
-           select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
-                  jsonb_build_array(jsonb_build_object('date', $2::date, 'startTime', null, 'endTime', null, 'status', 'scheduled'))
-           from event_series s where s.id = $1
-           on conflict (series_id, start_date) do update set start_date = excluded.start_date
-           returning id`,
+           select id from inserted
+           union all
+           select id from event_occurrences where event_id = $1 and date = $2
+           limit 1`,
           [input.seriesId, date],
         );
-        if (await sessionIsClosed(tx, instance!.id, date)) {
+        if (await sessionIsClosed(tx, input.seriesId, date)) {
           throw new SessionClosedError(
             `The session on ${date} is closed; no further per-member write is accepted`,
           );
         }
         await tx.query(
-          `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-           values ($1,$2,$3,'manual',$4)`,
-          [row.id, instance!.id, date, actor],
+          `insert into attendance (member_id, occurrence_id, source, created_by)
+           values ($1,$2,'manual',$3)`,
+          [row.id, occurrence!.id, actor],
         );
         await tx.query(
-          'delete from attendance_suppressions where member_id = $1 and event_instance_id = $2 and session_date = $3',
-          [row.id, instance!.id, date],
+          'delete from attendance_suppressions where member_id = $1 and occurrence_id = $2',
+          [row.id, occurrence!.id],
         );
         await touch(tx, row.id, actor);
-        return instance!.id;
+        return input.seriesId;
       });
 
       const [entry] = await this.db.query<{
@@ -2092,17 +2098,19 @@ export class MemberRepository {
         source: 'import' | 'manual';
         event_name: string;
       }>(
-        `select a.id, a.session_date, a.source, e.name as event_name
-           from attendance a join event_instances e on e.id = a.event_instance_id
-          where a.member_id = $1 and a.event_instance_id = $2 and a.session_date = $3`,
-        [row.id, eventInstanceId, date],
+        `select a.id, o.date as session_date, a.source, e.name as event_name
+           from attendance a
+           join event_occurrences o on o.id = a.occurrence_id
+           join events e on e.id = o.event_id
+          where a.member_id = $1 and o.event_id = $2 and o.date = $3`,
+        [row.id, eventId, date],
       );
 
       return {
         id: entry!.id,
         date: isoDate(entry!.session_date)!,
         source: entry!.source,
-        eventId: eventInstanceId,
+        eventId,
         eventName: entry!.event_name,
       };
     } catch (error) {
@@ -2117,16 +2125,20 @@ export class MemberRepository {
     const row = await this.requireRow(memberNo);
     await this.db.transaction(async (tx) => {
       const [entry] = await tx.query<{
-        event_instance_id: string;
+        occurrence_id: string;
+        event_id: string;
         session_date: string;
         source: 'import' | 'manual';
       }>(
-        'select event_instance_id, session_date, source from attendance where id = $1 and member_id = $2',
+        `select a.occurrence_id, o.event_id, o.date as session_date, a.source
+           from attendance a
+           join event_occurrences o on o.id = a.occurrence_id
+          where a.id = $1 and a.member_id = $2`,
         [attendanceId, row.id],
       );
       if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
 
-      if (await sessionIsClosed(tx, entry.event_instance_id, entry.session_date)) {
+      if (await sessionIsClosed(tx, entry.event_id, entry.session_date)) {
         throw new SessionClosedError(
           `The session on ${entry.session_date} is closed; no further per-member write is accepted`,
         );
@@ -2136,9 +2148,9 @@ export class MemberRepository {
 
       if (entry.source === 'import') {
         await tx.query(
-          `insert into attendance_suppressions (member_id, event_instance_id, session_date, suppressed_by)
-           values ($1,$2,$3,$4) on conflict do nothing`,
-          [row.id, entry.event_instance_id, entry.session_date, actor],
+          `insert into attendance_suppressions (member_id, occurrence_id, suppressed_by)
+           values ($1,$2,$3) on conflict do nothing`,
+          [row.id, entry.occurrence_id, actor],
         );
       }
 
@@ -2313,7 +2325,14 @@ export class MemberRepository {
     }
 
     const [series] = await this.db.query<{ name: string; timezone: string }>(
-      'select name, timezone from event_series where id = $1 and archived_at is null',
+      `select e.name, e.timezone
+         from events e
+        where e.id = $1
+          and e.archived_at is null
+          and e.status = 'active'
+          and exists (
+            select 1 from event_recurrence_versions rv where rv.event_id = e.id
+          )`,
       [seriesId],
     );
     if (!series) throw new NotFoundError(`Series ${seriesId} was not found`);
@@ -2329,10 +2348,10 @@ export class MemberRepository {
 
     const ids = rows.map((row) => row.id);
     const attended = await this.db.query<{ member_id: string; session_date: string | Date }>(
-      `select a.member_id, a.session_date
+      `select a.member_id, o.date as session_date
          from attendance a
-         join event_instances e on e.id = a.event_instance_id
-        where e.series_id = $1 and a.member_id = any($2::uuid[])`,
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1 and a.member_id = any($2::uuid[])`,
       [seriesId, ids],
     );
 
@@ -2542,22 +2561,26 @@ export class MemberRepository {
       timezone: string;
       ministry: string | null;
     }>(
-      `select distinct s.id, s.name, s.timezone, mi.name as ministry
-       from event_series s
-       left join ministries mi on mi.id = s.ministry_id
-       where s.archived_at is null
+      `select e.id, e.name, e.timezone, mi.name as ministry
+       from events e
+       left join ministries mi on mi.id = e.ministry_id
+       where e.archived_at is null
+         and e.status = 'active'
+         and exists (
+           select 1 from event_recurrence_versions rv where rv.event_id = e.id
+         )
          and (
            exists (
               select 1 from attendance a
-              join event_instances e on e.id = a.event_instance_id
-              where e.series_id = s.id and a.member_id = $1
+              join event_occurrences o on o.id = a.occurrence_id
+              where o.event_id = e.id and a.member_id = $1
             )
            or exists (
              select 1 from member_ministries mm
-             where mm.member_id = $1 and mm.ministry_id = s.ministry_id
+             where mm.member_id = $1 and mm.ministry_id = e.ministry_id
            )
          )
-       order by s.name`,
+       order by e.name`,
       [row.id],
     );
 
@@ -2569,9 +2592,18 @@ export class MemberRepository {
       session_date: string;
       source: 'import' | 'manual';
     }>(
-      `select a.id, e.series_id, e.id as event_id, e.name as event_name,
-              a.session_date, a.source
-         from attendance a join event_instances e on e.id = a.event_instance_id
+      `select a.id,
+              case
+                when exists (
+                  select 1 from event_recurrence_versions rv where rv.event_id = e.id
+                ) then e.id
+                else null
+              end as series_id,
+              e.id as event_id, e.name as event_name,
+              o.date as session_date, a.source
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+         join events e on e.id = o.event_id
         where a.member_id = $1`,
       [row.id],
     );
@@ -2638,10 +2670,17 @@ export class MemberRepository {
       start_date: string | Date;
       end_date: string | Date;
     }>(
-      `select e.id as event_id, e.name as event_name, e.timezone, e.start_date, e.end_date
-         from attendance a join event_instances e on e.id = a.event_instance_id
-        where a.member_id = $1 and e.series_id is null
-        group by e.id
+      `select e.id as event_id, e.name as event_name, e.timezone,
+              min(o.date) as start_date, max(o.date) as end_date
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+         join events e on e.id = o.event_id
+        where a.member_id = $1
+          and e.status = 'active'
+          and not exists (
+            select 1 from event_recurrence_versions rv where rv.event_id = e.id
+          )
+        group by e.id, e.name, e.timezone
         order by lower(e.name), e.id`,
       [row.id],
     );
@@ -2650,12 +2689,11 @@ export class MemberRepository {
       standalone.length === 0
         ? []
         : await this.db.query<{ event_id: string; session_date: string | Date }>(
-            `select e.id as event_id, (s->>'date')::date as session_date
-               from event_instances e
-               cross join lateral jsonb_array_elements(e.sessions) s
-              where e.id = any($1::uuid[])
-                and coalesce(s->>'status', 'scheduled') <> 'cancelled'
-              order by e.id, (s->>'date')::date`,
+            `select o.event_id, o.date as session_date
+               from event_occurrences o
+              where o.event_id = any($1::uuid[])
+                and o.status <> 'cancelled'
+              order by o.event_id, o.date`,
             [standalone.map((event) => event.event_id)],
           );
 

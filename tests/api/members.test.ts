@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
@@ -83,9 +84,9 @@ async function seedOverviewAttendance(
     [memberNo],
   );
   const [inserted] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
-     on conflict (event_instance_id, session_date, member_id) do nothing
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1, (select id from event_occurrences where event_id = $2 and date = $3), 'manual','seed')
+     on conflict (occurrence_id, member_id) do nothing
      returning id`,
     [member!.id, eventId, date],
   );
@@ -623,14 +624,15 @@ describe('membership fields and the overview projection', () => {
     expect(dates.length).toBeGreaterThan(0);
     expectedRecurring = dates.length;
 
-    recurringEventId = await createOverviewEvent(
-      dates[dates.length - 1]!,
-      'Overview Recurring Meeting',
-    );
-    await harness.db.query('update event_instances set series_id = $2 where id = $1', [
-      recurringEventId,
-      recurringSeriesId,
-    ]);
+    recurringEventId = recurringSeriesId;
+    await seedEvent(harness.db, {
+      eventId: recurringSeriesId,
+      name: 'Overview Recurring Series',
+      startDate: dates[dates.length - 1]!,
+      endDate: dates[dates.length - 1]!,
+      series: true,
+      sessions: [{ date: dates[dates.length - 1]!, startTime: '09:00' }],
+    });
     await seedOverviewAttendance(recurringEventId, SUBJECT, dates[dates.length - 1]!);
 
     // One standalone event row: no series, so the detail must not drop it.
@@ -805,7 +807,7 @@ describe('membership fields and the overview projection', () => {
     expect(row.entries).toHaveLength(1);
     expect(row.entries[0]).toMatchObject({
       eventId: recurringEventId,
-      eventName: 'Overview Recurring Meeting',
+      eventName: 'Overview Recurring Series',
     });
 
     const attendance = await request(app)
@@ -817,7 +819,7 @@ describe('membership fields and the overview projection', () => {
     );
     expect(listed.entries[0]).toMatchObject({
       eventId: recurringEventId,
-      eventName: 'Overview Recurring Meeting',
+      eventName: 'Overview Recurring Series',
     });
   });
 

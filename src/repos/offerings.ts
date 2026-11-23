@@ -149,7 +149,7 @@ chosen as (
   ), 'GHS') as currency
 ),
 paid as (
-  select c.member_id, c.offering_id, c.event_instance_id, c.session_date, c.amount_minor
+  select c.member_id, c.offering_id, c.event_id as event_instance_id, c.session_date, c.amount_minor
     from contributions c, bounds b, chosen ch
    where c.status = 'paid'
      and c.session_date between b.from_date and b.to_date
@@ -188,7 +188,7 @@ offering_totals as (
 event_totals as (
   select p.event_instance_id as event_id, e.name, sum(p.amount_minor) as paid_minor
     from paid p
-    join event_instances e on e.id = p.event_instance_id
+    join events e on e.id = p.event_instance_id
    where p.member_id is not null
    group by p.event_instance_id, e.name
 )
@@ -238,23 +238,23 @@ with bounds as (
   select $1::date as from_date, $2::date as to_date
 ),
 current_counts as (
-  select distinct on (c.event_instance_id, c.offering_id, c.session_date)
-         c.id, c.event_instance_id, c.offering_id
+  select distinct on (c.occurrence_id, c.offering_id, c.session_date)
+         c.id, c.occurrence_id, c.offering_id
     from event_session_offering_counts c, bounds b
    where c.currency = $3
      and c.session_date between b.from_date and b.to_date
      and not exists (
        select 1 from event_session_offering_counts s where s.supersedes_id = c.id
      )
-   order by c.event_instance_id, c.offering_id, c.session_date,
+   order by c.occurrence_id, c.offering_id, c.session_date,
             c.as_of desc, c.recorded_at desc, c.id desc
 ),
 counted as (
-  select c.event_instance_id, c.offering_id,
+  select c.occurrence_id, c.offering_id,
          sum(l.denomination_minor * l.pieces)::bigint as amount
     from current_counts c
     join event_session_offering_count_lines l on l.count_id = c.id
-   group by c.event_instance_id, c.offering_id
+   group by c.occurrence_id, c.offering_id
 ),
 offering_totals as (
   select d.offering_id,
@@ -271,10 +271,11 @@ offering_totals as (
    group by d.offering_id, t.name, t.purpose
 ),
 event_totals as (
-  select d.event_instance_id as event_id, e.name, sum(d.amount)::bigint as amount
+  select o.event_id, e.name, sum(d.amount)::bigint as amount
     from counted d
-    join event_instances e on e.id = d.event_instance_id
-   group by d.event_instance_id, e.name
+    join event_occurrences o on o.id = d.occurrence_id
+    join events e on e.id = o.event_id
+   group by o.event_id, e.name
 )
 select coalesce((select sum(amount) from counted), 0)::bigint as total_counted,
        coalesce((
@@ -317,7 +318,7 @@ bounded as (
    group by pe.pledge_id
 ),
 staged as (
-  select p.member_id, m.member_no, p.offering_id, p.event_instance_id,
+  select p.member_id, m.member_no, p.offering_id, p.event_id as event_instance_id,
          p.amount_minor, p.expected_on,
          case
            when b.dishonored_at is not null
@@ -364,7 +365,7 @@ event_totals as (
          coalesce(sum(i.amount_minor) filter (where i.as_of_status <> 'dishonored'), 0) as pledged,
          coalesce(sum(i.amount_minor) filter (where i.as_of_status = 'pending'), 0) as outstanding
     from in_scope i
-    join event_instances e on e.id = i.event_instance_id
+    join events e on e.id = i.event_instance_id
    group by i.event_instance_id, e.name
 )
 select coalesce((
@@ -435,8 +436,7 @@ type OfferingRow = TermsRow & {
 type AttachmentRow = TermsRow & {
   attachment_id: string;
   offering_id: string;
-  event_instance_id: string | null;
-  series_id: string | null;
+  event_id: string;
   /** The attachment's own date, aliased away from the terms date. */
   attachment_available_until: unknown;
 };
@@ -445,15 +445,15 @@ type EventContextRow = {
   id: string;
   name: string;
   end_date: unknown;
-  series_id: string | null;
-  sessions: unknown;
+  occurrence_dates: unknown;
 };
 
 type EventGuardRow = {
   id: string;
   status: string;
   end_date: unknown;
-  sessions: unknown;
+  occurrence_count: number | string;
+  cancelled_count: number | string;
 };
 
 type SummaryContributionRow = {
@@ -700,22 +700,16 @@ async function assertActiveOffering(db: DbClient, offeringId: string): Promise<v
 async function assertNotAttached(
   db: DbClient,
   offeringId: string,
-  target: { eventId?: string; seriesId?: string },
+  target: { eventId: string },
 ): Promise<void> {
-  const [existing] = target.eventId
-    ? await db.query<{ id: string }>(
-        `select id from event_instance_offerings
-          where offering_id = $1 and event_instance_id = $2 and detached_on is null`,
-        [offeringId, target.eventId],
-      )
-    : await db.query<{ id: string }>(
-        `select id from event_instance_offerings
-          where offering_id = $1 and series_id = $2 and detached_on is null`,
-        [offeringId, target.seriesId],
-      );
+  const [existing] = await db.query<{ id: string }>(
+    `select id from event_offerings
+      where offering_id = $1 and event_id = $2 and occurrence_id is null and detached_on is null`,
+    [offeringId, target.eventId],
+  );
   if (existing) {
     throw new OfferingAlreadyAttachedError(
-      `Offering ${offeringId} is already attached to this ${target.eventId ? 'event' : 'series'}`,
+      `Offering ${offeringId} is already attached to this event`,
     );
   }
 }
@@ -726,18 +720,11 @@ async function activeAttachmentId(
   targetId: string,
   offeringId: string,
 ): Promise<string> {
-  const [row] =
-    kind === 'event'
-      ? await db.query<{ id: string }>(
-          `select id from event_instance_offerings
-            where event_instance_id = $1 and offering_id = $2 and detached_on is null`,
-          [targetId, offeringId],
-        )
-      : await db.query<{ id: string }>(
-          `select id from event_instance_offerings
-            where series_id = $1 and offering_id = $2 and detached_on is null`,
-          [targetId, offeringId],
-        );
+  const [row] = await db.query<{ id: string }>(
+    `select id from event_offerings
+      where event_id = $1 and offering_id = $2 and occurrence_id is null and detached_on is null`,
+    [targetId, offeringId],
+  );
   if (!row) {
     throw new NotFoundError(
       `Offering ${offeringId} has no active attachment on this ${kind === 'event' ? 'event' : 'series'}`,
@@ -1062,15 +1049,25 @@ export class OfferingRepository {
   ): Promise<OfferingAttachmentItem> {
     return this.db.transaction(async (tx) => {
       const [event] = await tx.query<EventGuardRow>(
-        'select id, status, end_date, sessions from event_instances where id = $1',
+        `select e.id, e.status,
+                (select max(o.date) from event_occurrences o where o.event_id = e.id) as end_date,
+                (select count(*) from event_occurrences o where o.event_id = e.id)
+                  as occurrence_count,
+                (select count(*) from event_occurrences o
+                  where o.event_id = e.id and o.status = 'cancelled') as cancelled_count
+           from events e
+          where e.id = $1`,
         [eventId],
       );
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
 
       const endDate = requiredDate(event.end_date);
-      if (event.status === 'cancelled' || event.status === 'archived') {
+      const allCancelled =
+        Number(event.occurrence_count) > 0 &&
+        Number(event.cancelled_count) === Number(event.occurrence_count);
+      if (event.status === 'archived' || allCancelled) {
         throw new EventNotActiveError(
-          `Event ${eventId} is ${event.status} and cannot take offerings`,
+          `Event ${eventId} is cancelled or archived and cannot take offerings`,
         );
       }
       if (endDate < todayUtcDate()) {
@@ -1092,9 +1089,9 @@ export class OfferingRepository {
 
       try {
         const [inserted] = await tx.query<{ id: string }>(
-          `insert into event_instance_offerings
-             (event_instance_id, series_id, offering_id, available_until, attached_by)
-           values ($1, null, $2, $3, $4)
+          `insert into event_offerings
+             (event_id, offering_id, available_until, attached_by)
+           values ($1, $2, $3, $4)
            returning id`,
           [eventId, input.offeringId, availableUntil, actor],
         );
@@ -1122,7 +1119,7 @@ export class OfferingRepository {
   ): Promise<OfferingAttachmentItem> {
     return this.db.transaction(async (tx) => {
       const [series] = await tx.query<{ id: string; archived_at: unknown }>(
-        'select id, archived_at from event_series where id = $1',
+        'select id, archived_at from events where id = $1',
         [seriesId],
       );
       if (!series) throw new NotFoundError(`Series ${seriesId} was not found`);
@@ -1131,13 +1128,13 @@ export class OfferingRepository {
       }
 
       await assertActiveOffering(tx, input.offeringId);
-      await assertNotAttached(tx, input.offeringId, { seriesId });
+      await assertNotAttached(tx, input.offeringId, { eventId: seriesId });
 
       try {
         const [inserted] = await tx.query<{ id: string }>(
-          `insert into event_instance_offerings
-             (event_instance_id, series_id, offering_id, available_until, attached_by)
-           values (null, $1, $2, null, $3)
+          `insert into event_offerings
+             (event_id, offering_id, available_until, attached_by)
+           values ($1, $2, null, $3)
            returning id`,
           [seriesId, input.offeringId, actor],
         );
@@ -1160,9 +1157,9 @@ export class OfferingRepository {
 
   async detachFromEvent(eventId: string, offeringId: string, actor: string): Promise<void> {
     const [detached] = await this.db.query<{ id: string }>(
-      `update event_instance_offerings
+      `update event_offerings
           set detached_on = now(), detached_by = $3
-        where event_instance_id = $1 and offering_id = $2 and detached_on is null
+        where event_id = $1 and offering_id = $2 and detached_on is null
         returning id`,
       [eventId, offeringId, actor],
     );
@@ -1175,9 +1172,9 @@ export class OfferingRepository {
 
   async detachFromSeries(seriesId: string, offeringId: string, actor: string): Promise<void> {
     const [detached] = await this.db.query<{ id: string }>(
-      `update event_instance_offerings
+      `update event_offerings
           set detached_on = now(), detached_by = $3
-        where series_id = $1 and offering_id = $2 and detached_on is null
+        where event_id = $1 and offering_id = $2 and detached_on is null
         returning id`,
       [seriesId, offeringId, actor],
     );
@@ -1189,28 +1186,25 @@ export class OfferingRepository {
   }
 
   async listEventAttachments(eventId: string): Promise<OfferingAttachmentItem[]> {
-    const [event] = await this.db.query('select 1 from event_instances where id = $1', [eventId]);
+    const [event] = await this.db.query('select 1 from events where id = $1', [eventId]);
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-    return this.listAttachments('event_instance_id', eventId);
+    return this.listAttachments(eventId);
   }
 
   async listSeriesAttachments(seriesId: string): Promise<OfferingAttachmentItem[]> {
-    const [series] = await this.db.query('select 1 from event_series where id = $1', [seriesId]);
+    const [series] = await this.db.query('select 1 from events where id = $1', [seriesId]);
     if (!series) throw new NotFoundError(`Series ${seriesId} was not found`);
-    return this.listAttachments('series_id', seriesId);
+    return this.listAttachments(seriesId);
   }
 
-  private async listAttachments(
-    column: 'event_instance_id' | 'series_id',
-    targetId: string,
-  ): Promise<OfferingAttachmentItem[]> {
+  private async listAttachments(targetId: string): Promise<OfferingAttachmentItem[]> {
     const rows = await this.db.query<AttachmentRow>(
-      `select a.id as attachment_id, a.offering_id, a.event_instance_id, a.series_id,
+      `select a.id as attachment_id, a.offering_id, a.event_id,
               a.available_until as attachment_available_until, ${TERMS_COLUMNS}
-         from event_instance_offerings a
+         from event_offerings a
          join offerings o on o.id = a.offering_id
          ${CURRENT_TERMS_JOIN}
-        where a.${column} = $1 and a.detached_on is null
+        where a.event_id = $1 and a.detached_on is null
         order by a.attached_on, a.id`,
       [targetId],
     );
@@ -1240,14 +1234,14 @@ export class OfferingRepository {
       const attachmentId = await activeAttachmentId(tx, kind, targetId, offeringId);
 
       if (kind === 'event') {
-        const [event] = await tx.query<{ sessions: unknown }>(
-          'select sessions from event_instances where id = $1',
+        const [event] = await tx.query<{ occurrence_dates: unknown }>(
+          `select coalesce(jsonb_agg(o.date order by o.date), '[]'::jsonb) as occurrence_dates
+             from event_occurrences o
+            where o.event_id = $1`,
           [targetId],
         );
         const sessionDates = new Set(
-          parseJsonArray(event!.sessions).map((session) =>
-            requiredDate((session as { date?: unknown }).date),
-          ),
+          parseJsonArray(event!.occurrence_dates).map((date) => requiredDate(date)),
         );
         if (input.kind !== 'skip') {
           throw new InvalidExceptionDateError('An event attachment accepts only a skip exception');
@@ -1260,9 +1254,9 @@ export class OfferingRepository {
           throw new InvalidExceptionDateError(`${date} is not a date the series meets`);
         }
       } else {
-        const [extra] = await tx.query<{ occurs_on: unknown }>(
-          `select occurs_on from series_exceptions
-            where series_id = $1 and occurs_on = $2 and kind = 'extra'`,
+        const [extra] = await tx.query<{ date: unknown }>(
+          `select date from event_recurrence_exceptions
+            where event_id = $1 and date = $2 and kind = 'extra'`,
           [targetId, date],
         );
         if (!extra) {
@@ -1326,21 +1320,23 @@ export async function eventOfferingsFor(
   if (eventIds.length === 0) return result;
 
   const events = await db.query<EventContextRow>(
-    `select id, name, end_date, series_id, sessions
-       from event_instances
-      where id = any($1::uuid[])`,
+    `select e.id, e.name,
+            (select max(o.date) from event_occurrences o where o.event_id = e.id) as end_date,
+            coalesce(
+              (select jsonb_agg(o.date order by o.date)
+                 from event_occurrences o where o.event_id = e.id),
+              '[]'::jsonb
+            ) as occurrence_dates
+       from events e
+      where e.id = any($1::uuid[])`,
     [eventIds],
   );
   if (events.length === 0) return result;
 
-  const seriesIds = [
-    ...new Set(events.map((event) => event.series_id).filter((id): id is string => id !== null)),
-  ];
-
   const attachments = await db.query<AttachmentRow>(
-    `select a.id as attachment_id, a.offering_id, a.event_instance_id, a.series_id,
+    `select a.id as attachment_id, a.offering_id, a.event_id,
             a.available_until as attachment_available_until, ${TERMS_COLUMNS}
-       from event_instance_offerings a
+       from event_offerings a
        join lateral (
          select *
          from offering_terms t
@@ -1349,9 +1345,9 @@ export async function eventOfferingsFor(
          limit 1
        ) t on true
       where a.detached_on is null
-        and (a.event_instance_id = any($1::uuid[]) or a.series_id = any($2::uuid[]))
+        and a.event_id = any($1::uuid[])
       order by a.attached_on, a.id`,
-    [eventIds, seriesIds],
+    [eventIds],
   );
 
   const attachmentIds = attachments.map((attachment) => attachment.attachment_id);
@@ -1391,9 +1387,8 @@ export async function eventOfferingsFor(
       ? []
       : await db.query<{ offering_id: string; attached_events: number | string }>(
           `select offering_id, count(*)::int as attached_events
-             from event_instance_offerings
+             from event_offerings
             where detached_on is null
-              and event_instance_id is not null
               and offering_id = any($1::uuid[])
             group by offering_id`,
           [offeredIds],
@@ -1404,17 +1399,12 @@ export async function eventOfferingsFor(
 
   for (const event of events) {
     const sessionDates = new Set(
-      parseJsonArray(event.sessions).map((session) =>
-        requiredDate((session as { date?: unknown }).date),
-      ),
+      parseJsonArray(event.occurrence_dates).map((date) => requiredDate(date)),
     );
     const items = result.get(event.id)!;
 
     for (const attachment of attachments) {
-      const appliesToEvent =
-        attachment.event_instance_id === event.id ||
-        (event.series_id !== null && attachment.series_id === event.series_id);
-      if (!appliesToEvent) continue;
+      if (attachment.event_id !== event.id) continue;
 
       const terms = termsFromRow(attachment);
       const availableUntil = effectiveAvailableUntil({

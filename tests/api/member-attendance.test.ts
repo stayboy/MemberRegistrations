@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
@@ -72,9 +73,9 @@ async function seedAttendance(eventId: string, memberNo: string, date: string): 
     [memberNo],
   );
   const [inserted] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
-     on conflict (event_instance_id, session_date, member_id) do nothing
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1, (select id from event_occurrences where event_id = $2 and date = $3), 'manual','seed')
+     on conflict (occurrence_id, member_id) do nothing
      returning id`,
     [member!.id, eventId, date],
   );
@@ -106,11 +107,16 @@ beforeAll(async () => {
       schedule: { effectiveFrom: day(-60), rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: day(-20) },
     })
     .expect(201);
-  ministryEventId = await createEvent(day(-25), 'Choir rehearsal');
-  await harness.db.query('update event_instances set series_id = $2 where id = $1', [
-    ministryEventId,
-    series.body.id,
-  ]);
+  ministryEventId = series.body.id as string;
+  await seedEvent(harness.db, {
+    eventId: ministryEventId,
+    name: 'Ministry attendance series',
+    ministryCode: 'CHOIR',
+    startDate: day(-25),
+    endDate: day(-25),
+    series: true,
+    sessions: [{ date: day(-25), startTime: '09:00' }],
+  });
 
   headcountEventId = await createEvent(day(-15), 'Headcount-only rally', {
     tracksMembers: false,
@@ -230,7 +236,7 @@ describe('attendance summary', () => {
     expect(attended.body.attended).toBe(1);
     expect(attended.body.events[0]).toMatchObject({
       eventId: ministryEventId,
-      name: 'Choir rehearsal',
+      name: 'Ministry attendance series',
       sessionDate: day(-25),
     });
   });

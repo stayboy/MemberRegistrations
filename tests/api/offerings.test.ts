@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { effectiveAvailableUntil, isExpired } from '../../src/repos/offerings.js';
 
 let harness: TestApp;
@@ -49,31 +50,23 @@ async function makeOffering(overrides: Record<string, unknown> = {}) {
 
 async function insertEvent(seed: SeedEvent): Promise<string> {
   eventSeq += 1;
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,$2,$3,'UTC',$4,$5,'09:00',null,'auditorium',null,null,$6,'manual',$7::jsonb)
-     returning id`,
-    [
-      `OFF-${eventSeq}`,
-      seed.seriesId ?? null,
-      seed.name,
-      seed.startDate,
-      seed.endDate,
-      seed.status ?? 'scheduled',
-      JSON.stringify(
-        seed.sessions.map((session) => ({
-          date: session.date,
-          startTime: '09:00',
-          endTime: null,
-          status: session.status ?? 'scheduled',
-        })),
-      ),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventId: seed.seriesId ?? undefined,
+    eventNo: `OFF-${eventSeq}`,
+    name: seed.name,
+    startDate: seed.startDate,
+    endDate: seed.endDate,
+    startTime: '09:00',
+    status: seed.status as 'scheduled' | 'cancelled' | 'archived' | undefined,
+    series: seed.seriesId !== null && seed.seriesId !== undefined,
+    sessions: seed.sessions.map((session) => ({
+      date: session.date,
+      startTime: '09:00',
+      endTime: null,
+      status: session.status ?? 'scheduled',
+    })),
+  });
+  return seeded.eventId;
 }
 
 function attachToEvent(eventId: string, body: Record<string, unknown>) {
@@ -605,7 +598,7 @@ describe('detaching', () => {
       id: string;
       detached_on: Date | string | null;
       detached_by: string | null;
-    }>('select id, detached_on, detached_by from event_instance_offerings where id = $1', [
+    }>('select id, detached_on, detached_by from event_offerings where id = $1', [
       attached.body.attachmentId,
     ]);
     expect(row!.detached_on).not.toBeNull();
@@ -670,7 +663,7 @@ describe('detaching', () => {
     const [row] = await harness.db.query<{
       detached_on: Date | string | null;
       detached_by: string | null;
-    }>('select detached_on, detached_by from event_instance_offerings where id = $1', [
+    }>('select detached_on, detached_by from event_offerings where id = $1', [
       attached.body.attachmentId,
     ]);
     expect(row!.detached_on).not.toBeNull();
@@ -1003,10 +996,10 @@ describe('event aggregate offerings', () => {
     expect(item).toMatchObject({
       offeringId: offering.id,
       name: 'Series Event · Building',
-      availableUntil: '2026-01-04',
+      availableUntil: '2026-01-25',
       expired: true,
       exceptions: [{ date: '2026-01-04', kind: 'skip', note: 'On the event date' }],
-      stats: { attachedEvents: 0 },
+      stats: { attachedEvents: 1 },
     });
   });
 

@@ -7,6 +7,7 @@ import {
   writeHeaders,
   type TestApp,
 } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 
 const USSD_SECRET = 'test-ussd-gateway-secret-16';
 const USSD_PHONE_PEPPER = 'test-ussd-phone-pepper-16';
@@ -41,21 +42,15 @@ async function createMember(memberNo: string, phone: string) {
 
 async function insertEvent(name: string, date: string): Promise<string> {
   eventSeq += 1;
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,null,$2,'UTC',$3,$3,'09:00',null,'auditorium',null,null,'scheduled','manual',$4::jsonb)
-     returning id`,
-    [
-      `NALO-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}-${eventSeq}`,
-      name,
-      date,
-      JSON.stringify([{ date, startTime: '09:00', endTime: null, status: 'scheduled' }]),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventNo: `NALO-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}-${eventSeq}`,
+    name,
+    startDate: date,
+    endDate: date,
+    startTime: '09:00',
+    sessions: [{ date, startTime: '09:00', endTime: null, status: 'scheduled' }],
+  });
+  return seeded.eventId;
 }
 
 let attachSeq = 0;
@@ -63,9 +58,9 @@ let attachSeq = 0;
 async function attach(eventId: string, offeringId: string) {
   attachSeq += 1;
   await harness.db.query(
-    `insert into event_instance_offerings (
-       event_instance_id, series_id, offering_id, available_until, attached_on, attached_by
-     ) values ($1,null,$2,null, now() + make_interval(secs => $3), 'test')`,
+    `insert into event_offerings (
+       event_id, offering_id, available_until, attached_on, attached_by
+     ) values ($1,$2,null, now() + make_interval(secs => $3), 'test')`,
     [eventId, offeringId, attachSeq],
   );
 }

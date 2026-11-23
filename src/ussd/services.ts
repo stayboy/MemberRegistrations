@@ -1,6 +1,5 @@
 import type { Db, Row } from '../db/sql.js';
 import { ValidationError } from '../errors/domain-errors.js';
-import { todayIn } from '../domain/series.js';
 import type { PhoneCipher } from '../domain/phone-cipher.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
@@ -58,42 +57,17 @@ export interface UssdServiceDeps {
   verification: VerificationService;
 }
 
-interface EventRow extends Row {
+type CurrentEventRow = {
   id: string;
   name: string;
   timezone: string;
-  sessions: unknown;
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
+  session_date: string | Date | null;
+};
 
 function dateOf(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   return null;
-}
-
-function sessionDates(sessions: unknown): Array<{ date: string; status: string }> {
-  return parseJsonArray(sessions)
-    .map((entry) => {
-      const value = entry as { date?: unknown; status?: unknown };
-      const date = dateOf(value.date);
-      if (date === null) return null;
-      return { date, status: typeof value.status === 'string' ? value.status : 'scheduled' };
-    })
-    .filter((entry): entry is { date: string; status: string } => entry !== null)
-    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function todayUtc(): string {
@@ -119,36 +93,34 @@ function offeringName(item: EventOfferingItem): string {
 }
 
 async function findCurrentEvent(db: Db): Promise<UssdEvent | null> {
-  const rows = await db.query<EventRow>(
-    `select e.id, e.name, e.timezone, e.sessions
-       from event_instances e
-      where e.status not in ('cancelled', 'archived')
+  const rows = await db.query<CurrentEventRow>(
+    `select e.id, e.name, e.timezone,
+            (select min(o.date)
+               from event_occurrences o
+              where o.event_id = e.id
+                and o.status <> 'cancelled'
+                and o.date >= (now() at time zone e.timezone)::date) as session_date,
+            exists (
+              select 1 from event_occurrences o
+               where o.event_id = e.id
+                 and o.status <> 'cancelled'
+                 and o.date = (now() at time zone e.timezone)::date
+            ) as has_today
+       from events e
+      where e.status = 'active'
         and exists (
-          select 1
-            from jsonb_array_elements(e.sessions) s
-           where (s->>'date')::date >= (now() at time zone e.timezone)::date
-             and coalesce(s->>'status', 'scheduled') <> 'cancelled'
+          select 1 from event_occurrences o
+           where o.event_id = e.id
+             and o.status <> 'cancelled'
+             and o.date >= (now() at time zone e.timezone)::date
         )
-      order by
-        (exists (
-          select 1
-            from jsonb_array_elements(e.sessions) s
-           where (s->>'date')::date = (now() at time zone e.timezone)::date
-             and coalesce(s->>'status', 'scheduled') <> 'cancelled'
-        )) desc,
-        e.start_date, e.id
+      order by has_today desc, session_date, e.id
       limit 1`,
   );
   const row = rows[0];
   if (!row) return null;
-
-  const today = todayIn(row.timezone);
-  const dates = sessionDates(row.sessions)
-    .filter((session) => session.status !== 'cancelled')
-    .map((session) => session.date);
-  const sessionDate = dates.includes(today) ? today : (dates.find((date) => date >= today) ?? null);
+  const sessionDate = dateOf(row.session_date);
   if (!sessionDate) return null;
-
   return { id: row.id, name: row.name, sessionDate };
 }
 
@@ -188,32 +160,30 @@ async function activitiesBetween(
   const memberId = await memberIdOf(db, viewer.memberNo);
   const rows = await db.query<ActivityRow>(
     `select e.id, e.name, e.event_no,
-            (session->>'date')::date as session_date,
-            coalesce(session->>'startTime', e.start_time, '') as session_start,
+            o.date as session_date,
+            coalesce(o.start_time, e.start_time, '') as session_start,
             e.tracks_members,
             case
-              when se.ministry_id is not null and exists (
+              when e.ministry_id is not null and exists (
                 select 1
                   from member_ministries mm
                   join ministries mi on mi.id = mm.ministry_id
                  where mm.member_id = $1::uuid
-                   and mm.ministry_id = se.ministry_id
-                   and mm.assigned_on <= (session->>'date')::date
+                   and mm.ministry_id = e.ministry_id
+                   and mm.assigned_on <= o.date
                    and mi.active
               ) then 0
               when e.presbyter_only then 1
               else 2
             end as priority_tier
-       from event_instances e
-       left join event_series se on se.id = e.series_id
-       cross join lateral jsonb_array_elements(e.sessions) session
-      where e.status not in ('cancelled', 'archived')
-        and coalesce(session->>'status', 'scheduled') <> 'cancelled'
-        and (session->>'date')::date between $2::date and $3::date
+       from events e
+       join event_occurrences o on o.event_id = e.id
+      where e.status = 'active'
+        and o.status <> 'cancelled'
+        and o.date between $2::date and $3::date
         and (not e.presbyter_only or $4::boolean)
         and (
-          se.id is null
-          or se.ministry_id is null
+          e.ministry_id is null
           or (
             $1::uuid is not null
             and exists (
@@ -221,15 +191,15 @@ async function activitiesBetween(
                 from member_ministries mm
                 join ministries mi on mi.id = mm.ministry_id
                where mm.member_id = $1::uuid
-                 and mm.ministry_id = se.ministry_id
-                 and mm.assigned_on <= (session->>'date')::date
+                 and mm.ministry_id = e.ministry_id
+                 and mm.assigned_on <= o.date
                  and mi.active
             )
           )
         )
-      order by (session->>'date')::date,
+      order by o.date,
                priority_tier,
-               coalesce(session->>'startTime', e.start_time, ''),
+               coalesce(o.start_time, e.start_time, ''),
                e.event_no nulls last,
                e.id`,
     [memberId, from, to, viewer.isPresbyter],

@@ -470,7 +470,7 @@ export class PaymentGroupRepository {
 
   private async findPledge(db: DbClient, id: string): Promise<PledgeRow> {
     const [row] = await db.query<PledgeRow>(
-      `select id, member_id, offering_id, event_instance_id, session_date,
+      `select id, member_id, offering_id, event_id as event_instance_id, session_date,
               amount_minor, currency, status
          from pledges
         where id = $1`,
@@ -583,7 +583,7 @@ export class PaymentGroupRepository {
   ): Promise<StoredGroupContributionRow[]> {
     return db.query<StoredGroupContributionRow>(
       `select id, member_id, visitor_name, visitor_phone_hash, offering_id,
-              event_instance_id, session_date, amount_minor, channel
+              event_id as event_instance_id, session_date, amount_minor, channel
          from contributions
         where payment_group_id = $1
         order by coalesce(

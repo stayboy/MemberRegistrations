@@ -4,7 +4,7 @@ import { dateStringSchema, memberNoParamSchema } from './common.js';
 import { offeringStatsSchema, termsSchema } from './offerings.js';
 
 export const VENUE_TYPES = ['auditorium', 'virtual', 'hybrid'] as const;
-export const EVENT_STATUSES = ['draft', 'scheduled', 'held', 'cancelled', 'archived'] as const;
+export const EVENT_STATUSES = ['draft', 'active', 'archived'] as const;
 export const EVENT_SESSION_STATUSES = ['scheduled', 'held', 'cancelled'] as const;
 export const EVENT_SOURCES = ['series', 'manual', 'import'] as const;
 export const SESSION_SOURCES = ['import', 'manual', 'mixed', 'none'] as const;

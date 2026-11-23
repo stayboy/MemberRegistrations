@@ -3,8 +3,9 @@ import { migrate } from '../../src/db/migrate.js';
 import { MIGRATIONS } from '../../src/db/migrations.js';
 import { createPgliteDb } from '../../src/db/pglite.js';
 import type { Db } from '../../src/db/sql.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 
-describe('event instances', () => {
+describe('event parent and occurrences', () => {
   let db: Db;
 
   beforeAll(async () => {
@@ -16,39 +17,74 @@ describe('event instances', () => {
     await db.close();
   });
 
-  it('accepts a standalone three-session event with no series', async () => {
-    const sessions = [
-      { date: '2026-03-01', startTime: '09:00', endTime: '17:00', status: 'scheduled' },
-      { date: '2026-03-02', startTime: '09:00', endTime: '17:00', status: 'scheduled' },
-      { date: '2026-03-03', startTime: '09:00', endTime: '12:00', status: 'scheduled' },
-    ];
+  it('accepts a standalone three-session event as one parent with three occurrences', async () => {
+    const seeded = await seedEvent(db, {
+      eventNo: 'EV-1',
+      name: 'Strategic Conference',
+      startDate: '2026-03-01',
+      endDate: '2026-03-03',
+      startTime: '09:00',
+      sessions: [
+        { date: '2026-03-01', startTime: '09:00', endTime: '17:00' },
+        { date: '2026-03-02', startTime: '09:00', endTime: '17:00' },
+        { date: '2026-03-03', startTime: '09:00', endTime: '12:00' },
+      ],
+    });
 
-    await db.query(
-      `insert into event_instances
-         (event_no, name, timezone, start_date, end_date, venue_type, status, source, sessions)
-       values ('EV-1', 'Strategic Conference', 'UTC', '2026-03-01', '2026-03-03', 'auditorium',
-               'scheduled', 'manual', $1::jsonb)`,
-      [JSON.stringify(sessions)],
-    );
-
-    const [row] = await db.query<{ series_id: string | null; sessions: unknown }>(
-      'select series_id, sessions from event_instances where event_no = $1',
+    const [event] = await db.query<{ id: string; audience_id: string | null }>(
+      'select id, audience_id from events where event_no = $1',
       ['EV-1'],
     );
-    expect(row!.series_id).toBeNull();
-    expect(Array.isArray(row!.sessions)).toBe(true);
-    expect((row!.sessions as unknown[]).length).toBe(3);
+    expect(event!.id).toBe(seeded.eventId);
+    expect(event!.audience_id).toBeTruthy();
+
+    const occurrences = await db.query<{ date: Date | string }>(
+      'select date from event_occurrences where event_id = $1 order by date',
+      [seeded.eventId],
+    );
+    expect(
+      occurrences.map((row) =>
+        row.date instanceof Date
+          ? row.date.toISOString().slice(0, 10)
+          : String(row.date).slice(0, 10),
+      ),
+    ).toEqual(['2026-03-01', '2026-03-02', '2026-03-03']);
   });
 
-  it('enforces the series foreign key when series_id is set', async () => {
+  it('rejects a second occurrence for the same parent and date', async () => {
+    const seeded = await seedEvent(db, {
+      eventNo: 'EV-2',
+      name: 'One Day',
+      startDate: '2026-04-01',
+      endDate: '2026-04-01',
+      sessions: [{ date: '2026-04-01' }],
+    });
+
     await expect(
       db.query(
-        `insert into event_instances
-           (series_id, name, start_date, end_date, venue_type, status, source, sessions)
-         values ('00000000-0000-0000-0000-000000000000', 'Orphan', '2026-03-01', '2026-03-01',
-                 'auditorium', 'scheduled', 'series', '[]'::jsonb)`,
+        `insert into event_occurrences (event_id, date, status)
+         values ($1, '2026-04-01', 'scheduled')`,
+        [seeded.eventId],
       ),
     ).rejects.toThrow();
+  });
+
+  it('keeps the legacy ministry and presbyter columns as audience projections', async () => {
+    const seeded = await seedEvent(db, {
+      eventNo: 'EV-3',
+      name: 'Choir Presbyters',
+      ministryCode: 'CHOIR',
+      presbyterOnly: true,
+      startDate: '2026-05-01',
+      endDate: '2026-05-01',
+      sessions: [{ date: '2026-05-01' }],
+    });
+    const [row] = await db.query<{ ministry_id: string | null; presbyter_only: boolean }>(
+      'select ministry_id, presbyter_only from events where id = $1',
+      [seeded.eventId],
+    );
+    expect(row!.ministry_id).toBeTruthy();
+    expect(row!.presbyter_only).toBe(true);
   });
 });
 

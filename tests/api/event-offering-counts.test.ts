@@ -120,8 +120,11 @@ beforeAll(async () => {
   cancelledEvent = await createEvent('OC-280', [today]);
   cancelledSessionEvent = await createEvent(
     'OC-300',
-    [today],
-    [{ date: today, startTime: '09:00', status: 'cancelled', note: 'Venue flooded' }],
+    [today, tomorrow],
+    [
+      { date: today, startTime: '09:00', status: 'cancelled', note: 'Venue flooded' },
+      { date: tomorrow, startTime: '09:00', status: 'scheduled' },
+    ],
   );
   archivedEvent = await createEvent('OC-400', [today]);
   summaryEvent = await createEvent('OC-500', [shiftDate(summaryDate, -1), summaryDate]);
@@ -136,17 +139,18 @@ beforeAll(async () => {
   // The summary event is in the past, so attaching through the route would be
   // refused as an ended event; seed the attachments as the database would.
   await harness.db.query(
-    `insert into event_instance_offerings (event_instance_id, offering_id, attached_by)
+    `insert into event_offerings (event_id, offering_id, attached_by)
      values ($1, $2, 'seed'), ($1, $3, 'seed'), ($1, $4, 'seed')`,
     [summaryEvent, ghsOffering, ghsSecondOffering, usdOffering],
   );
 
-  await harness.db.query(`update event_instances set status = 'cancelled' where id = $1`, [
+  await harness.db.query(`update event_occurrences set status = 'cancelled' where event_id = $1`, [
     cancelledEvent,
   ]);
-  await harness.db.query(`update event_instances set status = 'archived' where id = $1`, [
-    archivedEvent,
-  ]);
+  await harness.db.query(
+    `update events set status = 'archived', archived_at = now() where id = $1`,
+    [archivedEvent],
+  );
 });
 
 afterAll(async () => {
@@ -324,7 +328,7 @@ describe('POST /v1/events/{eventId}/offering-counts', () => {
     // The attach route resolves current terms and refuses a termless offering,
     // so seed the attachment directly to reach the count repository's check.
     await harness.db.query(
-      `insert into event_instance_offerings (event_instance_id, offering_id, attached_by)
+      `insert into event_offerings (event_id, offering_id, attached_by)
        values ($1, $2, 'seed')`,
       [eventA, bareOffering!.id],
     );
@@ -653,16 +657,23 @@ describe.skipIf(!testDatabaseUrl)('offering counts on the pooled pg driver', () 
        values ($1, 1, 'PG Count', 'Pooled driver count', 'freewill', 'GHS', 'seed')`,
       [offeringId],
     );
+    const [audience] = await pooled.query<{ id: string }>(
+      `select id from audiences where system_key = 'everyone'`,
+    );
     const [event] = await pooled.query<{ id: string }>(
-      `insert into event_instances (event_no, name, timezone, start_date, end_date, status, source, sessions)
-       values ('PG-OC-1', 'Pooled count service', 'UTC', $1::date, $1::date, 'scheduled', 'manual',
-               jsonb_build_array(jsonb_build_object('date', $1::date, 'startTime', '09:00')))
+      `insert into events (event_no, name, audience_id, timezone, venue_type, start_time, status)
+       values ('PG-OC-1', 'Pooled count service', $1, 'UTC', 'auditorium', '09:00', 'active')
        returning id`,
-      [shiftDate(today, -2)],
+      [audience!.id],
     );
     eventId = event!.id;
     await pooled.query(
-      `insert into event_instance_offerings (event_instance_id, offering_id, attached_by)
+      `insert into event_occurrences (event_id, date, start_time, end_time, status)
+       values ($1, $2::date, '09:00', null, 'scheduled')`,
+      [eventId, shiftDate(today, -2)],
+    );
+    await pooled.query(
+      `insert into event_offerings (event_id, offering_id, attached_by)
        values ($1, $2, 'seed')`,
       [eventId, offeringId],
     );

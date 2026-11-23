@@ -194,7 +194,7 @@ describe('presbyter-only roster and regularity', () => {
 });
 
 describe('series presbyterOnly', () => {
-  it('affects future generated occurrences only', async () => {
+  it('carries the parent flag for every generated occurrence', async () => {
     const created = await request(harness.app)
       .post('/v1/series')
       .set(writeHeaders)
@@ -235,15 +235,13 @@ describe('series presbyterOnly', () => {
       .get('/v1/events')
       .query({ seriesId, from: '2030-02-03', to: '2030-02-17', limit: 100 })
       .set(readHeaders);
-    const byDate = new Map<string, boolean>(
-      listed.body.items.map((event: { startDate: string; presbyterOnly: boolean }) => [
-        event.startDate,
-        event.presbyterOnly,
-      ]),
-    );
-    expect(byDate.get('2030-02-03')).toBe(false);
-    expect(byDate.get('2030-02-10')).toBe(false);
-    expect(byDate.get('2030-02-17')).toBe(true);
+    expect(listed.body.items).toHaveLength(1);
+    expect(listed.body.items[0].presbyterOnly).toBe(true);
+    expect(listed.body.items[0].sessions.map((session: { date: string }) => session.date)).toEqual([
+      '2030-02-03',
+      '2030-02-10',
+      '2030-02-17',
+    ]);
   });
 
   it('creates a presbyter-only series whose generated instances inherit the flag', async () => {

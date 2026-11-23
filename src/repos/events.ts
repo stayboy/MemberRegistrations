@@ -22,7 +22,7 @@ import {
 import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
-export type EventStatus = 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived';
+export type EventStatus = 'draft' | 'active' | 'archived';
 export type EventSessionStatus = 'scheduled' | 'held' | 'cancelled';
 export type EventSource = 'series' | 'manual' | 'import';
 export type SessionSource = 'import' | 'manual' | 'mixed' | 'none';
@@ -50,7 +50,7 @@ export interface EventSessionItem {
 
 export interface EventItem {
   id: string;
-  /** Null while a series-minted instance has not been assigned an event number yet. */
+  /** Null while a series-minted event has not been assigned an event number yet. */
   eventNo: string | null;
   name: string;
   seriesId: string | null;
@@ -88,10 +88,10 @@ export interface GenerateEventsResult {
 
 interface StoredSession {
   date?: unknown;
-  startTime?: string | null;
-  endTime?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   status?: string;
-  venueType?: string;
+  venue_type?: string | null;
   note?: string | null;
 }
 
@@ -158,7 +158,7 @@ type EventRow = {
   id: string;
   event_no: string | null;
   name: string;
-  series_id: string | null;
+  is_series: boolean;
   timezone: string;
   start_date: unknown;
   end_date: unknown;
@@ -168,10 +168,11 @@ type EventRow = {
   venue_name: string | null;
   description: string | null;
   status: string;
-  source: string;
   tracks_members: boolean;
   presbyter_only: boolean;
   sessions: unknown;
+  occurrence_count: number | string;
+  cancelled_count: number | string;
   ministry_code: string | null;
   ministry_name: string | null;
   session_counts: unknown;
@@ -179,7 +180,7 @@ type EventRow = {
   session_captures: unknown;
 };
 
-/** The event_instances row without the joined ministry or attendance aggregate. */
+/** The events row without the joined ministry or attendance aggregate. */
 type EventRowCore = Omit<
   EventRow,
   'session_counts' | 'session_expected' | 'session_captures' | 'ministry_code' | 'ministry_name'
@@ -189,31 +190,56 @@ const EVENT_COLUMNS = `
   e.id,
   e.event_no,
   e.name,
-  e.series_id,
+  occ.is_series,
   e.timezone,
-  e.start_date,
-  e.end_date,
+  occ.start_date,
+  occ.end_date,
   e.start_time,
   e.end_time,
   e.venue_type,
   e.venue_name,
   e.description,
   e.status,
-  e.source,
   e.tracks_members,
   e.presbyter_only,
-  e.sessions,
+  occ.sessions,
+  occ.occurrence_count,
+  occ.cancelled_count,
   m.code as ministry_code,
   m.name as ministry_name`;
 
 const EVENT_FROM = `
-  from event_instances e
-  left join event_series s on s.id = e.series_id
-  left join ministries m on m.id = s.ministry_id`;
+  from events e
+  left join ministries m on m.id = e.ministry_id
+  left join lateral (
+    select coalesce(
+             jsonb_agg(
+               jsonb_build_object(
+                 'date', o.date,
+                 'start_time', o.start_time,
+                 'end_time', o.end_time,
+                 'status', o.status,
+                 'venue_type', o.venue_type,
+                 'note', o.note
+               )
+               order by o.date
+             ),
+             '[]'::jsonb
+           ) as sessions,
+           count(*) as occurrence_count,
+           count(*) filter (where o.status = 'cancelled') as cancelled_count,
+           min(o.date) as start_date,
+           max(o.date) as end_date,
+           exists (
+             select 1 from event_recurrence_versions rv where rv.event_id = e.id
+           ) as is_series
+      from event_occurrences o
+     where o.event_id = e.id
+  ) occ on true`;
 
 /**
- * Attendance per session for the rows in scope. Correlated on the event id so
- * neither the list nor the detail issues a query per event or per session.
+ * Attendance per occurrence for the rows in scope. Correlated on the event id
+ * so neither the list nor the detail issues a query per event or per session.
  */
 function sessionCounts(alias: string): string {
   return `
@@ -222,37 +248,39 @@ function sessionCounts(alias: string): string {
       coalesce((
         select jsonb_agg(
                  jsonb_build_object(
-                   'date', c.session_date,
+                   'date', c.date,
                    'present', c.present,
                    'importedRows', c.imported_rows
                  )
-                 order by c.session_date
+                 order by c.date
                )
         from (
-          select a.session_date,
-                 count(*)::int as present,
-                 count(*) filter (where a.source = 'import')::int as imported_rows
-          from attendance a
-          where a.event_instance_id = ${alias}.id
-          group by a.session_date
+          select o.date,
+                 count(a.id)::int as present,
+                 count(a.id) filter (where a.source = 'import')::int as imported_rows
+          from event_occurrences o
+          left join attendance a on a.occurrence_id = o.id
+          where o.event_id = ${alias}.id
+          group by o.date
         ) c
       ), '[]'::jsonb) as session_counts,
       coalesce((
         select jsonb_agg(
-                 jsonb_build_object('date', d.session_date, 'expected', d.expected)
-                 order by d.session_date
+                 jsonb_build_object('date', d.date, 'expected', d.expected)
+                 order by d.date
                )
         from (
-          select (session->>'date')::date as session_date,
+          select o.date,
                  count(m.id) filter (
                    where not ${alias}.presbyter_only or m.is_presbyter
                  )::int as expected
-          from jsonb_array_elements(${alias}.sessions) session
+          from event_occurrences o
           left join members m
-            on coalesce(m.joined_on, m.created_at::date) <= (session->>'date')::date
+            on coalesce(m.joined_on, m.created_at::date) <= o.date
            and m.archived_at is null
            and m.purged_at is null
-          group by (session->>'date')::date
+          where o.event_id = ${alias}.id
+          group by o.date
         ) d
       ), '[]'::jsonb) as session_expected,
       coalesce((
@@ -270,21 +298,22 @@ function sessionCounts(alias: string): string {
                     filter (where c.is_current))[1] as as_of,
                  bool_or(c.ended) as ended
           from (
-            select ib.session_date, ib.as_of, ib.created_at as recorded_at, ib.id,
-                   0 as channel, true as is_current, ib.ended
-            from import_batches ib
-            where ib.kind = 'attendance'
-              and ib.event_instance_id = ${alias}.id
-              and ib.session_date is not null
+            select o.date as session_date, b.as_of, b.created_at as recorded_at, b.id,
+                   0 as channel, true as is_current, b.ended
+            from import_batches b
+            join event_occurrences o on o.id = b.occurrence_id
+            where b.kind = 'attendance'
+              and o.event_id = ${alias}.id
             union all
-            select h.session_date, h.as_of, h.recorded_at, h.id,
+            select o.date, h.as_of, h.recorded_at, h.id,
                    1 as channel,
                    not exists (
                      select 1 from event_session_headcounts s where s.supersedes_id = h.id
                    ) as is_current,
                    h.ended
             from event_session_headcounts h
-            where h.event_instance_id = ${alias}.id
+            join event_occurrences o on o.id = h.occurrence_id
+            where o.event_id = ${alias}.id
           ) c
           group by c.session_date
         ) g
@@ -300,16 +329,22 @@ const LIST_SQL = `
 with page as (
   select ${EVENT_COLUMNS}
   ${EVENT_FROM}
-  where ($1::date is null or e.end_date >= $1::date)
-    and ($2::date is null or e.start_date <= $2::date)
-    and ($3::uuid is null or e.series_id = $3::uuid)
+  where (
+      $1::date is null
+      or (select max(o.date) from event_occurrences o where o.event_id = e.id) >= $1::date
+    )
+    and (
+      $2::date is null
+      or (select min(o.date) from event_occurrences o where o.event_id = e.id) <= $2::date
+    )
+    and ($3::uuid is null or e.id = $3::uuid)
     and (
       $4::text is null
       or lower(m.code) = lower($4::text)
       or lower(m.name) = lower($4::text)
     )
     and ($5::text is null or e.venue_type = $5::text)
-  order by e.start_date, e.id
+  order by occ.start_date nulls last, e.id
   limit $6::int offset $7::int
 )
 select p.*,
@@ -318,7 +353,7 @@ select p.*,
        coalesce(counts.session_captures, '[]'::jsonb) as session_captures
 from page p
 ${sessionCounts('p')}
-order by p.start_date, p.id
+order by p.start_date nulls last, p.id
 `;
 
 const DETAIL_SQL = `
@@ -332,88 +367,52 @@ where e.id = $1
 `;
 
 const ROW_SQL = `
-select e.id,
-       e.event_no,
-       e.name,
-       e.series_id,
-       e.timezone,
-       e.start_date,
-       e.end_date,
-       e.start_time,
-       e.end_time,
-       e.venue_type,
-       e.venue_name,
-       e.description,
-       e.status,
-       e.source,
-       e.tracks_members,
-       e.presbyter_only,
-       e.sessions
-from event_instances e
+select ${EVENT_COLUMNS}
+${EVENT_FROM}
 where e.id = $1
 `;
 
 const INSERT_SQL = `
-insert into event_instances (
-  event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, tracks_members, presbyter_only, sessions
+insert into events (
+  event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
+  venue_type, venue_name, start_time, end_time, tracks_members, status
 ) values (
-  $1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled', 'manual',
-  $11::boolean, $12::boolean, $13::jsonb
+  $1, $2, $3, null, $4, $5, $6, $7, $8, $9, $10, $11, 'active'
 )
 returning id
-`;
-
-const GENERATE_INSERT_SQL = `
-insert into event_instances (
-  event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-  venue_type, venue_name, description, status, source, tracks_members, presbyter_only, sessions
-) values (
-  $1, $2, $3, $4, $5, $5, '00:00', null,
-  'auditorium', null, null, 'scheduled', 'series', true, $6::boolean,
-  jsonb_build_array(jsonb_build_object(
-    'date', $5::date,
-    'startTime', '00:00',
-    'endTime', null,
-    'status', 'scheduled'
-  ))
-)
-on conflict (series_id, start_date) do nothing
-returning id
-`;
-
-const NEXT_EVENT_NO_SQL = `
-insert into event_no_counters (year, last_value)
-values ($1::int, 1)
-on conflict (year) do update set last_value = event_no_counters.last_value + 1
-returning last_value
 `;
 
 const UPDATE_SQL = `
-update event_instances
+update events
 set name = $2,
-    timezone = $3,
-    start_date = $4,
-    end_date = $5,
+    audience_id = $3,
+    presbyter_only = $4,
+    timezone = $5,
     start_time = $6,
     end_time = $7,
     venue_type = $8,
     venue_name = $9,
     description = $10,
-    tracks_members = $11::boolean,
-    presbyter_only = $12::boolean,
-    sessions = $13::jsonb
+    tracks_members = $11,
+    updated_at = now()
 where id = $1
 `;
 
+const INSERT_OCCURRENCE_SQL = `
+insert into event_occurrences (
+  event_id, date, start_time, end_time, status, note, venue_type
+) values ($1,$2,$3,$4,$5,$6,$7)
+on conflict (event_id, date) do update
+  set start_time = excluded.start_time,
+      end_time = excluded.end_time,
+      status = excluded.status,
+      note = excluded.note,
+      venue_type = excluded.venue_type,
+      updated_at = now()
+`;
+
 const VENUE_TYPES: readonly VenueType[] = ['auditorium', 'virtual', 'hybrid'];
-const EVENT_STATUSES: readonly EventStatus[] = [
-  'draft',
-  'scheduled',
-  'held',
-  'cancelled',
-  'archived',
-];
+const EVENT_STATUSES: readonly EventStatus[] = ['draft', 'active', 'archived'];
 const SESSION_STATUSES: readonly EventSessionStatus[] = ['scheduled', 'held', 'cancelled'];
 
 function isoDate(value: unknown): string {
@@ -446,16 +445,8 @@ function parseJsonArray(value: unknown): unknown[] {
   return [];
 }
 
-function deriveStatus(
-  stored: EventStatus,
-  startDate: string,
-  endDate: string,
-  today: string,
-): EventStatus {
-  if (stored === 'draft' || stored === 'cancelled' || stored === 'archived') return stored;
-  if (endDate < today) return 'held';
-  if (startDate > today) return 'scheduled';
-  return 'held';
+function asStatus(value: string): EventStatus {
+  return EVENT_STATUSES.includes(value as EventStatus) ? (value as EventStatus) : 'active';
 }
 
 function sessionSource(present: number, importedRows: number): SessionSource {
@@ -465,30 +456,13 @@ function sessionSource(present: number, importedRows: number): SessionSource {
   return 'mixed';
 }
 
-function asStatus(value: string): EventStatus {
-  return EVENT_STATUSES.includes(value as EventStatus) ? (value as EventStatus) : 'scheduled';
-}
-
 function asSessionStatus(value: string | undefined): EventSessionStatus {
   return SESSION_STATUSES.includes(value as EventSessionStatus)
     ? (value as EventSessionStatus)
     : 'scheduled';
 }
 
-function findSession(
-  sessions: unknown,
-  date: string,
-): { date: string; status: EventSessionStatus } | null {
-  for (const entry of parseJsonArray(sessions)) {
-    const session = entry as StoredSession;
-    if (isoDate(session.date) === date) {
-      return { date, status: asSessionStatus(session.status) };
-    }
-  }
-  return null;
-}
-
-function asVenueType(value: string): VenueType {
+function asVenueType(value: string | null | undefined): VenueType {
   return VENUE_TYPES.includes(value as VenueType) ? (value as VenueType) : 'auditorium';
 }
 
@@ -509,10 +483,10 @@ function normalizeSessions(
     const note = session.note?.trim();
     return {
       date: session.date,
-      startTime: session.startTime ?? startTime,
-      endTime: session.endTime === undefined ? endTime : session.endTime,
+      start_time: session.startTime ?? startTime,
+      end_time: session.endTime === undefined ? endTime : session.endTime,
       status: session.status ?? 'scheduled',
-      ...(session.venueType ? { venueType: session.venueType } : {}),
+      venue_type: session.venueType ?? null,
       note: note ? note : null,
     };
   });
@@ -572,20 +546,29 @@ function etagFor(row: EventRowCore): string {
     row.event_no,
     row.name,
     row.timezone,
-    isoDate(row.start_date),
-    isoDate(row.end_date),
+    isoOptionalDate(row.start_date),
+    isoOptionalDate(row.end_date),
     row.start_time,
     row.end_time,
     row.venue_type,
     row.venue_name,
     row.description,
     row.status,
-    row.source,
     row.tracks_members,
     row.presbyter_only,
     parseJsonArray(row.sessions),
   ]);
   return `"e${createHash('sha256').update(payload).digest('hex').slice(0, 24)}"`;
+}
+
+async function audienceIdFor(db: DbClient, presbyterOnly: boolean): Promise<string> {
+  const systemKey = presbyterOnly ? 'presbyters' : 'everyone';
+  const [audience] = await db.query<{ id: string }>(
+    'select id from audiences where system_key = $1',
+    [systemKey],
+  );
+  if (!audience) throw new Error(`The ${systemKey} audience is missing`);
+  return audience.id;
 }
 
 export class EventRepository {
@@ -635,25 +618,37 @@ export class EventRepository {
     const sessions = normalizeSessions(input.sessions, input.startTime, input.endTime ?? null);
     validateEventShape({ startDate, endDate, sessions });
     validateSessionReasons(sessions);
+    const audienceId = await audienceIdFor(this.db, input.presbyterOnly);
 
     let id: string;
     try {
-      const [row] = await this.db.query<{ id: string }>(INSERT_SQL, [
-        eventNo,
-        name,
-        timezone,
-        startDate,
-        endDate,
-        input.startTime,
-        input.endTime ?? null,
-        input.venueType,
-        input.venueName ?? null,
-        input.description ?? null,
-        input.tracksMembers,
-        input.presbyterOnly,
-        JSON.stringify(sessions),
-      ]);
-      id = row!.id;
+      id = await this.db.transaction(async (tx) => {
+        const [row] = await tx.query<{ id: string }>(INSERT_SQL, [
+          eventNo,
+          name,
+          audienceId,
+          input.presbyterOnly,
+          timezone,
+          input.description ?? null,
+          input.venueType,
+          input.venueName ?? null,
+          input.startTime,
+          input.endTime ?? null,
+          input.tracksMembers,
+        ]);
+        for (const session of sessions) {
+          await tx.query(INSERT_OCCURRENCE_SQL, [
+            row!.id,
+            isoDate(session.date),
+            session.start_time ?? input.startTime,
+            session.end_time ?? null,
+            asSessionStatus(session.status),
+            session.note ?? null,
+            session.venue_type ?? null,
+          ]);
+        }
+        return row!.id;
+      });
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError(`Event number ${eventNo} is already in use`);
@@ -665,13 +660,13 @@ export class EventRepository {
   }
 
   /**
-   * Mint one event per resolved series occurrence in [from, to]. Existing
-   * (series, date) pairs are skipped and never rewritten, so re-running is a
-   * no-op.
+   * Generate occurrences for every active series parent in [from, to]. An
+   * existing (event, date) pair is skipped and never rewritten, so re-running
+   * is a no-op.
    */
   async generate(from: string, to: string, actor: string): Promise<GenerateEventsResult> {
-    // event_instances has no created_by column, so the actor is accepted for
-    // route consistency and deliberately not persisted.
+    // events has no created_by column, so the actor is accepted for route
+    // consistency and deliberately not persisted.
     void actor;
 
     assertDate(from, 'from');
@@ -685,7 +680,13 @@ export class EventRepository {
         timezone: string;
         presbyter_only: boolean;
       }>(
-        'select id, name, timezone, presbyter_only from event_series where archived_at is null order by id',
+        `select e.id, e.name, e.timezone, e.presbyter_only
+           from events e
+          where e.status = 'active'
+            and exists (
+              select 1 from event_recurrence_versions rv where rv.event_id = e.id
+            )
+          order by e.id`,
       );
 
       const eventIds: string[] = [];
@@ -694,69 +695,41 @@ export class EventRepository {
 
       for (const row of series) {
         const occurrences = await resolveSeriesOccurrences(tx, row.id, from, to);
-        const existingRows = await tx.query<{
-          id: string;
-          start_date: unknown;
-          event_no: string | null;
-        }>(
-          `select id, start_date, event_no from event_instances
-           where series_id = $1 and start_date between $2::date and $3::date`,
+        const existingRows = await tx.query<{ date: unknown }>(
+          `select o.date
+             from event_occurrences o
+            where o.event_id = $1
+              and o.date between $2::date and $3::date`,
           [row.id, from, to],
         );
-        const existing = new Map(existingRows.map((event) => [isoDate(event.start_date), event]));
+        const existing = new Set(existingRows.map((event) => isoDate(event.date)));
 
+        let added = 0;
         for (const date of occurrences) {
-          const current = existing.get(date);
-          if (current) {
-            // A manual attendance entry can create the instance before generation
-            // runs; backfill its number so an attendance import can target it.
-            if (current.event_no == null) {
-              const eventNo = await this.mintEventNo(tx, date);
-              await tx.query(
-                'update event_instances set event_no = $2 where id = $1 and event_no is null',
-                [current.id, eventNo],
-              );
-            }
+          if (existing.has(date)) {
             skipped += 1;
             continue;
           }
-
-          const eventNo = await this.mintEventNo(tx, date);
-          const [inserted] = await tx.query<{ id: string }>(GENERATE_INSERT_SQL, [
-            eventNo,
-            row.id,
-            row.name,
-            row.timezone,
-            date,
-            row.presbyter_only,
-          ]);
-
+          const [inserted] = await tx.query<{ id: string }>(
+            `insert into event_occurrences (
+               event_id, date, start_time, end_time, status
+             ) values ($1,$2,'00:00',null,'scheduled')
+             on conflict (event_id, date) do nothing
+             returning id`,
+            [row.id, date],
+          );
           if (inserted) {
             created += 1;
-            eventIds.push(inserted.id);
+            added += 1;
           } else {
             skipped += 1;
           }
         }
+        if (added > 0) eventIds.push(row.id);
       }
 
       return { created, skipped, eventIds };
     });
-  }
-
-  /** Mint `EVT-<year>-<NNN>` from the per-year counter, skipping manual numbers. */
-  private async mintEventNo(tx: DbClient, date: string): Promise<string> {
-    const year = Number(date.slice(0, 4));
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const [counter] = await tx.query<{ last_value: number | string }>(NEXT_EVENT_NO_SQL, [year]);
-      const eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
-      // A manually assigned EVT-YYYY-NNN can outrun the counter; try the next number.
-      const [taken] = await tx.query('select 1 from event_instances where event_no = $1', [
-        eventNo,
-      ]);
-      if (!taken) return eventNo;
-    }
-    throw new ConflictError(`Could not mint a unique event number for ${date}`);
   }
 
   async update(
@@ -766,8 +739,14 @@ export class EventRepository {
   ): Promise<EventDetail> {
     const current = await this.loadRow(id);
     if (!current) throw new NotFoundError(`Event ${id} was not found`);
-    if (current.status === 'cancelled' || current.status === 'archived') {
-      throw new ConflictError('A cancelled or archived event is read-only');
+    if (current.status === 'archived') {
+      throw new ConflictError('An archived event is read-only');
+    }
+    if (
+      Number(current.occurrence_count ?? 0) > 0 &&
+      Number(current.cancelled_count ?? 0) === Number(current.occurrence_count ?? 0)
+    ) {
+      throw new ConflictError('A cancelled event is read-only');
     }
     if (expectedEtag && expectedEtag !== etagFor(current)) {
       throw new ConflictError('The event has changed since it was read; refetch it and retry');
@@ -776,34 +755,75 @@ export class EventRepository {
     const timezone = input.timezone ?? current.timezone;
     if (input.timezone !== undefined) todayIn(input.timezone);
 
-    const startDate = input.startDate ?? isoDate(current.start_date);
-    const endDate = input.endDate ?? isoDate(current.end_date);
+    const startDate = input.startDate ?? isoOptionalDate(current.start_date) ?? todayUtc();
+    const endDate = input.endDate ?? isoOptionalDate(current.end_date) ?? startDate;
     const startTime = input.startTime ?? current.start_time ?? '';
     const endTime = input.endTime === undefined ? current.end_time : input.endTime;
-    const sessions: Array<{ date?: unknown }> = input.sessions
+    const sessions: StoredSession[] = input.sessions
       ? normalizeSessions(input.sessions, startTime, endTime)
-      : (parseJsonArray(current.sessions) as Array<{ date?: unknown }>);
+      : (parseJsonArray(current.sessions) as StoredSession[]);
     validateEventShape({ startDate, endDate, sessions });
-    if (input.sessions) validateSessionReasons(sessions as StoredSession[]);
+    if (input.sessions) validateSessionReasons(sessions);
 
     const name = input.name !== undefined ? input.name.trim() : current.name;
     if (!name) throw new ValidationError('name is required');
+    const presbyterOnly = input.presbyterOnly ?? current.presbyter_only;
+    const audienceId = await audienceIdFor(this.db, presbyterOnly);
 
-    await this.db.query(UPDATE_SQL, [
-      id,
-      name,
-      timezone,
-      startDate,
-      endDate,
-      startTime,
-      endTime,
-      input.venueType ?? asVenueType(current.venue_type),
-      input.venueName !== undefined ? input.venueName : current.venue_name,
-      input.description !== undefined ? input.description : current.description,
-      input.tracksMembers ?? current.tracks_members,
-      input.presbyterOnly ?? current.presbyter_only,
-      JSON.stringify(sessions),
-    ]);
+    await this.db.transaction(async (tx) => {
+      await tx.query(UPDATE_SQL, [
+        id,
+        name,
+        audienceId,
+        presbyterOnly,
+        timezone,
+        startTime,
+        endTime,
+        input.venueType ?? asVenueType(current.venue_type),
+        input.venueName !== undefined ? input.venueName : current.venue_name,
+        input.description !== undefined ? input.description : current.description,
+        input.tracksMembers ?? current.tracks_members,
+      ]);
+
+      const existingRows = await tx.query<{ id: string; date: unknown }>(
+        'select id, date from event_occurrences where event_id = $1',
+        [id],
+      );
+      const wanted = new Set(sessions.map((session) => isoDate(session.date)));
+      for (const session of sessions) {
+        const date = isoDate(session.date);
+        await tx.query(INSERT_OCCURRENCE_SQL, [
+          id,
+          date,
+          session.start_time ?? startTime,
+          session.end_time ?? null,
+          asSessionStatus(session.status),
+          session.note ?? null,
+          session.venue_type ?? null,
+        ]);
+      }
+      for (const occurrence of existingRows) {
+        const date = isoDate(occurrence.date);
+        if (wanted.has(date)) continue;
+        const [child] = await tx.query<{ exists: boolean }>(
+          `select exists (select 1 from attendance where occurrence_id = $1)
+               or exists (select 1 from event_session_headcounts where occurrence_id = $1)
+               or exists (select 1 from event_session_offering_counts where occurrence_id = $1)
+               or exists (select 1 from registration_requests where occurrence_id = $1)
+               or exists (select 1 from attendance_codes where occurrence_id = $1)
+               or exists (select 1 from clocking_delegations where occurrence_id = $1)
+               or exists (select 1 from import_batches where occurrence_id = $1)
+               or exists (select 1 from event_offerings where occurrence_id = $1) as exists`,
+          [occurrence.id],
+        );
+        if (child?.exists) {
+          throw new ValidationError(
+            `The occurrence on ${date} cannot be removed while rows reference it`,
+          );
+        }
+        await tx.query('delete from event_occurrences where id = $1', [occurrence.id]);
+      }
+    });
 
     return (await this.get(id))!;
   }
@@ -813,11 +833,17 @@ export class EventRepository {
 
     const [event] = await this.db.query<{
       id: string;
-      sessions: unknown;
       presbyter_only: boolean;
-    }>('select id, sessions, presbyter_only from event_instances where id = $1', [eventId]);
+      occurrence_id: string | null;
+    }>(
+      `select e.id, e.presbyter_only, o.id as occurrence_id
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
+    );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (!findSession(event.sessions, sessionDate)) {
+    if (!event.occurrence_id) {
       throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
     }
 
@@ -835,9 +861,9 @@ export class EventRepository {
               to_char(a.session_time, 'HH24:MI') as session_time
        from attendance a
        join members m on m.id = a.member_id
-       where a.event_instance_id = $1 and a.session_date = $2
+       where a.occurrence_id = $1
        order by lower(concat_ws(' ', m.first_name, m.last_name)), m.member_no`,
-      [eventId, sessionDate],
+      [event.occurrence_id],
     );
 
     const [register] = await this.db.query<{ count: number | string }>(
@@ -883,21 +909,35 @@ export class EventRepository {
         tracks_members: boolean;
         presbyter_only: boolean;
         timezone: string;
-        sessions: unknown;
+        occurrence_id: string | null;
+        occurrence_status: string | null;
+        occurrence_count: number | string;
+        cancelled_count: number | string;
       }>(
-        'select status, tracks_members, presbyter_only, timezone, sessions from event_instances where id = $1',
-        [eventId],
+        `select e.status, e.tracks_members, e.presbyter_only, e.timezone,
+                o.id as occurrence_id, o.status as occurrence_status,
+                (select count(*) from event_occurrences x where x.event_id = e.id)
+                  as occurrence_count,
+                (select count(*) from event_occurrences x
+                  where x.event_id = e.id and x.status = 'cancelled')
+                  as cancelled_count
+           from events e
+           left join event_occurrences o on o.event_id = e.id and o.date = $2
+          where e.id = $1`,
+        [eventId, sessionDate],
       );
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-      if (event.status === 'cancelled' || event.status === 'archived') {
+      if (
+        event.status === 'archived' ||
+        (Number(event.occurrence_count) > 0 &&
+          Number(event.cancelled_count) === Number(event.occurrence_count))
+      ) {
         throw new ConflictError('A cancelled or archived event is read-only');
       }
-
-      const session = findSession(event.sessions, sessionDate);
-      if (!session) {
+      if (!event.occurrence_id) {
         throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
       }
-      if (session.status === 'cancelled') {
+      if (event.occurrence_status === 'cancelled') {
         throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
       }
       if (await sessionIsClosed(tx, eventId, sessionDate)) {
@@ -941,8 +981,8 @@ export class EventRepository {
       const [existing] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
         `select id, source
          from attendance
-         where event_instance_id = $1 and session_date = $2 and member_id = $3`,
-        [eventId, sessionDate, member.id],
+         where occurrence_id = $1 and member_id = $2`,
+        [event.occurrence_id, member.id],
       );
 
       let row: { id: string; source: 'import' | 'manual' };
@@ -962,10 +1002,10 @@ export class EventRepository {
       } else {
         try {
           const [inserted] = await tx.query<{ id: string; source: 'import' | 'manual' }>(
-            `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-             values ($1,$2,$3,'manual',$4)
+            `insert into attendance (member_id, occurrence_id, source, created_by)
+             values ($1,$2,'manual',$3)
              returning id, source`,
-            [member.id, eventId, sessionDate, actor],
+            [member.id, event.occurrence_id, actor],
           );
           row = inserted!;
         } catch (error) {
@@ -992,30 +1032,33 @@ export class EventRepository {
 
   async deleteAttendance(eventId: string, attendanceId: string, actor: string): Promise<void> {
     await this.db.transaction(async (tx) => {
-      const [event] = await tx.query<{
-        status: string;
-        sessions: unknown;
-      }>('select status, sessions from event_instances where id = $1', [eventId]);
+      const [event] = await tx.query<{ status: string }>(
+        'select status from events where id = $1',
+        [eventId],
+      );
       if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-      if (event.status === 'cancelled' || event.status === 'archived') {
-        throw new ConflictError('A cancelled or archived event is read-only');
+      if (event.status === 'archived') {
+        throw new ConflictError('An archived event is read-only');
       }
 
       const [entry] = await tx.query<{
         member_id: string;
+        occurrence_id: string;
+        occurrence_status: string;
         session_date: unknown;
         source: 'import' | 'manual';
       }>(
-        `select member_id, session_date, source
-         from attendance
-         where id = $1 and event_instance_id = $2`,
+        `select a.member_id, a.occurrence_id, o.status as occurrence_status,
+                o.date as session_date, a.source
+           from attendance a
+           join event_occurrences o on o.id = a.occurrence_id
+          where a.id = $1 and o.event_id = $2`,
         [attendanceId, eventId],
       );
       if (!entry) throw new NotFoundError(`Attendance ${attendanceId} was not found`);
 
       const sessionDate = isoDate(entry.session_date);
-      const session = findSession(event.sessions, sessionDate);
-      if (session?.status === 'cancelled') {
+      if (entry.occurrence_status === 'cancelled') {
         throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
       }
       if (await sessionIsClosed(tx, eventId, sessionDate)) {
@@ -1027,10 +1070,10 @@ export class EventRepository {
       await tx.query('delete from attendance where id = $1', [attendanceId]);
       if (entry.source === 'import') {
         await tx.query(
-          `insert into attendance_suppressions (member_id, event_instance_id, session_date, suppressed_by)
-           values ($1,$2,$3,$4)
+          `insert into attendance_suppressions (member_id, occurrence_id, suppressed_by)
+           values ($1,$2,$3)
            on conflict do nothing`,
-          [entry.member_id, eventId, isoDate(entry.session_date), actor],
+          [entry.member_id, entry.occurrence_id, actor],
         );
       }
     });
@@ -1041,10 +1084,10 @@ export class EventRepository {
     return row ?? null;
   }
 
-  private toItem(row: EventRow, today: string, offerings: EventOfferingItem[]): EventItem {
-    const startDate = isoDate(row.start_date);
-    const endDate = isoDate(row.end_date);
-    const status = deriveStatus(asStatus(row.status), startDate, endDate, today);
+  private toItem(row: EventRow, _today: string, offerings: EventOfferingItem[]): EventItem {
+    const startDate = isoOptionalDate(row.start_date);
+    const endDate = isoOptionalDate(row.end_date);
+    const status = asStatus(row.status);
     const startTime = row.start_time ?? '';
     const endTime = row.end_time ?? null;
 
@@ -1083,14 +1126,14 @@ export class EventRepository {
       const date = isoDate(session.date);
       const count = counts.get(date) ?? { present: 0, importedRows: 0 };
       const sessionVenueType =
-        session.venueType && VENUE_TYPES.includes(session.venueType as VenueType)
-          ? (session.venueType as VenueType)
+        session.venue_type && VENUE_TYPES.includes(session.venue_type as VenueType)
+          ? (session.venue_type as VenueType)
           : undefined;
 
       return {
         date,
-        startTime: session.startTime ?? startTime,
-        endTime: session.endTime ?? endTime,
+        startTime: session.start_time ?? startTime,
+        endTime: session.end_time ?? endTime,
         status: asSessionStatus(session.status),
         ...(sessionVenueType ? { venueType: sessionVenueType } : {}),
         capture: capturesByDate.get(date) ?? null,
@@ -1106,21 +1149,21 @@ export class EventRepository {
       id: row.id,
       eventNo: row.event_no,
       name: row.name,
-      seriesId: row.series_id,
+      seriesId: row.is_series ? row.id : null,
       ministry:
         row.ministry_code && row.ministry_name
           ? { code: row.ministry_code, name: row.ministry_name }
           : null,
       timezone: row.timezone,
-      startDate,
-      endDate,
+      startDate: startDate ?? '',
+      endDate: endDate ?? '',
       startTime,
       endTime: row.end_time,
       venueType: asVenueType(row.venue_type),
       venueName: row.venue_name,
       description: row.description,
       status,
-      source: row.source as EventSource,
+      source: row.is_series ? 'series' : 'manual',
       tracksMembers: row.tracks_members,
       presbyterOnly: row.presbyter_only,
       sessions,

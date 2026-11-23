@@ -60,9 +60,9 @@ type StoredPledgeRow = PledgeRow & {
 
 type EventRow = {
   status: string;
-  sessions: unknown;
   end_date: unknown;
-  series_id: string | null;
+  occurrence_count: number | string;
+  cancelled_count: number | string;
 };
 
 type OfferingTermsRow = {
@@ -117,7 +117,7 @@ const PLEDGE_COLUMNS = `
   p.offering_id,
   t.name as terms_name,
   t.kind as offering_kind,
-  p.event_instance_id,
+  p.event_id as event_instance_id,
   e.name as event_name,
   p.session_date,
   p.amount_minor,
@@ -141,7 +141,7 @@ const PLEDGE_FROM = `
   from pledges p
   join members m on m.id = p.member_id
   join members o on o.id = p.officer_member_id
-  join event_instances e on e.id = p.event_instance_id
+  join events e on e.id = p.event_id
   join lateral (
     select name, kind
       from offering_terms t
@@ -187,29 +187,6 @@ function shiftDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00Z`);
   shifted.setUTCDate(shifted.getUTCDate() + days);
   return shifted.toISOString().slice(0, 10);
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function findSession(sessions: unknown, date: string): { status: string } | null {
-  for (const entry of parseJsonArray(sessions)) {
-    const session = entry as { date?: unknown; status?: unknown };
-    if (isoDate(session.date) === date) {
-      return { status: String(session.status ?? 'scheduled') };
-    }
-  }
-  return null;
 }
 
 /** The effective expiry is the earliest date among the active attachments. */
@@ -314,7 +291,10 @@ export class PledgeRepository {
 
     const event = await this.resolveEvent(this.db, input.eventId);
     if (sessionDate !== null) {
-      const session = findSession(event.sessions, sessionDate);
+      const [session] = await this.db.query<{ status: string }>(
+        'select status from event_occurrences where event_id = $1 and date = $2',
+        [input.eventId, sessionDate],
+      );
       if (!session) {
         throw new SessionNotInEventError(`Event ${input.eventId} has no session on ${sessionDate}`);
       }
@@ -329,7 +309,7 @@ export class PledgeRepository {
     const attachments = await this.db.query<AttachmentExpiryRow>(
       `select a.available_until as attachment_available_until,
               t.available_until as terms_available_until
-         from event_instance_offerings a
+         from event_offerings a
          join lateral (
            select available_until
              from offering_terms t
@@ -339,11 +319,17 @@ export class PledgeRepository {
          ) t on true
         where a.detached_on is null
           and a.offering_id = $1
+          and a.event_id = $2
           and (
-            a.event_instance_id = $2::uuid
-            or ($3::uuid is not null and a.series_id = $3::uuid)
+            a.occurrence_id is null
+            or (
+              $3::date is not null
+              and a.occurrence_id = (
+                select id from event_occurrences where event_id = $2 and date = $3
+              )
+            )
           )`,
-      [input.offeringId, input.eventId, event.series_id],
+      [input.offeringId, input.eventId, sessionDate],
     );
     if (attachments.length === 0) {
       throw new OfferingNotOnEventError(
@@ -390,7 +376,7 @@ export class PledgeRepository {
       const id = await this.db.transaction(async (tx) => {
         const [inserted] = await tx.query<{ id: string }>(
           `insert into pledges (
-             member_id, offering_id, event_instance_id, session_date, amount_minor, currency,
+             member_id, offering_id, event_id, session_date, amount_minor, currency,
              expected_on, officer_member_id, status, reason, terms_version, idempotency_key,
              created_by
            ) values ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10,$11,$12)
@@ -765,14 +751,24 @@ export class PledgeRepository {
 
   private async resolveEvent(db: DbClient, eventId: string): Promise<EventRow> {
     const [row] = await db.query<EventRow>(
-      `select status, sessions, end_date, series_id
-         from event_instances
-        where id = $1`,
+      `select e.status,
+              (select max(o.date) from event_occurrences o where o.event_id = e.id) as end_date,
+              (select count(*) from event_occurrences o where o.event_id = e.id)
+                as occurrence_count,
+              (select count(*) from event_occurrences o
+                where o.event_id = e.id and o.status = 'cancelled') as cancelled_count
+         from events e
+        where e.id = $1`,
       [eventId],
     );
     if (!row) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (row.status === 'cancelled' || row.status === 'archived') {
-      throw new EventNotActiveError(`Event ${eventId} is ${row.status} and cannot take pledges`);
+    const allCancelled =
+      Number(row.occurrence_count) > 0 &&
+      Number(row.cancelled_count) === Number(row.occurrence_count);
+    if (row.status === 'archived' || allCancelled) {
+      throw new EventNotActiveError(
+        `Event ${eventId} is cancelled or archived and cannot take pledges`,
+      );
     }
     return row;
   }

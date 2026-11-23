@@ -250,12 +250,19 @@ describe('0022 headcount lanes backfill', () => {
       const migration = MIGRATIONS.find((entry) => entry.version === '0022_headcount_lanes');
       expect(migration).toBeTruthy();
       await db.exec(migration!.sql);
+      // The parent model lands after the lane reshape; the repository reads it.
+      for (const later of MIGRATIONS) {
+        if (later.version > '0022_headcount_lanes') await db.exec(later.sql);
+      }
 
       // The reshape tolerates the duplicate tips: no row added, none rewritten,
       // none deleted, and both stay non-superseded.
       const rows = await db.query<{ id: string; supersedes_id: string | null }>(
-        `select id, supersedes_id from event_session_headcounts
-            where event_instance_id = $1 order by as_of`,
+        `select h.id, h.supersedes_id
+           from event_session_headcounts h
+           join event_occurrences o on o.id = h.occurrence_id
+          where o.event_id = $1
+          order by h.as_of`,
         [eventId],
       );
       expect(rows).toEqual([

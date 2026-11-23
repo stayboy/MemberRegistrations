@@ -28,6 +28,7 @@ let harness: TestApp;
 let series: SeriesRepository;
 let mainSeriesId: string;
 let endedSeriesId: string;
+let draftSeriesId: string;
 
 async function insertMember(input: {
   memberNo: string;
@@ -64,37 +65,35 @@ async function insertEvent(input: {
     date: session.date,
     startTime: '09:00',
     endTime: null,
-    status: session.status ?? 'scheduled',
+    status: input.status === 'cancelled' ? 'cancelled' : (session.status ?? 'scheduled'),
     note: session.status === 'cancelled' ? 'Seeded cancellation' : null,
   }));
-  const dates = input.sessions.map((session) => session.date).sort();
-  const startDate = input.startDate ?? dates[0];
-  const endDate = input.startDate ?? dates[dates.length - 1];
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, name, series_id, timezone, start_date, end_date, start_time,
-       status, source, sessions, tracks_members, presbyter_only
-     ) values ($1,$2,$3,'UTC',$4::date,$5::date,'09:00',$6,'series',$7::jsonb,$8,$9)
-     returning id`,
-    [
-      input.eventNo,
-      `Event ${input.eventNo}`,
-      mainSeriesId,
-      startDate,
-      endDate,
-      input.status ?? 'scheduled',
-      JSON.stringify(sessions),
-      input.tracksMembers ?? true,
-      input.presbyterOnly ?? false,
-    ],
-  );
-  return row!.id;
+  for (const session of sessions) {
+    await harness.db.query(
+      `insert into event_occurrences (event_id, date, start_time, end_time, status, note)
+       values ($1,$2,$3,$4,$5,$6)
+       on conflict (event_id, date) do update
+         set start_time = excluded.start_time,
+             end_time = excluded.end_time,
+             status = excluded.status,
+             note = excluded.note`,
+      [
+        mainSeriesId,
+        session.date,
+        session.startTime,
+        session.endTime,
+        session.status,
+        session.note,
+      ],
+    );
+  }
+  return mainSeriesId;
 }
 
 async function insertAttendance(eventId: string, date: string, memberId: string): Promise<void> {
   await harness.db.query(
-    `insert into attendance (event_instance_id, session_date, member_id, source, created_by)
-     values ($1,$2::date,$3,'manual','seed')`,
+    `insert into attendance (occurrence_id, member_id, source, created_by)
+     values ((select id from event_occurrences where event_id = $1 and date = $2),$3,'manual','seed')`,
     [eventId, date, memberId],
   );
 }
@@ -113,10 +112,10 @@ async function insertOffering(name: string, currency = 'GHS'): Promise<string> {
 
 async function attachToSeries(seriesId: string, offeringId: string): Promise<void> {
   await harness.db.query(
-    `insert into event_instance_offerings (series_id, offering_id, attached_by)
+    `insert into event_offerings (event_id, offering_id, attached_by)
      select $1,$2,'seed' where not exists (
-       select 1 from event_instance_offerings
-        where series_id = $1 and offering_id = $2 and detached_on is null
+       select 1 from event_offerings
+        where event_id = $1 and offering_id = $2 and detached_on is null
      )`,
     [seriesId, offeringId],
   );
@@ -132,7 +131,7 @@ async function insertContribution(input: {
 }): Promise<void> {
   await harness.db.query(
     `insert into contributions (
-       member_id, visitor_name, visitor_phone_hash, offering_id, event_instance_id,
+       member_id, visitor_name, visitor_phone_hash, offering_id, event_id,
        session_date, amount_minor, currency, channel, status, reference, idempotency_key,
        terms_version, created_by
      ) values ($1,$2,$3,$4,$5,$6::date,$7,$8,'manual','paid',$9,$10,1,'seed')`,
@@ -163,7 +162,7 @@ async function insertPledge(input: {
 }): Promise<void> {
   const [pledge] = await harness.db.query<{ id: string }>(
     `insert into pledges (
-       member_id, offering_id, event_instance_id, session_date, amount_minor, currency,
+       member_id, offering_id, event_id, session_date, amount_minor, currency,
        expected_on, officer_member_id, status, terms_version, idempotency_key, created_by
      ) values ($1,$2,$3,$4::date,$5,'GHS',$6::date,$7,'pending',1,$8,'seed')
      returning id`,
@@ -217,6 +216,25 @@ beforeAll(async () => {
   );
   endedSeriesId = ended.id;
 
+  const draft = await series.create(
+    {
+      name: 'Draft Series',
+      timezone: 'UTC',
+      effectiveFrom: held1,
+      rrule: 'FREQ=DAILY',
+      endsOn: held2,
+    },
+    'seed',
+  );
+  draftSeriesId = draft.id;
+  await harness.db.query(
+    `insert into event_occurrences (event_id, date, start_time, end_time, status)
+     values ($1,$2,'09:00',null,'scheduled'), ($1,$3,'09:00',null,'scheduled')
+     on conflict (event_id, date) do nothing`,
+    [draftSeriesId, held1, held2],
+  );
+  await harness.db.query(`update events set status = 'draft' where id = $1`, [draftSeriesId]);
+
   const m1 = await insertMember({
     memberNo: 'SUM-1',
     joinedOn: shiftDate(today, -365),
@@ -244,7 +262,7 @@ beforeAll(async () => {
     status: 'cancelled',
     sessions: [{ date: shiftDate(today, -10) }],
   });
-  const presbyterEvent = await insertEvent({
+  await insertEvent({
     eventNo: 'SUM-EVT-5',
     sessions: [{ date: held2 }],
     presbyterOnly: true,
@@ -253,7 +271,6 @@ beforeAll(async () => {
 
   await insertAttendance(heldEvent, held1, m1);
   await insertAttendance(heldEvent, held2, m1);
-  await insertAttendance(presbyterEvent, held2, m1);
   // A headcount-only session takes no member rows.
   void headcountEvent;
   void mixedEvent;
@@ -290,9 +307,9 @@ beforeAll(async () => {
 
   const [count] = await harness.db.query<{ id: string }>(
     `insert into event_session_offering_counts (
-       event_instance_id, offering_id, session_date, currency, terms_version,
+       occurrence_id, offering_id, session_date, currency, terms_version,
        as_of, recorded_by
-     ) values ($1,$2,$3::date,'GHS',1, now(),'seed')
+     ) values ((select id from event_occurrences where event_id = $1 and date = $3),$2,$3::date,'GHS',1, now(),'seed')
      returning id`,
     [heldEvent, freewill, held2],
   );
@@ -349,9 +366,9 @@ describe('series window summary', () => {
       from,
       to,
       attendance: {
-        memberSessions: { held: 3, expected: 4, present: 3, rate: 0.75 },
-        lastHeld: { date: held2, expected: 3, present: 2 },
-        headcountSessions: { held: 1 },
+        memberSessions: { held: 2, expected: 3, present: 2, rate: 2 / 3 },
+        lastHeld: { date: held2, expected: 2, present: 1 },
+        headcountSessions: { held: 0 },
         cancelled: 2,
         upcoming: 1,
       },
@@ -369,6 +386,20 @@ describe('series window summary', () => {
     expect(response.body.nextOccurrence).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(response.body.nextOccurrence >= today).toBe(true);
     expect(response.body.nextOccurrence <= shiftDate(today, 90)).toBe(true);
+  });
+
+  it('excludes a draft parent from held, cancelled and upcoming counts', async () => {
+    const response = await request(harness.app)
+      .get(`/v1/series/${draftSeriesId}/summary?from=${from}&to=${to}`)
+      .set(readHeaders);
+    expect(response.status).toBe(200);
+    expect(response.body.attendance).toMatchObject({
+      memberSessions: { held: 0, expected: 0, present: 0, rate: null },
+      lastHeld: null,
+      headcountSessions: { held: 0 },
+      cancelled: 0,
+      upcoming: 0,
+    });
   });
 
   it('returns a null next occurrence for a series that ended', async () => {
@@ -495,22 +526,15 @@ describe.skipIf(!testDatabaseUrl)('series window summary on the pooled pg driver
        returning id`,
       [shiftDate(today, -365)],
     );
-    const [event] = await pooled.query<{ id: string }>(
-      `insert into event_instances (
-         event_no, name, series_id, timezone, start_date, end_date, start_time,
-         status, source, sessions
-       ) values ('PG-SUM-EVT-1','Pooled Event',$1,'UTC',$2::date,$2::date,'09:00','scheduled','series',$3::jsonb)
-       returning id`,
-      [
-        seriesId,
-        held2,
-        JSON.stringify([{ date: held2, startTime: '09:00', endTime: null, status: 'scheduled' }]),
-      ],
+    await pooled.query(
+      `insert into event_occurrences (event_id, date, start_time, end_time, status)
+       values ($1,$2::date,'09:00',null,'scheduled')`,
+      [seriesId, held2],
     );
     await pooled.query(
-      `insert into attendance (event_instance_id, session_date, member_id, source, created_by)
-       values ($1,$2::date,$3,'manual','seed')`,
-      [event!.id, held2, member!.id],
+      `insert into attendance (occurrence_id, member_id, source, created_by)
+       values ((select id from event_occurrences where event_id = $1 and date = $2),$3,'manual','seed')`,
+      [seriesId, held2, member!.id],
     );
     const [offering] = await pooled.query<{ id: string }>(
       'insert into offerings default values returning id',
@@ -521,16 +545,16 @@ describe.skipIf(!testDatabaseUrl)('series window summary on the pooled pg driver
       [offering!.id],
     );
     await pooled.query(
-      `insert into event_instance_offerings (series_id, offering_id, attached_by)
+      `insert into event_offerings (event_id, offering_id, attached_by)
        values ($1,$2,'seed')`,
       [seriesId, offering!.id],
     );
     await pooled.query(
       `insert into contributions (
-         member_id, offering_id, event_instance_id, session_date, amount_minor, currency,
+         member_id, offering_id, event_id, session_date, amount_minor, currency,
          channel, status, reference, idempotency_key, terms_version, created_by
        ) values ($1,$2,$3,$4::date,4200,'GHS','manual','paid','PG-SUM-REF','PG-SUM-KEY',1,'seed')`,
-      [member!.id, offering!.id, event!.id, held2],
+      [member!.id, offering!.id, seriesId, held2],
     );
   });
 

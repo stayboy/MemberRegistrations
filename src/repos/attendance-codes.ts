@@ -81,7 +81,8 @@ interface StoredCodeRow extends Row {
   id: string;
   code_hash: string;
   purpose: CodePurpose;
-  event_instance_id: string;
+  occurrence_id: string;
+  event_id: string;
   session_date: string | Date;
   issued_at: Date | string;
   expires_at: Date | string;
@@ -89,11 +90,6 @@ interface StoredCodeRow extends Row {
   used_by_member_id: string | null;
   registration_request_id: string | null;
   voided_at: Date | string | null;
-}
-
-interface StoredSession {
-  date?: unknown;
-  status?: string;
 }
 
 function isoDate(value: unknown): string {
@@ -104,28 +100,6 @@ function isoDate(value: unknown): string {
 function isoTimestamp(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return value instanceof Date ? value.toISOString() : String(value);
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function asSession(value: unknown): { date: string; status: string } | null {
-  const session = value as StoredSession;
-  if (session.date === null || session.date === undefined) return null;
-  return {
-    date: isoDate(session.date),
-    status: typeof session.status === 'string' ? session.status : 'scheduled',
-  };
 }
 
 /**
@@ -148,15 +122,15 @@ export class AttendanceCodeRepository {
     actor: string,
   ): Promise<IssuedCode> {
     const sessionDate = assertDate(input.sessionDate, 'sessionDate');
-    await this.requireSession(input.eventId, sessionDate);
+    const occurrenceId = await this.requireSession(input.eventId, sessionDate);
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const [row] = await this.db.query<{ id: string; expires_at: Date | string }>(
       `insert into attendance_codes (
-         code_hash, purpose, event_instance_id, session_date, issued_by, expires_at
+         code_hash, purpose, occurrence_id, session_date, issued_by, expires_at
        ) values ($1,$2,$3,$4,$5, now() + make_interval(mins => $6::int))
        returning id, expires_at`,
-      [this.hash(code), input.purpose, input.eventId, sessionDate, actor, CODE_TTL_MINUTES],
+      [this.hash(code), input.purpose, occurrenceId, sessionDate, actor, CODE_TTL_MINUTES],
     );
 
     return {
@@ -175,12 +149,13 @@ export class AttendanceCodeRepository {
   ): Promise<{ items: CodeListItem[] }> {
     const date = assertDate(sessionDate, 'sessionDate');
     const rows = await this.db.query<StoredCodeRow & { used_by_member_no: string | null }>(
-      `select c.id, c.code_hash, c.purpose, c.event_instance_id, c.session_date,
+      `select c.id, c.code_hash, c.purpose, c.occurrence_id, o.event_id, c.session_date,
               c.issued_at, c.expires_at, c.used_at, c.used_by_member_id,
               c.registration_request_id, c.voided_at, m.member_no as used_by_member_no
          from attendance_codes c
+         join event_occurrences o on o.id = c.occurrence_id
          left join members m on m.id = c.used_by_member_id
-        where c.event_instance_id = $1 and c.session_date = $2
+        where o.event_id = $1 and o.date = $2
         order by c.issued_at desc, c.id desc`,
       [eventId, date],
     );
@@ -207,11 +182,12 @@ export class AttendanceCodeRepository {
     );
     if (updated.length > 0) {
       const [row] = await this.db.query<StoredCodeRow & { used_by_member_no: string | null }>(
-        `select c.id, c.code_hash, c.purpose, c.event_instance_id, c.session_date,
+        `select c.id, c.code_hash, c.purpose, c.occurrence_id, o.event_id, c.session_date,
                 c.issued_at, c.expires_at, c.used_at, c.used_by_member_id,
                 c.registration_request_id, c.voided_at,
                 m.member_no as used_by_member_no
            from attendance_codes c
+           join event_occurrences o on o.id = c.occurrence_id
            left join members m on m.id = c.used_by_member_id
           where c.id = $1`,
         [id],
@@ -220,9 +196,12 @@ export class AttendanceCodeRepository {
     }
 
     const [existing] = await this.db.query<StoredCodeRow>(
-      `select id, code_hash, purpose, event_instance_id, session_date, issued_at,
-              expires_at, used_at, used_by_member_id, registration_request_id, voided_at
-         from attendance_codes where id = $1`,
+      `select c.id, c.code_hash, c.purpose, c.occurrence_id, o.event_id, c.session_date,
+              c.issued_at, c.expires_at, c.used_at, c.used_by_member_id,
+              c.registration_request_id, c.voided_at
+         from attendance_codes c
+         join event_occurrences o on o.id = c.occurrence_id
+        where c.id = $1`,
       [id],
     );
     if (!existing) throw new NotFoundError(`Code ${id} was not found`);
@@ -241,9 +220,12 @@ export class AttendanceCodeRepository {
         ? assertDate(input.sessionDate, 'sessionDate')
         : null;
     const [stored] = await this.db.query<StoredCodeRow>(
-      `select id, code_hash, purpose, event_instance_id, session_date, issued_at,
-              expires_at, used_at, used_by_member_id, registration_request_id, voided_at
-         from attendance_codes where code_hash = $1`,
+      `select c.id, c.code_hash, c.purpose, c.occurrence_id, o.event_id, c.session_date,
+              c.issued_at, c.expires_at, c.used_at, c.used_by_member_id,
+              c.registration_request_id, c.voided_at
+         from attendance_codes c
+         join event_occurrences o on o.id = c.occurrence_id
+        where c.code_hash = $1`,
       [this.hash(input.code.trim())],
     );
     if (!stored || stored.purpose !== input.purpose) throw new CodeInvalidError();
@@ -254,10 +236,7 @@ export class AttendanceCodeRepository {
           'eventId and sessionDate are required to redeem an attendance code',
         );
       }
-      if (
-        stored.event_instance_id !== input.eventId ||
-        isoDate(stored.session_date) !== sessionDate
-      ) {
+      if (stored.event_id !== input.eventId || isoDate(stored.session_date) !== sessionDate) {
         throw new CodeWrongSessionError();
       }
     }
@@ -269,9 +248,12 @@ export class AttendanceCodeRepository {
 
     return this.db.transaction(async (tx) => {
       const [code] = await tx.query<StoredCodeRow>(
-        `select id, code_hash, purpose, event_instance_id, session_date, issued_at,
-                expires_at, used_at, used_by_member_id, registration_request_id, voided_at
-           from attendance_codes where id = $1 for update`,
+        `select c.id, c.code_hash, c.purpose, c.occurrence_id, o.event_id, c.session_date,
+                c.issued_at, c.expires_at, c.used_at, c.used_by_member_id,
+                c.registration_request_id, c.voided_at
+           from attendance_codes c
+           join event_occurrences o on o.id = c.occurrence_id
+          where c.id = $1 for update`,
         [stored.id],
       );
       if (!code) throw new CodeInvalidError();
@@ -308,11 +290,14 @@ export class AttendanceCodeRepository {
     // the session must not be closed and must be dated today in the event
     // timezone. Both refusals leave the code unconsumed.
     const [session] = await tx.query<{ timezone: string }>(
-      'select timezone from event_instances where id = $1',
-      [code.event_instance_id],
+      `select e.timezone
+         from events e
+         join event_occurrences o on o.event_id = e.id
+        where o.id = $1`,
+      [code.occurrence_id],
     );
     if (!session) throw new NotFoundError('The event was not found');
-    if (await sessionIsClosed(tx, code.event_instance_id, sessionDate)) {
+    if (await sessionIsClosed(tx, code.event_id, sessionDate)) {
       throw new SessionClosedError(
         `The session on ${sessionDate} is closed; the code cannot clock it`,
       );
@@ -325,16 +310,16 @@ export class AttendanceCodeRepository {
 
     const [existing] = await tx.query<{ id: string }>(
       `select id from attendance
-        where event_instance_id = $1 and session_date = $2 and member_id = $3`,
-      [code.event_instance_id, sessionDate, member.id],
+        where occurrence_id = $1 and member_id = $2`,
+      [code.occurrence_id, member.id],
     );
     if (existing) throw new AlreadyClockedError();
 
     const [attendance] = await tx.query<{ id: string }>(
-      `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-       values ($1,$2,$3,'manual',$4)
+      `insert into attendance (member_id, occurrence_id, source, created_by)
+       values ($1,$2,'manual',$3)
        returning id`,
-      [member.id, code.event_instance_id, sessionDate, input.actor],
+      [member.id, code.occurrence_id, input.actor],
     );
 
     await this.markUsed(tx, code.id, member.id, null);
@@ -342,7 +327,7 @@ export class AttendanceCodeRepository {
     return {
       kind: 'attendance',
       attendanceId: attendance!.id,
-      eventId: code.event_instance_id,
+      eventId: code.event_id,
       sessionDate,
     };
   }
@@ -370,7 +355,7 @@ export class AttendanceCodeRepository {
         const [request] = await tx.query<{ id: string }>(
           `insert into registration_requests (
              reference, first_name, last_name, phone_hash, phone_encrypted,
-             event_instance_id, session_date, code_id
+             occurrence_id, session_date, code_id
            ) values ($1,$2,$3,$4,$5,$6,$7,$8)
            returning id`,
           [
@@ -379,7 +364,7 @@ export class AttendanceCodeRepository {
             lastName,
             input.phoneHash,
             input.phoneEncrypted ?? null,
-            code.event_instance_id,
+            code.occurrence_id,
             sessionDate,
             code.id,
           ],
@@ -433,25 +418,29 @@ export class AttendanceCodeRepository {
     return (row?.count ?? 0) <= CODE_ATTEMPT_LIMIT;
   }
 
-  private async requireSession(eventId: string, sessionDate: string): Promise<void> {
-    const [event] = await this.db.query<{ status: string; sessions: unknown }>(
-      'select status, sessions from event_instances where id = $1',
-      [eventId],
+  private async requireSession(eventId: string, sessionDate: string): Promise<string> {
+    const [event] = await this.db.query<{
+      status: string;
+      occurrence_id: string | null;
+      occurrence_status: string | null;
+    }>(
+      `select e.status, o.id as occurrence_id, o.status as occurrence_status
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
     );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (event.status === 'cancelled' || event.status === 'archived') {
-      throw new ConflictError('A cancelled or archived event is read-only');
+    if (event.status === 'archived') {
+      throw new ConflictError('An archived event is read-only');
     }
-
-    const session = parseJsonArray(event.sessions)
-      .map(asSession)
-      .find((entry) => entry?.date === sessionDate);
-    if (!session) {
+    if (!event.occurrence_id) {
       throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
     }
-    if (session.status === 'cancelled') {
+    if (event.occurrence_status === 'cancelled') {
       throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
     }
+    return event.occurrence_id;
   }
 
   private toListItem(row: StoredCodeRow & { used_by_member_no?: string | null }): CodeListItem {
