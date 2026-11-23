@@ -124,6 +124,8 @@ export const listQuerySchema = z
         return [...new Set(parts)] as ListInclude[];
       }),
     seriesId: z.string().uuid().optional(),
+    /** The parent id under its current name; `seriesId` is the transition alias. */
+    eventId: z.string().uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
     cursor: z.string().min(1).max(64).optional(),
   })
@@ -137,7 +139,14 @@ export const listQuerySchema = z
         });
       }
     }
-    if (query.include?.includes('attendance') && !query.seriesId) {
+    if (query.eventId && query.seriesId && query.eventId !== query.seriesId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['eventId'],
+        message: 'eventId and seriesId must name the same parent when both are supplied',
+      });
+    }
+    if (query.include?.includes('attendance') && !query.seriesId && !query.eventId) {
       ctx.addIssue({
         code: 'custom',
         path: ['seriesId'],

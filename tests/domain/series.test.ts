@@ -4,6 +4,7 @@ import {
   expandSchedule,
   occurrenceWindow,
   resolveOccurrences,
+  todayIn,
   validateRrule,
 } from '../../src/domain/series.js';
 import { summariseAttendance } from '../../src/domain/attendance.js';
@@ -27,6 +28,15 @@ describe('rrule validation', () => {
 
   it('rejects a body that is not a recurrence rule', () => {
     expect(() => validateRrule('every sunday')).toThrow(ValidationError);
+  });
+});
+
+describe('the event timezone calendar day', () => {
+  it('resolves two zones to different dates at the same instant', () => {
+    const instant = new Date('2026-06-15T12:00:00Z');
+    // UTC+14 is already the next calendar day; UTC-11 is still the same day.
+    expect(todayIn('Pacific/Kiritimati', instant)).toBe('2026-06-16');
+    expect(todayIn('Pacific/Pago_Pago', instant)).toBe('2026-06-15');
   });
 });
 

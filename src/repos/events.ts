@@ -19,6 +19,10 @@ import {
   type EventOfferingItem,
   type OfferingStatsItem,
 } from './offerings.js';
+import { parentWindowSummary } from './series.js';
+import { renderAudienceSummary } from '../domain/audiences.js';
+import type { AudienceRule } from '../schemas/audiences.js';
+import type { SeriesSummary } from '../schemas/reference.js';
 import type { CreateEventInput, EventListQuery, UpdateEventInput } from '../schemas/events.js';
 
 export type VenueType = 'auditorium' | 'virtual' | 'hybrid';
@@ -445,6 +449,16 @@ function parseJsonArray(value: unknown): unknown[] {
   return [];
 }
 
+function parseCapture(value: unknown): { asOf: string; ended: boolean } | null {
+  if (value === null || value === undefined) return null;
+  const parsed =
+    typeof value === 'string'
+      ? (JSON.parse(value) as { asOf?: unknown; ended?: unknown })
+      : (value as { asOf?: unknown; ended?: unknown });
+  if (parsed.asOf === null || parsed.asOf === undefined) return null;
+  return { asOf: isoInstant(parsed.asOf), ended: parsed.ended === true };
+}
+
 function asStatus(value: string): EventStatus {
   return EVENT_STATUSES.includes(value as EventStatus) ? (value as EventStatus) : 'active';
 }
@@ -571,8 +585,416 @@ async function audienceIdFor(db: DbClient, presbyterOnly: boolean): Promise<stri
   return audience.id;
 }
 
+export interface EventOccurrenceItem {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string | null;
+  status: EventSessionStatus;
+  venueType?: VenueType;
+  capture: { asOf: string; ended: boolean } | null;
+  note: string | null;
+  present: number;
+  expected: number;
+  importedRows: number;
+  source: SessionSource;
+  legacyEventNo: string | null;
+}
+
+export interface EventParentItem {
+  id: string;
+  eventNo: string;
+  name: string;
+  audienceId: string;
+  audience: { id: string; name: string; system: boolean; summary: string };
+  ministry: { code: string; name: string } | null;
+  presbyterOnly: boolean;
+  timezone: string;
+  description: string | null;
+  venueType: VenueType;
+  venueName: string | null;
+  startDate: string;
+  endDate: string | null;
+  startTime: string;
+  endTime: string | null;
+  tracksMembers: boolean;
+  status: EventStatus;
+  recurrence: {
+    schedules: Array<{ effectiveFrom: string; rrule: string; endsOn: string | null }>;
+    exceptions: Array<{ date: string; kind: 'cancelled' | 'extra'; note: string | null }>;
+  } | null;
+  occurrences: EventOccurrenceItem[];
+  offerings: EventOfferingItem[];
+  stats: OfferingStatsItem;
+  summary: SeriesSummary;
+}
+
+export interface EventParentListQuery {
+  from: string;
+  to: string;
+  seriesId?: string;
+  ministry?: string;
+  venueType?: string;
+  limit: number;
+  offset: number;
+}
+
+type ParentRow = {
+  id: string;
+  event_no: string | null;
+  name: string;
+  audience_id: string;
+  audience_name: string;
+  audience_system: boolean;
+  audience_rule: unknown;
+  ministry_code: string | null;
+  ministry_name: string | null;
+  presbyter_only: boolean;
+  timezone: string;
+  description: string | null;
+  venue_type: string;
+  venue_name: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  tracks_members: boolean;
+  status: string;
+};
+
+type OccurrenceRow = {
+  id: string;
+  date: unknown;
+  start_time: string | null;
+  end_time: string | null;
+  status: string;
+  note: string | null;
+  venue_type: string | null;
+  legacy_event_no: string | null;
+  present: number | string;
+  imported_rows: number | string;
+  expected: number | string;
+  capture: unknown;
+};
+
+const PARENT_COLUMNS = `
+  e.id,
+  e.event_no,
+  e.name,
+  e.audience_id,
+  a.name as audience_name,
+  a.system as audience_system,
+  a.rule as audience_rule,
+  m.code as ministry_code,
+  m.name as ministry_name,
+  e.presbyter_only,
+  e.timezone,
+  e.description,
+  e.venue_type,
+  e.venue_name,
+  e.start_time,
+  e.end_time,
+  e.tracks_members,
+  e.status`;
+
+const PARENT_FROM = `
+  from events e
+  join audiences a on a.id = e.audience_id
+  left join ministries m on m.id = e.ministry_id`;
+
+/** The parent ids whose derived range overlaps the requested window. */
+const PARENT_IDS_SQL = `
+with derived as (
+  select e.id,
+         coalesce(
+           least(
+             (select min(o.date) from event_occurrences o where o.event_id = e.id),
+             (select min(rv.effective_from) from event_recurrence_versions rv where rv.event_id = e.id)
+           ),
+           (now() at time zone e.timezone)::date
+         ) as start_date,
+         case
+           when exists (
+             select 1 from event_recurrence_versions rv
+              where rv.event_id = e.id and rv.ends_on is null
+           ) then null
+           else greatest(
+             (select max(o.date) from event_occurrences o where o.event_id = e.id),
+             (select max(rv.ends_on) from event_recurrence_versions rv where rv.event_id = e.id)
+           )
+         end as end_date
+    from events e
+)
+select d.id
+  from derived d
+  join events e on e.id = d.id
+  left join ministries m on m.id = e.ministry_id
+ where ($1::date is null or d.end_date is null or d.end_date >= $1::date)
+   and ($2::date is null or d.start_date <= $2::date)
+   and ($3::uuid is null or e.id = $3::uuid)
+   and (
+     $4::text is null
+     or lower(m.code) = lower($4::text)
+     or lower(m.name) = lower($4::text)
+   )
+   and ($5::text is null or e.venue_type = $5::text)
+ order by d.start_date, d.id
+ limit $6::int offset $7::int`;
+
+function parseAudienceRule(value: unknown): AudienceRule {
+  if (typeof value === 'string') return JSON.parse(value) as AudienceRule;
+  return value as AudienceRule;
+}
+
+function occurrenceStatus(
+  parentStatus: string,
+  storedStatus: string,
+  date: string,
+  today: string,
+): EventSessionStatus {
+  if (parentStatus === 'draft') return 'scheduled';
+  if (storedStatus === 'cancelled' || parentStatus === 'archived') return 'cancelled';
+  return date <= today ? 'held' : 'scheduled';
+}
+
 export class EventRepository {
   constructor(private readonly db: Db) {}
+
+  /** One row per event parent, with its window occurrences and figures. */
+  async listParents(query: EventParentListQuery): Promise<EventParentItem[]> {
+    const rows = await this.db.query<{ id: string }>(PARENT_IDS_SQL, [
+      query.from,
+      query.to,
+      query.seriesId ?? null,
+      query.ministry ?? null,
+      query.venueType ?? null,
+      query.limit,
+      query.offset,
+    ]);
+    const items = await Promise.all(
+      rows.map((row) => this.getParent(row.id, query.from, query.to)),
+    );
+    return items.filter((item): item is EventParentItem => item !== null);
+  }
+
+  /** The parent detail for the window; null when the event does not exist. */
+  async getParent(id: string, from: string, to: string): Promise<EventParentItem | null> {
+    const [row] = await this.db.query<ParentRow>(
+      `select ${PARENT_COLUMNS} ${PARENT_FROM} where e.id = $1`,
+      [id],
+    );
+    if (!row) return null;
+
+    const today = todayIn(row.timezone);
+    const range = await this.parentRange(row.id);
+    const recurrence = await this.parentRecurrence(row.id, range.isRecurring);
+    const occurrences = await this.parentOccurrences(row, from, to, today);
+    const summary = await parentWindowSummary(
+      this.db,
+      { id: row.id, timezone: row.timezone },
+      from,
+      to,
+    );
+    const offeringsByEvent = await eventOfferingsFor(this.db, [row.id], todayUtc());
+    const rule = parseAudienceRule(row.audience_rule);
+
+    return {
+      id: row.id,
+      eventNo: row.event_no ?? '',
+      name: row.name,
+      audienceId: row.audience_id,
+      audience: {
+        id: row.audience_id,
+        name: row.audience_name,
+        system: row.audience_system,
+        summary: renderAudienceSummary(row.audience_name, rule),
+      },
+      ministry:
+        row.ministry_code && row.ministry_name
+          ? { code: row.ministry_code, name: row.ministry_name }
+          : null,
+      presbyterOnly: row.presbyter_only,
+      timezone: row.timezone,
+      description: row.description,
+      venueType: asVenueType(row.venue_type),
+      venueName: row.venue_name,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      startTime: row.start_time ?? '',
+      endTime: row.end_time,
+      tracksMembers: row.tracks_members,
+      status: asStatus(row.status),
+      recurrence,
+      occurrences,
+      offerings: offeringsByEvent.get(row.id) ?? [],
+      stats: {
+        ...emptyOfferingStats(),
+        attachedEvents: summary.offerings.attachedCount,
+        pledgedMinor: summary.offerings.pledgedMinor,
+        paidMinor: summary.offerings.paidMinor,
+        pendingMinor: summary.offerings.outstandingMinor,
+      },
+      summary,
+    };
+  }
+
+  private async parentRange(id: string): Promise<{
+    startDate: string;
+    endDate: string | null;
+    isRecurring: boolean;
+  }> {
+    const [row] = await this.db.query<{
+      first_occ: unknown;
+      last_occ: unknown;
+      first_sch: unknown;
+      last_sch: unknown;
+      unbounded: boolean;
+      is_recurring: boolean;
+    }>(
+      `select
+         (select min(o.date) from event_occurrences o where o.event_id = $1) as first_occ,
+         (select max(o.date) from event_occurrences o where o.event_id = $1) as last_occ,
+         (select min(rv.effective_from) from event_recurrence_versions rv where rv.event_id = $1)
+           as first_sch,
+         (select max(rv.ends_on) from event_recurrence_versions rv where rv.event_id = $1)
+           as last_sch,
+         coalesce(
+           (select bool_or(rv.ends_on is null) from event_recurrence_versions rv where rv.event_id = $1),
+           false
+         ) as unbounded,
+         exists (
+           select 1 from event_recurrence_versions rv where rv.event_id = $1
+         ) as is_recurring`,
+      [id],
+    );
+    const starts = [isoOptionalDate(row?.first_occ), isoOptionalDate(row?.first_sch)]
+      .filter((value): value is string => value !== null)
+      .sort();
+    const startDate = starts[0] ?? todayUtc();
+    if (row?.unbounded) return { startDate, endDate: null, isRecurring: true };
+    const ends = [isoOptionalDate(row?.last_occ), isoOptionalDate(row?.last_sch)]
+      .filter((value): value is string => value !== null)
+      .sort();
+    return {
+      startDate,
+      endDate: ends.length > 0 ? ends[ends.length - 1]! : null,
+      isRecurring: row?.is_recurring === true,
+    };
+  }
+
+  private async parentRecurrence(
+    id: string,
+    isRecurring: boolean,
+  ): Promise<EventParentItem['recurrence']> {
+    if (!isRecurring) return null;
+    const schedules = await this.db.query<{
+      effective_from: unknown;
+      rrule: string;
+      ends_on: unknown;
+    }>(
+      `select effective_from, rrule, ends_on
+         from event_recurrence_versions
+        where event_id = $1
+        order by effective_from`,
+      [id],
+    );
+    const exceptions = await this.db.query<{ date: unknown; kind: string; note: string | null }>(
+      `select distinct on (date) date, kind, note
+         from event_recurrence_exceptions
+        where event_id = $1
+        order by date, created_at desc, id desc`,
+      [id],
+    );
+    return {
+      schedules: schedules.map((schedule) => ({
+        effectiveFrom: isoDate(schedule.effective_from),
+        rrule: schedule.rrule,
+        endsOn: isoOptionalDate(schedule.ends_on),
+      })),
+      exceptions: exceptions.map((exception) => ({
+        date: isoDate(exception.date),
+        kind: exception.kind as 'cancelled' | 'extra',
+        note: exception.note,
+      })),
+    };
+  }
+
+  private async parentOccurrences(
+    parent: ParentRow,
+    from: string,
+    to: string,
+    today: string,
+  ): Promise<EventOccurrenceItem[]> {
+    const rows = await this.db.query<OccurrenceRow>(
+      `select o.id, o.date, o.start_time, o.end_time, o.status, o.note, o.venue_type,
+              o.legacy_event_no,
+              (select count(*)::int from attendance a where a.occurrence_id = o.id) as present,
+              (select count(*)::int from attendance a
+                where a.occurrence_id = o.id and a.source = 'import') as imported_rows,
+              (select count(*)::int from members m
+                where coalesce(m.joined_on, m.created_at::date) <= o.date
+                  and m.archived_at is null
+                  and m.purged_at is null
+                  and (not $4::boolean or m.is_presbyter)) as expected,
+              (select jsonb_build_object(
+                        'asOf', coalesce(g.as_of, g.any_as_of),
+                        'ended', coalesce(g.ended, false)
+                      )
+                 from (
+                   select
+                     (array_agg(c.as_of order by c.as_of desc, c.recorded_at desc,
+                                c.channel asc, c.id desc)
+                        filter (where c.is_current))[1] as as_of,
+                     max(c.as_of) as any_as_of,
+                     bool_or(c.ended) as ended,
+                     count(*) as n
+                     from (
+                       select b.as_of, b.created_at as recorded_at, b.id,
+                              0 as channel, true as is_current, b.ended
+                         from import_batches b
+                        where b.kind = 'attendance' and b.occurrence_id = o.id
+                       union all
+                       select h.as_of, h.recorded_at, h.id,
+                              1 as channel,
+                              not exists (
+                                select 1 from event_session_headcounts s
+                                 where s.supersedes_id = h.id
+                              ) as is_current,
+                              h.ended
+                         from event_session_headcounts h
+                        where h.occurrence_id = o.id
+                     ) c
+                 ) g
+                where g.n > 0) as capture
+         from event_occurrences o
+        where o.event_id = $1
+          and o.date between $2::date and $3::date
+        order by o.date`,
+      [parent.id, from, to, parent.presbyter_only],
+    );
+
+    return rows.map((row) => {
+      const date = isoDate(row.date);
+      const present = Number(row.present);
+      const importedRows = Number(row.imported_rows);
+      const capture = parseCapture(row.capture);
+      return {
+        id: row.id,
+        date,
+        startTime: row.start_time ?? parent.start_time ?? '',
+        endTime: row.end_time ?? parent.end_time,
+        status: occurrenceStatus(parent.status, row.status, date, today),
+        ...(row.venue_type && VENUE_TYPES.includes(row.venue_type as VenueType)
+          ? { venueType: row.venue_type as VenueType }
+          : {}),
+        capture,
+        note: row.note,
+        present,
+        expected: Number(row.expected),
+        importedRows,
+        source: sessionSource(present, importedRows),
+        legacyEventNo: row.legacy_event_no,
+      };
+    });
+  }
 
   async list(query: EventListQuery): Promise<EventItem[]> {
     const rows = await this.db.query<EventRow>(LIST_SQL, [

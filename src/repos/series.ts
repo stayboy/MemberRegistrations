@@ -266,6 +266,92 @@ select coalesce((
        ), 0)::bigint as outstanding_minor
 `;
 
+/**
+ * The window figures for one event parent (FR-6b–FR-6d): the same three reads
+ * the legacy series summary uses, scoped by the event id. A standalone event
+ * has no recurrence, so its next occurrence is read from its own rows.
+ */
+export async function parentWindowSummary(
+  db: Db,
+  event: { id: string; timezone: string },
+  from: string,
+  to: string,
+): Promise<SeriesSummary> {
+  const today = todayIn(event.timezone);
+  const [attendance] = await db.query<SummaryAttendanceRow>(SERIES_SUMMARY_ATTENDANCE_SQL, [
+    event.id,
+    from,
+    to,
+    today,
+  ]);
+  const [money] = await db.query<SummaryMoneyRow>(SERIES_SUMMARY_MONEY_SQL, [event.id, from, to]);
+  const currency = money?.currency ?? 'GHS';
+  const [pledges] = await db.query<SummaryPledgeRow>(SERIES_SUMMARY_PLEDGES_SQL, [
+    event.id,
+    from,
+    to,
+    today,
+    currency,
+  ]);
+
+  const recurrenceDates = await resolveSeriesOccurrences(
+    db,
+    event.id,
+    today,
+    shiftDate(today, NEXT_OCCURRENCE_DAYS),
+  );
+  let nextOccurrence: string | null = recurrenceDates[0] ?? null;
+  if (nextOccurrence === null) {
+    const [next] = await db.query<{ date: unknown }>(
+      `select date from event_occurrences
+        where event_id = $1 and date >= $2::date and date <= $3::date
+        order by date limit 1`,
+      [event.id, today, shiftDate(today, NEXT_OCCURRENCE_DAYS)],
+    );
+    nextOccurrence = next ? isoDate(next.date) : null;
+  }
+
+  const expected = Number(attendance?.expected ?? 0);
+  const present = Number(attendance?.present ?? 0);
+  const lastHeldDate = attendance?.last_held_date ? isoDate(attendance.last_held_date) : null;
+
+  return {
+    from,
+    to,
+    nextOccurrence,
+    attendance: {
+      memberSessions: {
+        held: Number(attendance?.member_held ?? 0),
+        expected,
+        present,
+        rate: expected > 0 ? present / expected : null,
+      },
+      lastHeld: lastHeldDate
+        ? {
+            date: lastHeldDate,
+            expected: Number(attendance?.last_held_expected ?? 0),
+            present: Number(attendance?.last_held_present ?? 0),
+          }
+        : null,
+      headcountSessions: { held: Number(attendance?.headcount_held ?? 0) },
+      cancelled: Number(attendance?.cancelled ?? 0),
+      upcoming: Number(attendance?.upcoming ?? 0),
+    },
+    offerings: {
+      attachedCount: Number(money?.attached_count ?? 0),
+      currency,
+      paidMinor: Number(money?.paid_minor ?? 0),
+      pledgedMinor: Number(pledges?.pledged_minor ?? 0),
+      outstandingMinor: Number(pledges?.outstanding_minor ?? 0),
+      countedMinor: Number(money?.counted_minor ?? 0),
+      visitors: {
+        count: Number(money?.visitor_count ?? 0),
+        paidMinor: Number(money?.visitor_paid ?? 0),
+      },
+    },
+  };
+}
+
 export class SeriesRepository {
   constructor(private readonly db: Db) {}
 
@@ -528,69 +614,7 @@ export class SeriesRepository {
    */
   async summary(id: string, from: string, to: string): Promise<SeriesSummary> {
     const series = await this.require(id);
-    const today = todayIn(series.timezone);
-
-    const [attendance] = await this.db.query<SummaryAttendanceRow>(SERIES_SUMMARY_ATTENDANCE_SQL, [
-      id,
-      from,
-      to,
-      today,
-    ]);
-    const [money] = await this.db.query<SummaryMoneyRow>(SERIES_SUMMARY_MONEY_SQL, [id, from, to]);
-    const currency = money?.currency ?? 'GHS';
-    const [pledges] = await this.db.query<SummaryPledgeRow>(SERIES_SUMMARY_PLEDGES_SQL, [
-      id,
-      from,
-      to,
-      today,
-      currency,
-    ]);
-
-    const expected = Number(attendance?.expected ?? 0);
-    const present = Number(attendance?.present ?? 0);
-    const lastHeldDate = attendance?.last_held_date ? isoDate(attendance.last_held_date) : null;
-    const nextDates = await resolveSeriesOccurrences(
-      this.db,
-      id,
-      today,
-      shiftDate(today, NEXT_OCCURRENCE_DAYS),
-    );
-
-    return {
-      from,
-      to,
-      nextOccurrence: nextDates[0] ?? null,
-      attendance: {
-        memberSessions: {
-          held: Number(attendance?.member_held ?? 0),
-          expected,
-          present,
-          rate: expected > 0 ? present / expected : null,
-        },
-        lastHeld: lastHeldDate
-          ? {
-              date: lastHeldDate,
-              expected: Number(attendance?.last_held_expected ?? 0),
-              present: Number(attendance?.last_held_present ?? 0),
-            }
-          : null,
-        headcountSessions: { held: Number(attendance?.headcount_held ?? 0) },
-        cancelled: Number(attendance?.cancelled ?? 0),
-        upcoming: Number(attendance?.upcoming ?? 0),
-      },
-      offerings: {
-        attachedCount: Number(money?.attached_count ?? 0),
-        currency,
-        paidMinor: Number(money?.paid_minor ?? 0),
-        pledgedMinor: Number(pledges?.pledged_minor ?? 0),
-        outstandingMinor: Number(pledges?.outstanding_minor ?? 0),
-        countedMinor: Number(money?.counted_minor ?? 0),
-        visitors: {
-          count: Number(money?.visitor_count ?? 0),
-          paidMinor: Number(money?.visitor_paid ?? 0),
-        },
-      },
-    };
+    return parentWindowSummary(this.db, { id, timezone: series.timezone }, from, to);
   }
 
   private async load(id: string): Promise<SeriesDto | null> {

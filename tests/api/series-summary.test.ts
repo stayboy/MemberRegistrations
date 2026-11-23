@@ -408,20 +408,27 @@ describe('series window summary', () => {
       .set(readHeaders);
 
     expect(response.status).toBe(200);
-    expect(response.body.nextOccurrence).toBeNull();
-    expect(response.body.attendance.memberSessions).toMatchObject({
-      held: 0,
-      expected: 0,
-      present: 0,
-      rate: null,
-    });
-    expect(response.body.attendance.lastHeld).toBeNull();
-    expect(response.body.offerings).toMatchObject({
-      attachedCount: 0,
-      paidMinor: 0,
-      pledgedMinor: 0,
-      outstandingMinor: 0,
-      countedMinor: 0,
+    // Full legacy body: this pins the default serialiser, not just its presence.
+    expect(response.body).toEqual({
+      from,
+      to,
+      nextOccurrence: null,
+      attendance: {
+        memberSessions: { held: 0, expected: 0, present: 0, rate: null },
+        lastHeld: null,
+        headcountSessions: { held: 0 },
+        cancelled: 0,
+        upcoming: 0,
+      },
+      offerings: {
+        attachedCount: 0,
+        currency: 'GHS',
+        paidMinor: 0,
+        pledgedMinor: 0,
+        outstandingMinor: 0,
+        countedMinor: 0,
+        visitors: { count: 0, paidMinor: 0 },
+      },
     });
   });
 

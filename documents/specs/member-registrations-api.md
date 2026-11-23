@@ -20,6 +20,11 @@ downstream round. No migration or code lands in the spec round.
 
 ## Change log
 
+- 2026-11-23: **the read transition** (owner: unattended, 2026-11-23): `/v1/events`, `/v1/events/:id` and
+  `/v1/series/:id` keep their legacy shapes as the default and serve the parent read with `view=parent`; the flag
+  and the legacy serialisers retire in the downstream round, when the default flips. This keeps the deployed UI
+  working across the API round.
+
 - 2026-11-22: **two migration decisions** (owner: "all as recommended"): a legacy `draft` instance keeps a
   `draft` parent status (`draft | active | archived`), and the legacy per-instance offering attachments rekey
   to their occurrence (`event_offerings.occurrence_id`) rather than to the parent alone, preserving the date
@@ -726,6 +731,12 @@ validation_error` with the field named. A recurring event's name and audience ar
 - The parent is the scope for attendance, imports, offerings, contributions and pledges: `eventId` is
   this parent, and `sessionDate` names its occurrence. An offering attaches to a session, not to the
   parent: see `member-registrations-session-offerings.md`.
+- **Transition.** Until the UI and downstream rounds move, `/v1/events`, `/v1/events/:id` and `/v1/series/:id` serve
+  their **legacy shapes by default**, and the parent read with `view=parent` (the window's `from`/`to` apply to
+  both; any other `view` value is `422 validation_error`). The flag and the legacy serialisers retire in the downstream
+  round once the UI and USSD have moved, when the default flips to the parent (the `/v1/series` alias flips with the
+  UI alone). This keeps the deployed UI working
+  across the migration and is the only additive wire exception on the events read.
 
 ### Recurrence
 
@@ -1393,8 +1404,9 @@ archived custom audience is hidden from the event picker while the events that r
 resolving.
 
 The `/v1/series` routes **retire**: an event is the parent (Events below), and its recurrence is read and
-written under the event. `GET /v1/series/{id}` aliases the parent read for the transition; there is no
-series list, series create or series schedule route.
+written under the event. During the transition `GET /v1/series/{id}` keeps the legacy series read as its
+default and serves the parent detail with `view=parent`; once the UI moves, the default flips and the route
+is the plain alias. There is no series list, series create or series schedule route.
 
 ### Events
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actorOf } from '../actor.js';
 import { BadRequestError, NotFoundError } from '../errors/domain-errors.js';
 import { dateStringSchema } from '../schemas/common.js';
+import { eventViewQuerySchema, seriesParentQuerySchema } from '../schemas/events.js';
 import {
   createSeriesSchema,
   scheduleInputSchema,
@@ -10,9 +11,10 @@ import {
   seriesSummaryQuerySchema,
   updateSeriesSchema,
 } from '../schemas/reference.js';
+import type { EventRepository } from '../repos/events.js';
 import type { SeriesRepository } from '../repos/series.js';
 
-export function seriesRouter(repo: SeriesRepository): Router {
+export function seriesRouter(repo: SeriesRepository, events: EventRepository): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
@@ -40,6 +42,18 @@ export function seriesRouter(repo: SeriesRepository): Router {
   });
 
   router.get('/:id', async (req, res) => {
+    const { view } = eventViewQuerySchema.parse(req.query);
+    if (view === 'parent') {
+      const query = seriesParentQuerySchema.parse(req.query);
+      if (query.from > query.to) {
+        throw new BadRequestError('from must be on or before to', 'invalid_window');
+      }
+      const parent = await events.getParent(req.params.id, query.from, query.to);
+      if (!parent) throw new NotFoundError(`Series ${req.params.id} was not found`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(parent);
+      return;
+    }
     const series = await repo.get(req.params.id);
     if (!series) throw new NotFoundError(`Series ${req.params.id} was not found`);
     res.setHeader('Cache-Control', 'no-store');
