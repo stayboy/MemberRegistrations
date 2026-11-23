@@ -99,7 +99,10 @@ export function membersRouter(
       res.json({ items });
       return;
     }
-    const page = await repo.list(query);
+    const page = await repo.list({
+      ...query,
+      seriesId: query.eventId ?? query.seriesId,
+    });
     res.setHeader('Cache-Control', 'no-store');
     res.json(page);
   });

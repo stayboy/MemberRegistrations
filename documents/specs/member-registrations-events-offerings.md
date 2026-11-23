@@ -507,8 +507,10 @@ keep a separate Attendance section, that is Q1.
   event.
 - FR-6a: The summary MUST come from **one** request, `GET /v1/events/{eventId}` with the page's `from`/`to`.
   `from` and `to` are required UTC dates with `from <= to` (400 otherwise); an unknown event answers
-  404; the response is `no-store`. The UI MUST NOT build the summary by summing the paginated events
-  list, the church-wide offering summary or per-offering reads (NFR-1, NFR-5).
+  404; the response is `no-store`. During the read transition this is `GET /v1/events/{eventId}?view=parent`
+  (`member-registrations-api.md` § Events, "Transition"); the flag retires when the default flips. The UI MUST
+  NOT build the summary by summing the paginated events list, the church-wide offering summary or per-offering
+  reads (NFR-1, NFR-5).
 - FR-6b: The summary window is the page's single UTC `from`/`to`, shared with the occurrence list;
   attendance and offering money are bounded by it. "Today" is the date in the **event timezone**
   (FR-12). The Occurrences tile is the count of dates the recurrence generates inside that window — the

@@ -53,6 +53,12 @@ import {
   updateSeriesSchema,
 } from './schemas/reference.js';
 import {
+  audienceListSchema,
+  audienceRuleSchema,
+  audienceSchema,
+  audienceSummarySchema,
+} from './schemas/audiences.js';
+import {
   attendanceImportSchema,
   importBatchSchema,
   memberImportSchema,
@@ -69,7 +75,12 @@ import {
   eventAttendanceSchema,
   eventGenerationSchema,
   eventListSchema,
+  eventOccurrenceSchema,
+  eventParentListSchema,
+  eventParentSchema,
+  eventRecurrenceSchema,
   eventSchema,
+  eventWindowSummarySchema,
   HEADCOUNT_READ_MODES,
   headcountInputSchema,
   headcountListSchema,
@@ -222,6 +233,156 @@ const ifMatchHeader = {
   schema: { type: 'string' },
 };
 
+const audienceExample = {
+  id: '8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10',
+  name: 'Choir',
+  system: true,
+  systemKey: 'ministry:CHOIR',
+  active: true,
+  rule: {
+    operator: 'allOf',
+    clauses: [{ attribute: 'ministry', ministryCode: 'CHOIR' }],
+  },
+  summary: 'Choir - all of ministry CHOIR',
+  createdAt: '2026-11-22T09:00:00.000Z',
+  createdBy: 'migration',
+  updatedAt: '2026-11-22T09:00:00.000Z',
+  updatedBy: 'migration',
+};
+
+const audienceSummaryExample = {
+  id: audienceExample.id,
+  name: audienceExample.name,
+  system: audienceExample.system,
+  summary: audienceExample.summary,
+};
+
+const parentEventExample = {
+  id: '0f7c4f4e-6d7a-4e56-9a7c-5b8d8d2f4a11',
+  eventNo: 'EVT-2026-014',
+  name: 'Sunday Celebration',
+  audienceId: audienceExample.id,
+  audience: audienceSummaryExample,
+  ministry: { code: 'CHOIR', name: 'Choir' },
+  presbyterOnly: false,
+  timezone: 'Africa/Lagos',
+  description: 'Sunday service',
+  venueType: 'auditorium',
+  venueName: 'Main Auditorium',
+  startDate: '2026-01-04',
+  endDate: null,
+  startTime: '09:00',
+  endTime: '11:00',
+  tracksMembers: true,
+  status: 'active',
+  recurrence: {
+    schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
+    exceptions: [{ date: '2026-12-27', kind: 'cancelled', note: 'Christmas break' }],
+  },
+  occurrences: [
+    {
+      id: '3c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f',
+      date: '2026-11-01',
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'held',
+      venueType: 'auditorium',
+      capture: { asOf: '2026-11-01T10:42:00.000Z', ended: false },
+      note: null,
+      present: 120,
+      expected: 150,
+      importedRows: 100,
+      source: 'mixed',
+      legacyEventNo: 'EVT-2026-014',
+    },
+  ],
+  offerings: [],
+  stats: {
+    attachedEvents: 0,
+    pledgedMinor: 0,
+    paidMinor: 0,
+    pendingMinor: 0,
+    honorRate: 0,
+    contributionCount: 0,
+  },
+  summary: {
+    from: '2026-09-01',
+    to: '2026-11-30',
+    nextOccurrence: '2026-11-08',
+    attendance: {
+      memberSessions: { held: 4, expected: 600, present: 480, rate: 0.8 },
+      lastHeld: { date: '2026-11-01', expected: 150, present: 120 },
+      headcountSessions: { held: 0 },
+      cancelled: 1,
+      upcoming: 0,
+    },
+    offerings: {
+      attachedCount: 0,
+      currency: 'GHS',
+      paidMinor: 0,
+      pledgedMinor: 0,
+      outstandingMinor: 0,
+      countedMinor: 0,
+      visitors: { count: 0, paidMinor: 0 },
+    },
+  },
+};
+
+const legacyEventExample = {
+  id: '9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  eventNo: 'EVT-2026-101',
+  name: 'Sunday Celebration',
+  seriesId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+  ministry: { code: 'CHOIR', name: 'Choir' },
+  timezone: 'Africa/Lagos',
+  startDate: '2026-11-01',
+  endDate: '2026-11-01',
+  startTime: '09:00',
+  endTime: '11:00',
+  venueType: 'auditorium',
+  venueName: 'Main Auditorium',
+  description: 'Sunday service',
+  status: 'active',
+  source: 'series',
+  tracksMembers: true,
+  presbyterOnly: false,
+  sessions: [
+    {
+      date: '2026-11-01',
+      startTime: '09:00',
+      endTime: '11:00',
+      status: 'held',
+      capture: { asOf: '2026-11-01T10:42:00.000Z', ended: false },
+      note: null,
+      present: 120,
+      expected: 150,
+      importedRows: 100,
+      source: 'mixed',
+    },
+  ],
+  offerings: [],
+  stats: {
+    attachedEvents: 0,
+    pledgedMinor: 0,
+    paidMinor: 0,
+    pendingMinor: 0,
+    honorRate: 0,
+    contributionCount: 0,
+  },
+};
+
+const legacySeriesExample = {
+  id: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+  name: 'Sunday Celebration',
+  ministry: { code: 'CHOIR', name: 'Choir' },
+  presbyterOnly: false,
+  timezone: 'Africa/Lagos',
+  description: 'Sunday service',
+  archivedAt: null,
+  schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
+  exceptions: [{ date: '2026-12-27', kind: 'cancelled', note: 'Christmas break' }],
+};
+
 export function buildOpenApiDocument(): Record<string, unknown> {
   return {
     openapi: '3.1.0',
@@ -319,6 +480,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OccurrenceList: toSchema(occurrenceListSchema, 'output'),
         Event: toSchema(eventSchema, 'output'),
         EventList: toSchema(eventListSchema, 'output'),
+        EventRecurrence: toSchema(eventRecurrenceSchema, 'output'),
+        EventOccurrence: toSchema(eventOccurrenceSchema, 'output'),
+        EventWindowSummary: toSchema(eventWindowSummarySchema, 'output'),
+        EventParent: toSchema(eventParentSchema, 'output'),
+        EventParentList: toSchema(eventParentListSchema, 'output'),
+        AudienceSummary: toSchema(audienceSummarySchema, 'output'),
+        AudienceRule: toSchema(audienceRuleSchema, 'output'),
+        Audience: toSchema(audienceSchema, 'output'),
+        AudienceList: toSchema(audienceListSchema, 'output'),
         EventGeneration: toSchema(eventGenerationSchema, 'output'),
         CreateEvent: toSchema(createEventSchema, 'input'),
         UpdateEvent: toSchema(updateEventSchema, 'input'),
@@ -653,7 +823,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             {
               name: 'seriesId',
               in: 'query',
-              description: 'Required when include contains attendance.',
+              description:
+                'Legacy name for the parent event id; required when include contains attendance unless eventId is supplied.',
+              schema: { type: 'string', format: 'uuid' },
+            },
+            {
+              name: 'eventId',
+              in: 'query',
+              description:
+                'The parent event id when include contains attendance; seriesId remains the legacy name.',
               schema: { type: 'string', format: 'uuid' },
             },
             { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
@@ -1525,6 +1703,58 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
+      '/v1/audiences': {
+        get: {
+          summary: 'List audiences',
+          description:
+            'System and custom reference data. Active audiences only by default; includeArchived=true also returns archived custom audiences.',
+          parameters: [
+            {
+              name: 'includeArchived',
+              in: 'query',
+              schema: { type: 'string', enum: ['true', 'false'] },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Audiences with their structured rule and server-rendered summary.',
+              content: {
+                'application/json': {
+                  schema: ref('AudienceList'),
+                  examples: {
+                    default: {
+                      summary: 'System and custom audiences',
+                      value: { items: [audienceExample] },
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+      },
+
+      '/v1/audiences/{id}': {
+        parameters: [idParam('id')],
+        get: {
+          summary: 'Read one audience',
+          responses: {
+            200: {
+              description: 'The audience with its structured rule and summary.',
+              content: {
+                'application/json': {
+                  schema: ref('Audience'),
+                  examples: {
+                    ministry: { summary: 'A seeded ministry audience', value: audienceExample },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
       '/v1/series': {
         get: {
           summary: 'List event series',
@@ -1564,9 +1794,33 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       '/v1/series/{id}': {
         parameters: [idParam('id')],
         get: {
-          summary: 'Read a series',
+          summary: 'Read a series, or its parent detail with view=parent',
+          parameters: [
+            {
+              name: 'view',
+              in: 'query',
+              description: 'Omit for the legacy series read; `parent` serves the parent detail.',
+              schema: { type: 'string', enum: ['parent'] },
+            },
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
           responses: {
-            200: json('The series.', 'Series'),
+            200: {
+              description: 'The legacy series, or the parent detail with view=parent.',
+              content: {
+                'application/json': {
+                  schema: { oneOf: [ref('Series'), ref('EventParent')] },
+                  examples: {
+                    legacy: { summary: 'Legacy series read (no view)', value: legacySeriesExample },
+                    parent: {
+                      summary: 'Parent detail with view=parent',
+                      value: parentEventExample,
+                    },
+                  },
+                },
+              },
+            },
             401: unauthorized,
             404: notFound,
           },
@@ -1687,6 +1941,12 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'List events in a date window, standalone and series-generated',
           parameters: [
+            {
+              name: 'view',
+              in: 'query',
+              description: 'Omit for the legacy event list; `parent` serves the parent read.',
+              schema: { type: 'string', enum: ['parent'] },
+            },
             { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
             { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
             { name: 'seriesId', in: 'query', schema: { type: 'string', format: 'uuid' } },
@@ -1700,7 +1960,25 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 } },
           ],
           responses: {
-            200: json('A page of events with per-session attendance counts.', 'EventList'),
+            200: {
+              description:
+                'A legacy page of event instances, or the parent read with `view=parent` and a required from/to.',
+              content: {
+                'application/json': {
+                  schema: { oneOf: [ref('EventList'), ref('EventParentList')] },
+                  examples: {
+                    legacy: {
+                      summary: 'Legacy event-instance list (no view)',
+                      value: { items: [legacyEventExample] },
+                    },
+                    parent: {
+                      summary: 'Parent read with view=parent',
+                      value: { items: [parentEventExample] },
+                    },
+                  },
+                },
+              },
+            },
             401: unauthorized,
             422: validation,
           },
@@ -1811,8 +2089,33 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         parameters: [idParam('eventId')],
         get: {
           summary: 'Read an event with its sessions, offerings and statistics',
+          parameters: [
+            {
+              name: 'view',
+              in: 'query',
+              description: 'Omit for the legacy detail; `parent` serves the parent read.',
+              schema: { type: 'string', enum: ['parent'] },
+            },
+            { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
+          ],
           responses: {
-            200: json('The event detail.', 'Event'),
+            200: {
+              description:
+                'The legacy detail, or the parent detail with recurrence, occurrences and window summary.',
+              content: {
+                'application/json': {
+                  schema: { oneOf: [ref('Event'), ref('EventParent')] },
+                  examples: {
+                    legacy: { summary: 'Legacy event detail (no view)', value: legacyEventExample },
+                    parent: {
+                      summary: 'Parent detail with view=parent',
+                      value: parentEventExample,
+                    },
+                  },
+                },
+              },
+            },
             401: unauthorized,
             404: notFound,
           },

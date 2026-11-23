@@ -61,6 +61,13 @@ below were put with a recommendation and a cost, and the owner answered **"all a
 10. **Per-instance offering attachments.** Old rows carry `event_instance_id` (a date).
     Recommendation: (a) occurrence-preserving (`event_offerings.occurrence_id`), not parent-only. Cost: a wider legacy
     table and a rework pass, with the offerings round converting the rows later. Owner answered (a).
+11. **The `/v1/events` shape collision.** The old UI calls `/v1/events` and `/v1/events/:id` for the instance shape;
+    the target parent read needs the same paths, and the pipeline deploys the API before the UI round moves.
+    Recommendation: the legacy projection stays the default and the parent read is served with `view=parent` on the
+    list and detail; `/v1/series/:id` returns the parent detail as a superset; the flag and the legacy projection
+    retire in the downstream round once the UI and USSD have moved. Cost: one query parameter and two serialisers for
+    the transition, and the target path is reached by flipping the default later. Auto-accepted under the unattended
+    standing.
 
 ## Process decisions (owner grill, 2026-11-22)
 
@@ -101,11 +108,15 @@ conformance. The write surface, the audience writes and the capture amendment fo
   `status`, which becomes the spec's three-valued `draft | active | archived` (recorded under Deviations).
 - Drizzle schema for the new tables plus the drift check.
 
-**Slice 2b (after 2a merges).** Three dispatches in one chain:
+**Slice 2b (after 2a merges).** This round lands **2b-read** only; **2b-write** and **2b-capture** are the following
+rounds (the UI read screens start once 2b-read merges):
 
-- **2b-read:** `GET /v1/events` (parent + occurrences), the occurrence read, and the audiences read; the three aliases.
-- **2b-write:** the event create/update, the audience CRUD writes, and membership status.
-- **2b-capture:** the capture amendment's API half.
+- **2b-read (this round):** `GET /v1/events`, `/v1/events/:id` and `/v1/series/:id` behind `view=parent` (the legacy
+  shapes stay the default), the audiences read, the `seriesId` alias, and the committed OpenAPI snapshot with its
+  equality test.
+- **2b-write (next round):** the event create/update, the audience CRUD writes, the `eventNo` create input and
+  membership status.
+- **2b-capture (the round after):** the capture amendment's API half.
 
 **The UI pipelines, it does not overlap.** Round 3 starts when **2b-read** merges and the UI can call a real read API; its read screens (list, detail, audience picker options) build against it. The write screens follow **2b-write**, and the import panel follows **2b-capture**. No UI branch is opened against a mock, and no UI screen merges before the endpoint it calls exists.
 
@@ -118,7 +129,12 @@ conformance. The write surface, the audience writes and the capture amendment fo
 
 gate-run 2026-11-23T04:21:45.974Z profile=fast steps=4/4 lines=4 bytes=691
 
+gate-run 2026-11-23T04:53:36.930Z profile=fast steps=4/4 lines=4 bytes=691
+
+The first line is slice 2a's gate; the second is 2b-read's, after the review fixes (the 04:47 run preceded them).
+
 Tests: 1,021 passed at the worker's first pass; 218 in the rework's touched suites; the parent's gate ran the full suite.
+2b-read: the worker's touched suites 194 passed over 11 files; the parent's gate ran the full suite again.
 
 ## Review
 
@@ -133,6 +149,15 @@ Seat: consistent — worker `ollama-cloud/deepseek-v4.1-flash:1017`; reviewer `o
 Verdict after the second pass: **ACCEPT** (two nits: the cancelled-instance skip, since covered by a test, and the
 round-doc parity wording, now corrected).
 
+**2b-read.** Tier 2 independent review, `deepseek-v4-pro:0813`: **ACCEPT** with three P2s, all fixed in the same
+slice — the legacy `422` path for `include=attendance` restored to `seriesId` (the new `eventId` conflict keeps its
+own path), the conflict rejection and the restored path pinned by tests, a non-UTC-timezone test for the
+event-timezone "today" rule, and a test pinning today's transitional roster as `expected`; two nits (the duplicated
+`greatest` pair, and a full-body equality test for the legacy series summary). The reviewer confirmed the `view`
+gate is identical on all three routes, the legacy serialisers are untouched, every query is bound and inside
+`src/repos/`, the OpenAPI generator derives from the handler schemas, and `no-store` is set on every personal-data
+read.
+
 ## Git writes
 
 `git-seat-budget: 12` (two chains: `2 × (1 branch + 1 commit + 1 push + 1 pr + 1 merge + 1 sync) = 12`).
@@ -145,10 +170,34 @@ round-doc parity wording, now corrected).
 | 4     | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | Slice 2a PR against `main`                    |
 | 5     | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | Slice 2a, after the checks                    |
 | 6     | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                               |
+| 7     | `git-executor rung 2` | `branch` | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-api` from `main`       |
+| 8     | `git-executor rung 2` | `commit` | `ollama-cloud/mimo-v2.6-flash` | 2b-read: read API, contract, snapshot, tests  |
+| 9     | `git-executor rung 2` | `push`   | `ollama-cloud/mimo-v2.6-flash` | 2b-read branch only                           |
+| 10    | `git-executor rung 2` | `pr`     | `ollama-cloud/mimo-v2.6-flash` | 2b-read PR against `main`                     |
+| 11    | `git-executor rung 2` | `merge`  | `ollama-cloud/mimo-v2.6-flash` | 2b-read, after the checks                     |
+| 12    | `git-executor rung 2` | `sync`   | `ollama-cloud/mimo-v2.6-flash` | Post-merge pull                               |
 
 ## Acceptance
 
-Pending.
+| #   | Criterion                                                                                                                                           | Met | Evidence                                                                                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------- |
+| 1   | One parent per series or standalone event, one occurrence per date, with the parent/occurrence tables                                               | yes | `tests/db/event-parent-migration.test.ts` (legacy fixture through 0025, then 0026); AC-39                     |
+| 2   | The rekey resolves every child row to its occurrence, counts unchanged, supersession chains intact, a bad row aborts                                | yes | `tests/db/event-parent-migration.test.ts` (row-count map, chain resolution, two abort cases)                  |
+| 3   | Parent `draft` preserved, a draft occurrence `scheduled`, archived series `archived`, no draft in held/upcoming                                     | yes | same suite (AC-40); `tests/api/series-summary.test.ts`; `src/repos/series.ts` `SERIES_SUMMARY_ATTENDANCE_SQL` |
+| 4   | `event_offerings.occurrence_id` with the three attachment cases and the two partial active pairs                                                    | yes | same suite; `tests/db/schema-drift.test.ts`; `src/db/migrations.ts`                                           |
+| 5   | Six seeded audiences plus one per ministry, the four legacy pairs mapped, membership status and visitor identity                                    | yes | `tests/db/event-audience-backfill.test.ts`; AC-40 area of the audience spec                                   |
+| 6   | Legacy tables dropped, `events.ministry_id`/`presbyter_only` kept as read-only projections                                                          | yes | `tests/db/event-parent-migration.test.ts` drop-list assertions; `src/db/migrations.ts`                        |
+| 7   | `/v1/events`, `/v1/events/:id` and `/v1/series/:id` keep their legacy shapes by default; `view=parent` serves the parent; any other `view` is `422` | yes | `tests/api/event-parent-read.test.ts`; `tests/api/series-summary.test.ts` full-body equality                  |
+| 8   | The parent list carries one row per event with next occurrence (event timezone, 90-day cap, null when none)                                         | yes | `tests/api/event-parent-read.test.ts`; `tests/domain/series.test.ts` (non-UTC)                                |
+| 9   | The parent detail carries identity, audience, recurrence, occurrence capture/counts, window summary and offerings                                   | yes | `tests/api/event-parent-read.test.ts`                                                                         |
+| 10  | Audiences are readable with the rule and the server-rendered summary; no write in this slice                                                        | yes | `tests/api/event-parent-read.test.ts`; `src/routes/audiences.ts`                                              |
+| 11  | `seriesId` keeps working as the alias for `eventId`, the conflict is rejected, the legacy error path is unchanged                                   | yes | `tests/api/event-parent-read.test.ts` (three alias cases)                                                     |
+| 12  | The OpenAPI snapshot is generated from the handler schemas and its equality test is in the gate                                                     | yes | `openapi.json`; `tests/api/openapi-snapshot.test.ts`; `src/openapi.ts`                                        |
+| 13  | Tier 2 review by the independent seat, both axes, with the fixes re-reviewed                                                                        | yes | `## Review`; 2a and 2b-read both ACCEPT                                                                       |
+| 14  | The parent's gate passes on the frozen tree                                                                                                         | yes | `verify:fast` 4/4 and `smoke` PASS; signatures above                                                          |
+
+Verdict: **ACCEPTED** by the parent after the Tier 2 confirmation round. Slice 2a merged as PR #219 (`7cc0bbc`);
+2b-read is this slice's PR from the commit carrying this doc.
 
 ## Deviations
 
@@ -160,3 +209,12 @@ Pending.
   one.
 - **A series parent's venue and times are derived from its earliest non-cancelled instance**; the occurrence may
   override them.
+- **The contract and the read handlers land together in 2b-read.** The workflow's contract-only PR exists to let a
+  parallel track branch before the implementation; the UI read track starts only after 2b-read, so the schemas, the
+  OpenAPI snapshot and the handlers ship in one PR. From the write slice, where the UI screens run alongside, the
+  contract-only split applies.
+- **The parent read's `expected` is the transitional roster.** It is today's evaluated-member count filtered by the
+  legacy `presbyter_only` flag, not the audience rule evaluated at the occurrence date, because no audience-evaluation
+  predicate exists yet; the spec keeps the legacy pair until the downstream "nothing reads them" round. Recorded in
+  `documents/backlog.md` under "Audience-derived `expected` on the parent read", and pinned by a test so the
+  downstream round flips it with a failing test rather than a silent change.

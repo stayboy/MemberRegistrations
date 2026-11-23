@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { actorOf } from '../actor.js';
-import { NotFoundError } from '../errors/domain-errors.js';
+import { BadRequestError, NotFoundError } from '../errors/domain-errors.js';
 import {
   createEventSchema,
   delegationInputSchema,
@@ -9,6 +9,9 @@ import {
   eventAttendanceQuerySchema,
   eventGenerateQuerySchema,
   eventListQuerySchema,
+  eventParentDetailQuerySchema,
+  eventParentListQuerySchema,
+  eventViewQuerySchema,
   headcountInputSchema,
   headcountListQuerySchema,
   sessionDateQuerySchema,
@@ -37,6 +40,10 @@ function sendEvent(res: Response, detail: EventDetail, status = 200): void {
   res.status(status).json(detail.event);
 }
 
+function assertWindow(from: string, to: string): void {
+  if (from > to) throw new BadRequestError('from must be on or before to', 'invalid_window');
+}
+
 /**
  * The bearer token is shared by officers and reads the whole register. Member
  * identity lives on the USSD session, never on this surface.
@@ -50,6 +57,14 @@ export function eventsRouter(
   const router = Router();
 
   router.get('/', async (req, res) => {
+    const { view } = eventViewQuerySchema.parse(req.query);
+    if (view === 'parent') {
+      const query = eventParentListQuerySchema.parse(req.query);
+      assertWindow(query.from, query.to);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ items: await repo.listParents(query) });
+      return;
+    }
     const query = eventListQuerySchema.parse(req.query);
     res.setHeader('Cache-Control', 'no-store');
     res.json({ items: await repo.list(query) });
@@ -176,6 +191,16 @@ export function eventsRouter(
 
   router.get('/:id', async (req, res) => {
     const id = eventIdSchema.parse(req.params.id);
+    const { view } = eventViewQuerySchema.parse(req.query);
+    if (view === 'parent') {
+      const query = eventParentDetailQuerySchema.parse(req.query);
+      assertWindow(query.from, query.to);
+      const parent = await repo.getParent(id, query.from, query.to);
+      if (!parent) throw new NotFoundError(`Event ${id} was not found`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(parent);
+      return;
+    }
     const detail = await repo.get(id);
     if (!detail) throw new NotFoundError(`Event ${id} was not found`);
     sendEvent(res, detail);

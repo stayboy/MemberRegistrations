@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { GENDERS } from '../repos/members.js';
+import { audienceSummarySchema } from './audiences.js';
 import { dateStringSchema, memberNoParamSchema } from './common.js';
 import { offeringStatsSchema, termsSchema } from './offerings.js';
+import { seriesSummarySchema } from './reference.js';
 
 export const VENUE_TYPES = ['auditorium', 'virtual', 'hybrid'] as const;
 export const EVENT_STATUSES = ['draft', 'active', 'archived'] as const;
@@ -346,4 +348,97 @@ export const delegationSchema = z.object({
 
 export const delegationListSchema = z.object({
   items: z.array(delegationSchema),
+});
+
+/**
+ * The parent read's occurrence row: a dated child of the event, never a
+ * second event. The attendance fields are the occurrence's own summary.
+ */
+export const eventOccurrenceSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  startTime: z.string(),
+  endTime: z.string().nullable(),
+  status: eventSessionStatusSchema,
+  venueType: venueTypeSchema.optional(),
+  capture: z.object({ asOf: z.string(), ended: z.boolean() }).nullable(),
+  note: z.string().nullable(),
+  present: z.number().int(),
+  expected: z.number().int(),
+  importedRows: z.number().int(),
+  source: sessionSourceSchema,
+  /** Read-only legacy per-instance number; null once the transition retires it. */
+  legacyEventNo: z.string().nullable(),
+});
+
+export const eventRecurrenceSchema = z.object({
+  schedules: z.array(
+    z.object({
+      effectiveFrom: z.string(),
+      rrule: z.string(),
+      endsOn: z.string().nullable(),
+    }),
+  ),
+  exceptions: z.array(
+    z.object({
+      date: z.string(),
+      kind: z.enum(['cancelled', 'extra']),
+      note: z.string().nullable(),
+    }),
+  ),
+});
+
+/** The parent read's window figures: the data behind the four tiles (S-Q2). */
+export const eventWindowSummarySchema = seriesSummarySchema;
+
+export const eventParentSchema = z.object({
+  id: z.string(),
+  eventNo: z.string(),
+  name: z.string(),
+  audienceId: z.string(),
+  audience: audienceSummarySchema,
+  ministry: z.object({ code: z.string(), name: z.string() }).nullable(),
+  presbyterOnly: z.boolean(),
+  timezone: z.string(),
+  description: z.string().nullable(),
+  venueType: venueTypeSchema,
+  venueName: z.string().nullable(),
+  startDate: z.string(),
+  endDate: z.string().nullable(),
+  startTime: z.string(),
+  endTime: z.string().nullable(),
+  tracksMembers: z.boolean(),
+  status: eventStatusSchema,
+  recurrence: eventRecurrenceSchema.nullable(),
+  occurrences: z.array(eventOccurrenceSchema),
+  offerings: z.array(eventOfferingSchema),
+  stats: offeringStatsSchema,
+  summary: eventWindowSummarySchema,
+});
+
+export const eventParentListSchema = z.object({
+  items: z.array(eventParentSchema),
+});
+
+/** The transition flag, validated even on the legacy default path. */
+export const eventViewQuerySchema = z.object({
+  view: z.literal('parent').optional(),
+});
+
+export const eventParentListQuerySchema = eventListQuerySchema.extend({
+  view: z.literal('parent'),
+  from: dateStringSchema,
+  to: dateStringSchema,
+});
+
+export const eventParentDetailQuerySchema = z.object({
+  view: z.literal('parent'),
+  from: dateStringSchema,
+  to: dateStringSchema,
+});
+
+export const seriesParentQuerySchema = z.object({
+  view: z.literal('parent'),
+  from: dateStringSchema,
+  to: dateStringSchema,
 });

@@ -25,6 +25,7 @@ import { createPhoneCipher, type PhoneCipher } from './domain/phone-cipher.js';
 import { buildOpenApiDocument } from './openapi.js';
 import { StubPaymentGateway, type PaymentGateway } from './payments/gateway.js';
 import { AttendanceCodeRepository } from './repos/attendance-codes.js';
+import { AudienceRepository } from './repos/audiences.js';
 import { AuthRepository } from './repos/auth.js';
 import { ClockingRepository } from './repos/clocking.js';
 import { ContributionRepository } from './repos/contributions.js';
@@ -46,6 +47,7 @@ import { SubscriptionRepository } from './repos/subscriptions.js';
 import { UssdRepository } from './repos/ussd.js';
 import { VerificationRepository } from './repos/verification.js';
 import { attendanceCodesRouter } from './routes/attendance-codes.js';
+import { audiencesRouter } from './routes/audiences.js';
 import { contributionsRouter } from './routes/contributions.js';
 import { eventsRouter } from './routes/events.js';
 import { importsRouter } from './routes/imports.js';
@@ -126,6 +128,7 @@ export function createApp(options: AppOptions): Express {
   const members = new MemberRepository(options.db, countryCode);
   const ministries = new MinistryRepository(options.db);
   const presbyterTitles = new PresbyterTitleRepository(options.db);
+  const audiences = new AudienceRepository(options.db);
   const series = new SeriesRepository(options.db);
   const imports = new ImportRepository(options.db);
   const shepherding = new ShepherdingRepository(options.db);
@@ -340,7 +343,8 @@ export function createApp(options: AppOptions): Express {
   v1.use('/subscription-products', subscriptionProductsRouter(subscriptionProducts));
   v1.use('/ministries', ministriesRouter(ministries));
   v1.use('/presbyter-titles', presbyterTitlesRouter(presbyterTitles));
-  v1.use('/series', seriesRouter(series));
+  v1.use('/audiences', audiencesRouter(audiences));
+  v1.use('/series', seriesRouter(series, events));
   v1.use('/imports', importsRouter(imports));
   // Registered before /events so /events/:eventId/codes reaches this router.
   v1.use(attendanceCodesRouter(attendanceCodes));

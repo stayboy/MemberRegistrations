@@ -48,13 +48,17 @@ function assertTimeZone(timeZone: string): string {
 }
 
 /** Today's calendar date in the series timezone, not the server's. */
-export function todayIn(timeZone: string): string {
+/**
+ * The UTC calendar date in the event's timezone. The optional `at` is the
+ * clock seam: production callers use now, while a test can pin an instant.
+ */
+export function todayIn(timeZone: string, at: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: assertTimeZone(timeZone),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(at);
 }
 
 /**
