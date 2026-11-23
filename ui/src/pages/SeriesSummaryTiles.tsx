@@ -30,28 +30,42 @@ function SummaryTile({
 }
 
 /**
- * Call site: SeriesDetailPage (FR-6e). Four presentational tiles fed by one
- * summary request. The occurrence count is the list the page already renders, so
- * the tile and the table cannot disagree; the mock's rail and per-occurrence
- * columns stay queued.
+ * Call site: SeriesDetailPage (FR-6e) and EventDetailPage's parent read. Four
+ * presentational tiles fed by one summary request. The occurrence count is the
+ * list the page already renders, so the tile and the table cannot disagree; the
+ * mock's rail and per-occurrence columns stay queued.
  */
 export function SeriesSummaryTiles({
   summary,
   occurrenceCount,
   formatDate,
+  label = 'Series summary',
+  expectedLabel,
 }: {
   summary: SeriesSummaryDto;
   occurrenceCount: number;
   formatDate: (date: string) => string;
+  /** The region's accessible name; an event detail passes "Event summary". */
+  label?: string;
+  /**
+   * "Roster" on both detail pages: the expected count is the transitional roster
+   * (FR-6e, amended 2026-11-23), so it is labelled and kept apart from present.
+   */
+  expectedLabel?: string;
 }) {
   const styles = useEventStyles();
   const { attendance, offerings } = summary;
   const { memberSessions, lastHeld, headcountSessions } = attendance;
   const headcountNote =
     headcountSessions.held > 0 ? ` · ${headcountSessions.held} headcount-only` : '';
+  const lastHeldCaption = lastHeld
+    ? expectedLabel
+      ? `${lastHeld.present} present · ${expectedLabel} ${lastHeld.expected} on ${formatDate(lastHeld.date)}${headcountNote}`
+      : `${lastHeld.present} of ${lastHeld.expected} on ${formatDate(lastHeld.date)}${headcountNote}`
+    : 'No held sessions in this window';
 
   return (
-    <section className={styles.metrics} aria-label="Series summary">
+    <section className={styles.metrics} aria-label={label}>
       <SummaryTile
         label="Next occurrence"
         value={summary.nextOccurrence ? formatDate(summary.nextOccurrence) : 'None in 90 days'}
@@ -61,11 +75,7 @@ export function SeriesSummaryTiles({
       <SummaryTile
         label="Attendance"
         value={memberSessions.rate === null ? '—' : percentLabel(memberSessions.rate)}
-        caption={
-          lastHeld
-            ? `${lastHeld.present} of ${lastHeld.expected} on ${formatDate(lastHeld.date)}${headcountNote}`
-            : 'No held sessions in this window'
-        }
+        caption={lastHeldCaption}
       />
       <SummaryTile
         label="Offerings"

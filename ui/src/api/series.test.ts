@@ -11,6 +11,7 @@ import {
   seriesExceptionPath,
   seriesListPath,
   seriesOccurrencesPath,
+  seriesParentPath,
   seriesSchedulePath,
   setSeriesException,
   updateSeries,
@@ -351,6 +352,18 @@ describe('series exceptions', () => {
     expect(seriesExceptionPath('series/1', '2026-11-08')).toBe(
       '/gateway/v1/series/series%2F1/exceptions/2026-11-08',
     );
+  });
+});
+
+describe('seriesParentPath', () => {
+  it('encodes the id and carries view=parent with the window', () => {
+    expect(
+      seriesParentPath('series/1', {
+        view: 'parent',
+        from: '2026-01-01',
+        to: '2026-01-31',
+      }),
+    ).toBe('/gateway/v1/series/series%2F1?view=parent&from=2026-01-01&to=2026-01-31');
   });
 });
 

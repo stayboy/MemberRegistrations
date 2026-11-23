@@ -21,31 +21,33 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
-  getEvent,
-  type EventSessionItem,
-  type EventStatus,
+  getEventParent,
+  type EventOccurrenceItem,
+  type EventParentStatus,
   type EventVenueType,
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
+import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { PageFrame } from '../components/PageFrame';
 import { SessionHeadcount } from '../components/SessionHeadcount';
 import { SessionImportPanel } from '../components/SessionImportPanel';
-import { occurrenceFrom, type Occurrence } from '../features/attendance-import/AttendanceWorkspace';
-import { PageFrame } from '../components/PageFrame';
 import { TermsDialog } from '../components/TermsDialog';
+import { occurrenceFrom, type Occurrence } from '../features/attendance-import/AttendanceWorkspace';
+import { captureState, endActionState } from '../format/capture';
 import {
   eventStatusLabel,
-  formatPresentExpected,
+  ministryLabel,
   offeringsLabel,
-  seriesLabel,
   sessionCaptureLine,
   sessionSourceLabel,
   sessionStatusLabel,
   venueLabel,
 } from '../format/events';
-import { captureState, endActionState } from '../format/capture';
+import { exceptionKindLabel, exceptionNoteLabel, scheduleLabel } from '../format/series';
 
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { EventAttendanceDialog } from './EventAttendanceDialog';
+import { SeriesSummaryTiles } from './SeriesSummaryTiles';
 import { useEventStyles } from './events-styles';
 
 type BadgeColor = ComponentProps<typeof Badge>['color'];
@@ -61,11 +63,10 @@ function venueColor(venueType: EventVenueType): BadgeColor {
   return 'informative';
 }
 
-function statusColor(status: EventStatus): BadgeColor {
-  if (status === 'held') return 'success';
-  if (status === 'cancelled') return 'danger';
-  if (status === 'scheduled') return 'informative';
-  return 'subtle';
+function statusColor(status: EventParentStatus): BadgeColor {
+  if (status === 'active') return 'success';
+  if (status === 'archived') return 'subtle';
+  return 'informative';
 }
 
 function kindLabel(kind: string): string {
@@ -73,11 +74,15 @@ function kindLabel(kind: string): string {
 }
 
 /**
- * Events → event detail (events FR-4/FR-10/FR-15): the header, the metadata,
- * the attached-offering count and one row per dated session with its status,
- * source and API-supplied present/expected. Selecting a session opens the
- * read-only attendance dialog. The status is the API's derived value; the
- * screen never classifies an event by comparing dates (FR-3).
+ * Events → event detail (events FR-4/FR-5/FR-6, UI FR-42): the parent read with
+ * its identity, the server-rendered audience summary, the recurrence's schedule
+ * versions and exceptions, the window occurrence table with the derived status
+ * and capture state, the window summary tiles and the read-only offerings.
+ *
+ * The roster figure is the API's transitional `expected` count, labelled
+ * Roster and never merged with present or coloured here. The status and next
+ * occurrence are the API's; the screen never classifies an event by comparing
+ * dates (FR-3).
  */
 export function EventDetailPage() {
   const styles = useEventStyles();
@@ -86,45 +91,62 @@ export function EventDetailPage() {
   const { baseUrl, session, signOut } = useSession();
   const { formatDate, formatTime, formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
-  const [selected, setSelected] = useState<EventSessionItem | null>(null);
+  const [window, setWindow] = useDateWindow();
+  const [selected, setSelected] = useState<EventOccurrenceItem | null>(null);
+  const [importFor, setImportFor] = useState<Occurrence | null>(null);
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [termsTarget, setTermsTarget] = useState<{
     readonly offeringId: string;
     readonly name: string;
   } | null>(null);
 
   const eventQuery = useQuery({
-    queryKey: ['events', baseUrl, 'detail', id],
-    queryFn: ({ signal }) => getEvent(baseUrl, token, id, signal),
-    enabled: Boolean(token) && id.length > 0,
+    queryKey: ['events', baseUrl, 'detail', id, window.from, window.to],
+    queryFn: ({ signal }) =>
+      getEventParent(baseUrl, token, id, {
+        from: window.from,
+        to: window.to,
+        signal,
+      }),
+    enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
   });
 
   useEffect(() => {
     if (isUnauthorized(eventQuery.error)) void signOut();
   }, [eventQuery.error, signOut]);
 
-  const [importFor, setImportFor] = useState<Occurrence | null>(null);
-  const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const event = eventQuery.data?.event;
+  const event = eventQuery.data;
+  const occurrences = event?.occurrences ?? [];
+  const schedules = [...(event?.recurrence?.schedules ?? [])].sort((left, right) =>
+    right.effectiveFrom.localeCompare(left.effectiveFrom),
+  );
+  const exceptions = event?.recurrence?.exceptions ?? [];
 
-  // FR-8a: a retired route forwards here with `import=<date>`. The occurrence is derived, never stored
-  // from an effect, so closing the panel and dropping the parameter are the same act.
+  // FR-8a: a retired route forwards here with `import=<date>`. The date is a
+  // calendar date matched to the occurrence the parent read returned for the
+  // window; no derived occurrence is invented when nothing matches, so closing
+  // the panel and dropping the parameter are the same act.
   const linkedDate = searchParams.get('import');
-  const linkedSession =
-    linkedDate && event
-      ? event.sessions.find((candidate) => candidate.date === linkedDate)
-      : undefined;
+  const linkedOccurrence = linkedDate
+    ? occurrences.find((candidate) => candidate.date === linkedDate)
+    : undefined;
   const panelOccurrence: Occurrence | null =
-    importFor ?? (event && linkedSession ? occurrenceFrom(event, linkedSession) : null);
+    importFor ?? (event && linkedOccurrence ? occurrenceFrom(event, linkedOccurrence) : null);
 
-  const sessions = event?.sessions ?? [];
+  function clearImportParam(): void {
+    if (!linkedDate) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('import');
+    setSearchParams(next, { replace: true });
+  }
 
   return (
     <PageFrame
       sectionId="events"
       title={event?.name ?? 'Event'}
       submenu={event?.name ?? 'Event detail'}
-      description="Sessions and per-date attendance. Select a session to review the rows recorded against it."
+      description="Occurrences, attendance and offerings for one event, as the API derives them for the chosen window."
       controls={
         <Button
           icon={<ArrowLeftRegular />}
@@ -172,15 +194,32 @@ export function EventDetailPage() {
           </div>
         ) : eventQuery.isError || !event ? null : (
           <>
+            <div className={styles.toolbar}>
+              <DateWindowControl
+                value={window}
+                onChange={setWindow}
+                label="Event window"
+                hint="UTC dates · the API owns today and the 90-day next occurrence."
+              />
+            </div>
+
             <Card className={styles.meta}>
               <div className={styles.metaRows}>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Event number</Text>
-                  <Text className={styles.metaValue}>{event.eventNo ?? 'No number yet'}</Text>
+                  <Text className={styles.metaValue}>{event.eventNo || 'No number yet'}</Text>
                 </div>
                 <div className={styles.metaRow}>
-                  <Text className={styles.metaLabel}>Series</Text>
-                  <Text className={styles.metaValue}>{seriesLabel(event)}</Text>
+                  <Text className={styles.metaLabel}>Audience</Text>
+                  <Text className={styles.metaValue}>{event.audience.summary}</Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Ministry</Text>
+                  <Text className={styles.metaValue}>{ministryLabel(event.ministry)}</Text>
+                </div>
+                <div className={styles.metaRow}>
+                  <Text className={styles.metaLabel}>Timezone</Text>
+                  <Text className={styles.metaValue}>{event.timezone}</Text>
                 </div>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Venue</Text>
@@ -206,7 +245,9 @@ export function EventDetailPage() {
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Dates</Text>
                   <Text className={styles.metaValue}>
-                    {formatRange(event.startDate, event.endDate)}
+                    {event.endDate
+                      ? formatRange(event.startDate, event.endDate)
+                      : `${formatDate(event.startDate)} · ongoing`}
                   </Text>
                 </div>
                 <div className={styles.metaRow}>
@@ -229,6 +270,233 @@ export function EventDetailPage() {
                 </>
               ) : null}
             </Card>
+
+            <SeriesSummaryTiles
+              summary={event.summary}
+              occurrenceCount={occurrences.length}
+              formatDate={formatDate}
+              label="Event summary"
+              expectedLabel="Roster"
+            />
+
+            <section className={styles.panel} aria-label="Recurrence">
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.panelTitle}>Recurrence</h2>
+                <Text size={200} className={styles.muted}>
+                  {event.recurrence
+                    ? `${schedules.length} schedule version${schedules.length === 1 ? '' : 's'} · ${exceptions.length} exception${exceptions.length === 1 ? '' : 's'}`
+                    : 'Standalone event'}
+                </Text>
+              </div>
+              {!event.recurrence ? (
+                <div className={styles.empty}>
+                  <Text className={styles.emptyTitle}>No recurrence</Text>
+                  <Text size={200} className={styles.muted}>
+                    This event is standalone: its dated occurrences stand on their own, with no
+                    schedule versions or exceptions.
+                  </Text>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.tableWrap}>
+                    <Table className={styles.table} size="small" aria-label="Schedule versions">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHeaderCell>Effective from</TableHeaderCell>
+                          <TableHeaderCell>Schedule</TableHeaderCell>
+                          <TableHeaderCell>Ends on</TableHeaderCell>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {schedules.map((version) => (
+                          <TableRow key={version.effectiveFrom}>
+                            <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
+                            <TableCell>{scheduleLabel(version.rrule)}</TableCell>
+                            <TableCell>
+                              {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {exceptions.length > 0 ? (
+                    <div className={styles.tableWrap}>
+                      <Table className={styles.table} size="small" aria-label="Exceptions">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHeaderCell>Date</TableHeaderCell>
+                            <TableHeaderCell>Kind</TableHeaderCell>
+                            <TableHeaderCell>Note</TableHeaderCell>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {exceptions.map((exception) => (
+                            <TableRow key={exception.date}>
+                              <TableCell>{formatDate(exception.date)}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  appearance="tint"
+                                  color={exception.kind === 'cancelled' ? 'danger' : 'informative'}
+                                  size="small"
+                                >
+                                  {exceptionKindLabel(exception.kind)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {exception.note ? (
+                                  exception.note
+                                ) : (
+                                  <Text size={200} className={styles.muted}>
+                                    {exceptionNoteLabel(exception.kind, exception.note)}
+                                  </Text>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </section>
+
+            <section className={styles.panel} aria-label="Event occurrences">
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.panelTitle}>Event occurrences</h2>
+                <Text size={200} className={styles.muted}>
+                  {occurrences.length} occurrence{occurrences.length === 1 ? '' : 's'} in this
+                  window
+                </Text>
+              </div>
+              {occurrences.length === 0 ? (
+                <div className={styles.empty}>
+                  <Text className={styles.emptyTitle}>No occurrences in this window</Text>
+                  <Text size={200} className={styles.muted}>
+                    Widen the window; the API generates the dates and the screen never expands the
+                    RRULE.
+                  </Text>
+                </div>
+              ) : (
+                <div className={styles.tableWrap}>
+                  <Table
+                    className={styles.sessionTable}
+                    size="small"
+                    aria-label="Event occurrences"
+                  >
+                    <TableHeader>
+                      <TableRow>
+                        <TableHeaderCell>Date</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
+                        <TableHeaderCell>Capture</TableHeaderCell>
+                        <TableHeaderCell>Headcount</TableHeaderCell>
+                        <TableHeaderCell>Present / Roster</TableHeaderCell>
+                        <TableHeaderCell>Imported rows</TableHeaderCell>
+                        <TableHeaderCell>Source</TableHeaderCell>
+                        <TableHeaderCell aria-label="Action" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {occurrences.map((occurrence) => (
+                        <TableRow key={occurrence.id}>
+                          <TableCell>{formatDate(occurrence.date)}</TableCell>
+                          <TableCell className={styles.statusCell}>
+                            <div className={styles.statusStack}>
+                              <Badge
+                                appearance="tint"
+                                color={
+                                  occurrence.status === 'held'
+                                    ? 'success'
+                                    : occurrence.status === 'cancelled'
+                                      ? 'danger'
+                                      : 'informative'
+                                }
+                                size="small"
+                              >
+                                {sessionStatusLabel(occurrence.status)}
+                              </Badge>
+                              {occurrence.status === 'cancelled' ? (
+                                <Text size={200} className={styles.muted}>
+                                  {occurrence.note
+                                    ? `Reason: ${occurrence.note}`
+                                    : 'No reason recorded'}
+                                </Text>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Text size={200} className={styles.muted}>
+                              {sessionCaptureLine(
+                                {
+                                  date: occurrence.date,
+                                  startTime: occurrence.startTime,
+                                  endTime: occurrence.endTime,
+                                  timezone: event.timezone,
+                                  status: occurrence.status,
+                                  capture: occurrence.capture,
+                                },
+                                new Date(),
+                              )}
+                            </Text>
+                          </TableCell>
+                          <TableCell>
+                            <SessionHeadcount
+                              eventId={event.id}
+                              sessionDate={occurrence.date}
+                              disabled={
+                                occurrence.status === 'cancelled' ||
+                                Boolean(occurrence.capture?.ended)
+                              }
+                              onImport={
+                                event.tracksMembers
+                                  ? () => setImportFor(occurrenceFrom(event, occurrence))
+                                  : undefined
+                              }
+                              endAction={
+                                event.tracksMembers
+                                  ? endActionState(
+                                      captureState(
+                                        {
+                                          date: occurrence.date,
+                                          startTime: occurrence.startTime,
+                                          endTime: occurrence.endTime,
+                                          timezone: event.timezone,
+                                          status: occurrence.status,
+                                          capture: occurrence.capture,
+                                        },
+                                        new Date(),
+                                      ),
+                                    )
+                                  : 'hidden'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className={styles.counts}>
+                              <Text size={200}>{occurrence.present} present</Text>
+                              <Text size={200}>Roster {occurrence.expected}</Text>
+                            </div>
+                          </TableCell>
+                          <TableCell>{occurrence.importedRows}</TableCell>
+                          <TableCell>{sessionSourceLabel(occurrence.source)}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              appearance="transparent"
+                              aria-label={`View rows for ${formatDate(occurrence.date)}`}
+                              onClick={() => setSelected(occurrence)}
+                            >
+                              View rows
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </section>
 
             <section className={styles.panel} aria-label="Active offerings">
               <div className={styles.sectionHeader}>
@@ -308,115 +576,6 @@ export function EventDetailPage() {
                 </>
               )}
             </section>
-
-            <section className={styles.panel} aria-label="Event sessions">
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.panelTitle}>Event sessions</h2>
-                <Text size={200} className={styles.muted}>
-                  {sessions.length} session dates
-                </Text>
-              </div>
-              {sessions.length === 0 ? (
-                <div className={styles.empty}>
-                  <Text className={styles.emptyTitle}>No sessions</Text>
-                  <Text size={200} className={styles.muted}>
-                    This event has no dated sessions yet.
-                  </Text>
-                </div>
-              ) : (
-                <div className={styles.tableWrap}>
-                  <Table className={styles.sessionTable} size="small" aria-label="Event sessions">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHeaderCell>Date</TableHeaderCell>
-                        <TableHeaderCell>Start ({event.timezone})</TableHeaderCell>
-                        <TableHeaderCell>End ({event.timezone})</TableHeaderCell>
-                        <TableHeaderCell>Status</TableHeaderCell>
-                        <TableHeaderCell>Source</TableHeaderCell>
-                        <TableHeaderCell>Present/expected</TableHeaderCell>
-                        <TableHeaderCell>Headcount</TableHeaderCell>
-                        <TableHeaderCell>Attendance</TableHeaderCell>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sessions.map((item) => (
-                        <TableRow key={item.date}>
-                          <TableCell>{formatDate(item.date)}</TableCell>
-                          <TableCell>{formatTime(item.startTime)}</TableCell>
-                          <TableCell>{item.endTime ? formatTime(item.endTime) : '—'}</TableCell>
-                          <TableCell className={styles.statusCell}>
-                            <div className={styles.statusStack}>
-                              <Badge
-                                appearance="tint"
-                                color={statusColor(item.status)}
-                                size="small"
-                              >
-                                {sessionStatusLabel(item.status)}
-                              </Badge>
-                              {item.status === 'cancelled' ? (
-                                <Text size={200} className={styles.muted}>
-                                  {item.note ? `Reason: ${item.note}` : 'No reason recorded'}
-                                </Text>
-                              ) : null}
-                              <Text size={200} className={styles.muted}>
-                                {sessionCaptureLine(
-                                  {
-                                    date: item.date,
-                                    startTime: item.startTime,
-                                    endTime: item.endTime,
-                                    timezone: event.timezone,
-                                    status: item.status,
-                                    capture: item.capture ?? null,
-                                  },
-                                  new Date(),
-                                )}
-                              </Text>
-                            </div>
-                          </TableCell>
-                          <TableCell>{sessionSourceLabel(item.source)}</TableCell>
-                          <TableCell>
-                            <SessionHeadcount
-                              eventId={event.id}
-                              sessionDate={item.date}
-                              disabled={item.status === 'cancelled' || Boolean(item.capture?.ended)}
-                              onImport={
-                                event.seriesId
-                                  ? () => setImportFor(occurrenceFrom(event, item))
-                                  : undefined
-                              }
-                              endAction={endActionState(
-                                captureState(
-                                  {
-                                    date: item.date,
-                                    startTime: item.startTime,
-                                    endTime: item.endTime,
-                                    timezone: event.timezone,
-                                    status: item.status,
-                                    capture: item.capture ?? null,
-                                  },
-                                  new Date(),
-                                ),
-                              )}
-                            />
-                          </TableCell>
-                          <TableCell>{formatPresentExpected(item)}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="small"
-                              appearance="transparent"
-                              aria-label={`View rows for ${formatDate(item.date)}`}
-                              onClick={() => setSelected(item)}
-                            >
-                              View rows
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </section>
           </>
         )}
       </div>
@@ -429,17 +588,14 @@ export function EventDetailPage() {
       />
 
       <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />
+
       {panelOccurrence ? (
         <SessionImportPanel
           open
           occurrence={panelOccurrence}
           onClose={() => {
             setImportFor(null);
-            if (linkedDate) {
-              const next = new URLSearchParams(searchParams);
-              next.delete('import');
-              setSearchParams(next, { replace: true });
-            }
+            clearImportParam();
           }}
           onImported={() => {
             setImportFor(null);
@@ -448,11 +604,7 @@ export function EventDetailPage() {
             for (const root of ['events', 'series', 'imports', 'member', 'members']) {
               void queryClient.invalidateQueries({ queryKey: [root, baseUrl] });
             }
-            if (linkedDate) {
-              const next = new URLSearchParams(searchParams);
-              next.delete('import');
-              setSearchParams(next, { replace: true });
-            }
+            clearImportParam();
           }}
         />
       ) : null}

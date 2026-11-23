@@ -1,11 +1,17 @@
 import { expect, test as base, type Page, type Request } from 'playwright/test';
 import type {
   EventAttendance,
+  EventAudienceItem,
   EventItem,
+  EventOccurrenceItem,
   EventOfferingItem,
   EventOfferingStatsItem,
+  EventParentItem,
+  EventParentStatus,
+  EventSessionStatus,
   EventVenueType,
   OfferingTermsItem,
+  SessionSource,
 } from '../src/api/events';
 import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
 import type { OfferingCount } from '../src/api/offering-counts';
@@ -1199,6 +1205,473 @@ const ATTENDANCE_EVENT_1: EventAttendance = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// The parent read (`view=parent`): one row per event parent (FR-1/FR-5)
+// ---------------------------------------------------------------------------
+
+/** The server's `renderAudienceSummary` for the seeded Everyone audience. */
+const AUDIENCE_EVERYONE: EventAudienceItem = {
+  id: 'aud-everyone',
+  name: 'Everyone',
+  system: true,
+  summary: 'Everyone - all of membership status active',
+};
+
+/** The Choir audience the Sunday Service carries; summary is server-rendered, never composed. */
+const AUDIENCE_CHOIR: EventAudienceItem = {
+  id: 'aud-choir',
+  name: 'Choir',
+  system: true,
+  summary: 'Choir - all of ministry CHR',
+};
+
+function recurrenceOf(series: SeriesDto): NonNullable<EventParentItem['recurrence']> {
+  return { schedules: series.schedules, exceptions: series.exceptions };
+}
+
+/** One dated occurrence of a parent, with every field the detail row reads. */
+function occurrence(
+  eventId: string,
+  fields: {
+    readonly date: string;
+    readonly startTime: string;
+    readonly endTime: string | null;
+    readonly status: EventSessionStatus;
+    readonly present: number;
+    readonly expected: number;
+    readonly importedRows: number;
+    readonly source: SessionSource;
+    readonly note?: string | null;
+    readonly capture?: EventOccurrenceItem['capture'];
+    readonly legacyEventNo?: string | null;
+  },
+): EventOccurrenceItem {
+  return {
+    id: `${eventId}@${fields.date}`,
+    date: fields.date,
+    startTime: fields.startTime,
+    endTime: fields.endTime,
+    status: fields.status,
+    capture: fields.capture ?? null,
+    note: fields.note ?? null,
+    present: fields.present,
+    expected: fields.expected,
+    importedRows: fields.importedRows,
+    source: fields.source,
+    legacyEventNo: fields.legacyEventNo ?? null,
+  };
+}
+
+/**
+ * The window figures the four tiles read. They are derived from the occurrence
+ * rows in the same body, so the Occurrences/Attendance tiles and the table can
+ * never disagree (FR-6b/FR-6e).
+ */
+function windowSummaryFor(
+  occurrences: readonly EventOccurrenceItem[],
+  options: {
+    readonly from: string;
+    readonly to: string;
+    readonly nextOccurrence: string | null;
+    readonly offerings: SeriesSummaryDto['offerings'];
+  },
+): SeriesSummaryDto {
+  const held = occurrences.filter((candidate) => candidate.status === 'held');
+  const present = held.reduce((sum, candidate) => sum + candidate.present, 0);
+  const expected = held.reduce((sum, candidate) => sum + candidate.expected, 0);
+  const lastHeld = held.at(-1);
+
+  return {
+    from: options.from,
+    to: options.to,
+    nextOccurrence: options.nextOccurrence,
+    attendance: {
+      memberSessions: {
+        held: held.length,
+        present,
+        expected,
+        rate: expected === 0 ? null : present / expected,
+      },
+      lastHeld: lastHeld
+        ? { date: lastHeld.date, expected: lastHeld.expected, present: lastHeld.present }
+        : null,
+      headcountSessions: { held: 0 },
+      cancelled: occurrences.filter((candidate) => candidate.status === 'cancelled').length,
+      upcoming: occurrences.filter((candidate) => candidate.status === 'scheduled').length,
+    },
+    offerings: options.offerings,
+  };
+}
+
+/** The series parent's three held Sundays; 3 of 4 on each, so the ratio is 75%. */
+const SERIES_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('series-1', {
+    date: '2026-01-04',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 4,
+    importedRows: 3,
+    source: 'import',
+  }),
+  occurrence('series-1', {
+    date: '2026-01-18',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 4,
+    importedRows: 3,
+    source: 'import',
+  }),
+  occurrence('series-1', {
+    date: '2026-01-25',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 4,
+    importedRows: 3,
+    source: 'import',
+  }),
+];
+
+/**
+ * The legacy instance the detail specs open by id. Its 4 January roster is the
+ * attendance report's own 42, so the dialog and the parent row agree.
+ */
+const EVENT_1_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('event-1', {
+    date: '2026-01-04',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 42,
+    importedRows: 2,
+    source: 'mixed',
+  }),
+  occurrence('event-1', {
+    date: '2026-01-18',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 4,
+    importedRows: 3,
+    source: 'import',
+  }),
+  occurrence('event-1', {
+    date: '2026-01-25',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'held',
+    present: 3,
+    expected: 4,
+    importedRows: 3,
+    source: 'import',
+  }),
+];
+
+/** A cancelled parent: both occurrences carry their own status and reason (FR-4a). */
+const CANCELLED_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('event-cancelled', {
+    date: '2026-06-01',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'cancelled',
+    present: 0,
+    expected: 0,
+    importedRows: 0,
+    source: 'none',
+    note: 'Venue flooded',
+  }),
+  occurrence('event-cancelled', {
+    date: '2026-06-02',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'cancelled',
+    present: 0,
+    expected: 0,
+    importedRows: 0,
+    source: 'none',
+  }),
+];
+
+const RETREAT_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('event-2', {
+    date: '2026-01-10',
+    startTime: '08:30',
+    endTime: null,
+    status: 'scheduled',
+    present: 0,
+    expected: 12,
+    importedRows: 0,
+    source: 'none',
+  }),
+  occurrence('event-2', {
+    date: '2026-01-11',
+    startTime: '08:30',
+    endTime: null,
+    status: 'scheduled',
+    present: 0,
+    expected: 12,
+    importedRows: 0,
+    source: 'none',
+  }),
+];
+
+const FOUNDATION_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('event-offerings', {
+    date: '2999-01-10',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'scheduled',
+    present: 0,
+    expected: 10,
+    importedRows: 0,
+    source: 'none',
+  }),
+];
+
+interface ParentSeed {
+  readonly id: string;
+  /** The legacy read the identity fields come from; the parent adds its own shape. */
+  readonly event: EventItem;
+  readonly status: EventParentStatus;
+  readonly audience: EventAudienceItem;
+  readonly startDate: string;
+  readonly endDate: string | null;
+  readonly recurrence: EventParentItem['recurrence'];
+  readonly occurrences: readonly EventOccurrenceItem[];
+  readonly offerings: readonly EventOfferingItem[];
+  readonly summaryOfferings: SeriesSummaryDto['offerings'];
+  readonly nextOccurrence: string | null;
+}
+
+const SUNDAY = EVENTS[0]!;
+
+const PARENT_SEEDS: Readonly<Record<string, ParentSeed>> = {
+  // The series is the event parent: one row, one id, the recurrence and its summary.
+  'series-1': {
+    id: 'series-1',
+    event: SUNDAY,
+    status: 'active',
+    audience: AUDIENCE_CHOIR,
+    startDate: '2025-01-05',
+    endDate: null,
+    recurrence: recurrenceOf(SERIES[0]!),
+    occurrences: SERIES_OCCURRENCES,
+    offerings: SUNDAY.offerings.slice(0, 2),
+    summaryOfferings: SERIES_SUMMARIES['series-1']!.offerings,
+    nextOccurrence: '2026-01-04',
+  },
+  // The legacy per-instance id the detail specs still open.
+  'event-1': {
+    id: 'event-1',
+    event: SUNDAY,
+    status: 'active',
+    audience: AUDIENCE_CHOIR,
+    startDate: '2025-01-05',
+    endDate: null,
+    recurrence: recurrenceOf(SERIES[0]!),
+    occurrences: EVENT_1_OCCURRENCES,
+    offerings: SUNDAY.offerings,
+    summaryOfferings: {
+      ...SERIES_SUMMARIES['series-1']!.offerings,
+      attachedCount: 3,
+      paidMinor: 1_045_000,
+      countedMinor: 1_045_000,
+    },
+    nextOccurrence: '2026-01-04',
+  },
+  'event-cancelled': {
+    id: 'event-cancelled',
+    event: EVENTS[1]!,
+    status: 'active',
+    audience: AUDIENCE_EVERYONE,
+    startDate: '2026-06-01',
+    endDate: '2026-06-02',
+    recurrence: null,
+    occurrences: CANCELLED_OCCURRENCES,
+    offerings: [],
+    summaryOfferings: EMPTY_SUMMARY.offerings,
+    nextOccurrence: null,
+  },
+  'event-2': {
+    id: 'event-2',
+    event: EVENTS[2]!,
+    status: 'active',
+    audience: AUDIENCE_EVERYONE,
+    startDate: '2026-01-10',
+    endDate: '2026-01-11',
+    recurrence: null,
+    occurrences: RETREAT_OCCURRENCES,
+    offerings: [],
+    summaryOfferings: EMPTY_SUMMARY.offerings,
+    nextOccurrence: null,
+  },
+  'event-offerings': {
+    id: 'event-offerings',
+    event: EVENTS[3]!,
+    status: 'active',
+    audience: AUDIENCE_EVERYONE,
+    startDate: '2999-01-10',
+    endDate: '2999-01-10',
+    recurrence: null,
+    occurrences: FOUNDATION_OCCURRENCES,
+    offerings: PREVIEW_OFFERINGS,
+    summaryOfferings: { ...EMPTY_SUMMARY.offerings, attachedCount: PREVIEW_OFFERINGS.length },
+    nextOccurrence: '2999-01-10',
+  },
+};
+
+/** The list is one row per parent; the legacy instance id is served on the detail only. */
+const PARENT_LIST_IDS = ['series-1', 'event-cancelled', 'event-2', 'event-offerings'] as const;
+
+function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
+  const { event } = seed;
+  return {
+    id: seed.id,
+    eventNo: event.eventNo ?? '',
+    name: event.name,
+    audienceId: seed.audience.id,
+    audience: seed.audience,
+    ministry: event.ministry,
+    presbyterOnly: event.presbyterOnly,
+    timezone: event.timezone,
+    description: event.description,
+    venueType: event.venueType,
+    venueName: event.venueName,
+    startDate: seed.startDate,
+    endDate: seed.endDate,
+    startTime: event.startTime,
+    endTime: event.endTime,
+    tracksMembers: event.tracksMembers,
+    status: seed.status,
+    recurrence: seed.recurrence,
+    occurrences: seed.occurrences,
+    offerings: seed.offerings,
+    stats: event.stats,
+    summary: windowSummaryFor(seed.occurrences, {
+      from,
+      to,
+      nextOccurrence: seed.nextOccurrence,
+      offerings: seed.summaryOfferings,
+    }),
+  };
+}
+
+/** A created standalone event reads back as a draft parent with its own dated occurrences. */
+function parentFromCreatedEvent(event: EventItem, from: string, to: string): EventParentItem {
+  const occurrences = event.sessions.map((session) =>
+    occurrence(event.id, {
+      date: session.date,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      status: session.status,
+      present: session.present,
+      expected: session.expected,
+      importedRows: session.importedRows,
+      source: session.source,
+      note: session.note,
+      capture: session.capture,
+    }),
+  );
+
+  return {
+    id: event.id,
+    eventNo: event.eventNo ?? '',
+    name: event.name,
+    audienceId: AUDIENCE_EVERYONE.id,
+    audience: AUDIENCE_EVERYONE,
+    ministry: event.ministry,
+    presbyterOnly: event.presbyterOnly,
+    timezone: event.timezone,
+    description: event.description,
+    venueType: event.venueType,
+    venueName: event.venueName,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    startTime: event.startTime,
+    endTime: event.endTime,
+    tracksMembers: event.tracksMembers,
+    status: 'draft',
+    recurrence: null,
+    occurrences,
+    offerings: event.offerings,
+    stats: event.stats,
+    summary: windowSummaryFor(occurrences, {
+      from,
+      to,
+      nextOccurrence: null,
+      offerings: EMPTY_SUMMARY.offerings,
+    }),
+  };
+}
+
+/** A created series is the same parent read behind the series alias. */
+function parentFromCreatedSeries(series: SeriesDto, from: string, to: string): EventParentItem {
+  const [firstSchedule] = [...series.schedules].sort((left, right) =>
+    left.effectiveFrom.localeCompare(right.effectiveFrom),
+  );
+
+  return {
+    id: series.id,
+    eventNo: '',
+    name: series.name,
+    audienceId: AUDIENCE_EVERYONE.id,
+    audience: AUDIENCE_EVERYONE,
+    ministry: series.ministry,
+    presbyterOnly: series.presbyterOnly,
+    timezone: series.timezone,
+    description: series.description,
+    venueType: 'auditorium',
+    venueName: null,
+    startDate: firstSchedule?.effectiveFrom ?? '',
+    endDate: firstSchedule?.endsOn ?? null,
+    startTime: '',
+    endTime: null,
+    tracksMembers: true,
+    status: series.archivedAt ? 'archived' : 'draft',
+    recurrence: recurrenceOf(series),
+    occurrences: [],
+    offerings: [],
+    stats: EMPTY_OFFERING_STATS,
+    summary: windowSummaryFor([], {
+      from,
+      to,
+      nextOccurrence: null,
+      offerings: EMPTY_SUMMARY.offerings,
+    }),
+  };
+}
+
+function parentForId(
+  id: string,
+  from: string,
+  to: string,
+  createdEvents: ReadonlyMap<string, EventItem>,
+): EventParentItem | null {
+  const created = createdEvents.get(id);
+  if (created) return parentFromCreatedEvent(created, from, to);
+  const seed = PARENT_SEEDS[id];
+  return seed ? parentOf(seed, from, to) : null;
+}
+
+function seriesParentForId(
+  id: string,
+  from: string,
+  to: string,
+  createdSeries: ReadonlyMap<string, SeriesDto>,
+): EventParentItem | null {
+  const created = createdSeries.get(id);
+  if (created) return parentFromCreatedSeries(created, from, to);
+  const seed = PARENT_SEEDS[id];
+  return seed ? parentOf(seed, from, to) : null;
+}
+
 const OFFICER = {
   officerId: 'officer-1',
   name: 'Efua Boateng',
@@ -1872,7 +2345,26 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/events$/,
-      handle: () => reply({ items: [...currentEvents(), ...createdEvents.values()] }),
+      handle: (call) => {
+        // The three event pages send `view=parent` (FR-6a); the USSD, picker and
+        // offerings callers still read the legacy per-instance list.
+        if (call.search.get('view') === 'parent') {
+          const from = call.search.get('from') ?? '';
+          const to = call.search.get('to') ?? '';
+          const seriesFilter = call.search.get('seriesId');
+          const items: EventParentItem[] = [
+            ...PARENT_LIST_IDS.map((id) => parentForId(id, from, to, createdEvents)).filter(
+              (item): item is EventParentItem => item !== null,
+            ),
+            ...[...createdEvents.values()].map((event) => parentFromCreatedEvent(event, from, to)),
+            ...[...createdSeries.values()].map((series) =>
+              parentFromCreatedSeries(series, from, to),
+            ),
+          ].filter((item) => !seriesFilter || item.id === seriesFilter);
+          return reply({ items });
+        }
+        return reply({ items: [...currentEvents(), ...createdEvents.values()] });
+      },
     },
     {
       method: 'POST',
@@ -1923,7 +2415,19 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/events\/([^/]+)$/,
-      handle: (_call, [eventId]) => {
+      handle: (call, [eventId]) => {
+        // FR-4/FR-6a: the detail reads the parent body; the USSD screens still
+        // read the legacy `EventItem` without the flag.
+        if (call.search.get('view') === 'parent') {
+          const parent = parentForId(
+            eventId!,
+            call.search.get('from') ?? '',
+            call.search.get('to') ?? '',
+            createdEvents,
+          );
+          if (!parent) return problem(404, `Event ${eventId} was not found`);
+          return reply(parent, 200, { ETag: '"e2e-event-parent"' });
+        }
         const event =
           createdEvents.get(eventId!) ??
           currentEvents().find((candidate) => candidate.id === eventId);
@@ -2217,7 +2721,19 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/series\/([^/]+)$/,
-      handle: (_call, [seriesId]) => {
+      handle: (call, [seriesId]) => {
+        // A series is the event parent, so the detail reads the same body behind
+        // the alias (FR-1). The edit form still reads the legacy `SeriesDto`.
+        if (call.search.get('view') === 'parent') {
+          const parent = seriesParentForId(
+            seriesId!,
+            call.search.get('from') ?? '',
+            call.search.get('to') ?? '',
+            createdSeries,
+          );
+          if (!parent) return problem(404, `Series ${seriesId} was not found`);
+          return reply(parent, 200, { ETag: '"e2e-series-parent"' });
+        }
         const series =
           createdSeries.get(seriesId!) ?? SERIES.find((candidate) => candidate.id === seriesId);
         if (!series) return problem(404, `Series ${seriesId} was not found`);

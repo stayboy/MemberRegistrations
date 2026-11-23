@@ -149,6 +149,12 @@ describe('eventsListPath', () => {
       '/gateway/v1/events?from=2026-10-02&to=2026-12-02&limit=100',
     );
   });
+
+  it('carries view=parent for the parent read', () => {
+    expect(
+      eventsListPath({ from: '2026-10-02', to: '2026-12-02', view: 'parent', limit: 100 }),
+    ).toBe('/gateway/v1/events?from=2026-10-02&to=2026-12-02&view=parent&limit=100');
+  });
 });
 
 describe('listEvents', () => {
@@ -203,6 +209,16 @@ describe('listEvents', () => {
 describe('eventDetailPath', () => {
   it('encodes the event id as one path segment', () => {
     expect(eventDetailPath('event/with space')).toBe('/gateway/v1/events/event%2Fwith%20space');
+  });
+
+  it('carries view=parent and the window for the parent detail read', () => {
+    expect(
+      eventDetailPath('event/with space', {
+        view: 'parent',
+        from: '2026-10-02',
+        to: '2026-12-02',
+      }),
+    ).toBe('/gateway/v1/events/event%2Fwith%20space?view=parent&from=2026-10-02&to=2026-12-02');
   });
 });
 

@@ -40,6 +40,7 @@ describe('event labels', () => {
     });
     expect(EVENT_STATUS_LABELS).toEqual({
       draft: 'Draft',
+      active: 'Active',
       scheduled: 'Scheduled',
       held: 'Held',
       cancelled: 'Cancelled',

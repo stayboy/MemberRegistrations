@@ -165,14 +165,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "6e8df508006f989c94f4824b942c6305f507724b7b614f0eb9ba905f9a9f98d2",
+      "sha256": "aafc4320cd85390c9716ca5e45f58858560642a9feb3062675f61025363c143a",
       "reviewedBy": "ollama-cloud/deepseek-v4-pro",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner's signature on the eleven event-parent states (six re-cut, five unchanged candidates); each entry is `coverage: \"signed\"` with `by: \"owner\"`, `at: \"2026-11-22\"` and the pin it carried. why: the owner answered \"Sign all eleven (Recommended)\" on 2026-11-22, closing the mock-sign-off milestone. rejected: leaving the entries auto-signed; changing any claim text at signing.",
+      "reason": "changes: five `baseline` fields in the `v2-events` catalogue name this round's captures, each a factual surface-to-surface mapping and nothing else - `01-events-list` to `events-list.png`, `02-event-detail` to `event-detail.png`, `03-activity-detail-series` to `series-detail.png`, `06-record-headcount-dialog` to `event-headcount-dialog.png` and `07-import-attendance-panel` to `event-import-panel.png`. why: the UI read round re-captured those surfaces, and two of the five (the list and the series detail) must be paired for the R6 coverage line the round doc cites; the other three are set because their surfaces were re-captured, not because the coverage line needs them. `02-event-detail` records the mapping without claiming parity - its drawing is stale on the tile set and columns, and the round records that separately. rejected: leaving the five null (a state with no baseline cannot be paired, and the captures would be invisible to the probe); pairing `02-event-detail` in this round's scoring call (it has no spec-derived control and the drawing is stale); changing any claim, coverage, entry or story to match the build.",
       "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; Sunday off-peak) compared the signed texts with the text it had ACCEPTed: the signature flip is the only change, every pin is unchanged, no claim/story/quote/surface/inventory text moved, no state outside the eleven was touched, and both round-doc tables match the catalogue. VERDICT ACCEPT.",
-      "at": "2026-11-22"
+      "attestation": "`deepseek-v4-pro:0813` read the exact post-diff catalogue text and the diff (five `baseline` lines only; no claim, coverage, entry, story or sha256 touched) and returned ACCEPT with two P2s, both applied to this reason: the R6 necessity belongs to two of the five baselines, and the `02-event-detail` mapping is recorded without a parity claim. It cross-checked each mapping against `ui/e2e/capture.spec.ts` and the mock README and found no neighbouring-screen substitution. The reviewer could not compute the sha256 (read-only session); the parent computed it over the normalised text and `tests/meta/protected-doc-review.test.ts` recomputes it.",
+      "at": "2026-11-23"
     },
     {
       "path": "documents/mock-claims/headcount.json",

@@ -72,7 +72,8 @@ test('the series detail shows versions, exceptions and the occurrence window', a
   await expect(summary.getByText('Occurrences')).toBeVisible();
   await expect(summary.getByText('in this window')).toBeVisible();
   await expect(summary.getByText('75%')).toBeVisible();
-  await expect(summary.getByText('3 of 4 on Jan 25, 2026')).toBeVisible();
+  // The tiles carry the Roster label, never the bare "of" the retired caption used.
+  await expect(summary.getByText('3 present · Roster 4 on Jan 25, 2026')).toBeVisible();
   await expect(summary.getByText('2', { exact: true })).toBeVisible();
   await expect(summary.getByText('paid this window')).toBeVisible();
 });

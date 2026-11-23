@@ -18,8 +18,16 @@ export const useEventStyles = makeStyles({
     gap: tokens.spacingHorizontalM,
     flexWrap: 'wrap',
   },
-  seriesFilter: {
-    minWidth: '220px',
+  // The audience is a server-rendered sentence, so the tag can outgrow its column. It truncates at
+  // a fixed width with the full sentence kept in the DOM (and as the hover title).
+  audienceTag: {
+    maxWidth: '220px',
+    overflow: 'hidden',
+  },
+  audienceTagText: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   panel: {
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
@@ -108,6 +116,11 @@ export const useEventStyles = makeStyles({
     gap: tokens.spacingVerticalXXS,
   },
   counts: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+  },
+  when: {
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXXS,

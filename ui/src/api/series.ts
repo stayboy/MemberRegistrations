@@ -1,4 +1,5 @@
 import { ApiError } from './errors';
+import type { EventParentItem } from './events';
 import { gatewayRequest } from './gateway';
 
 /**
@@ -146,6 +147,41 @@ export async function listSeries(
 /** The detail path; the id is encoded as one path segment. */
 export function seriesDetailPath(seriesId: string): string {
   return `${SERIES_PATH}/${encodeURIComponent(seriesId)}`;
+}
+
+/** The parent read's query; the series id is the event-parent id (FR-1/FR-6). */
+export interface SeriesParentDetailQuery {
+  readonly view: 'parent';
+  readonly from: string;
+  readonly to: string;
+}
+
+export function seriesParentPath(seriesId: string, query: SeriesParentDetailQuery): string {
+  const params = new URLSearchParams();
+  params.set('view', query.view);
+  params.set('from', query.from);
+  params.set('to', query.to);
+  return `${seriesDetailPath(seriesId)}?${params.toString()}`;
+}
+
+/**
+ * `GET /v1/series/:id?view=parent&from&to`: the same parent body the event
+ * detail reads, served behind the series alias (FR-1: a series is the event
+ * parent). The window is required; the response is `no-store`.
+ */
+export async function getSeriesParent(
+  baseUrl: string,
+  sessionToken: string,
+  seriesId: string,
+  options: { readonly from: string; readonly to: string; readonly signal?: AbortSignal },
+): Promise<EventParentItem> {
+  const result = await gatewayRequest<EventParentItem>(
+    baseUrl,
+    seriesParentPath(seriesId, { view: 'parent', from: options.from, to: options.to }),
+    { sessionToken, signal: options.signal },
+  );
+  if (!result) throw new ApiError(500, 'The series parent response was empty.');
+  return result;
 }
 
 export function seriesSummaryPath(seriesId: string, from: string, to: string): string {

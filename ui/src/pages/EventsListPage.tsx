@@ -1,11 +1,10 @@
 import {
   Badge,
   Button,
-  Dropdown,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
-  Option,
+  ProgressBar,
   Spinner,
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
+  Tag,
   Text,
 } from '@fluentui/react-components';
 import {
@@ -20,30 +20,22 @@ import {
   CalendarAddRegular,
   CalendarMonthRegular,
 } from '@fluentui/react-icons';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useEffect, useState, type ComponentProps } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect, type ComponentProps } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   DEFAULT_EVENT_LIMIT,
-  listEvents,
-  type EventStatus,
-  type EventVenueType,
+  listEventParents,
+  type EventParentItem,
+  type EventParentStatus,
+  type EventRecurrenceSchedule,
 } from '../api/events';
-import { listSeries } from '../api/series';
 import { useSession } from '../auth/SessionProvider';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
-import { SeriesActivityRow } from '../components/SeriesActivityRow';
-import { seedEventsListQuery } from '../format/events-list';
-import {
-  eventStatusLabel,
-  ministryLabel,
-  offeringsLabel,
-  seriesColumnLabel,
-  sessionAttendanceLabels,
-  venueLabel,
-} from '../format/events';
+import { eventStatusLabel, venueLabel } from '../format/events';
+import { scheduleLabel } from '../format/series';
 import { useEventStyles } from './events-styles';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 
@@ -60,52 +52,71 @@ function eventHref(eventId: string): string {
   return `/events/${encodeURIComponent(eventId)}`;
 }
 
-function venueColor(venueType: EventVenueType): BadgeColor {
-  if (venueType === 'hybrid') return 'brand';
-  if (venueType === 'virtual') return 'subtle';
+function statusColor(status: EventParentStatus): BadgeColor {
+  if (status === 'active') return 'success';
+  if (status === 'archived') return 'subtle';
   return 'informative';
 }
 
-function statusColor(status: EventStatus): BadgeColor {
-  if (status === 'held') return 'success';
-  if (status === 'cancelled') return 'danger';
-  if (status === 'scheduled') return 'informative';
-  return 'subtle';
+/** The summary's server-computed ratio; the browser only formats the number. */
+function percentLabel(rate: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'percent',
+    maximumFractionDigits: 0,
+  }).format(rate);
+}
+
+/** The event number and, after it, the venue the mock's first cell carries. */
+function identityLine(event: EventParentItem): string {
+  const number = event.eventNo || 'No number yet';
+  const venue = event.venueName?.trim() || venueLabel(event.venueType);
+  return `${number} · ${venue}`;
+}
+
+/** `4 events in this window · 3 recurring · 1 standalone`, counted from the rows. */
+function footerLabel(events: readonly EventParentItem[]): string {
+  const recurring = events.filter((event) => event.recurrence !== null).length;
+  return `${events.length} ${events.length === 1 ? 'event' : 'events'} in this window · ${recurring} recurring · ${events.length - recurring} standalone`;
 }
 
 /**
- * Events → Events (events FR-1/FR-2): the date-window list. Each row shows the
- * date range, the event and number, the series or Standalone, the venue badge,
- * the API's per-session attendance counts, the attached-offering count and the
- * server-derived status. Selecting the event name opens the detail.
+ * The detail's rule (FR-6): the schedule version with the latest `effectiveFrom`
+ * wins. The list labels that version's RRULE through `scheduleLabel` and never
+ * expands it into dates (FR-5).
+ */
+function latestSchedule(event: EventParentItem): EventRecurrenceSchedule | null {
+  if (!event.recurrence) return null;
+  return (
+    [...event.recurrence.schedules].sort((left, right) =>
+      right.effectiveFrom.localeCompare(left.effectiveFrom),
+    )[0] ?? null
+  );
+}
+
+/**
+ * Events → Events (events FR-1/FR-2/FR-5, UI FR-42): the date-window list read
+ * through `view=parent`, one row per event. Each row shows the event name and
+ * its Repeats/Standalone tag, the event number with its venue, the audience
+ * summary exactly as the server renders it (as a tag), and its dates: a
+ * recurring event's human-readable schedule label beside the server's next
+ * occurrence (or an explicit empty state), a standalone event's own date range.
+ * The window attendance (text plus its bar) and offering figures and the stored
+ * status follow. A draft parent carries the FR-42 Draft badge. Selecting the
+ * event name opens the detail.
  */
 export function EventsListPage() {
   const styles = useEventStyles();
   const navigate = useNavigate();
   const { baseUrl, session, signOut } = useSession();
-  const { formatRange } = useDateTimeFormat();
+  const { formatDate, formatRange } = useDateTimeFormat();
   const token = session?.token ?? '';
-  const [searchParams, setSearchParams] = useSearchParams();
   const [window, setWindow] = useDateWindow();
 
-  // The occurrence link carries `?series=<id>&from&to` (FR-43). `useDateWindow`
-  // reads the URL-backed window on first render; the series filter is read once
-  // here so a later window change cannot silently re-seed it.
-  const [seriesId, setSeriesId] = useState(() => seedEventsListQuery(searchParams).seriesId);
-
-  const seriesQuery = useQuery({
-    queryKey: ['series', baseUrl, 'events-filter'],
-    queryFn: ({ signal }) => listSeries(baseUrl, token, { includeArchived: true, signal }),
-    enabled: Boolean(token),
-    staleTime: 5 * 60_000,
-  });
-
   const eventsQuery = useInfiniteQuery({
-    queryKey: ['events', baseUrl, 'list', window.from, window.to, seriesId],
+    queryKey: ['events', baseUrl, 'list', window.from, window.to],
     queryFn: ({ signal, pageParam }) =>
-      listEvents(baseUrl, token, {
+      listEventParents(baseUrl, token, {
         ...window,
-        seriesId: seriesId || undefined,
         limit: PAGE_SIZE,
         offset: pageParam === 0 ? undefined : pageParam,
         signal,
@@ -117,28 +128,13 @@ export function EventsListPage() {
   });
 
   useEffect(() => {
-    if (isUnauthorized(eventsQuery.error) || isUnauthorized(seriesQuery.error)) {
+    if (isUnauthorized(eventsQuery.error)) {
       void signOut();
     }
-  }, [eventsQuery.error, seriesQuery.error, signOut]);
+  }, [eventsQuery.error, signOut]);
 
   const events = eventsQuery.data?.pages.flat() ?? [];
   const loadedCount = events.length;
-  const seriesOptions = seriesQuery.data ?? [];
-  const selectedSeries = seriesOptions.find((series) => series.id === seriesId);
-
-  function selectSeries(next: string): void {
-    setSeriesId(next);
-    setSearchParams(
-      (current) => {
-        const params = new URLSearchParams(current);
-        if (next) params.set('series', next);
-        else params.delete('series');
-        return params;
-      },
-      { replace: true },
-    );
-  }
 
   return (
     <PageFrame
@@ -181,31 +177,7 @@ export function EventsListPage() {
             label="Events date window"
             hint="UTC dates · events outside this window are not shown."
           />
-          <Dropdown
-            className={styles.seriesFilter}
-            aria-label="Series filter"
-            value={selectedSeries?.name ?? (seriesId ? 'Selected series' : 'All series')}
-            selectedOptions={seriesId ? [seriesId] : []}
-            onOptionSelect={(_, data) => selectSeries(data.optionValue ?? '')}
-          >
-            <Option value="">All series</Option>
-            {seriesOptions.map((series) => (
-              <Option key={series.id} value={series.id}>
-                {series.archivedAt ? `${series.name} (archived)` : series.name}
-              </Option>
-            ))}
-          </Dropdown>
         </div>
-
-        {seriesQuery.isError ? (
-          <MessageBar intent="warning">
-            <MessageBarBody>
-              <MessageBarTitle>Series unavailable</MessageBarTitle>
-              The series filter could not load the series list. The events grid still works without
-              it.
-            </MessageBarBody>
-          </MessageBar>
-        ) : null}
 
         {eventsQuery.isError ? (
           <MessageBar intent="error">
@@ -230,18 +202,12 @@ export function EventsListPage() {
             <div className={styles.state}>
               <Spinner label="Loading events…" />
             </div>
-          ) : loadedCount === 0 && (seriesQuery.data ?? []).length === 0 ? (
+          ) : loadedCount === 0 ? (
             eventsQuery.isError ? null : (
               <div className={styles.empty}>
-                <Text className={styles.emptyTitle}>
-                  {seriesId
-                    ? 'No events for this series in this window'
-                    : 'No events in this window'}
-                </Text>
+                <Text className={styles.emptyTitle}>No events in this window</Text>
                 <Text size={200} className={styles.muted}>
-                  {seriesId
-                    ? 'Widen the date window or clear the series filter to review other events.'
-                    : 'Widen the date window to review held, scheduled or cancelled events.'}
+                  Widen the date window to review held, scheduled or cancelled events.
                 </Text>
               </div>
             )
@@ -251,78 +217,112 @@ export function EventsListPage() {
                 <Table className={styles.table} size="small" aria-label="Events">
                   <TableHeader>
                     <TableRow>
-                      <TableHeaderCell>Dates</TableHeaderCell>
                       <TableHeaderCell>Event</TableHeaderCell>
-                      <TableHeaderCell>Ministry</TableHeaderCell>
-                      <TableHeaderCell>Series</TableHeaderCell>
-                      <TableHeaderCell>Venue</TableHeaderCell>
+                      <TableHeaderCell>Audience</TableHeaderCell>
+                      <TableHeaderCell>When</TableHeaderCell>
                       <TableHeaderCell>Attendance</TableHeaderCell>
                       <TableHeaderCell>Offerings</TableHeaderCell>
                       <TableHeaderCell>Status</TableHeaderCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(seriesQuery.data ?? []).map((series) => (
-                      <SeriesActivityRow key={series.id} series={series} />
-                    ))}
-                    {events.map((event) => (
-                      <TableRow key={event.id}>
-                        <TableCell>{formatRange(event.startDate, event.endDate)}</TableCell>
-                        <TableCell>
-                          <div className={styles.identity}>
-                            <Link className={styles.link} to={eventHref(event.id)}>
-                              {event.name}
-                            </Link>
-                            <Text size={200} className={styles.muted}>
-                              {event.eventNo ?? 'No number yet'}
-                            </Text>
-                          </div>
-                        </TableCell>
-                        <TableCell>{ministryLabel(event.ministry)}</TableCell>
-                        <TableCell>{seriesColumnLabel(event)}</TableCell>
-                        <TableCell>
-                          <div className={styles.venue}>
-                            <Badge
-                              appearance="tint"
-                              color={venueColor(event.venueType)}
-                              size="small"
-                            >
-                              {venueLabel(event.venueType)}
-                            </Badge>
-                            {event.venueName ? (
+                    {events.map((event) => {
+                      const { attendance, offerings } = event.summary;
+                      const memberSessions = attendance.memberSessions;
+                      const schedule = latestSchedule(event);
+                      return (
+                        <TableRow key={event.id}>
+                          <TableCell>
+                            <div className={styles.identity}>
+                              <div className={styles.metaValue}>
+                                <Link className={styles.link} to={eventHref(event.id)}>
+                                  {event.name}
+                                </Link>
+                                <Badge
+                                  appearance="tint"
+                                  color={event.recurrence ? 'informative' : 'subtle'}
+                                  size="small"
+                                >
+                                  {event.recurrence ? 'Repeats' : 'Standalone'}
+                                </Badge>
+                              </div>
                               <Text size={200} className={styles.muted}>
-                                {event.venueName}
-                              </Text>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {event.sessions.length === 0 ? (
-                            <Text className={styles.muted}>—</Text>
-                          ) : (
-                            <div className={styles.counts}>
-                              <Text size={200}>{sessionAttendanceLabels(event.sessions)}</Text>
-                              <Text size={100} className={styles.muted}>
-                                present/expected per date
+                                {identityLine(event)}
                               </Text>
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell>{offeringsLabel(event.offerings.length)}</TableCell>
-                        <TableCell>
-                          <Badge appearance="tint" color={statusColor(event.status)} size="small">
-                            {eventStatusLabel(event.status)}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            <Tag
+                              appearance="outline"
+                              size="small"
+                              className={styles.audienceTag}
+                              primaryText={{ className: styles.audienceTagText }}
+                              title={event.audience.summary}
+                            >
+                              {event.audience.name}
+                            </Tag>
+                          </TableCell>
+                          <TableCell>
+                            {event.recurrence ? (
+                              <div className={styles.when}>
+                                {schedule ? (
+                                  <Text size={200}>{scheduleLabel(schedule.rrule)}</Text>
+                                ) : null}
+                                {event.summary.nextOccurrence ? (
+                                  <Text size={200}>{formatDate(event.summary.nextOccurrence)}</Text>
+                                ) : (
+                                  <Text size={200} className={styles.muted}>
+                                    None in 90 days
+                                  </Text>
+                                )}
+                              </div>
+                            ) : (
+                              formatRange(event.startDate, event.endDate)
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {memberSessions.held === 0 ? (
+                              <Text size={200} className={styles.muted}>
+                                —
+                              </Text>
+                            ) : (
+                              <div className={styles.counts}>
+                                <Text size={200}>
+                                  {memberSessions.present}/{memberSessions.expected}
+                                  {memberSessions.rate === null
+                                    ? ''
+                                    : ` · ${percentLabel(memberSessions.rate)}`}
+                                </Text>
+                                {memberSessions.rate === null ? null : (
+                                  <ProgressBar
+                                    aria-hidden
+                                    value={memberSessions.rate}
+                                    thickness="medium"
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {offerings.attachedCount === 0
+                              ? 'None'
+                              : `${offerings.attachedCount} attached`}
+                          </TableCell>
+                          <TableCell>
+                            <Badge appearance="tint" color={statusColor(event.status)} size="small">
+                              {eventStatusLabel(event.status)}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
 
               <div className={styles.listFooter}>
                 <Text size={200} className={styles.muted}>
-                  {loadedCount} events loaded
+                  {footerLabel(events)}
                 </Text>
                 {eventsQuery.hasNextPage ? (
                   <Button
