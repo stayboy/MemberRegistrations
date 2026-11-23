@@ -93,9 +93,13 @@ brief authorises one verb: a commit brief cannot push.
 
 ## Actions
 
-- `branch`: `git switch -c <branch>` from `main`; never from a dirty tree — except when every modified
-  or untracked path is this round's own `documents/rounds/<slug>.md`, which the brief lists and the
-  round's first commit carries.
+- `branch`: `git switch -c <branch> main`; never from a dirty tree — except when every modified or
+  untracked path is this round's own `documents/rounds/<slug>.md`, or is named in the brief's `files:`
+  and in the round doc's first-commit row, and `git status --porcelain` names exactly those paths.
+  That second exception is bounded by git, not by the brief: a dirty path the start point's tree has
+  moved makes `git switch` refuse on its own, so the only content it can carry is the listed first
+  commit; it never authorises staging, stashing, restoring or discarding a path to obtain a clean tree,
+  and a dirty path outside `files:` is `REFUSED: dirty tree`.
 - `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. When a listed path no
   longer exists in the worktree, `git add -A -- <files>` stages its deletion; otherwise `git add -- <files>`.
   Append `Model-Seat: git-executor (ollama-cloud/mimo-v2.6-flash)` and `Fallback-Reason: <classification>` if

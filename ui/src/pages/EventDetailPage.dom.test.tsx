@@ -1,7 +1,19 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEventParent, type EventParentItem, type EventWindowSummary } from '../api/events';
+import { ApiError } from '../api/errors';
+import {
+  addEventRecurrenceException,
+  addEventScheduleVersion,
+  archiveEventParent,
+  cancelEventOccurrence,
+  getEventParent,
+  removeEventRecurrenceException,
+  updateEventParent,
+  type EventParentItem,
+  type EventWindowSummary,
+} from '../api/events';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { renderWithProviders } from '../test/render';
@@ -108,7 +120,16 @@ const PARENT: EventParentItem = {
 
 vi.mock('../api/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/events')>();
-  return { ...actual, getEventParent: vi.fn(async () => PARENT) };
+  return {
+    ...actual,
+    getEventParent: vi.fn(async () => PARENT),
+    updateEventParent: vi.fn(),
+    archiveEventParent: vi.fn(),
+    cancelEventOccurrence: vi.fn(),
+    addEventScheduleVersion: vi.fn(),
+    addEventRecurrenceException: vi.fn(),
+    removeEventRecurrenceException: vi.fn(),
+  };
 });
 
 vi.mock('../api/gateway', async (importOriginal) => {
@@ -163,10 +184,32 @@ vi.mock('../api/ussd', async (importOriginal) => {
 });
 
 const getEventParentMock = vi.mocked(getEventParent);
+const updateEventParentMock = vi.mocked(updateEventParent);
+const archiveEventParentMock = vi.mocked(archiveEventParent);
+const cancelOccurrenceMock = vi.mocked(cancelEventOccurrence);
+const addScheduleVersionMock = vi.mocked(addEventScheduleVersion);
+const addExceptionMock = vi.mocked(addEventRecurrenceException);
+const removeExceptionMock = vi.mocked(removeEventRecurrenceException);
 
 beforeEach(() => {
   getEventParentMock.mockReset();
   getEventParentMock.mockResolvedValue(PARENT);
+  updateEventParentMock.mockReset();
+  updateEventParentMock.mockResolvedValue({ ...PARENT, status: 'active' });
+  archiveEventParentMock.mockReset();
+  archiveEventParentMock.mockResolvedValue({ ...PARENT, status: 'archived' });
+  cancelOccurrenceMock.mockReset();
+  cancelOccurrenceMock.mockResolvedValue({
+    ...PARENT.occurrences[1]!,
+    status: 'cancelled',
+    note: 'Public holiday',
+  });
+  addScheduleVersionMock.mockReset();
+  addScheduleVersionMock.mockResolvedValue(PARENT.recurrence!);
+  addExceptionMock.mockReset();
+  addExceptionMock.mockResolvedValue(PARENT.recurrence!);
+  removeExceptionMock.mockReset();
+  removeExceptionMock.mockResolvedValue({ schedules: [], exceptions: [] });
 });
 
 function renderDetail(importDate?: string): void {
@@ -244,5 +287,286 @@ describe('EventDetailPage parent read', () => {
     expect(within(heldRow!).getByText('150')).toBeVisible();
     expect(within(heldRow!).getByRole('button', { name: 'Record headcount' })).toBeVisible();
     expect(within(heldRow!).getByRole('button', { name: 'Import' })).toBeVisible();
+  });
+});
+
+/**
+ * FR-42e/FR-42f/FR-42g, AC-62/AC-63/AC-64: the detail's write verbs per state,
+ * the occurrence row's Cancel dialog and the recurrence panel's two dialogs.
+ * Requests and rendered surfaces are asserted, not internals.
+ */
+describe('EventDetailPage write verbs', () => {
+  it('offers Edit and Archive in the one Actions menu on an active parent', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByRole('heading', { level: 1, name: 'Strategic Conference' });
+
+    // Refresh is the bare utility; the verbs are behind the one Actions menu.
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Edit' })).toBeVisible();
+    expect(within(menu).getByRole('menuitem', { name: 'Archive' })).toBeEnabled();
+    expect(screen.queryByRole('menuitem', { name: 'Restore' })).toBeNull();
+  });
+
+  it('makes Activate primary and disables Archive and the row Cancel on a draft', async () => {
+    getEventParentMock.mockResolvedValue({ ...PARENT, status: 'draft' });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText('Draft', { exact: true });
+
+    // MR-1: a primary verb renders visibly beside the menu.
+    expect(screen.getByRole('button', { name: 'Activate' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Edit' })).toBeVisible();
+    expect(within(menu).getByRole('menuitem', { name: 'Archive' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    // AC-62: Cancel stays visible and disabled, with its reason shown.
+    const cancel = screen.getByRole('button', { name: 'Cancel Nov 29, 2026' });
+    expect(cancel).toBeDisabled();
+    expect(
+      screen.getAllByText('Activate the event before cancelling a date').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('offers no write verb and says the event is read-only when archived', async () => {
+    getEventParentMock.mockResolvedValue({ ...PARENT, status: 'archived' });
+    renderDetail();
+
+    expect(await screen.findByText('This event is archived')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cancel / })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add schedule version' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add exception' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remove exception/ })).toBeNull();
+  });
+
+  it('cancels an occurrence from its row, refusing a blank reason first', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByRole('table', { name: 'Event occurrences' });
+
+    await user.click(screen.getByRole('button', { name: 'Cancel Nov 29, 2026' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel this date' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel date' }));
+
+    // AC-64: the local check sends nothing, so `reason_required` is never reached.
+    expect(
+      await within(dialog).findByText('Enter a reason for cancelling this date.'),
+    ).toBeVisible();
+    expect(cancelOccurrenceMock).not.toHaveBeenCalled();
+
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason' }), '  Public holiday  ');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel date' }));
+
+    await waitFor(() => expect(cancelOccurrenceMock).toHaveBeenCalledTimes(1));
+    const [, token, eventId, date, input] = cancelOccurrenceMock.mock.calls[0] ?? [];
+    expect(token).toBe('dom-lane-session');
+    expect(eventId).toBe('evt-1');
+    expect(date).toBe('2026-11-29');
+    expect(input).toEqual({ note: 'Public holiday' });
+  });
+
+  it('keeps the cancellation reason and shows a 409 event_draft in the dialog', async () => {
+    cancelOccurrenceMock.mockRejectedValueOnce(
+      new ApiError(409, 'Activate the event before cancelling a date', { code: 'event_draft' }),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByRole('table', { name: 'Event occurrences' });
+
+    await user.click(screen.getByRole('button', { name: 'Cancel Nov 29, 2026' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel this date' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason' }), 'Public holiday');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel date' }));
+
+    expect(await within(dialog).findByText('The event is still a draft')).toBeVisible();
+    expect(within(dialog).getByRole('textbox', { name: 'Reason' })).toHaveValue('Public holiday');
+  });
+
+  it('shows a refused activation as a page banner', async () => {
+    getEventParentMock.mockResolvedValue({ ...PARENT, status: 'draft' });
+    updateEventParentMock.mockRejectedValueOnce(
+      new ApiError(409, 'The status move was refused', { code: 'status' }),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Activate' }));
+
+    expect(await screen.findByText('The API refused this status change')).toBeVisible();
+    expect(updateEventParentMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'evt-1',
+      {
+        status: 'active',
+      },
+    );
+  });
+
+  it('archives from the menu after a confirmation and shows a refusal on the page', async () => {
+    archiveEventParentMock.mockRejectedValueOnce(
+      new ApiError(409, 'The event is already archived', { code: 'status' }),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByRole('heading', { level: 1, name: 'Strategic Conference' });
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Archive' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Archive event' }));
+
+    expect(await screen.findByText('The API refused this status change')).toBeVisible();
+    expect(archiveEventParentMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'evt-1',
+    );
+  });
+
+  it('appends a schedule version built from the cadence, never a typed RRULE', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Add schedule version' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Add schedule version' });
+    // AC-63: no raw RRULE control exists on the surface.
+    expect(within(dialog).queryByRole('textbox', { name: /Recurrence rule/ })).toBeNull();
+
+    fireEvent.change(within(dialog).getByLabelText(/^Effective from/), {
+      target: { value: '2026-06-07' },
+    });
+    await user.click(within(dialog).getByRole('combobox', { name: 'Repeats' }));
+    await user.click(await screen.findByRole('option', { name: 'Fortnightly' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add version' }));
+
+    await waitFor(() => expect(addScheduleVersionMock).toHaveBeenCalledTimes(1));
+    const [, token, eventId, input] = addScheduleVersionMock.mock.calls[0] ?? [];
+    expect(token).toBe('dom-lane-session');
+    expect(eventId).toBe('evt-1');
+    expect(input).toEqual({
+      effectiveFrom: '2026-06-07',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      endsOn: null,
+    });
+  });
+
+  it('keeps the dialog values and shows a 409 recurrence against the schedule dialog', async () => {
+    addScheduleVersionMock.mockRejectedValueOnce(
+      new ApiError(409, 'This event records its dates by hand', { code: 'recurrence' }),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Add schedule version' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Add schedule version' });
+    fireEvent.change(within(dialog).getByLabelText(/^Effective from/), {
+      target: { value: '2026-06-07' },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Add version' }));
+
+    expect(await within(dialog).findByText('This event has no recurrence to change')).toBeVisible();
+    expect(within(dialog).getByLabelText(/^Effective from/)).toHaveValue('2026-06-07');
+  });
+
+  it('shows a 422 on the schedule dialog as a banner and keeps the values', async () => {
+    addScheduleVersionMock.mockRejectedValueOnce(
+      new ApiError(422, 'endsOn must not be before effectiveFrom'),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Add schedule version' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Add schedule version' });
+    fireEvent.change(within(dialog).getByLabelText(/^Effective from/), {
+      target: { value: '2026-06-07' },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Add version' }));
+
+    expect(await within(dialog).findByText('The schedule version was not added')).toBeVisible();
+    expect(within(dialog).getByText('endsOn must not be before effectiveFrom')).toBeVisible();
+    expect(within(dialog).getByLabelText(/^Effective from/)).toHaveValue('2026-06-07');
+  });
+
+  it('adds an extra date and offers no cancelled kind', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole('button', { name: 'Add exception' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Add exception' });
+    // FR-42e: a cancelled exception is not authored from the UI.
+    expect(within(dialog).queryByRole('combobox', { name: /Kind/ })).toBeNull();
+
+    fireEvent.change(within(dialog).getByLabelText(/^Date/), {
+      target: { value: '2026-11-29' },
+    });
+    await user.type(within(dialog).getByLabelText('Note (optional)'), 'Harvest thanksgiving');
+    await user.click(within(dialog).getByRole('button', { name: 'Add extra date' }));
+
+    await waitFor(() => expect(addExceptionMock).toHaveBeenCalledTimes(1));
+    const [, token, eventId, input] = addExceptionMock.mock.calls[0] ?? [];
+    expect(token).toBe('dom-lane-session');
+    expect(eventId).toBe('evt-1');
+    expect(input).toEqual({
+      date: '2026-11-29',
+      kind: 'extra',
+      note: 'Harvest thanksgiving',
+    });
+  });
+
+  it('renders a stored schedule inside the vocabulary as its own label', async () => {
+    getEventParentMock.mockResolvedValue({
+      ...PARENT,
+      recurrence: {
+        schedules: [
+          {
+            effectiveFrom: '2026-10-13',
+            rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+            endsOn: null,
+          },
+        ],
+        exceptions: [],
+      },
+    });
+    renderDetail();
+
+    const versions = await screen.findByRole('table', { name: 'Schedule versions' });
+    expect(within(versions).getByText('Fortnightly', { exact: true })).toBeVisible();
+  });
+
+  it('renders a schedule outside the vocabulary read-only from the stored string', async () => {
+    renderDetail();
+
+    const versions = await screen.findByRole('table', { name: 'Schedule versions' });
+    expect(within(versions).getByText('FREQ=DAILY')).toBeVisible();
+    expect(within(versions).getByText(/cannot be edited here/)).toBeVisible();
+  });
+
+  it('removes one exception directive after a confirmation', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Remove exception on Oct 14, 2026' }),
+    );
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove exception' }));
+
+    await waitFor(() => expect(removeExceptionMock).toHaveBeenCalledTimes(1));
+    const [, token, eventId, date] = removeExceptionMock.mock.calls[0] ?? [];
+    expect(token).toBe('dom-lane-session');
+    expect(eventId).toBe('evt-1');
+    expect(date).toBe('2026-10-14');
   });
 });

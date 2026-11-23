@@ -1,22 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SERIES_PATH,
-  addScheduleVersion,
-  createSeries,
   getSeries,
   getSeriesOccurrences,
   listSeries,
-  removeSeriesException,
   seriesDetailPath,
-  seriesExceptionPath,
   seriesListPath,
   seriesOccurrencesPath,
   seriesParentPath,
-  seriesSchedulePath,
-  setSeriesException,
-  updateSeries,
   type SeriesDto,
 } from './series';
+
+/**
+ * The `/v1/series` write surface retired with the series screens (AC-65): an
+ * event is the parent and its recurrence is written under the event, so this
+ * module is read-only. These cases pin the reads the transition still serves and
+ * that no writer is exported.
+ */
 
 const BASE = 'https://gateway.test';
 const TOKEN = 'session-token';
@@ -122,236 +122,6 @@ describe('series detail', () => {
       status: 500,
       message: 'The series response was empty.',
     });
-  });
-});
-
-describe('series authoring', () => {
-  it('POSTs the create body, including the first schedule version, to the series path', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    const created = await createSeries(BASE, TOKEN, {
-      name: 'Sunday service',
-      ministryCode: 'CHOIR',
-      timezone: 'Africa/Lagos',
-      description: 'Weekly worship',
-      schedule: {
-        effectiveFrom: '2026-11-08',
-        rrule: 'FREQ=WEEKLY;BYDAY=SU',
-        endsOn: '2027-11-08',
-      },
-    });
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series`);
-    expect(requestOptions(0).method).toBe('POST');
-    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      name: 'Sunday service',
-      ministryCode: 'CHOIR',
-      timezone: 'Africa/Lagos',
-      description: 'Weekly worship',
-      schedule: {
-        effectiveFrom: '2026-11-08',
-        rrule: 'FREQ=WEEKLY;BYDAY=SU',
-        endsOn: '2027-11-08',
-      },
-    });
-    expect(created).toEqual(SERIES);
-  });
-
-  it('sends null for an omitted optional field and schedule end date on create', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    await createSeries(BASE, TOKEN, {
-      name: 'Sunday service',
-      timezone: 'UTC',
-      schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
-    });
-
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      name: 'Sunday service',
-      ministryCode: null,
-      timezone: 'UTC',
-      description: null,
-      schedule: {
-        effectiveFrom: '2026-11-08',
-        rrule: 'FREQ=WEEKLY;BYDAY=SU',
-        endsOn: null,
-      },
-    });
-  });
-
-  it('forwards presbyterOnly when the create body carries it', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ ...SERIES, presbyterOnly: true }, 201));
-
-    const created = await createSeries(BASE, TOKEN, {
-      name: 'Presbyters',
-      presbyterOnly: true,
-      schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
-    });
-
-    expect(JSON.parse(String(requestOptions(0).body))).toMatchObject({ presbyterOnly: true });
-    expect(created.presbyterOnly).toBe(true);
-  });
-
-  it('rejects an empty create response body', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(null, 201));
-
-    await expect(
-      createSeries(BASE, TOKEN, {
-        name: 'Sunday service',
-        timezone: 'UTC',
-        schedule: { effectiveFrom: '2026-11-08', rrule: 'FREQ=WEEKLY;BYDAY=SU' },
-      }),
-    ).rejects.toMatchObject({
-      status: 500,
-      message: 'The created series response was empty.',
-    });
-  });
-
-  it('PUTs identity fields to the detail path and never a schedule', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES));
-
-    const updated = await updateSeries(BASE, TOKEN, 'series/1', {
-      name: 'Sunday service',
-      ministryCode: null,
-      timezone: 'Europe/London',
-      description: null,
-    });
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series/series%2F1`);
-    expect(requestOptions(0).method).toBe('PUT');
-    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
-    const body = JSON.parse(String(requestOptions(0).body));
-    expect(body).toEqual({
-      name: 'Sunday service',
-      ministryCode: null,
-      timezone: 'Europe/London',
-      description: null,
-    });
-    expect(body).not.toHaveProperty('schedule');
-    expect(updated).toEqual(SERIES);
-  });
-
-  it('sends the archive flag on update', async () => {
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ ...SERIES, archivedAt: '2026-11-05T10:00:00.000Z' })),
-    );
-
-    await updateSeries(BASE, TOKEN, 'series-1', { archived: true });
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({ archived: true });
-
-    await updateSeries(BASE, TOKEN, 'series-1', { archived: false });
-    expect(JSON.parse(String(requestOptions(1).body))).toEqual({ archived: false });
-  });
-
-  it('forwards presbyterOnly on update', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ ...SERIES, presbyterOnly: true }));
-
-    await updateSeries(BASE, TOKEN, 'series-1', { presbyterOnly: true });
-
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({ presbyterOnly: true });
-  });
-
-  it('rejects an empty update response body', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(null));
-
-    await expect(updateSeries(BASE, TOKEN, 'series-1', { archived: true })).rejects.toMatchObject({
-      status: 500,
-      message: 'The updated series response was empty.',
-    });
-  });
-});
-
-describe('schedule versions', () => {
-  it('POSTs the append-only version body to the schedule path', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    await addScheduleVersion(BASE, TOKEN, 'series/1', {
-      effectiveFrom: '2026-12-01',
-      rrule: 'FREQ=MONTHLY;BYMONTHDAY=15',
-      endsOn: '2027-12-01',
-    });
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series/series%2F1/schedule`);
-    expect(requestOptions(0).method).toBe('POST');
-    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      effectiveFrom: '2026-12-01',
-      rrule: 'FREQ=MONTHLY;BYMONTHDAY=15',
-      endsOn: '2027-12-01',
-    });
-  });
-
-  it('sends endsOn as null when the version has no end date', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    await addScheduleVersion(BASE, TOKEN, 'series-1', {
-      effectiveFrom: '2026-12-01',
-      rrule: 'FREQ=DAILY',
-    });
-
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      effectiveFrom: '2026-12-01',
-      rrule: 'FREQ=DAILY',
-      endsOn: null,
-    });
-  });
-
-  it('exposes the schedule path for a caller that only needs the route', () => {
-    expect(seriesSchedulePath('series/1')).toBe('/gateway/v1/series/series%2F1/schedule');
-  });
-});
-
-describe('series exceptions', () => {
-  it('POSTs date, kind and note to the exceptions path', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    await setSeriesException(BASE, TOKEN, 'series/1', {
-      date: '2026-11-08',
-      kind: 'extra',
-      note: 'Added service',
-    });
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/series/series%2F1/exceptions`);
-    expect(requestOptions(0).method).toBe('POST');
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      date: '2026-11-08',
-      kind: 'extra',
-      note: 'Added service',
-    });
-  });
-
-  it('sends a null note when the caller omits it', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(SERIES, 201));
-
-    await setSeriesException(BASE, TOKEN, 'series-1', {
-      date: '2026-11-08',
-      kind: 'cancelled',
-    });
-
-    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      date: '2026-11-08',
-      kind: 'cancelled',
-      note: null,
-    });
-  });
-
-  it('encodes the date in the DELETE path and accepts a 204 body', async () => {
-    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-
-    await removeSeriesException(BASE, TOKEN, 'series/1', '2026-11-08');
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      `${BASE}/gateway/v1/series/series%2F1/exceptions/2026-11-08`,
-    );
-    expect(requestOptions(0).method).toBe('DELETE');
-    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
-  });
-
-  it('exposes the exception path with the date encoded', () => {
-    expect(seriesExceptionPath('series/1', '2026-11-08')).toBe(
-      '/gateway/v1/series/series%2F1/exceptions/2026-11-08',
-    );
   });
 });
 

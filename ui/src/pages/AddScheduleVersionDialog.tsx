@@ -6,93 +6,105 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
+  Dropdown,
   Field,
   Input,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
+  Option,
   Text,
 } from '@fluentui/react-components';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { isUnauthorized } from '../api/errors';
-import { addScheduleVersion, type AddScheduleVersionInput } from '../api/series';
+import { addEventScheduleVersion, type AddEventScheduleVersionInput } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
 import { utcToday } from '../format/member-form';
+import {
+  CADENCE_OPTIONS,
+  toRrule,
+  type RecurrenceCadence,
+  type RecurrenceChoice,
+} from '../format/rrule';
+import { writeFailure, type WriteFailure } from '../format/write-errors';
 import { useEventStyles } from './events-styles';
 
-interface FormValues {
-  effectiveFrom: string;
-  rrule: string;
-  endsOn: string;
-}
+const EFFECTIVE_FROM_REQUIRED = 'Choose the first date this version applies to.';
 
 interface FormErrors {
   effectiveFrom?: string;
-  rrule?: string;
   endsOn?: string;
 }
 
-function validate(values: FormValues): FormErrors {
+function validate(values: { readonly effectiveFrom: string; readonly endsOn: string }): FormErrors {
   const errors: FormErrors = {};
-  if (!values.effectiveFrom)
-    errors.effectiveFrom = 'Choose the first date this version applies to.';
-  if (!values.rrule.trim()) errors.rrule = 'Enter an RRULE body such as FREQ=WEEKLY;BYDAY=SU.';
+  if (!values.effectiveFrom) errors.effectiveFrom = EFFECTIVE_FROM_REQUIRED;
   if (values.endsOn && values.effectiveFrom && values.endsOn < values.effectiveFrom) {
     errors.endsOn = 'The end date must not be before the effective date.';
   }
   return errors;
 }
 
+function asCadence(value: string | undefined): RecurrenceCadence {
+  return value === 'fortnightly' || value === 'monthly' ? value : 'weekly';
+}
+
 /**
- * Call site: SeriesDetailPage. One POST appends a schedule version; earlier
- * versions are never edited or removed (FR-42, history is append-only). The
- * page owns invalidation through `onSaved`.
+ * Call site: EventDetailPage's recurrence panel (FR-42e/FR-42f, AC-63). One
+ * `POST …/recurrence/versions` appends a version; earlier versions are never
+ * edited or removed. The cadence comes from the closed vocabulary and the
+ * `rrule` is built by `toRrule` from the effective date, so no raw RRULE is ever
+ * typed here.
  */
 export function AddScheduleVersionDialog({
-  seriesId,
+  eventId,
   onClose,
   onSaved,
 }: {
-  seriesId: string;
+  eventId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const styles = useEventStyles();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
-  const [values, setValues] = useState<FormValues>(() => ({
-    effectiveFrom: utcToday(),
-    rrule: '',
-    endsOn: '',
-  }));
+  const [effectiveFrom, setEffectiveFrom] = useState(() => utcToday());
+  const [cadence, setCadence] = useState<RecurrenceCadence>('weekly');
+  const [endsOn, setEndsOn] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<WriteFailure | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (input: AddScheduleVersionInput) =>
-      addScheduleVersion(baseUrl, token, seriesId, input),
+    mutationFn: (input: AddEventScheduleVersionInput) =>
+      addEventScheduleVersion(baseUrl, token, eventId, input),
   });
 
-  function update(next: Partial<FormValues>): void {
-    setValues((current) => ({ ...current, ...next }));
-    setFormError(null);
+  function update(next: {
+    effectiveFrom?: string;
+    cadence?: RecurrenceCadence;
+    endsOn?: string;
+  }): void {
+    if (next.effectiveFrom !== undefined) setEffectiveFrom(next.effectiveFrom);
+    if (next.cadence !== undefined) setCadence(next.cadence);
+    if (next.endsOn !== undefined) setEndsOn(next.endsOn);
+    setErrors({});
+    setFailure(null);
   }
 
   function submit(): void {
     if (mutation.isPending) return;
 
-    const nextErrors = validate(values);
+    const nextErrors = validate({ effectiveFrom, endsOn });
+    const choice: RecurrenceChoice = { cadence, effectiveFrom };
+    const rrule = toRrule(choice);
+    if (!rrule) nextErrors.effectiveFrom = EFFECTIVE_FROM_REQUIRED;
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0 || !rrule) return;
 
-    setFormError(null);
+    setFailure(null);
     mutation.mutate(
-      {
-        effectiveFrom: values.effectiveFrom,
-        rrule: values.rrule.trim(),
-        endsOn: values.endsOn || null,
-      },
+      { effectiveFrom, rrule, endsOn: endsOn || null },
       {
         onSuccess: () => {
           onSaved();
@@ -103,11 +115,7 @@ export function AddScheduleVersionDialog({
             void signOut();
             return;
           }
-          setFormError(
-            error instanceof Error && error.message.trim()
-              ? error.message
-              : 'Check the API connection and try again.',
-          );
+          setFailure(writeFailure(error, 'The schedule version was not added'));
         },
       },
     );
@@ -125,56 +133,64 @@ export function AddScheduleVersionDialog({
           <DialogTitle>Add schedule version</DialogTitle>
           <DialogContent className={styles.dialogContent}>
             <Text size={200} className={styles.muted}>
-              Versions are appended. Earlier versions remain visible and continue to own their
-              dates.
+              Versions are appended. Earlier versions keep their dates; a new version changes what
+              the API generates from its effective date onwards.
             </Text>
 
             <Field
               label="Effective from"
+              required
               hint="UTC date. This version applies from this date until the next version starts."
               validationState={errors.effectiveFrom ? 'error' : 'none'}
               validationMessage={errors.effectiveFrom}
             >
               <Input
                 type="date"
-                value={values.effectiveFrom}
+                value={effectiveFrom}
                 onChange={(_, data) => update({ effectiveFrom: data.value })}
               />
             </Field>
 
             <Field
-              label="Recurrence rule"
-              hint="RFC 5545 body. Examples: FREQ=WEEKLY;BYDAY=SU · FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE · FREQ=MONTHLY;BYMONTHDAY=15"
-              validationState={errors.rrule ? 'error' : 'none'}
-              validationMessage={errors.rrule}
+              label="Repeats"
+              required
+              hint="The weekday, or the day of the month, comes from the effective date."
             >
-              <Input
-                value={values.rrule}
-                maxLength={200}
-                placeholder="FREQ=WEEKLY;BYDAY=SU"
-                onChange={(_, data) => update({ rrule: data.value })}
-              />
+              <Dropdown
+                aria-label="Repeats"
+                value={
+                  CADENCE_OPTIONS.find((option) => option.value === cadence)?.label ?? 'Weekly'
+                }
+                selectedOptions={[cadence]}
+                onOptionSelect={(_, data) => update({ cadence: asCadence(data.optionValue) })}
+              >
+                {CADENCE_OPTIONS.map((option) => (
+                  <Option key={option.value} value={option.value}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </Field>
 
             <Field
               label="Ends on (optional)"
-              hint="UTC date. Leave blank when the series has no planned end."
+              hint="UTC date. Leave blank when the recurrence has no planned end."
               validationState={errors.endsOn ? 'error' : 'none'}
               validationMessage={errors.endsOn}
             >
               <Input
                 type="date"
-                value={values.endsOn}
-                min={values.effectiveFrom || undefined}
+                value={endsOn}
+                min={effectiveFrom || undefined}
                 onChange={(_, data) => update({ endsOn: data.value })}
               />
             </Field>
 
-            {formError ? (
+            {failure ? (
               <MessageBar intent="error">
                 <MessageBarBody>
-                  <MessageBarTitle>The schedule version was not added</MessageBarTitle>
-                  {formError}
+                  <MessageBarTitle>{failure.title}</MessageBarTitle>
+                  {failure.message}
                 </MessageBarBody>
               </MessageBar>
             ) : null}

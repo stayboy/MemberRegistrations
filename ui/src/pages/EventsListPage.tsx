@@ -15,11 +15,7 @@ import {
   Tag,
   Text,
 } from '@fluentui/react-components';
-import {
-  ArrowClockwiseRegular,
-  CalendarAddRegular,
-  CalendarMonthRegular,
-} from '@fluentui/react-icons';
+import { ArrowClockwiseRegular, CalendarAddRegular } from '@fluentui/react-icons';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, type ComponentProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -149,13 +145,6 @@ export function EventsListPage() {
           label: 'New event',
           icon: <CalendarAddRegular />,
           onSelect: () => navigate('/events/new'),
-        },
-        {
-          id: 'new-series',
-          kind: 'verb',
-          label: 'New series',
-          icon: <CalendarMonthRegular />,
-          onSelect: () => navigate('/events/series/new'),
         },
         {
           id: 'refresh',

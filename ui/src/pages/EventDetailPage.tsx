@@ -15,20 +15,34 @@ import {
   TableRow,
   Text,
 } from '@fluentui/react-components';
-import { ArrowClockwiseRegular, ArrowLeftRegular } from '@fluentui/react-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AddRegular,
+  ArchiveRegular,
+  ArrowClockwiseRegular,
+  ArrowLeftRegular,
+  CheckmarkCircleRegular,
+  DeleteRegular,
+  EditRegular,
+} from '@fluentui/react-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
+  archiveEventParent,
   getEventParent,
+  removeEventRecurrenceException,
+  updateEventParent,
   type EventOccurrenceItem,
   type EventParentStatus,
+  type EventRecurrenceException,
   type EventVenueType,
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
 import { PageFrame } from '../components/PageFrame';
+import type { PageAction } from '../components/PageActions';
 import { SessionHeadcount } from '../components/SessionHeadcount';
 import { SessionImportPanel } from '../components/SessionImportPanel';
 import { TermsDialog } from '../components/TermsDialog';
@@ -43,14 +57,22 @@ import {
   sessionStatusLabel,
   venueLabel,
 } from '../format/events';
-import { exceptionKindLabel, exceptionNoteLabel, scheduleLabel } from '../format/series';
+import { cadenceLabel, fromRrule } from '../format/rrule';
+import { exceptionKindLabel, exceptionNoteLabel } from '../format/series';
+import { writeFailure, type WriteFailure } from '../format/write-errors';
 
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
+import { AddExceptionDialog } from './AddExceptionDialog';
+import { AddScheduleVersionDialog } from './AddScheduleVersionDialog';
+import { CancelOccurrenceDialog } from './CancelOccurrenceDialog';
 import { EventAttendanceDialog } from './EventAttendanceDialog';
 import { SeriesSummaryTiles } from './SeriesSummaryTiles';
 import { useEventStyles } from './events-styles';
 
 type BadgeColor = ComponentProps<typeof Badge>['color'];
+
+/** AC-62: a draft cannot cancel a date, and the row says why rather than hiding it. */
+export const DRAFT_CANCEL_REASON = 'Activate the event before cancelling a date';
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -74,15 +96,22 @@ function kindLabel(kind: string): string {
 }
 
 /**
- * Events → event detail (events FR-4/FR-5/FR-6, UI FR-42): the parent read with
- * its identity, the server-rendered audience summary, the recurrence's schedule
- * versions and exceptions, the window occurrence table with the derived status
- * and capture state, the window summary tiles and the read-only offerings.
+ * Events → event detail (events FR-4/FR-5/FR-6, UI FR-42/FR-42e): the parent read
+ * with its identity, the server-rendered audience summary, the recurrence's
+ * schedule versions and exceptions, the window occurrence table with the derived
+ * status and capture state, the window summary tiles and the read-only offerings.
  *
- * The roster figure is the API's transitional `expected` count, labelled
- * Roster and never merged with present or coloured here. The status and next
- * occurrence are the API's; the screen never classifies an event by comparing
- * dates (FR-3).
+ * The page's write verbs follow the parent's state (AC-62): **Edit** and, on a
+ * draft, **Activate** and a disabled **Archive**, or **Archive** on an active
+ * parent, sit in the one `Actions` menu with `Refresh` as the bare utility to its
+ * left. An occurrence's **Cancel** is a row control; **Add schedule version** and
+ * **Add exception** are buttons inside the recurrence panel. An archived parent
+ * offers no write verb and no **Restore** - archiving is terminal - and the page
+ * says it is read-only.
+ *
+ * The roster figure is the API's transitional `expected` count, labelled Roster
+ * and never merged with present or coloured here. The status and next occurrence
+ * are the API's; the screen never classifies an event by comparing dates (FR-3).
  */
 export function EventDetailPage() {
   const styles = useEventStyles();
@@ -100,6 +129,14 @@ export function EventDetailPage() {
     readonly offeringId: string;
     readonly name: string;
   } | null>(null);
+  // FR-42e: the page's own confirm targets and the acting surface's failures.
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [actionFailure, setActionFailure] = useState<WriteFailure | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<EventOccurrenceItem | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [exceptionOpen, setExceptionOpen] = useState(false);
+  const [recurrenceFailure, setRecurrenceFailure] = useState<WriteFailure | null>(null);
+  const [removingException, setRemovingException] = useState<EventRecurrenceException | null>(null);
 
   const eventQuery = useQuery({
     queryKey: ['events', baseUrl, 'detail', id, window.from, window.to],
@@ -112,6 +149,16 @@ export function EventDetailPage() {
     enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
   });
 
+  const activateMutation = useMutation({
+    mutationFn: () => updateEventParent(baseUrl, token, id, { status: 'active' }),
+  });
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveEventParent(baseUrl, token, id),
+  });
+  const removeExceptionMutation = useMutation({
+    mutationFn: (date: string) => removeEventRecurrenceException(baseUrl, token, id, date),
+  });
+
   useEffect(() => {
     if (isUnauthorized(eventQuery.error)) void signOut();
   }, [eventQuery.error, signOut]);
@@ -122,6 +169,115 @@ export function EventDetailPage() {
     right.effectiveFrom.localeCompare(left.effectiveFrom),
   );
   const exceptions = event?.recurrence?.exceptions ?? [];
+  const archived = event?.status === 'archived';
+  const draft = event?.status === 'draft';
+  const actionBusy = activateMutation.isPending || archiveMutation.isPending;
+
+  function invalidateEvent(): void {
+    void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
+  }
+
+  /** FR-42g/AC-64: a refusal is a banner on the surface the operator acted on. */
+  function reportFailure(
+    error: unknown,
+    fallbackTitle: string,
+    set: (failure: WriteFailure) => void,
+  ): void {
+    if (isUnauthorized(error)) {
+      void signOut();
+      return;
+    }
+    set(writeFailure(error, fallbackTitle));
+  }
+
+  function activate(): void {
+    if (actionBusy) return;
+    setActionFailure(null);
+    activateMutation.mutate(undefined, {
+      onSuccess: () => invalidateEvent(),
+      onError: (error: unknown) =>
+        reportFailure(error, 'The event was not activated', setActionFailure),
+    });
+  }
+
+  function archive(): void {
+    if (archiveMutation.isPending) return;
+    setActionFailure(null);
+    archiveMutation.mutate(undefined, {
+      onSuccess: () => {
+        setArchiveOpen(false);
+        invalidateEvent();
+      },
+      onError: (error: unknown) => {
+        setArchiveOpen(false);
+        reportFailure(error, 'The event was not archived', setActionFailure);
+      },
+    });
+  }
+
+  function removeException(): void {
+    if (!removingException || removeExceptionMutation.isPending) return;
+    const date = removingException.date;
+    setRecurrenceFailure(null);
+    removeExceptionMutation.mutate(date, {
+      onSuccess: () => {
+        setRemovingException(null);
+        invalidateEvent();
+      },
+      onError: (error: unknown) => {
+        setRemovingException(null);
+        reportFailure(error, 'The exception was not removed', setRecurrenceFailure);
+      },
+    });
+  }
+
+  // FR-42e/AC-62: the verbs follow the parent's state. An archived parent offers
+  // none, a draft offers Activate as primary with Archive unavailable, and an
+  // active parent offers Archive. `Refresh` is the bare utility and never an item.
+  const actions: PageAction[] = [];
+  if (event && !archived) {
+    actions.push({
+      id: 'edit',
+      kind: 'verb',
+      label: 'Edit',
+      icon: <EditRegular />,
+      disabled: actionBusy,
+      onSelect: () => navigate(`/events/${encodeURIComponent(event.id)}/edit`),
+    });
+    if (draft) {
+      actions.push({
+        id: 'activate',
+        kind: 'verb',
+        label: 'Activate',
+        icon: <CheckmarkCircleRegular />,
+        primary: true,
+        disabled: actionBusy,
+        onSelect: activate,
+      });
+    }
+    actions.push({
+      id: 'archive',
+      kind: 'verb',
+      label: 'Archive',
+      icon: <ArchiveRegular />,
+      destructive: true,
+      disabled: draft || actionBusy,
+      onSelect: () => {
+        setActionFailure(null);
+        setArchiveOpen(true);
+      },
+    });
+  }
+  actions.push({
+    id: 'refresh',
+    kind: 'utility',
+    label: 'Refresh',
+    icon: <ArrowClockwiseRegular />,
+    onSelect: () => {
+      void eventQuery.refetch();
+    },
+    disabled: eventQuery.isFetching,
+  });
 
   // FR-8a: a retired route forwards here with `import=<date>`. The date is a
   // calendar date matched to the occurrence the parent read returned for the
@@ -156,18 +312,7 @@ export function EventDetailPage() {
           Back to events
         </Button>
       }
-      actions={[
-        {
-          id: 'refresh',
-          kind: 'utility' as const,
-          label: 'Refresh',
-          icon: <ArrowClockwiseRegular />,
-          onSelect: () => {
-            void eventQuery.refetch();
-          },
-          disabled: eventQuery.isFetching,
-        },
-      ]}
+      actions={actions}
     >
       <div className={styles.page}>
         {eventQuery.isError ? (
@@ -184,6 +329,15 @@ export function EventDetailPage() {
               >
                 Retry
               </Button>
+            </MessageBarBody>
+          </MessageBar>
+        ) : null}
+
+        {actionFailure ? (
+          <MessageBar intent="error">
+            <MessageBarBody>
+              <MessageBarTitle>{actionFailure.title}</MessageBarTitle>
+              {actionFailure.message}
             </MessageBarBody>
           </MessageBar>
         ) : null}
@@ -271,6 +425,16 @@ export function EventDetailPage() {
               ) : null}
             </Card>
 
+            {archived ? (
+              <MessageBar intent="warning">
+                <MessageBarBody>
+                  <MessageBarTitle>This event is archived</MessageBarTitle>
+                  It is read-only: occurrences, schedule versions and exceptions cannot be changed.
+                  Archiving is terminal by contract, so there is no Restore.
+                </MessageBarBody>
+              </MessageBar>
+            ) : null}
+
             <SeriesSummaryTiles
               summary={event.summary}
               occurrenceCount={occurrences.length}
@@ -288,6 +452,18 @@ export function EventDetailPage() {
                     : 'Standalone event'}
                 </Text>
               </div>
+
+              {recurrenceFailure ? (
+                <div className={styles.panelBanner}>
+                  <MessageBar intent="error">
+                    <MessageBarBody>
+                      <MessageBarTitle>{recurrenceFailure.title}</MessageBarTitle>
+                      {recurrenceFailure.message}
+                    </MessageBarBody>
+                  </MessageBar>
+                </div>
+              ) : null}
+
               {!event.recurrence ? (
                 <div className={styles.empty}>
                   <Text className={styles.emptyTitle}>No recurrence</Text>
@@ -298,6 +474,21 @@ export function EventDetailPage() {
                 </div>
               ) : (
                 <>
+                  <div className={styles.sectionHeader}>
+                    <Text className={styles.emptyTitle}>Schedule versions</Text>
+                    {archived ? null : (
+                      <Button
+                        icon={<AddRegular />}
+                        appearance="secondary"
+                        onClick={() => {
+                          setRecurrenceFailure(null);
+                          setScheduleOpen(true);
+                        }}
+                      >
+                        Add schedule version
+                      </Button>
+                    )}
+                  </div>
                   <div className={styles.tableWrap}>
                     <Table className={styles.table} size="small" aria-label="Schedule versions">
                       <TableHeader>
@@ -308,19 +499,56 @@ export function EventDetailPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {schedules.map((version) => (
-                          <TableRow key={version.effectiveFrom}>
-                            <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
-                            <TableCell>{scheduleLabel(version.rrule)}</TableCell>
-                            <TableCell>
-                              {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {schedules.map((version) => {
+                          // AC-63: a stored version renders the vocabulary's own
+                          // label; anything outside it is read-only from the string.
+                          const cadence = fromRrule(version.rrule);
+                          return (
+                            <TableRow key={version.effectiveFrom}>
+                              <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
+                              <TableCell>
+                                <div className={styles.identity}>
+                                  <Text>{cadence ? cadenceLabel(cadence) : version.rrule}</Text>
+                                  {cadence ? null : (
+                                    <Text size={200} className={styles.muted}>
+                                      Outside the recurrence vocabulary · cannot be edited here
+                                    </Text>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
-                  {exceptions.length > 0 ? (
+
+                  <div className={styles.sectionHeader}>
+                    <Text className={styles.emptyTitle}>Exceptions</Text>
+                    {archived ? null : (
+                      <Button
+                        icon={<AddRegular />}
+                        appearance="secondary"
+                        onClick={() => {
+                          setRecurrenceFailure(null);
+                          setExceptionOpen(true);
+                        }}
+                      >
+                        Add exception
+                      </Button>
+                    )}
+                  </div>
+
+                  {exceptions.length === 0 ? (
+                    <div className={styles.empty}>
+                      <Text size={200} className={styles.muted}>
+                        The schedule&apos;s generated dates stand as they are.
+                      </Text>
+                    </div>
+                  ) : (
                     <div className={styles.tableWrap}>
                       <Table className={styles.table} size="small" aria-label="Exceptions">
                         <TableHeader>
@@ -328,6 +556,7 @@ export function EventDetailPage() {
                             <TableHeaderCell>Date</TableHeaderCell>
                             <TableHeaderCell>Kind</TableHeaderCell>
                             <TableHeaderCell>Note</TableHeaderCell>
+                            <TableHeaderCell aria-label="Action" />
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -352,12 +581,32 @@ export function EventDetailPage() {
                                   </Text>
                                 )}
                               </TableCell>
+                              <TableCell>
+                                {archived ? (
+                                  <Text size={200} className={styles.muted}>
+                                    Read-only
+                                  </Text>
+                                ) : (
+                                  <Button
+                                    size="small"
+                                    appearance="transparent"
+                                    icon={<DeleteRegular />}
+                                    aria-label={`Remove exception on ${formatDate(exception.date)}`}
+                                    onClick={() => {
+                                      setRecurrenceFailure(null);
+                                      setRemovingException(exception);
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                )}
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </div>
-                  ) : null}
+                  )}
                 </>
               )}
             </section>
@@ -398,100 +647,124 @@ export function EventDetailPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {occurrences.map((occurrence) => (
-                        <TableRow key={occurrence.id}>
-                          <TableCell>{formatDate(occurrence.date)}</TableCell>
-                          <TableCell className={styles.statusCell}>
-                            <div className={styles.statusStack}>
-                              <Badge
-                                appearance="tint"
-                                color={
-                                  occurrence.status === 'held'
-                                    ? 'success'
-                                    : occurrence.status === 'cancelled'
-                                      ? 'danger'
-                                      : 'informative'
+                      {occurrences.map((occurrence) => {
+                        const cancelReasonId = `cancel-reason-${occurrence.id}`;
+                        return (
+                          <TableRow key={occurrence.id}>
+                            <TableCell>{formatDate(occurrence.date)}</TableCell>
+                            <TableCell className={styles.statusCell}>
+                              <div className={styles.statusStack}>
+                                <Badge
+                                  appearance="tint"
+                                  color={
+                                    occurrence.status === 'held'
+                                      ? 'success'
+                                      : occurrence.status === 'cancelled'
+                                        ? 'danger'
+                                        : 'informative'
+                                  }
+                                  size="small"
+                                >
+                                  {sessionStatusLabel(occurrence.status)}
+                                </Badge>
+                                {occurrence.status === 'cancelled' ? (
+                                  <Text size={200} className={styles.muted}>
+                                    {occurrence.note
+                                      ? `Reason: ${occurrence.note}`
+                                      : 'No reason recorded'}
+                                  </Text>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Text size={200} className={styles.muted}>
+                                {sessionCaptureLine(
+                                  {
+                                    date: occurrence.date,
+                                    startTime: occurrence.startTime,
+                                    endTime: occurrence.endTime,
+                                    timezone: event.timezone,
+                                    status: occurrence.status,
+                                    capture: occurrence.capture,
+                                  },
+                                  new Date(),
+                                )}
+                              </Text>
+                            </TableCell>
+                            <TableCell>
+                              <SessionHeadcount
+                                eventId={event.id}
+                                sessionDate={occurrence.date}
+                                disabled={
+                                  occurrence.status === 'cancelled' ||
+                                  Boolean(occurrence.capture?.ended)
                                 }
-                                size="small"
-                              >
-                                {sessionStatusLabel(occurrence.status)}
-                              </Badge>
-                              {occurrence.status === 'cancelled' ? (
-                                <Text size={200} className={styles.muted}>
-                                  {occurrence.note
-                                    ? `Reason: ${occurrence.note}`
-                                    : 'No reason recorded'}
-                                </Text>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Text size={200} className={styles.muted}>
-                              {sessionCaptureLine(
-                                {
-                                  date: occurrence.date,
-                                  startTime: occurrence.startTime,
-                                  endTime: occurrence.endTime,
-                                  timezone: event.timezone,
-                                  status: occurrence.status,
-                                  capture: occurrence.capture,
-                                },
-                                new Date(),
-                              )}
-                            </Text>
-                          </TableCell>
-                          <TableCell>
-                            <SessionHeadcount
-                              eventId={event.id}
-                              sessionDate={occurrence.date}
-                              disabled={
-                                occurrence.status === 'cancelled' ||
-                                Boolean(occurrence.capture?.ended)
-                              }
-                              onImport={
-                                event.tracksMembers
-                                  ? () => setImportFor(occurrenceFrom(event, occurrence))
-                                  : undefined
-                              }
-                              endAction={
-                                event.tracksMembers
-                                  ? endActionState(
-                                      captureState(
-                                        {
-                                          date: occurrence.date,
-                                          startTime: occurrence.startTime,
-                                          endTime: occurrence.endTime,
-                                          timezone: event.timezone,
-                                          status: occurrence.status,
-                                          capture: occurrence.capture,
-                                        },
-                                        new Date(),
-                                      ),
-                                    )
-                                  : 'hidden'
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className={styles.counts}>
-                              <Text size={200}>{occurrence.present} present</Text>
-                              <Text size={200}>Roster {occurrence.expected}</Text>
-                            </div>
-                          </TableCell>
-                          <TableCell>{occurrence.importedRows}</TableCell>
-                          <TableCell>{sessionSourceLabel(occurrence.source)}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="small"
-                              appearance="transparent"
-                              aria-label={`View rows for ${formatDate(occurrence.date)}`}
-                              onClick={() => setSelected(occurrence)}
-                            >
-                              View rows
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                onImport={
+                                  event.tracksMembers
+                                    ? () => setImportFor(occurrenceFrom(event, occurrence))
+                                    : undefined
+                                }
+                                endAction={
+                                  event.tracksMembers
+                                    ? endActionState(
+                                        captureState(
+                                          {
+                                            date: occurrence.date,
+                                            startTime: occurrence.startTime,
+                                            endTime: occurrence.endTime,
+                                            timezone: event.timezone,
+                                            status: occurrence.status,
+                                            capture: occurrence.capture,
+                                          },
+                                          new Date(),
+                                        ),
+                                      )
+                                    : 'hidden'
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className={styles.counts}>
+                                <Text size={200}>{occurrence.present} present</Text>
+                                <Text size={200}>Roster {occurrence.expected}</Text>
+                              </div>
+                            </TableCell>
+                            <TableCell>{occurrence.importedRows}</TableCell>
+                            <TableCell>{sessionSourceLabel(occurrence.source)}</TableCell>
+                            <TableCell>
+                              <div className={styles.rowActions}>
+                                <Button
+                                  size="small"
+                                  appearance="transparent"
+                                  aria-label={`View rows for ${formatDate(occurrence.date)}`}
+                                  onClick={() => setSelected(occurrence)}
+                                >
+                                  View rows
+                                </Button>
+                                {archived || occurrence.status === 'cancelled' ? null : (
+                                  <Button
+                                    size="small"
+                                    appearance="transparent"
+                                    disabled={draft}
+                                    aria-label={`Cancel ${formatDate(occurrence.date)}`}
+                                    aria-describedby={draft ? cancelReasonId : undefined}
+                                    onClick={() => {
+                                      setCancelTarget(occurrence);
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                )}
+                                {draft ? (
+                                  <Text id={cancelReasonId} size={200} className={styles.muted}>
+                                    {DRAFT_CANCEL_REASON}
+                                  </Text>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -608,6 +881,67 @@ export function EventDetailPage() {
           }}
         />
       ) : null}
+
+      {cancelTarget ? (
+        <CancelOccurrenceDialog
+          eventId={event?.id ?? id}
+          date={cancelTarget.date}
+          dateLabel={formatDate(cancelTarget.date)}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null);
+            invalidateEvent();
+          }}
+        />
+      ) : null}
+
+      {event && event.recurrence && scheduleOpen ? (
+        <AddScheduleVersionDialog
+          eventId={event.id}
+          onClose={() => setScheduleOpen(false)}
+          onSaved={invalidateEvent}
+        />
+      ) : null}
+
+      {event && event.recurrence && exceptionOpen ? (
+        <AddExceptionDialog
+          eventId={event.id}
+          onClose={() => setExceptionOpen(false)}
+          onSaved={invalidateEvent}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={archiveOpen}
+        title="Archive this event?"
+        message="The event leaves the active list and becomes read-only. Its occurrences and history are kept. Nothing is deleted, and archiving is terminal: there is no restore."
+        confirmLabel="Archive event"
+        busy={archiveMutation.isPending}
+        onConfirm={archive}
+        onCancel={() => {
+          if (!archiveMutation.isPending) setArchiveOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={removingException !== null}
+        title="Remove exception"
+        message={
+          removingException
+            ? `Remove the ${exceptionKindLabel(
+                removingException.kind,
+              ).toLowerCase()} exception on ${formatDate(
+                removingException.date,
+              )}? The occurrence list changes; the schedule versions are untouched.`
+            : ''
+        }
+        confirmLabel="Remove exception"
+        busy={removeExceptionMutation.isPending}
+        onConfirm={removeException}
+        onCancel={() => {
+          if (!removeExceptionMutation.isPending) setRemovingException(null);
+        }}
+      />
     </PageFrame>
   );
 }

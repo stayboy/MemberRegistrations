@@ -23,13 +23,14 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `member-detail.png`                 | Member detail, Welfare & Services tab                | 1440 × 900  | `v2-shell/12-subscriptions.png`             |
 | `member-add.png`                    | Add member, step 1 of the step flow                  | 1440 × 1123 | `v2-shell/21-add-person-contact.png`        |
 | `events-list.png`                   | Events list, venue and attendance columns            | 1440 × 900  | `v2-events/01-events-list.png`              |
-| `events-new.png`                    | New event form, identity, dates, sessions            | 1440 × 1123 | `v2-events/10-event-create.png`             |
+| `events-new.png`                    | New event form, identity, audience, repeats          | 1440 × 1123 | `v2-events/10-event-create.png`             |
+| `event-edit.png`                    | The same form in edit mode, read-only fields         | 1440 × 1123 | none (no edit-state drawing)                |
 | `event-detail.png`                  | Event detail, sessions table                         | 1440 × 900  | `v2-events/02-event-detail.png`             |
 | `event-headcount-dialog.png`        | Event detail, the headcount capture dialog           | 1440 x 900  | `v2-events/06-record-headcount-dialog.png`  |
 | `event-import-panel.png`            | Event detail, the attendance import panel            | 1440 x 900  | `v2-events/07-import-attendance-panel.png`  |
 | `event-attendance-dialog.png`       | Attendance dialog for the first session              | 1440 × 900  | `v2-events/06-attendance-rows.png`          |
-| `series-detail.png`                 | Series detail, versions, exceptions, occurrences     | 1440 × 1000 | `v2-events/04-series-detail.png`            |
-| `series-new.png`                    | New series form, identity, toggle and first schedule | 1440 × 900  | `v2-events/11-series-create.png`            |
+| `series-detail.png`                 | Event detail for the recurring parent                | 1440 × 1000 | `v2-events/03-activity-detail-series.png`   |
+| `series-new.png`                    | Orphaned: the series form retired — no capture case. | 1440 × 900  | `v2-events/11-series-create.png`            |
 | `shepherding-officers.png`          | Shepherding officers, coverage and officer table     | 1440 × 900  | `v2-shell/07-shepherding-officers.png`      |
 | `shepherding-roster.png`            | Shepherding roster for the fixture officer           | 1440 × 900  | `v2-shell/08-shepherding-roster.png`        |
 | `shepherding-report.png`            | Church report and status distribution                | 1440 × 900  | `v2-shell/09-shepherding-report.png`        |

@@ -119,15 +119,16 @@
     "10-event-create": {
       "mock": {
         "path": "mockups/v2-events/10-event-create.png",
-        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807",
+        "sha256": "95cfe3582c615639a1e790a1506ee8d63399768317a694a1db46a310a360103c",
         "source": "mockups/v2-events/10-event-create.html"
       },
-      "baseline": null,
-      "coverage": "signed",
+      "baseline": "events-new.png",
+      "coverage": "auto-signed",
       "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "5f5d7194594d661c3c0f0b13cbce80699ff5639064675b614bd4730690585807"
+        "by": "unattended",
+        "at": "2026-11-23",
+        "sha256": "95cfe3582c615639a1e790a1506ee8d63399768317a694a1db46a310a360103c",
+        "basis": "§17 target re-cut for FR-42b's two commit controls; the owner's 2026-11-22 signature is void and only the owner restores it"
       }
     },
     "02-event-detail": {
@@ -233,7 +234,7 @@
           "file": "documents/specs/member-registrations-events-offerings.md",
           "id": "AC-5",
           "disposition": "e2e-only",
-          "test": "ui/e2e/series.spec.ts::the series detail shows versions, exceptions and the occurrence window"
+          "test": "ui/e2e/events.spec.ts::the event detail shows schedule versions, exceptions, occurrences and the four summary tiles"
         },
         {
           "file": "documents/specs/member-registrations-events-offerings.md",

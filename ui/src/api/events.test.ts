@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_EVENT_LIMIT,
-  createEvent,
+  createEventParent,
   deleteEventAttendance,
   eventAttendancePath,
   eventAttendanceRowPath,
@@ -10,8 +10,10 @@ import {
   getEvent,
   getEventAttendance,
   listEvents,
+  updateEventParent,
   type EventAttendance,
   type EventItem,
+  type EventParentItem,
 } from './events';
 
 const BASE = 'https://gateway.test';
@@ -69,6 +71,63 @@ const EVENT: EventItem = {
     pendingMinor: 0,
     honorRate: 0,
     contributionCount: 0,
+  },
+};
+
+const PARENT: EventParentItem = {
+  id: 'event-parent-1',
+  eventNo: 'EVT-2026-023',
+  name: 'Harvest Thanksgiving',
+  audienceId: 'aud-everyone',
+  audience: {
+    id: 'aud-everyone',
+    name: 'Everyone',
+    system: true,
+    summary: 'Everyone - all of membership status active',
+  },
+  ministry: null,
+  presbyterOnly: false,
+  timezone: 'Africa/Lagos',
+  description: 'Three evenings of thanksgiving',
+  venueType: 'hybrid',
+  venueName: 'Main Auditorium + Zoom',
+  startDate: '2026-11-27',
+  endDate: '2026-11-29',
+  startTime: '17:00',
+  endTime: '19:30',
+  tracksMembers: true,
+  status: 'draft',
+  recurrence: null,
+  occurrences: [],
+  offerings: [],
+  stats: {
+    attachedEvents: 0,
+    pledgedMinor: 0,
+    paidMinor: 0,
+    pendingMinor: 0,
+    honorRate: 0,
+    contributionCount: 0,
+  },
+  summary: {
+    from: '2026-11-27',
+    to: '2026-11-29',
+    nextOccurrence: '2026-11-27',
+    attendance: {
+      memberSessions: { held: 0, expected: 0, present: 0, rate: null },
+      lastHeld: null,
+      headcountSessions: { held: 0 },
+      cancelled: 0,
+      upcoming: 2,
+    },
+    offerings: {
+      attachedCount: 0,
+      currency: 'GHS',
+      paidMinor: 0,
+      pledgedMinor: 0,
+      outstandingMinor: 0,
+      countedMinor: 0,
+      visitors: { count: 0, paidMinor: 0 },
+    },
   },
 };
 
@@ -222,55 +281,82 @@ describe('eventDetailPath', () => {
   });
 });
 
-describe('createEvent', () => {
-  it('POSTs the create body to the events path and returns the EventItem', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ ...EVENT, status: 'scheduled' }, 201));
+describe('createEventParent', () => {
+  it('POSTs the parent body and returns the created EventParent', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(PARENT, 201));
 
-    const created = await createEvent(BASE, TOKEN, {
-      eventNo: 'E-2',
-      name: 'Leaders retreat',
-      timezone: 'UTC',
-      startDate: '2026-11-10',
-      endDate: '2026-11-11',
-      startTime: '09:00',
-      venueType: 'auditorium',
-      sessions: [{ date: '2026-11-10' }],
+    const created = await createEventParent(BASE, TOKEN, {
+      name: 'Harvest Thanksgiving',
+      audienceId: 'aud-everyone',
+      venueType: 'hybrid',
+      startTime: '17:00',
+      endTime: '19:30',
+      tracksMembers: true,
+      occurrences: [{ date: '2026-11-27' }, { date: '2026-11-28' }],
     });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/events`);
     expect(requestOptions(0).method).toBe('POST');
     expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
     expect(JSON.parse(String(requestOptions(0).body))).toEqual({
-      eventNo: 'E-2',
-      name: 'Leaders retreat',
-      timezone: 'UTC',
-      startDate: '2026-11-10',
-      endDate: '2026-11-11',
-      startTime: '09:00',
-      venueType: 'auditorium',
-      sessions: [{ date: '2026-11-10' }],
+      name: 'Harvest Thanksgiving',
+      audienceId: 'aud-everyone',
+      venueType: 'hybrid',
+      startTime: '17:00',
+      endTime: '19:30',
+      tracksMembers: true,
+      occurrences: [{ date: '2026-11-27' }, { date: '2026-11-28' }],
     });
-    expect(created.id).toBe('event-1');
-    expect(created.status).toBe('scheduled');
+    expect(created.id).toBe('event-parent-1');
+    expect(created.status).toBe('draft');
   });
 
   it('rejects an empty response body', async () => {
     fetchMock.mockResolvedValue(jsonResponse(null, 201));
 
     await expect(
-      createEvent(BASE, TOKEN, {
-        eventNo: 'E-2',
-        name: 'Leaders retreat',
-        startDate: '2026-11-10',
-        endDate: '2026-11-11',
-        startTime: '09:00',
+      createEventParent(BASE, TOKEN, {
+        name: 'Harvest Thanksgiving',
         venueType: 'auditorium',
-        sessions: [{ date: '2026-11-10' }],
+        startTime: '09:00',
+        occurrences: [{ date: '2026-11-27' }],
       }),
     ).rejects.toMatchObject({
       status: 500,
       message: 'The created event response was empty.',
     });
+  });
+});
+
+describe('updateEventParent', () => {
+  it('PATCHes the parent fields and returns the updated EventParent', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...PARENT, status: 'active' }, 200));
+
+    const updated = await updateEventParent(BASE, TOKEN, 'event/parent 1', {
+      name: 'Harvest Thanksgiving',
+      venueType: 'hybrid',
+      startTime: '17:00',
+      description: null,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/events/event%2Fparent%201`);
+    expect(requestOptions(0).method).toBe('PATCH');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      name: 'Harvest Thanksgiving',
+      venueType: 'hybrid',
+      startTime: '17:00',
+      description: null,
+    });
+    expect(updated.status).toBe('active');
+  });
+
+  it('sends status alone for the activate move', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...PARENT, status: 'active' }, 200));
+
+    await updateEventParent(BASE, TOKEN, 'event-parent-1', { status: 'active' });
+
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({ status: 'active' });
   });
 });
 

@@ -80,45 +80,6 @@ export interface ListSeriesOptions {
   readonly signal?: AbortSignal;
 }
 
-export interface AddScheduleVersionInput {
-  readonly effectiveFrom: string;
-  readonly rrule: string;
-  readonly endsOn?: string | null;
-}
-
-/** Mirrors `scheduleInputSchema`; the create series body carries this object. */
-export interface SeriesScheduleInput {
-  readonly effectiveFrom: string;
-  readonly rrule: string;
-  readonly endsOn?: string | null;
-}
-
-/** Mirrors `createSeriesSchema` (FR-42). */
-export interface CreateSeriesInput {
-  readonly name: string;
-  readonly ministryCode?: string | null;
-  readonly presbyterOnly?: boolean;
-  readonly timezone?: string;
-  readonly description?: string | null;
-  readonly schedule: SeriesScheduleInput;
-}
-
-/** Mirrors `updateSeriesSchema`; schedule versions are appended, never edited here. */
-export interface UpdateSeriesInput {
-  readonly name?: string;
-  readonly ministryCode?: string | null;
-  readonly presbyterOnly?: boolean;
-  readonly timezone?: string;
-  readonly description?: string | null;
-  readonly archived?: boolean;
-}
-
-export interface SetSeriesExceptionInput {
-  readonly date: string;
-  readonly kind: SeriesExceptionKind;
-  readonly note?: string | null;
-}
-
 export const SERIES_PATH = '/gateway/v1/series';
 
 interface SeriesListResponse {
@@ -226,125 +187,11 @@ export async function getSeries(
 }
 
 /**
- * `POST /v1/series`: creates the series and its first schedule version in one
- * transaction. The API answers `201` with the new detail DTO (FR-42).
+ * The `/v1/series` routes retire: an event is the parent now and its recurrence
+ * is read and written under the event. This module keeps only the reads the API
+ * still serves during the transition; the UI makes no `/v1/series` write
+ * (AC-65), so the create, update, schedule and exception writers are gone.
  */
-export async function createSeries(
-  baseUrl: string,
-  sessionToken: string,
-  input: CreateSeriesInput,
-): Promise<SeriesDto> {
-  const result = await gatewayRequest<SeriesDto>(baseUrl, SERIES_PATH, {
-    method: 'POST',
-    sessionToken,
-    body: {
-      name: input.name,
-      ministryCode: input.ministryCode ?? null,
-      presbyterOnly: input.presbyterOnly,
-      timezone: input.timezone,
-      description: input.description ?? null,
-      schedule: {
-        effectiveFrom: input.schedule.effectiveFrom,
-        rrule: input.schedule.rrule,
-        endsOn: input.schedule.endsOn ?? null,
-      },
-    },
-  });
-  if (!result) throw new ApiError(500, 'The created series response was empty.');
-  return result;
-}
-
-/**
- * `PUT /v1/series/:id`: identity fields and the archive flag. Schedule versions
- * and exceptions have their own append-only routes (FR-42).
- */
-export async function updateSeries(
-  baseUrl: string,
-  sessionToken: string,
-  seriesId: string,
-  input: UpdateSeriesInput,
-): Promise<SeriesDto> {
-  const result = await gatewayRequest<SeriesDto>(baseUrl, seriesDetailPath(seriesId), {
-    method: 'PUT',
-    sessionToken,
-    body: {
-      name: input.name,
-      ministryCode: input.ministryCode,
-      presbyterOnly: input.presbyterOnly,
-      timezone: input.timezone,
-      description: input.description,
-      archived: input.archived,
-    },
-  });
-  if (!result) throw new ApiError(500, 'The updated series response was empty.');
-  return result;
-}
-
-export function seriesSchedulePath(seriesId: string): string {
-  return `${seriesDetailPath(seriesId)}/schedule`;
-}
-
-/** `POST /v1/series/:id/schedule`: appends a version and returns the series. */
-export async function addScheduleVersion(
-  baseUrl: string,
-  sessionToken: string,
-  seriesId: string,
-  input: AddScheduleVersionInput,
-): Promise<SeriesDto> {
-  const result = await gatewayRequest<SeriesDto>(baseUrl, seriesSchedulePath(seriesId), {
-    method: 'POST',
-    sessionToken,
-    body: {
-      effectiveFrom: input.effectiveFrom,
-      rrule: input.rrule,
-      endsOn: input.endsOn ?? null,
-    },
-  });
-  if (!result) throw new ApiError(500, 'The schedule version response was empty.');
-  return result;
-}
-
-export function seriesExceptionsPath(seriesId: string): string {
-  return `${seriesDetailPath(seriesId)}/exceptions`;
-}
-
-/** The remove path; the date is a UTC calendar date, encoded as one segment. */
-export function seriesExceptionPath(seriesId: string, date: string): string {
-  return `${seriesExceptionsPath(seriesId)}/${encodeURIComponent(date)}`;
-}
-
-/** `POST /v1/series/:id/exceptions`: sets one date's cancelled/extra exception. */
-export async function setSeriesException(
-  baseUrl: string,
-  sessionToken: string,
-  seriesId: string,
-  input: SetSeriesExceptionInput,
-): Promise<SeriesDto> {
-  const result = await gatewayRequest<SeriesDto>(baseUrl, seriesExceptionsPath(seriesId), {
-    method: 'POST',
-    sessionToken,
-    body: {
-      date: input.date,
-      kind: input.kind,
-      note: input.note ?? null,
-    },
-  });
-  if (!result) throw new ApiError(500, 'The series exception response was empty.');
-  return result;
-}
-
-/** `DELETE /v1/series/:id/exceptions/:date`: 204 with no body. */
-export async function removeSeriesException(
-  baseUrl: string,
-  sessionToken: string,
-  seriesId: string,
-  date: string,
-): Promise<void> {
-  await gatewayRequest(baseUrl, seriesExceptionPath(seriesId, date), {
-    method: 'DELETE',
-    sessionToken,
-  });
-}
 
 export function seriesOccurrencesPath(seriesId: string, from: string, to: string): string {
   const params = new URLSearchParams();

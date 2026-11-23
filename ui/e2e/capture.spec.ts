@@ -187,6 +187,16 @@ test('events new', async ({ page }) => {
   await capture(page, 'events-new');
 });
 
+test('event edit', async ({ page }) => {
+  // FR-42b: the same form serves the edit route, with Event number and Members
+  // tracking read-only.
+  await openScreen(page, '/events/event-1/edit', { width: 1440, height: 1123 });
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
+  await expect(page.getByLabel(/^Event number/)).toHaveAttribute('readonly', '');
+  await expect(page.getByRole('switch', { name: 'Members tracking' })).toBeDisabled();
+  await capture(page, 'event-edit');
+});
+
 test('event detail', async ({ page }) => {
   await openScreen(page, '/events/event-1', { width: 1440, height: 900 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
@@ -226,16 +236,12 @@ test('import panel', async ({ page }) => {
 });
 
 test('series detail', async ({ page }) => {
-  await openScreen(page, '/events/series-1?kind=series', { width: 1440, height: 1000 });
+  // The series detail retired; the series id is the event parent, so this is the
+  // event detail under the same baseline name (AC-51).
+  await openScreen(page, '/events/series-1', { width: 1440, height: 1000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Schedule versions' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Event occurrences' })).toBeVisible();
   await capture(page, 'series-detail');
-});
-
-test('series new', async ({ page }) => {
-  await openScreen(page, '/events/series/new', { width: 1440, height: 900 });
-  await expect(page.getByRole('heading', { level: 1, name: 'New series' })).toBeVisible();
-  await capture(page, 'series-new');
 });
 
 // --- Shepherding and contacts ----------------------------------------------

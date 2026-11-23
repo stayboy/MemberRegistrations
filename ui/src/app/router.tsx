@@ -52,12 +52,6 @@ const EventDetailPage = lazy(() =>
 const EventFormPage = lazy(() =>
   import('../pages/EventFormPage').then(({ EventFormPage: page }) => ({ default: page })),
 );
-const SeriesDetailPage = lazy(() =>
-  import('../pages/SeriesDetailPage').then(({ SeriesDetailPage: page }) => ({ default: page })),
-);
-const SeriesFormPage = lazy(() =>
-  import('../pages/SeriesFormPage').then(({ SeriesFormPage: page }) => ({ default: page })),
-);
 const OfferingsPage = lazy(() =>
   import('../pages/offerings/OfferingsPage').then(({ OfferingsPage: page }) => ({
     default: page,
@@ -118,21 +112,20 @@ function placeholder(sectionId: SectionId, path: string, title?: string) {
 /**
  * Hash routing keeps GitHub Pages deep links working on a hard refresh: no
  * 404.html copy of index.html and no server rewrite are needed (AC-25).
- */
-/**
- * The retired series detail lands on the activity detail with its kind, so a bookmark still resolves
- * (AC-51). The API keeps the two reads apart, which is why the kind travels in the route rather than
- * being guessed from the id's shape.
+ *
+ * The retired series routes land on the event they name (AC-51, AC-65): a series
+ * is the event parent now, so its detail, its new form and its edit form all
+ * resolve to the event's own routes. The `/v1/series` API routes stay live for the
+ * transition; the UI makes no write to them.
  */
 function SeriesRedirect() {
   const { id } = useParams();
-  return <Navigate to={`/events/${encodeURIComponent(id ?? '')}?kind=series`} replace />;
+  return <Navigate to={`/events/${encodeURIComponent(id ?? '')}`} replace />;
 }
 
-/** One activity detail serves a standalone event and a series (owner, 2026-11-15). */
-function ActivityPage() {
-  const [params] = useSearchParams();
-  return params.get('kind') === 'series' ? <SeriesDetailPage /> : <EventDetailPage />;
+function SeriesEditRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/events/${encodeURIComponent(id ?? '')}/edit`} replace />;
 }
 
 /**
@@ -183,11 +176,12 @@ export const router = createHashRouter([
           { path: 'events', element: <EventsListPage /> },
           { path: 'events/new', element: <EventFormPage /> },
           { path: 'events/series', element: <Navigate to="/events" replace /> },
-          { path: 'events/series/new', element: <SeriesFormPage /> },
+          { path: 'events/series/new', element: <Navigate to="/events/new" replace /> },
           { path: 'events/series/:id', element: <SeriesRedirect /> },
-          { path: 'events/series/:id/edit', element: <SeriesFormPage /> },
+          { path: 'events/series/:id/edit', element: <SeriesEditRedirect /> },
           { path: 'events/offerings', element: <OfferingsPage /> },
-          { path: 'events/:id', element: <ActivityPage /> },
+          { path: 'events/:id', element: <EventDetailPage /> },
+          { path: 'events/:id/edit', element: <EventFormPage /> },
           { path: 'imports/members', element: <ImportsPage /> },
           { path: 'imports/attendance', element: <AttendanceImportRedirect /> },
           { path: 'imports/batches', element: <ImportBatchesPage /> },
