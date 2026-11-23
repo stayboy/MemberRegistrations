@@ -57,6 +57,8 @@ import {
   audienceRuleSchema,
   audienceSchema,
   audienceSummarySchema,
+  createAudienceSchema,
+  updateAudienceSchema,
 } from './schemas/audiences.js';
 import {
   attendanceImportSchema,
@@ -64,9 +66,10 @@ import {
   memberImportSchema,
 } from './schemas/imports.js';
 import {
+  cancelOccurrenceSchema,
   codeItemSchema,
   codeListSchema,
-  createEventSchema,
+  createEventParentSchema,
   delegationInputSchema,
   delegationListSchema,
   delegationSchema,
@@ -87,6 +90,9 @@ import {
   headcountSchema,
   issueCodeSchema,
   issuedCodeSchema,
+  recurrenceExceptionInputSchema,
+  recurrenceScheduleInputSchema,
+  updateEventParentSchema,
   updateEventSchema,
   voidCodeSchema,
 } from './schemas/events.js';
@@ -219,6 +225,13 @@ const idParam = (name: string) => ({
   schema: { type: 'string' },
 });
 
+const dateParam = (name: string) => ({
+  name,
+  in: 'path',
+  required: true,
+  schema: { type: 'string', format: 'date', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+});
+
 const actorHeader = {
   name: 'X-Actor-Id',
   in: 'header',
@@ -326,6 +339,208 @@ const parentEventExample = {
       visitors: { count: 0, paidMinor: 0 },
     },
   },
+};
+
+const everyoneAudienceExample = {
+  id: 'f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918',
+  name: 'Everyone',
+  system: true,
+  systemKey: 'everyone',
+  active: true,
+  rule: {
+    operator: 'allOf',
+    clauses: [{ attribute: 'membershipStatus', value: 'active' }],
+  },
+  summary: 'Everyone - all of membership status active',
+  createdAt: '2026-11-22T09:00:00.000Z',
+  createdBy: 'migration',
+  updatedAt: '2026-11-22T09:00:00.000Z',
+  updatedBy: 'migration',
+};
+
+const everyoneAudienceSummaryExample = {
+  id: everyoneAudienceExample.id,
+  name: everyoneAudienceExample.name,
+  system: everyoneAudienceExample.system,
+  summary: everyoneAudienceExample.summary,
+};
+
+/** A created standalone event: draft, manual occurrences, no recurrence. */
+const createdEventParentExample = {
+  id: '6a9d4c1e-2b7f-4c8a-9d0e-1f2a3b4c5d6e',
+  eventNo: 'EVT-2026-023',
+  name: 'Harvest Thanksgiving',
+  audienceId: everyoneAudienceExample.id,
+  audience: everyoneAudienceSummaryExample,
+  ministry: null,
+  presbyterOnly: false,
+  timezone: 'Africa/Lagos',
+  description: 'Three evenings of thanksgiving',
+  venueType: 'hybrid',
+  venueName: 'Main Auditorium + Zoom',
+  startDate: '2026-11-27',
+  endDate: '2026-11-29',
+  startTime: '17:00',
+  endTime: '19:30',
+  tracksMembers: true,
+  status: 'draft',
+  recurrence: null,
+  occurrences: [
+    {
+      id: 'b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e',
+      date: '2026-11-27',
+      startTime: '17:00',
+      endTime: '19:30',
+      status: 'scheduled',
+      venueType: 'hybrid',
+      capture: null,
+      note: null,
+      present: 0,
+      expected: 120,
+      importedRows: 0,
+      source: 'none',
+      legacyEventNo: null,
+    },
+    {
+      id: 'c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f',
+      date: '2026-11-28',
+      startTime: '17:00',
+      endTime: '19:30',
+      status: 'scheduled',
+      venueType: 'hybrid',
+      capture: null,
+      note: null,
+      present: 0,
+      expected: 120,
+      importedRows: 0,
+      source: 'none',
+      legacyEventNo: null,
+    },
+    {
+      id: 'd3e4f5a6-b7c8-4d9e-8f0a-2b3c4d5e6f70',
+      date: '2026-11-29',
+      startTime: '17:00',
+      endTime: '19:30',
+      status: 'scheduled',
+      venueType: 'hybrid',
+      capture: null,
+      note: null,
+      present: 0,
+      expected: 120,
+      importedRows: 0,
+      source: 'none',
+      legacyEventNo: null,
+    },
+  ],
+  offerings: [],
+  stats: {
+    attachedEvents: 0,
+    pledgedMinor: 0,
+    paidMinor: 0,
+    pendingMinor: 0,
+    honorRate: 0,
+    contributionCount: 0,
+  },
+  summary: {
+    from: '2026-11-27',
+    to: '2026-11-29',
+    nextOccurrence: '2026-11-27',
+    attendance: {
+      memberSessions: { held: 0, expected: 360, present: 0, rate: null },
+      lastHeld: null,
+      headcountSessions: { held: 0 },
+      cancelled: 0,
+      upcoming: 3,
+    },
+    offerings: {
+      attachedCount: 0,
+      currency: 'GHS',
+      paidMinor: 0,
+      pledgedMinor: 0,
+      outstandingMinor: 0,
+      countedMinor: 0,
+      visitors: { count: 0, paidMinor: 0 },
+    },
+  },
+};
+
+/** The same event after "Save and activate". */
+const activatedEventParentExample = {
+  ...createdEventParentExample,
+  status: 'active',
+};
+
+/** The archived parent; history stays readable. */
+const archivedEventParentExample = {
+  ...activatedEventParentExample,
+  status: 'archived',
+};
+
+const cancelledOccurrenceExample = {
+  ...createdEventParentExample.occurrences[0],
+  status: 'cancelled',
+  note: 'Public holiday - moved to 2 December',
+  capture: null,
+  present: 0,
+  importedRows: 0,
+  source: 'none',
+};
+
+/** A schedule version was appended; the earlier version stays readable. */
+const recurrenceVersionsExample = {
+  schedules: [
+    { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
+    {
+      effectiveFrom: '2027-01-03',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      endsOn: '2027-12-26',
+    },
+  ],
+  exceptions: [{ date: '2026-12-27', kind: 'cancelled', note: 'Christmas break' }],
+};
+
+const recurrenceExceptionExample = {
+  schedules: recurrenceVersionsExample.schedules,
+  exceptions: [
+    ...recurrenceVersionsExample.exceptions,
+    { date: '2026-11-29', kind: 'extra', note: 'Harvest thanksgiving' },
+  ],
+};
+
+/** The extra date was removed; the schedules and the other exception are untouched. */
+const recurrenceExceptionRemovedExample = {
+  schedules: recurrenceExceptionExample.schedules,
+  exceptions: recurrenceExceptionExample.exceptions.filter(
+    (exception) => exception.date !== '2026-11-29',
+  ),
+};
+
+const youngAdultsAudienceExample = {
+  id: '2e6c8a4b-7d1f-4a3c-8b5e-9f0a1c2d3e4f',
+  name: 'Young Adults',
+  system: false,
+  systemKey: null,
+  active: true,
+  rule: {
+    operator: 'allOf',
+    clauses: [{ attribute: 'ageBand', minYears: 18, maxYears: 35 }],
+  },
+  summary: 'Young Adults - all of age 18-35',
+  createdAt: '2026-11-23T10:15:00.000Z',
+  createdBy: 'officer_ada',
+  updatedAt: '2026-11-23T10:15:00.000Z',
+  updatedBy: 'officer_ada',
+};
+
+const editedYoungAdultsAudienceExample = {
+  ...youngAdultsAudienceExample,
+  name: 'Young Adults 18-40',
+  rule: {
+    operator: 'allOf',
+    clauses: [{ attribute: 'ageBand', minYears: 18, maxYears: 40 }],
+  },
+  summary: 'Young Adults 18-40 - all of age 18-40',
+  updatedAt: '2026-11-23T11:40:00.000Z',
 };
 
 const legacyEventExample = {
@@ -490,8 +705,14 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         Audience: toSchema(audienceSchema, 'output'),
         AudienceList: toSchema(audienceListSchema, 'output'),
         EventGeneration: toSchema(eventGenerationSchema, 'output'),
-        CreateEvent: toSchema(createEventSchema, 'input'),
-        UpdateEvent: toSchema(updateEventSchema, 'input'),
+        CreateEvent: toSchema(createEventParentSchema, 'input'),
+        UpdateEvent: toSchema(updateEventParentSchema, 'input'),
+        UpdateEventLegacy: toSchema(updateEventSchema, 'input'),
+        CancelOccurrence: toSchema(cancelOccurrenceSchema, 'input'),
+        EventScheduleInput: toSchema(recurrenceScheduleInputSchema, 'input'),
+        EventExceptionInput: toSchema(recurrenceExceptionInputSchema, 'input'),
+        AudienceCreate: toSchema(createAudienceSchema, 'input'),
+        AudienceUpdate: toSchema(updateAudienceSchema, 'input'),
         EventAttendance: toSchema(eventAttendanceSchema, 'output'),
         EventAttendanceEntry: toSchema(eventAttendanceEntrySchema, 'output'),
         EventAttendanceInput: toSchema(eventAttendanceInputSchema, 'input'),
@@ -1733,6 +1954,32 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
           },
         },
+        post: {
+          summary: 'Create a custom audience',
+          description:
+            'Creates a custom audience from its name and rule; 201 with Location. System audiences are seeded and read-only, so they are never created here. There is no delete: a custom audience is archived through PUT with `{ active: false }`.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('AudienceCreate') } },
+          },
+          responses: {
+            201: {
+              description: 'The created audience with its structured rule and summary.',
+              content: {
+                'application/json': {
+                  schema: ref('Audience'),
+                  examples: {
+                    youngAdults: {
+                      summary: 'A custom age-band audience',
+                      value: youngAdultsAudienceExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
 
       '/v1/audiences/{id}': {
@@ -1747,6 +1994,32 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                   schema: ref('Audience'),
                   examples: {
                     ministry: { summary: 'A seeded ministry audience', value: audienceExample },
+                  },
+                },
+              },
+            },
+          },
+        },
+        put: {
+          summary: 'Edit a custom audience',
+          description:
+            'Edits a custom audience name, rule or active state. A system audience is refused with 409 audience_system. There is no delete: archiving is `{ active: false }`, and an archived audience stays resolvable for events that already reference it.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('AudienceUpdate') } },
+          },
+          responses: {
+            200: {
+              description: 'The edited audience with its structured rule and summary.',
+              content: {
+                'application/json': {
+                  schema: ref('Audience'),
+                  examples: {
+                    renamed: {
+                      summary: 'A custom age-band audience edited',
+                      value: editedYoungAdultsAudienceExample,
+                    },
                   },
                 },
               },
@@ -1984,19 +2257,29 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           },
         },
         post: {
-          summary: 'Create a standalone event with its sessions',
+          summary: 'Create the parent, with manual occurrences or one recurrence',
           description:
-            'Creates a manual event with no series. The session dates must be unique and inside the event range.',
+            'Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceId` defaults to the seeded Everyone audience, `tracksMembers` to true, `timezone` to UTC, and `eventNo` is optional: the server mints it when it is omitted. The retired `ministry` and `presbyterOnly` fields are not part of the payload. 201 with Location naming the new detail URL.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
             content: { 'application/json': { schema: ref('CreateEvent') } },
           },
           responses: {
-            201: json('Event created; Location names the new detail URL.', 'Event'),
-            401: unauthorized,
-            409: conflict,
-            422: validation,
+            201: {
+              description: 'The created parent in its draft state, with its occurrences.',
+              content: {
+                'application/json': {
+                  schema: ref('EventParent'),
+                  examples: {
+                    standalone: {
+                      summary: 'A created standalone event with three occurrences',
+                      value: createdEventParentExample,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -2120,14 +2403,41 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             404: notFound,
           },
         },
-        put: {
-          summary: 'Update an event; a stale If-Match returns 409',
+        patch: {
+          summary: 'Update the parent (partial); a stale If-Match returns 409',
           description:
-            'A cancelled or archived event is read-only. The event number is immutable; sessions may be replaced as a set.',
+            'Updates the parent from its partial fields and is the write the UI uses. It carries no recurrence, no `eventNo` and no occurrence set: the event number is immutable, the recurrence is written through its own routes, and the derived range is never accepted. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.',
           parameters: [actorHeader, ifMatchHeader],
           requestBody: {
             required: true,
             content: { 'application/json': { schema: ref('UpdateEvent') } },
+          },
+          responses: {
+            200: {
+              description: 'The updated parent.',
+              content: {
+                'application/json': {
+                  schema: ref('EventParent'),
+                  examples: {
+                    activated: {
+                      summary: 'A draft parent activated after "Save and activate"',
+                      value: activatedEventParentExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        put: {
+          summary:
+            'The legacy per-instance update during the transition; it retires when the UI moves',
+          description:
+            'The legacy per-instance update kept for the deployed UI; the parent write is PATCH and this form retires when the UI moves. A cancelled or archived event is read-only. The event number is immutable; sessions may be replaced as a set.',
+          parameters: [actorHeader, ifMatchHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('UpdateEventLegacy') } },
           },
           responses: {
             200: json('Event updated.', 'Event'),
@@ -2135,6 +2445,148 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             404: notFound,
             409: conflict,
             422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/archive': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Archive the event parent',
+          description:
+            'Archives the parent; its occurrences, attendance and giving history stay readable and it is never hard deleted.',
+          parameters: [actorHeader],
+          responses: {
+            200: {
+              description: 'The archived parent.',
+              content: {
+                'application/json': {
+                  schema: ref('EventParent'),
+                  examples: {
+                    archived: {
+                      summary: 'An event archived after its last service',
+                      value: archivedEventParentExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/occurrences/{date}/cancel': {
+        parameters: [idParam('eventId'), dateParam('date')],
+        post: {
+          summary: 'Cancel one occurrence with a reason',
+          description:
+            'Cancels the occurrence named by its UTC date and stores the reason as its `note`; the occurrence becomes read-only and its history stays readable.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CancelOccurrence') } },
+          },
+          responses: {
+            200: {
+              description: 'The cancelled occurrence.',
+              content: {
+                'application/json': {
+                  schema: ref('EventOccurrence'),
+                  examples: {
+                    cancelled: {
+                      summary: 'An occurrence cancelled for a public holiday',
+                      value: cancelledOccurrenceExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/recurrence/versions': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Add a recurrence schedule version',
+          description:
+            'Appends a schedule version; earlier versions stay readable and only future generation changes. `rrule` carries the RRULE body, never COUNT or UNTIL, because the end is `endsOn`.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventScheduleInput') } },
+          },
+          responses: {
+            201: {
+              description: 'The recurrence with the appended schedule version.',
+              content: {
+                'application/json': {
+                  schema: ref('EventRecurrence'),
+                  examples: {
+                    appended: {
+                      summary: 'A second schedule version appended',
+                      value: recurrenceVersionsExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/recurrence/exceptions': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Cancel or add one recurrence date',
+          description:
+            'Appends an exception: `cancelled` generates no occurrence for its date and requires a non-empty `note`, `extra` generates one. The exception history is append-only.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventExceptionInput') } },
+          },
+          responses: {
+            201: {
+              description: 'The recurrence with the appended exception.',
+              content: {
+                'application/json': {
+                  schema: ref('EventRecurrence'),
+                  examples: {
+                    extra: {
+                      summary: 'An extra occurrence added',
+                      value: recurrenceExceptionExample,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/recurrence/exceptions/{date}': {
+        parameters: [idParam('eventId'), dateParam('date')],
+        delete: {
+          summary: 'Remove an exception',
+          description:
+            'Removes the exception for one UTC date and returns the recomputed recurrence. The schedules are untouched; only the exception list changes.',
+          parameters: [actorHeader],
+          responses: {
+            200: {
+              description: 'The recurrence with the exception removed.',
+              content: {
+                'application/json': {
+                  schema: ref('EventRecurrence'),
+                  examples: {
+                    removed: {
+                      summary: 'An extra date removed, the schedules untouched',
+                      value: recurrenceExceptionRemovedExample,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },

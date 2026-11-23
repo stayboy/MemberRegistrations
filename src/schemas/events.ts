@@ -388,6 +388,147 @@ export const eventRecurrenceSchema = z.object({
   ),
 });
 
+/**
+ * The recurrence write contract. `rrule` is the RRULE body only: `COUNT` and
+ * `UNTIL` are refused inside it because the end is `endsOn` (Recurrence).
+ */
+export const recurrenceRuleInputSchema = z
+  .string()
+  .trim()
+  .min(6)
+  .max(200)
+  .refine((value) => !/(^|;)\s*(?:COUNT|UNTIL)\s*=/i.test(value), {
+    message: 'rrule must not carry COUNT or UNTIL; set endsOn instead',
+  });
+
+/** A standalone event's date row. Blank times inherit the parent's defaults. */
+export const eventOccurrenceInputSchema = z.object({
+  date: dateStringSchema,
+  startTime: timeStringSchema.optional(),
+  endTime: timeStringSchema.nullable().optional(),
+});
+
+export const recurrenceScheduleInputSchema = z.object({
+  effectiveFrom: dateStringSchema,
+  rrule: recurrenceRuleInputSchema,
+  endsOn: dateStringSchema.nullable().optional(),
+});
+
+export const recurrenceExceptionInputSchema = z
+  .object({
+    date: dateStringSchema,
+    kind: z.enum(['cancelled', 'extra']),
+    /** Required and non-empty on a `cancelled` exception (Recurrence). */
+    note: z.string().trim().min(1).max(200).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === 'cancelled' && !value.note) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: 'a cancelled exception requires a non-empty note',
+      });
+    }
+  });
+
+export const eventRecurrenceInputSchema = z.object({
+  schedules: z.array(recurrenceScheduleInputSchema).min(1),
+  exceptions: z.array(recurrenceExceptionInputSchema).default([]),
+});
+
+/**
+ * `POST /v1/events`: one parent, a draft, with either manual occurrences
+ * (standalone) or a first recurrence version (recurring), never both. The
+ * range is derived, so `startDate`/`endDate` are not request fields. The
+ * retired `ministry`/`presbyterOnly` projections are not in the payload.
+ */
+export const createEventParentSchema = z
+  .object({
+    eventNo: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .optional()
+      .describe(
+        'Optional identity. When omitted the server mints `EVT-<year>-<sequence>`; a duplicate is 409.',
+      ),
+    name: z.string().trim().min(1).max(200),
+    audienceId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe('The event applicability; defaults to the seeded Everyone audience when omitted.'),
+    timezone: z
+      .string()
+      .min(1)
+      .max(64)
+      .optional()
+      .describe('IANA override used only to decide "today" for this event; defaults to UTC.'),
+    description: z.string().max(2000).nullable().optional(),
+    venueType: venueTypeSchema,
+    venueName: z.string().max(200).nullable().optional(),
+    startTime: timeStringSchema,
+    endTime: timeStringSchema.nullable().optional(),
+    tracksMembers: z.boolean().default(true),
+    occurrences: z
+      .array(eventOccurrenceInputSchema)
+      .min(1)
+      .optional()
+      .describe("A standalone event's dates; mutually exclusive with `recurrence`."),
+    recurrence: eventRecurrenceInputSchema
+      .optional()
+      .describe(
+        "A recurring event's first schedule version; mutually exclusive with `occurrences`.",
+      ),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.occurrences && !value.recurrence) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['occurrences'],
+        message: 'a standalone event requires at least one occurrence, or supply a recurrence',
+      });
+    }
+    if (value.occurrences && value.recurrence) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recurrence'],
+        message: 'supply either occurrences or a recurrence, not both',
+      });
+    }
+  });
+
+/**
+ * `PATCH /v1/events/{eventId}`: the same parent fields without the recurrence,
+ * all optional. `eventNo` is immutable and `status` moves through the
+ * documented transitions; the legacy projections stay refused.
+ */
+export const updateEventParentSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  audienceId: z.string().uuid().optional(),
+  timezone: z.string().min(1).max(64).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  venueType: venueTypeSchema.optional(),
+  venueName: z.string().max(200).nullable().optional(),
+  startTime: timeStringSchema.optional(),
+  endTime: timeStringSchema.nullable().optional(),
+  tracksMembers: z.boolean().optional(),
+  status: eventStatusSchema.optional(),
+});
+
+/** `POST .../occurrences/{date}/cancel`: the reason is stored as the occurrence's `note`. */
+export const cancelOccurrenceSchema = z.object({
+  note: z.string().trim().min(1).max(200),
+});
+
+export type CreateEventParentInput = z.infer<typeof createEventParentSchema>;
+export type UpdateEventParentInput = z.infer<typeof updateEventParentSchema>;
+export type EventRecurrenceInput = z.infer<typeof eventRecurrenceInputSchema>;
+export type RecurrenceScheduleInput = z.infer<typeof recurrenceScheduleInputSchema>;
+export type RecurrenceExceptionInput = z.infer<typeof recurrenceExceptionInputSchema>;
+export type CancelOccurrenceInput = z.infer<typeof cancelOccurrenceSchema>;
+
 /** The parent read's window figures: the data behind the four tiles (S-Q2). */
 export const eventWindowSummarySchema = seriesSummarySchema;
 
