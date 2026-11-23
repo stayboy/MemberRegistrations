@@ -79,9 +79,9 @@ The brief must contain:
 - a `merge` brief on uncommitted work also carries `files:` and `message:` for its commit step.
 
 Return `REFUSED: <reason>` when the verb is absent from the owner's sentence, the tree hash does not
-match `git rev-parse 'HEAD^{tree}'`, the file list is not what is staged, a merge brief does not state
-all three checks green, or the brief contains a secret or a credential. One brief authorises one verb:
-a commit brief cannot push.
+match `git rev-parse 'HEAD^{tree}'`, the file list is not what is staged, a merge brief names neither all
+three checks green nor the chain's wait condition, or the brief contains a secret or a credential. One
+brief authorises one verb: a commit brief cannot push.
 
 ## Actions
 
@@ -97,7 +97,9 @@ a commit brief cannot push.
   green; `gh pr merge <number> --squash --delete-branch`; never `--admin`. `--auto` is not used: on an
   already-mergeable pull request it falls through to a direct merge. When the work is uncommitted the
   owner's `merge` is still this one verb; what it expands to is `.github/merge-policy.md`'s Verb
-  glossary, and the expansion runs inside this one brief. This file does not restate it.
+  glossary, and the expansion runs inside this one brief. This file does not restate it. The brief names
+  the three checks in one of two ways: **already green** when the PR exists, or **as the wait condition**
+  when the chain opens the PR itself.
 - `tag`: annotated `git tag -a <tag> -m <message>`.
 - `sync`: `git switch main` and `git pull --ff-only`.
 

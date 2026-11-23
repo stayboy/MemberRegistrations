@@ -70,6 +70,12 @@ its own track; the cross-track integration is a post-merge pass on `main`. Rules
 `~/.agents/skills/orchestrator/references/parallel-workers.md`; incident evidence, once owner-accepted,
 lives in `documents/lessons.md`.
 
+- **A round that builds a UI and its API together follows `documents/agents/parallel-ui-api.md`** (owner,
+  2026-11-22; `0813` review 2026-11-23). The committed OpenAPI snapshot is the seam: the contract merges first, a UI
+  track branches only after it and builds against generated mocks, and a screen merges only when the endpoint it
+  calls is implemented on `main` and passes conformance. A **frozen** contract qualifies this section's "no shared
+  wire contracts"; an unfrozen one does not, and the tracks run serially.
+
 ## 4. Date and time
 
 - Backend dates are **UTC calendar dates**. Every default and every "today" uses UTC.
