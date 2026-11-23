@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
@@ -52,30 +53,21 @@ function attach(event: string, offeringId: string) {
 
 async function insertEvent(seed: SeedEvent): Promise<string> {
   eventSeq += 1;
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,null,$2,'UTC',$3,$4,'09:00',null,'auditorium',null,null,$5,'manual',$6::jsonb)
-     returning id`,
-    [
-      `CON-${eventSeq}`,
-      seed.name,
-      seed.startDate,
-      seed.endDate,
-      seed.status ?? 'scheduled',
-      JSON.stringify(
-        seed.sessions.map((session) => ({
-          date: session.date,
-          startTime: '09:00',
-          endTime: null,
-          status: session.status ?? 'scheduled',
-        })),
-      ),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventNo: `CON-${eventSeq}`,
+    name: seed.name,
+    startDate: seed.startDate,
+    endDate: seed.endDate,
+    startTime: '09:00',
+    status: seed.status as 'scheduled' | 'cancelled' | 'archived' | undefined,
+    sessions: seed.sessions.map((session) => ({
+      date: session.date,
+      startTime: '09:00',
+      endTime: null,
+      status: session.status ?? 'scheduled',
+    })),
+  });
+  return seeded.eventId;
 }
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -819,9 +811,10 @@ describe('idempotency outranks later state changes', () => {
   });
 
   it('returns the stored gift after the event is cancelled', async () => {
-    await harness.db.query(`update event_instances set status = 'cancelled' where id = $1`, [
-      retryEvent2Id,
-    ]);
+    await harness.db.query(
+      `update event_occurrences set status = 'cancelled' where event_id = $1`,
+      [retryEvent2Id],
+    );
 
     const repeat = await postContribution({
       memberNo: 'C-5005',

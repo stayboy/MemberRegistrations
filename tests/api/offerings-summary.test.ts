@@ -5,6 +5,7 @@ import type { Db } from '../../src/db/sql.js';
 import { OfferingRepository } from '../../src/repos/offerings.js';
 import { PledgeRepository } from '../../src/repos/pledges.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 import { createScratchPgDb } from '../helpers/scratch-db.js';
 
@@ -53,7 +54,7 @@ async function insertContribution(input: {
   const memberId = input.memberNo ? memberIds[input.memberNo] : null;
   await harness.db.query(
     `insert into contributions (
-       member_id, visitor_name, visitor_phone_hash, offering_id, event_instance_id,
+       member_id, visitor_name, visitor_phone_hash, offering_id, event_id,
        session_date, amount_minor, currency, channel, status, reference, idempotency_key,
        terms_version, created_by
      ) values ($1,$2,$3,$4,$5,$6,$7,$8,'manual',$9,$10,$11,1,'seed')`,
@@ -76,7 +77,7 @@ async function insertContribution(input: {
 async function insertPledge(seed: SeedPledge): Promise<string> {
   const [row] = await harness.db.query<{ id: string }>(
     `insert into pledges (
-       member_id, offering_id, event_instance_id, session_date, amount_minor, currency,
+       member_id, offering_id, event_id, session_date, amount_minor, currency,
        expected_on, officer_member_id, status, terms_version, idempotency_key, created_by
      ) values ($1,$2,$3,null,$4,$5,$6,$7,'pending',1,$8,'seed')
      returning id`,
@@ -113,28 +114,20 @@ async function insertPledge(seed: SeedPledge): Promise<string> {
 }
 
 async function insertEvent(name: string, startDate: string, sessions: string[]): Promise<string> {
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     ) values ($1,null,$2,'UTC',$3,$4,'09:00',null,'auditorium',null,null,'scheduled','manual',$5::jsonb)
-     returning id`,
-    [
-      `SUM-${name.replace(/\W+/g, '-')}`,
-      name,
-      startDate,
-      sessions[sessions.length - 1] ?? startDate,
-      JSON.stringify(
-        sessions.map((date) => ({
-          date,
-          startTime: '09:00',
-          endTime: null,
-          status: 'scheduled',
-        })),
-      ),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventNo: `SUM-${name.replace(/\W+/g, '-')}`,
+    name,
+    startDate,
+    endDate: sessions[sessions.length - 1] ?? startDate,
+    startTime: '09:00',
+    sessions: sessions.map((date) => ({
+      date,
+      startTime: '09:00',
+      endTime: null,
+      status: 'scheduled',
+    })),
+  });
+  return seeded.eventId;
 }
 
 async function seedDataset(db: Db): Promise<void> {
@@ -669,16 +662,19 @@ describe.skipIf(!testDatabaseUrl)('offerings summary on the pooled pg driver', (
        values ($1, 1, 'Sunday Tithe', 'The regular tithe', 'tithe', 'GHS', 'seed')`,
       [offering!.id],
     );
+    const [audience] = await pooled.query<{ id: string }>(
+      `select id from audiences where system_key = 'everyone'`,
+    );
     const [event] = await pooled.query<{ id: string }>(
-      `insert into event_instances (event_no, name, start_date, end_date, status, source, sessions)
-       values ('PG-EVT-1', 'Harvest Service', $1::date, $1::date, 'scheduled', 'manual', '[]'::jsonb)
+      `insert into events (event_no, name, audience_id, timezone, venue_type, start_time, status)
+       values ('PG-EVT-1', 'Harvest Service', $1, 'UTC', 'auditorium', '09:00', 'active')
        returning id`,
-      [shiftDate(today, -20)],
+      [audience!.id],
     );
 
     await pooled.query(
       `insert into contributions (
-         member_id, visitor_name, visitor_phone_hash, offering_id, event_instance_id,
+         member_id, visitor_name, visitor_phone_hash, offering_id, event_id,
          session_date, amount_minor, currency, channel, status, reference, idempotency_key,
          terms_version, created_by
        ) values
@@ -704,7 +700,7 @@ describe.skipIf(!testDatabaseUrl)('offerings summary on the pooled pg driver', (
     ): Promise<string> => {
       const [row] = await pooled.query<{ id: string }>(
         `insert into pledges (
-           member_id, offering_id, event_instance_id, amount_minor, currency, expected_on,
+           member_id, offering_id, event_id, amount_minor, currency, expected_on,
            officer_member_id, status, terms_version, idempotency_key, created_by
          ) values ($1,$2,$3,$4,'GHS',$5,$6,'pending',1,$7,'seed')
          returning id`,

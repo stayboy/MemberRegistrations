@@ -658,9 +658,12 @@ describe('headcount corrections', () => {
     // accepts a headcount for a session dated before today (AC-33a).
     const [seeded] = await harness.db.query<{ id: string }>(
       `insert into event_session_headcounts (
-         event_instance_id, session_date, as_of, mode, total, ended, recorded_by
+         occurrence_id, session_date, as_of, mode, total, ended, recorded_by
        )
-       values ($1,$2,$3,'adults',15,false,'seed')
+       values (
+         (select id from event_occurrences where event_id = $1 and date = $2),
+         $2,$3,'adults',15,false,'seed'
+       )
        returning id`,
       [pastEventId, yesterday, `${yesterday}T10:00:00.000Z`],
     );
@@ -693,8 +696,10 @@ describe('headcount corrections', () => {
     expect(corrected.body.code).toBe('validation_error');
 
     const [stored] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from event_session_headcounts
-        where event_instance_id = $1 and session_date = $2`,
+      `select count(*)::int as count
+         from event_session_headcounts h
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2`,
       [pastEventId, yesterday],
     );
     expect(Number(stored!.count)).toBe(1);
@@ -712,14 +717,10 @@ describe('headcount corrections', () => {
   it('answers session_closed when a late import already closed the past session', async () => {
     const sessionDate = shiftDate(today, -3);
     const closedEventId = await freshEvent([sessionDate]);
-    const [series] = await harness.db.query<{ id: string }>(
-      `insert into event_series (name, timezone, created_by, updated_by)
-       values ('Headcount Close Series', 'UTC', 'seed', 'seed')
-       returning id`,
-    );
     await harness.db.query(
-      'update event_instances set series_id = $1, timezone = $2 where id = $3',
-      [series!.id, 'UTC', closedEventId],
+      `insert into event_recurrence_versions (event_id, effective_from, rrule, ends_on, created_by)
+       values ($1,$2,'FREQ=DAILY',$2,'seed')`,
+      [closedEventId, sessionDate],
     );
 
     const closed = await request(harness.app)
@@ -740,8 +741,10 @@ describe('headcount corrections', () => {
     expect(response.body.code).toBe('session_closed');
 
     const [stored] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from event_session_headcounts
-        where event_instance_id = $1 and session_date = $2`,
+      `select count(*)::int as count
+         from event_session_headcounts h
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2`,
       [closedEventId, sessionDate],
     );
     expect(Number(stored!.count)).toBe(0);
@@ -779,9 +782,12 @@ describe('lane filters and legacy rows', () => {
     // reshape keeps both rows and does not rewrite the chain (HC-19..HC-21).
     const [adults] = await harness.db.query<{ id: string }>(
       `insert into event_session_headcounts (
-         event_instance_id, session_date, as_of, mode, total, ended, recorded_by
+         occurrence_id, session_date, as_of, mode, total, ended, recorded_by
        )
-       values ($1,$2,$3,'adults',12,false,'legacy')
+       values (
+         (select id from event_occurrences where event_id = $1 and date = $2),
+         $2,$3,'adults',12,false,'legacy'
+       )
        returning id`,
       [eventId, today, `${today}T07:00:00.000Z`],
     );
@@ -792,9 +798,12 @@ describe('lane filters and legacy rows', () => {
     );
     const [mixed] = await harness.db.query<{ id: string }>(
       `insert into event_session_headcounts (
-         event_instance_id, session_date, as_of, mode, total, ended, recorded_by, supersedes_id
+         occurrence_id, session_date, as_of, mode, total, ended, recorded_by, supersedes_id
        )
-       values ($1,$2,$3,'mixed',18,false,'legacy',$4)
+       values (
+         (select id from event_occurrences where event_id = $1 and date = $2),
+         $2,$3,'mixed',18,false,'legacy',$4
+       )
        returning id`,
       [eventId, today, `${today}T08:00:00.000Z`, adults!.id],
     );
@@ -993,8 +1002,10 @@ describe('headcount lane locking (HC-2)', () => {
     expect(accepted.filter((response) => response.body.supersedesId === null)).toHaveLength(1);
 
     const rows = await harness.db.query<{ supersedes_id: string | null }>(
-      `select supersedes_id from event_session_headcounts
-        where event_instance_id = $1 and session_date = $2 and mode = 'adults'`,
+      `select h.supersedes_id
+         from event_session_headcounts h
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2 and h.mode = 'adults'`,
       [eventId, today],
     );
     expect(rows.filter((row) => row.supersedes_id === null)).toHaveLength(1);

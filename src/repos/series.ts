@@ -1,10 +1,8 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import { eventSeries, ministries, seriesExceptions, seriesSchedules } from '../db/schema.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { assertDate } from '../domain/contacts.js';
 import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
 import type { SeriesSummary } from '../schemas/reference.js';
-import type { Db, Row } from '../db/sql.js';
+import type { Db, DbClient, Row } from '../db/sql.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
 
@@ -92,28 +90,25 @@ type SummaryPledgeRow = Row & {
   outstanding_minor: number | string;
 };
 
-/**
- * Series window attendance (FR-6b, FR-6c). Held is date-derived in the series
- * timezone: a session on or before today whose session and event are not
- * cancelled or archived. Only held member-tracking sessions enter the ratio;
- * `expected` reuses the event detail's register rule.
- */
+/** Series window attendance (FR-6b, FR-6c) on the parented occurrence model. */
 const SERIES_SUMMARY_ATTENDANCE_SQL = `
 with bounds as (
   select $2::date as from_date, $3::date as to_date, $4::date as today
 ),
 sessions as (
   select e.id as event_id,
+         o.id as occurrence_id,
          e.tracks_members,
          e.presbyter_only,
-         (s->>'date')::date as session_date,
-         coalesce(s->>'status', 'scheduled') = 'cancelled' as session_cancelled,
-         e.status in ('cancelled', 'archived') as event_cancelled
-    from event_instances e
-    cross join lateral jsonb_array_elements(e.sessions) as s
+         o.date as session_date,
+         o.status = 'cancelled' as session_cancelled,
+         e.status = 'archived' as event_cancelled
+    from events e
+    join event_occurrences o on o.event_id = e.id
     cross join bounds b
-   where e.series_id = $1
-     and (s->>'date')::date between b.from_date and b.to_date
+   where e.id = $1
+     and e.status <> 'draft'
+     and o.date between b.from_date and b.to_date
 ),
 classified as (
   select s.*,
@@ -125,18 +120,18 @@ classified as (
     from sessions s
 ),
 attendance_counts as (
-  select a.event_instance_id, a.session_date, count(*)::int as present
+  select a.occurrence_id, count(*)::int as present
     from attendance a
-   where a.event_instance_id in (select event_id from sessions)
-     and a.session_date between (select from_date from bounds) and (select to_date from bounds)
-   group by a.event_instance_id, a.session_date
+    join event_occurrences o on o.id = a.occurrence_id
+   where o.event_id = $1
+     and o.date between (select from_date from bounds) and (select to_date from bounds)
+   group by a.occurrence_id
 ),
 held_member as (
-  select c.event_id, c.session_date, c.presbyter_only,
+  select c.event_id, c.occurrence_id, c.session_date, c.presbyter_only,
          coalesce(ac.present, 0) as present
     from classified c
-    left join attendance_counts ac
-      on ac.event_instance_id = c.event_id and ac.session_date = c.session_date
+    left join attendance_counts ac on ac.occurrence_id = c.occurrence_id
    where c.bucket = 'held' and c.tracks_members
 ),
 expected_by_session as (
@@ -171,25 +166,16 @@ select
   ), 0)::int as last_held_present
 `;
 
-/**
- * Series window money (FR-6d), the church summary's rules scoped by series:
- * the largest paid currency in the window wins, counted cash is reported
- * beside the gifts, and visitors are separate. Attached count is the active
- * attachments made to the series itself.
- */
 const SERIES_SUMMARY_MONEY_SQL = `
 with bounds as (
   select $2::date as from_date, $3::date as to_date
-),
-series_events as (
-  select id from event_instances where series_id = $1
 ),
 chosen as (
   select coalesce((
     select c.currency
       from contributions c, bounds b
      where c.status = 'paid'
-       and c.event_instance_id in (select id from series_events)
+       and c.event_id = $1
        and c.session_date between b.from_date and b.to_date
      group by c.currency
      order by sum(c.amount_minor) desc, c.currency asc
@@ -200,20 +186,22 @@ paid as (
   select c.member_id, c.amount_minor
     from contributions c, bounds b, chosen ch
    where c.status = 'paid'
-     and c.event_instance_id in (select id from series_events)
+     and c.event_id = $1
      and c.session_date between b.from_date and b.to_date
      and c.currency = ch.currency
 ),
 current_counts as (
-  select distinct on (c.event_instance_id, c.offering_id, c.session_date) c.id
-    from event_session_offering_counts c, bounds b, chosen ch
-   where c.event_instance_id in (select id from series_events)
+  select distinct on (c.offering_id, c.session_date) c.id
+    from event_session_offering_counts c
+    join event_occurrences o on o.id = c.occurrence_id
+    cross join bounds b, chosen ch
+   where o.event_id = $1
      and c.currency = ch.currency
      and c.session_date between b.from_date and b.to_date
      and not exists (
        select 1 from event_session_offering_counts s where s.supersedes_id = c.id
      )
-   order by c.event_instance_id, c.offering_id, c.session_date,
+   order by c.offering_id, c.session_date,
             c.as_of desc, c.recorded_at desc, c.id desc
 ),
 counted as (
@@ -228,12 +216,11 @@ select ch.currency,
        coalesce((select sum(amount_minor) from paid where member_id is null), 0)::bigint
          as visitor_paid,
        coalesce((select amount from counted), 0)::bigint as counted_minor,
-       (select count(*) from event_instance_offerings a
-         where a.series_id = $1 and a.detached_on is null)::int as attached_count
+       (select count(*) from event_offerings a
+         where a.event_id = $1 and a.detached_on is null)::int as attached_count
   from chosen ch
 `;
 
-/** Series window pledges, the church summary's relevance rule scoped by series. */
 const SERIES_SUMMARY_PLEDGES_SQL = `
 with bounds as (
   select $2::date as from_date,
@@ -243,7 +230,7 @@ with bounds as (
 series_pledges as (
   select p.*
     from pledges p
-   where p.event_instance_id in (select id from event_instances where series_id = $1)
+   where p.event_id = $1
      and p.currency = $5
 ),
 bounded as (
@@ -279,20 +266,20 @@ select coalesce((
        ), 0)::bigint as outstanding_minor
 `;
 
-type Statement = ReturnType<typeof sql>;
-
-type SeriesUpdate = Partial<Omit<typeof eventSeries.$inferInsert, 'archivedAt' | 'updatedAt'>> & {
-  archivedAt?: Statement | null;
-  updatedAt: Statement;
-};
-
 export class SeriesRepository {
   constructor(private readonly db: Db) {}
 
   async list(includeArchived = false): Promise<SeriesDto[]> {
-    let query = this.db.orm.select({ id: eventSeries.id }).from(eventSeries).$dynamic();
-    if (!includeArchived) query = query.where(isNull(eventSeries.archivedAt));
-    const rows = await query.orderBy(sql`lower(${eventSeries.name})`);
+    const rows = await this.db.query<{ id: string }>(
+      `select e.id
+         from events e
+        where exists (
+                select 1 from event_recurrence_versions rv where rv.event_id = e.id
+              )
+          and ($1::boolean or e.archived_at is null)
+        order by lower(e.name)`,
+      [includeArchived],
+    );
     const result: SeriesDto[] = [];
     for (const row of rows) {
       const series = await this.load(row.id);
@@ -323,81 +310,146 @@ export class SeriesRepository {
       throw new ValidationError('endsOn must not be before effectiveFrom');
     }
     const rrule = validateRrule(input.rrule);
-    const ministryId = await this.resolveMinistry(input.ministryCode ?? null);
 
     try {
       const id = await this.db.transaction(async (tx) => {
-        const [series] = await tx.orm
-          .insert(eventSeries)
-          .values({
+        const audienceId = await resolveAudience(
+          tx,
+          input.ministryCode ?? null,
+          input.presbyterOnly ?? false,
+          actor,
+        );
+        const ministryId = await resolveMinistry(tx, input.ministryCode ?? null);
+        const [conflict] = await tx.query<{ id: string }>(
+          `select e.id
+             from events e
+            where lower(e.name) = lower($1)
+              and e.audience_id = $2
+              and e.archived_at is null
+              and exists (
+                select 1 from event_recurrence_versions rv where rv.event_id = e.id
+              )
+            limit 1`,
+          [name, audienceId],
+        );
+        if (conflict) {
+          throw new ConflictError('A series with this name already exists for that audience');
+        }
+
+        const [event] = await tx.query<{ id: string }>(
+          `insert into events (
+             event_no, name, audience_id, ministry_id, presbyter_only, timezone,
+             description, venue_type, venue_name, start_time, end_time, tracks_members, status
+           ) values ($1,$2,$3,$4,$5,$6,$7,'auditorium',null,'00:00',null,true,'active')
+           returning id`,
+          [
+            await mintEventNo(tx, effectiveFrom),
             name,
+            audienceId,
             ministryId,
-            presbyterOnly: input.presbyterOnly ?? false,
+            input.presbyterOnly ?? false,
             timezone,
-            description: input.description ?? null,
-            createdBy: actor,
-            updatedBy: actor,
-          })
-          .returning({ id: eventSeries.id });
-        await tx.orm.insert(seriesSchedules).values({
-          seriesId: series!.id,
-          effectiveFrom,
-          rrule,
-          endsOn,
-          createdBy: actor,
-        });
-        return series!.id;
+            input.description ?? null,
+          ],
+        );
+        await tx.query(
+          `insert into event_recurrence_versions (
+             event_id, effective_from, rrule, ends_on, created_by
+           ) values ($1,$2,$3,$4,$5)`,
+          [event!.id, effectiveFrom, rrule, endsOn, actor],
+        );
+        return event!.id;
       });
 
       return (await this.load(id))!;
     } catch (error) {
       if (sqlState(error) === '23505') {
-        throw new ConflictError('A series with this name already exists for that ministry');
+        throw new ConflictError('A series with this name already exists for that audience');
       }
       throw error;
     }
   }
 
   async update(id: string, input: UpdateSeriesInput, actor: string): Promise<SeriesDto> {
-    await this.require(id);
-    const set: SeriesUpdate = { updatedAt: sql`now()`, updatedBy: actor };
+    const current = await this.require(id);
+    const sets: string[] = [];
+    const params: unknown[] = [id];
     let changed = false;
 
+    const push = (fragment: string, value: unknown) => {
+      params.push(value);
+      sets.push(`${fragment} = $${params.length}`);
+    };
+
+    let name = current.name;
     if (input.name !== undefined) {
-      const name = input.name.trim();
+      name = input.name.trim();
       if (!name) throw new ValidationError('name is required');
-      set.name = name;
+      push('name', name);
       changed = true;
     }
+    let ministryCode = current.ministry?.code ?? null;
     if (input.ministryCode !== undefined) {
-      set.ministryId = await this.resolveMinistry(input.ministryCode);
+      ministryCode = input.ministryCode;
       changed = true;
     }
+    let presbyterOnly = current.presbyterOnly;
     if (input.presbyterOnly !== undefined) {
-      set.presbyterOnly = input.presbyterOnly;
+      presbyterOnly = input.presbyterOnly;
       changed = true;
+    }
+    if (changed) {
+      const audienceId = await resolveAudience(this.db, ministryCode, presbyterOnly, actor);
+      const ministryId = await resolveMinistry(this.db, ministryCode);
+      push('audience_id', audienceId);
+      push('ministry_id', ministryId);
+      push('presbyter_only', presbyterOnly);
+
+      const [conflict] = await this.db.query<{ id: string }>(
+        `select e.id
+           from events e
+          where lower(e.name) = lower($1)
+            and e.audience_id = $2
+            and e.archived_at is null
+            and e.id <> $3
+            and exists (
+              select 1 from event_recurrence_versions rv where rv.event_id = e.id
+            )
+          limit 1`,
+        [name, audienceId, id],
+      );
+      if (conflict) {
+        throw new ConflictError('A series with this name already exists for that audience');
+      }
     }
     if (input.timezone !== undefined) {
       todayIn(input.timezone);
-      set.timezone = input.timezone;
+      push('timezone', input.timezone);
       changed = true;
     }
     if (input.description !== undefined) {
-      set.description = input.description;
+      push('description', input.description);
       changed = true;
     }
     if (input.archived !== undefined) {
-      set.archivedAt = input.archived ? sql`now()` : null;
+      if (input.archived) {
+        sets.push('archived_at = now()', "status = 'archived'");
+      } else {
+        sets.push('archived_at = null', "status = 'active'");
+      }
       changed = true;
     }
 
     if (!changed) throw new ValidationError('No fields to update');
 
     try {
-      await this.db.orm.update(eventSeries).set(set).where(eq(eventSeries.id, id));
+      await this.db.query(
+        `update events set ${sets.join(', ')}, updated_at = now() where id = $1`,
+        params,
+      );
     } catch (error) {
       if (sqlState(error) === '23505') {
-        throw new ConflictError('A series with this name already exists for that ministry');
+        throw new ConflictError('A series with this name already exists for that audience');
       }
       throw error;
     }
@@ -419,13 +471,12 @@ export class SeriesRepository {
     const rrule = validateRrule(input.rrule);
 
     try {
-      await this.db.orm.insert(seriesSchedules).values({
-        seriesId: id,
-        effectiveFrom,
-        rrule,
-        endsOn,
-        createdBy: actor,
-      });
+      await this.db.query(
+        `insert into event_recurrence_versions (
+           event_id, effective_from, rrule, ends_on, created_by
+         ) values ($1,$2,$3,$4,$5)`,
+        [id, effectiveFrom, rrule, endsOn, actor],
+      );
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError(`A schedule already starts on ${effectiveFrom}`);
@@ -447,29 +498,21 @@ export class SeriesRepository {
       throw new ValidationError('A cancelled exception needs a reason', 'reason_required');
     }
     const date = assertDate(input.date, 'date');
-    await this.db.orm
-      .insert(seriesExceptions)
-      .values({
-        seriesId: id,
-        occursOn: date,
-        kind: input.kind,
-        note,
-        createdBy: actor,
-      })
-      .onConflictDoUpdate({
-        target: [seriesExceptions.seriesId, seriesExceptions.occursOn],
-        set: { kind: input.kind, note },
-      });
+    await this.db.query(
+      `insert into event_recurrence_exceptions (event_id, date, kind, note, created_by)
+       values ($1,$2,$3,$4,$5)`,
+      [id, date, input.kind, note, actor],
+    );
     return this.require(id);
   }
 
   async removeException(id: string, date: string): Promise<void> {
-    const deleted = await this.db.orm
-      .delete(seriesExceptions)
-      .where(
-        and(eq(seriesExceptions.seriesId, id), eq(seriesExceptions.occursOn, assertDate(date))),
-      )
-      .returning({ occursOn: seriesExceptions.occursOn });
+    const deleted = await this.db.query<{ id: string }>(
+      `delete from event_recurrence_exceptions
+        where event_id = $1 and date = $2
+        returning id`,
+      [id, assertDate(date)],
+    );
     if (deleted.length === 0) throw new NotFoundError(`No exception on ${date}`);
   }
 
@@ -551,74 +594,158 @@ export class SeriesRepository {
   }
 
   private async load(id: string): Promise<SeriesDto | null> {
-    const [row] = await this.db.orm
-      .select({
-        id: eventSeries.id,
-        name: eventSeries.name,
-        presbyterOnly: eventSeries.presbyterOnly,
-        timezone: eventSeries.timezone,
-        description: eventSeries.description,
-        archivedAt: eventSeries.archivedAt,
-        ministryCode: ministries.code,
-        ministryName: ministries.name,
-      })
-      .from(eventSeries)
-      .leftJoin(ministries, eq(ministries.id, eventSeries.ministryId))
-      .where(eq(eventSeries.id, id))
-      .limit(1);
+    const [row] = await this.db.query<{
+      id: string;
+      name: string;
+      presbyter_only: boolean;
+      timezone: string;
+      description: string | null;
+      archived_at: Date | string | null;
+      ministry_code: string | null;
+      ministry_name: string | null;
+    }>(
+      `select e.id, e.name, e.presbyter_only, e.timezone, e.description, e.archived_at,
+              m.code as ministry_code, m.name as ministry_name
+         from events e
+         left join ministries m on m.id = e.ministry_id
+        where e.id = $1
+          and exists (
+            select 1 from event_recurrence_versions rv where rv.event_id = e.id
+          )`,
+      [id],
+    );
     if (!row) return null;
 
-    const schedules = await this.db.orm
-      .select({
-        effectiveFrom: seriesSchedules.effectiveFrom,
-        rrule: seriesSchedules.rrule,
-        endsOn: seriesSchedules.endsOn,
-      })
-      .from(seriesSchedules)
-      .where(eq(seriesSchedules.seriesId, id))
-      .orderBy(seriesSchedules.effectiveFrom);
-    const exceptions = await this.db.orm
-      .select({
-        occursOn: seriesExceptions.occursOn,
-        kind: seriesExceptions.kind,
-        note: seriesExceptions.note,
-      })
-      .from(seriesExceptions)
-      .where(eq(seriesExceptions.seriesId, id))
-      .orderBy(seriesExceptions.occursOn);
+    const schedules = await this.db.query<{
+      effective_from: string;
+      rrule: string;
+      ends_on: string | null;
+    }>(
+      `select effective_from, rrule, ends_on
+         from event_recurrence_versions
+        where event_id = $1
+        order by effective_from`,
+      [id],
+    );
+    const exceptions = await this.db.query<{
+      date: string;
+      kind: 'cancelled' | 'extra';
+      note: string | null;
+    }>(
+      `select distinct on (date) date, kind, note
+         from event_recurrence_exceptions
+        where event_id = $1
+        order by date, created_at desc, id desc`,
+      [id],
+    );
 
     return {
       id: row.id,
       name: row.name,
       ministry:
-        row.ministryCode && row.ministryName
-          ? { code: row.ministryCode, name: row.ministryName }
+        row.ministry_code && row.ministry_name
+          ? { code: row.ministry_code, name: row.ministry_name }
           : null,
-      presbyterOnly: row.presbyterOnly,
+      presbyterOnly: row.presbyter_only,
       timezone: row.timezone,
       description: row.description,
-      archivedAt: isoTimestamp(row.archivedAt),
+      archivedAt: isoTimestamp(row.archived_at),
       schedules: schedules.map((schedule) => ({
-        effectiveFrom: isoDate(schedule.effectiveFrom)!,
+        effectiveFrom: isoDate(schedule.effective_from)!,
         rrule: schedule.rrule,
-        endsOn: isoDate(schedule.endsOn),
+        endsOn: isoDate(schedule.ends_on),
       })),
       exceptions: exceptions.map((exception) => ({
-        date: isoDate(exception.occursOn)!,
-        kind: exception.kind as 'cancelled' | 'extra',
+        date: isoDate(exception.date)!,
+        kind: exception.kind,
         note: exception.note,
       })),
     };
   }
+}
 
-  private async resolveMinistry(code: string | null): Promise<string | null> {
-    if (!code) return null;
-    const [ministry] = await this.db.orm
-      .select({ id: ministries.id })
-      .from(ministries)
-      .where(sql`lower(${ministries.code}) = lower(${code})`)
-      .limit(1);
-    if (!ministry) throw new NotFoundError(`Ministry ${code} was not found`);
-    return ministry.id;
+async function resolveMinistry(db: DbClient, code: string | null): Promise<string | null> {
+  if (!code) return null;
+  const [ministry] = await db.query<{ id: string }>(
+    'select id from ministries where lower(code) = lower($1)',
+    [code],
+  );
+  if (!ministry) throw new NotFoundError(`Ministry ${code} was not found`);
+  return ministry.id;
+}
+
+async function resolveAudience(
+  db: DbClient,
+  ministryCode: string | null,
+  presbyterOnly: boolean,
+  actor: string,
+): Promise<string> {
+  if (!ministryCode) {
+    const systemKey = presbyterOnly ? 'presbyters' : 'everyone';
+    const [audience] = await db.query<{ id: string }>(
+      'select id from audiences where system_key = $1',
+      [systemKey],
+    );
+    if (!audience) throw new Error(`The ${systemKey} audience is missing`);
+    return audience.id;
   }
+
+  const [ministry] = await db.query<{ id: string; code: string; name: string }>(
+    'select id, code, name from ministries where lower(code) = lower($1)',
+    [ministryCode],
+  );
+  if (!ministry) throw new NotFoundError(`Ministry ${ministryCode} was not found`);
+
+  const systemKey = presbyterOnly
+    ? `legacy:${ministry.code}:presbyters`
+    : `ministry:${ministry.code}`;
+  const [existing] = await db.query<{ id: string }>(
+    'select id from audiences where system_key = $1',
+    [systemKey],
+  );
+  if (existing) return existing.id;
+
+  const rule = presbyterOnly
+    ? {
+        operator: 'allOf',
+        clauses: [
+          { attribute: 'ministry', ministryCode: ministry.code },
+          { attribute: 'presbyter', value: true },
+        ],
+      }
+    : {
+        operator: 'allOf',
+        clauses: [{ attribute: 'ministry', ministryCode: ministry.code }],
+      };
+  const [created] = await db.query<{ id: string }>(
+    `insert into audiences (name, system, system_key, active, rule, created_by, updated_by)
+     values ($1,$2,$3,true,$4::jsonb,$5,$5)
+     returning id`,
+    [
+      presbyterOnly ? `${ministry.name} · Presbyters` : ministry.name,
+      !presbyterOnly,
+      systemKey,
+      JSON.stringify(rule),
+      actor,
+    ],
+  );
+  return created!.id;
+}
+
+/** Mint `EVT-<year>-<NNN>` from the per-year counter, skipping manual numbers. */
+async function mintEventNo(db: DbClient, date: string): Promise<string> {
+  const year = Number(date.slice(0, 4));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const [counter] = await db.query<{ last_value: number | string }>(
+      `insert into event_no_counters (year, last_value)
+       values ($1::int, 1)
+       on conflict (year) do update set last_value = event_no_counters.last_value + 1
+       returning last_value`,
+      [year],
+    );
+    const eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
+    const [taken] = await db.query('select 1 from events where event_no = $1', [eventNo]);
+    if (!taken) return eventNo;
+  }
+  throw new ConflictError(`Could not mint a unique event number for ${date}`);
 }

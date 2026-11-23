@@ -23,11 +23,6 @@ export interface DelegationItem {
   createdAt: string;
 }
 
-interface StoredSession {
-  date?: unknown;
-  status?: string;
-}
-
 interface MemberRef extends Row {
   id: string;
   member_no: string;
@@ -39,27 +34,9 @@ interface MemberRef extends Row {
   presbyter_rank: number | null;
 }
 
-function isoDate(value: unknown): string {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value);
-}
-
 function isoTimestamp(value: Date | string | null): string | null {
   if (value === null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 function displayName(row: MemberRef): string {
@@ -121,11 +98,16 @@ export class ClockingRepository {
     try {
       const [row] = await this.db.query<{ id: string; created_at: Date | string }>(
         `insert into clocking_delegations (
-           event_instance_id, session_date, from_member_id, to_member_id, reason, created_by
-         ) values ($1,$2,$3,$4,$5,$6)
+           occurrence_id, from_member_id, to_member_id, reason, created_by
+         )
+         select o.id, $2, $3, $4, $5
+           from event_occurrences o
+          where o.event_id = $1 and o.date = $6
          returning id, created_at`,
-        [input.eventId, input.sessionDate, from.id, to.id, reason, actor],
+        [input.eventId, from.id, to.id, reason, actor, input.sessionDate],
       );
+      if (!row)
+        throw new ValidationError(`Event ${input.eventId} has no session on ${input.sessionDate}`);
 
       return {
         id: row!.id,
@@ -167,9 +149,10 @@ export class ClockingRepository {
               t.last_name as to_last, t.other_names as to_other,
               d.reason, d.created_at
          from clocking_delegations d
+         join event_occurrences o on o.id = d.occurrence_id
          join members f on f.id = d.from_member_id
          join members t on t.id = d.to_member_id
-        where d.event_instance_id = $1 and d.session_date = $2 and d.ended_at is null
+        where o.event_id = $1 and o.date = $2 and d.ended_at is null
         order by d.created_at desc, d.id desc`,
       [eventId, sessionDate],
     );
@@ -207,9 +190,11 @@ export class ClockingRepository {
 
     // A delegate inherits the senior's broad authority for this session only.
     const [delegation] = await this.db.query<{ id: string }>(
-      `select id from clocking_delegations
-        where event_instance_id = $1 and session_date = $2
-          and to_member_id = $3 and ended_at is null`,
+      `select d.id
+         from clocking_delegations d
+         join event_occurrences o on o.id = d.occurrence_id
+        where o.event_id = $1 and o.date = $2
+          and d.to_member_id = $3 and d.ended_at is null`,
       [input.eventId, input.sessionDate, actor.id],
     );
 
@@ -240,21 +225,25 @@ export class ClockingRepository {
   ): Promise<{ presbyterOnly: boolean }> {
     const [event] = await this.db.query<{
       status: string;
-      sessions: unknown;
       presbyter_only: boolean;
-    }>('select status, sessions, presbyter_only from event_instances where id = $1', [eventId]);
+      occurrence_id: string | null;
+      occurrence_status: string | null;
+    }>(
+      `select e.status, e.presbyter_only,
+              o.id as occurrence_id, o.status as occurrence_status
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
+    );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (event.status === 'cancelled' || event.status === 'archived') {
-      throw new ConflictError('A cancelled or archived event is read-only');
+    if (event.status === 'archived') {
+      throw new ConflictError('An archived event is read-only');
     }
-
-    const session = parseJsonArray(event.sessions)
-      .map((entry) => entry as StoredSession)
-      .find((entry) => isoDate(entry.date) === sessionDate);
-    if (!session) {
+    if (!event.occurrence_id) {
       throw new ValidationError(`Event ${eventId} has no session on ${sessionDate}`);
     }
-    if ((session.status ?? 'scheduled') === 'cancelled') {
+    if (event.occurrence_status === 'cancelled') {
       throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
     }
     return { presbyterOnly: event.presbyter_only };

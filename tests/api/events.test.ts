@@ -1,31 +1,8 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { occurrenceId, seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
-
-interface StoredSession {
-  date: string;
-  startTime: string | null;
-  endTime: string | null;
-  status: 'scheduled' | 'held' | 'cancelled';
-}
-
-interface SeedEvent {
-  eventNo: string | null;
-  seriesId: string | null;
-  name: string;
-  timezone?: string;
-  startDate: string;
-  endDate: string;
-  startTime: string | null;
-  endTime?: string | null;
-  venueType: 'auditorium' | 'virtual' | 'hybrid';
-  venueName?: string | null;
-  description?: string | null;
-  status?: 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived';
-  source?: 'series' | 'manual' | 'import';
-  sessions: StoredSession[];
-}
 
 let harness: TestApp;
 let seriesId: string;
@@ -33,44 +10,17 @@ let member1Id: string;
 let member2Id: string;
 const eventIds: Record<string, string> = {};
 
-async function insertEvent(event: SeedEvent): Promise<string> {
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)
-     returning id`,
-    [
-      event.eventNo,
-      event.seriesId,
-      event.name,
-      event.timezone ?? 'UTC',
-      event.startDate,
-      event.endDate,
-      event.startTime,
-      event.endTime ?? null,
-      event.venueType,
-      event.venueName ?? null,
-      event.description ?? null,
-      event.status ?? 'scheduled',
-      event.source ?? 'manual',
-      JSON.stringify(event.sessions),
-    ],
-  );
-  return row!.id;
-}
-
 async function insertAttendance(
   memberId: string,
-  eventInstanceId: string,
+  eventId: string,
   sessionDate: string,
   source: 'import' | 'manual',
 ): Promise<void> {
+  const occurrence = await occurrenceId(harness.db, eventId, sessionDate);
   await harness.db.query(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,$4,'test')`,
-    [memberId, eventInstanceId, sessionDate, source],
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1,$2,$3,'test')`,
+    [memberId, occurrence, source],
   );
 }
 
@@ -123,109 +73,99 @@ beforeAll(async () => {
   member1Id = members.find((member) => member.member_no === 'EL-001')!.id;
   member2Id = members.find((member) => member.member_no === 'EL-002')!.id;
 
-  eventIds.series = await insertEvent({
+  const seriesSeed = await seedEvent(harness.db, {
+    eventId: seriesId,
     eventNo: 'EL-100',
-    seriesId,
     name: 'Event List Service',
+    ministryCode: 'CHOIR',
     startDate: '2026-01-04',
-    endDate: '2026-01-04',
+    endDate: '2026-01-11',
     startTime: '09:00',
     endTime: '10:30',
     venueType: 'auditorium',
     venueName: 'Main Auditorium',
     description: 'Weekly service',
-    status: 'scheduled',
     source: 'series',
-    sessions: [{ date: '2026-01-04', startTime: '09:00', endTime: '10:30', status: 'held' }],
-  });
-
-  // A series-minted instance that has not been given an event number yet.
-  eventIds.unminted = await insertEvent({
-    eventNo: null,
-    seriesId,
-    name: 'Event List Service',
-    startDate: '2026-01-11',
-    endDate: '2026-01-11',
-    startTime: '09:00',
-    endTime: '10:30',
-    venueType: 'auditorium',
-    status: 'scheduled',
-    source: 'series',
-    sessions: [{ date: '2026-01-11', startTime: '09:00', endTime: '10:30', status: 'held' }],
-  });
-
-  eventIds.conference = await insertEvent({
-    eventNo: 'EL-200',
-    seriesId: null,
-    name: 'Strategic Conference',
-    timezone: 'Africa/Lagos',
-    startDate: '2026-03-01',
-    endDate: '2026-03-03',
-    startTime: '17:30',
-    endTime: '20:00',
-    venueType: 'hybrid',
-    venueName: 'Main Auditorium + Zoom',
-    description: 'Three-day conference',
-    status: 'scheduled',
-    source: 'manual',
+    series: true,
     sessions: [
-      { date: '2026-03-01', startTime: '17:30', endTime: '20:00', status: 'held' },
-      { date: '2026-03-02', startTime: '17:30', endTime: '20:00', status: 'held' },
-      { date: '2026-03-03', startTime: '17:30', endTime: '12:00', status: 'held' },
+      { date: '2026-01-04', startTime: '09:00', endTime: '10:30', status: 'held' },
+      { date: '2026-01-11', startTime: '09:00', endTime: '10:30', status: 'held' },
     ],
   });
+  eventIds.series = seriesSeed.eventId;
 
-  eventIds.future = await insertEvent({
-    eventNo: 'EL-300',
-    seriesId: null,
-    name: 'Future Virtual Gathering',
-    startDate: '2999-06-01',
-    endDate: '2999-06-01',
-    startTime: '10:00',
-    venueType: 'virtual',
-    status: 'scheduled',
-    source: 'manual',
-    sessions: [{ date: '2999-06-01', startTime: '10:00', endTime: null, status: 'scheduled' }],
-  });
+  eventIds.conference = (
+    await seedEvent(harness.db, {
+      eventNo: 'EL-200',
+      name: 'Strategic Conference',
+      timezone: 'Africa/Lagos',
+      startDate: '2026-03-01',
+      endDate: '2026-03-03',
+      startTime: '17:30',
+      endTime: '20:00',
+      venueType: 'hybrid',
+      venueName: 'Main Auditorium + Zoom',
+      description: 'Three-day conference',
+      source: 'manual',
+      sessions: [
+        { date: '2026-03-01', startTime: '17:30', endTime: '20:00', status: 'held' },
+        { date: '2026-03-02', startTime: '17:30', endTime: '20:00', status: 'held' },
+        { date: '2026-03-03', startTime: '17:30', endTime: '12:00', status: 'held' },
+      ],
+    })
+  ).eventId;
 
-  eventIds.cancelled = await insertEvent({
-    eventNo: 'EL-400',
-    seriesId: null,
-    name: 'Cancelled Gathering',
-    startDate: '2026-05-01',
-    endDate: '2026-05-01',
-    startTime: null,
-    venueType: 'auditorium',
-    status: 'cancelled',
-    source: 'manual',
-    sessions: [{ date: '2026-05-01', startTime: null, endTime: null, status: 'cancelled' }],
-  });
+  eventIds.future = (
+    await seedEvent(harness.db, {
+      eventNo: 'EL-300',
+      name: 'Future Virtual Gathering',
+      startDate: '2999-06-01',
+      endDate: '2999-06-01',
+      startTime: '10:00',
+      venueType: 'virtual',
+      source: 'manual',
+      sessions: [{ date: '2999-06-01', startTime: '10:00', endTime: null, status: 'scheduled' }],
+    })
+  ).eventId;
 
-  eventIds.draft = await insertEvent({
-    eventNo: 'EL-500',
-    seriesId: null,
-    name: 'Draft Gathering',
-    startDate: '2026-06-01',
-    endDate: '2026-06-01',
-    startTime: null,
-    venueType: 'auditorium',
-    status: 'draft',
-    source: 'manual',
-    sessions: [{ date: '2026-06-01', startTime: null, endTime: null, status: 'scheduled' }],
-  });
+  eventIds.cancelled = (
+    await seedEvent(harness.db, {
+      eventNo: 'EL-400',
+      name: 'Cancelled Gathering',
+      startDate: '2026-05-01',
+      endDate: '2026-05-01',
+      venueType: 'auditorium',
+      status: 'cancelled',
+      source: 'manual',
+      sessions: [{ date: '2026-05-01', status: 'cancelled' }],
+    })
+  ).eventId;
 
-  eventIds.archived = await insertEvent({
-    eventNo: 'EL-600',
-    seriesId: null,
-    name: 'Archived Gathering',
-    startDate: '2026-07-01',
-    endDate: '2026-07-01',
-    startTime: null,
-    venueType: 'auditorium',
-    status: 'archived',
-    source: 'manual',
-    sessions: [{ date: '2026-07-01', startTime: null, endTime: null, status: 'cancelled' }],
-  });
+  eventIds.draft = (
+    await seedEvent(harness.db, {
+      eventNo: 'EL-500',
+      name: 'Draft Gathering',
+      startDate: '2026-06-01',
+      endDate: '2026-06-01',
+      venueType: 'auditorium',
+      status: 'draft',
+      source: 'manual',
+      sessions: [{ date: '2026-06-01', status: 'scheduled' }],
+    })
+  ).eventId;
+
+  eventIds.archived = (
+    await seedEvent(harness.db, {
+      eventNo: 'EL-600',
+      name: 'Archived Gathering',
+      startDate: '2026-07-01',
+      endDate: '2026-07-01',
+      venueType: 'auditorium',
+      status: 'archived',
+      source: 'manual',
+      sessions: [{ date: '2026-07-01', status: 'cancelled' }],
+    })
+  ).eventId;
 
   // 2026-01-04: one manual and one import row → mixed.
   await insertAttendance(member1Id, eventIds.series!, '2026-01-04', 'manual');
@@ -255,13 +195,13 @@ describe('GET /v1/events', () => {
       ministry: { code: 'CHOIR', name: 'Choir' },
       timezone: 'UTC',
       startDate: '2026-01-04',
-      endDate: '2026-01-04',
+      endDate: '2026-01-11',
       startTime: '09:00',
       endTime: '10:30',
       venueType: 'auditorium',
       venueName: 'Main Auditorium',
       description: 'Weekly service',
-      status: 'held',
+      status: 'active',
       source: 'series',
       tracksMembers: true,
       presbyterOnly: false,
@@ -277,6 +217,18 @@ describe('GET /v1/events', () => {
           expected: 0,
           importedRows: 1,
           source: 'mixed',
+        },
+        {
+          date: '2026-01-11',
+          startTime: '09:00',
+          endTime: '10:30',
+          status: 'held',
+          capture: null,
+          note: null,
+          present: 0,
+          expected: 0,
+          importedRows: 0,
+          source: 'none',
         },
       ],
       offerings: [],
@@ -309,7 +261,7 @@ describe('GET /v1/events', () => {
       endDate: '2026-03-03',
       venueType: 'hybrid',
       venueName: 'Main Auditorium + Zoom',
-      status: 'held',
+      status: 'active',
       source: 'manual',
       offerings: [],
     });
@@ -336,17 +288,15 @@ describe('GET /v1/events', () => {
     ]);
   });
 
-  it('allows a series-minted instance to have no event number', async () => {
+  it('allows a series parent to keep its assigned event number', async () => {
     const response = await listEvents();
-    const item = response.body.items.find(
-      (event: { id: string }) => event.id === eventIds.unminted,
-    );
+    const item = response.body.items.find((event: { id: string }) => event.id === eventIds.series);
 
-    expect(item.eventNo).toBeNull();
+    expect(item.eventNo).toBe('EL-100');
     expect(item.seriesId).toBe(seriesId);
   });
 
-  it('derives status in UTC while preserving draft, cancelled and archived', async () => {
+  it('carries the parent status, preserving draft and archived', async () => {
     const response = await listEvents();
     const byId = new Map(
       response.body.items.map(
@@ -354,10 +304,10 @@ describe('GET /v1/events', () => {
       ),
     );
 
-    expect(byId.get(eventIds.series)).toBe('held');
-    expect(byId.get(eventIds.conference)).toBe('held');
-    expect(byId.get(eventIds.future)).toBe('scheduled');
-    expect(byId.get(eventIds.cancelled)).toBe('cancelled');
+    expect(byId.get(eventIds.series)).toBe('active');
+    expect(byId.get(eventIds.conference)).toBe('active');
+    expect(byId.get(eventIds.future)).toBe('active');
+    expect(byId.get(eventIds.cancelled)).toBe('active');
     expect(byId.get(eventIds.draft)).toBe('draft');
     expect(byId.get(eventIds.archived)).toBe('archived');
   });
@@ -377,15 +327,13 @@ describe('GET /v1/events', () => {
 
   it('filters by seriesId and ministry code or name, case-insensitively', async () => {
     const bySeries = await listEvents({ seriesId });
-    expect(bySeries.body.items.map((event: { id: string }) => event.id).sort()).toEqual(
-      [eventIds.series, eventIds.unminted].sort(),
-    );
+    expect(bySeries.body.items.map((event: { id: string }) => event.id)).toEqual([eventIds.series]);
 
     for (const ministry of ['CHOIR', 'choir', 'Choir']) {
       const byMinistry = await listEvents({ ministry });
-      expect(byMinistry.body.items.map((event: { id: string }) => event.id).sort()).toEqual(
-        [eventIds.series, eventIds.unminted].sort(),
-      );
+      expect(byMinistry.body.items.map((event: { id: string }) => event.id)).toEqual([
+        eventIds.series,
+      ]);
     }
   });
 
@@ -492,8 +440,7 @@ describe('POST /v1/events', () => {
       venueType: 'auditorium',
       venueName: 'Main Auditorium',
       description: 'Annual strategic conference',
-      // Today is after 2026-10-15, so the stored `scheduled` derives to held.
-      status: 'held',
+      status: 'active',
       source: 'manual',
       offerings: [],
       stats: emptyStats,
@@ -569,7 +516,7 @@ describe('POST /v1/events', () => {
     expect(response.body.detail).toContain('2026-11-30');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from event_instances where event_no = 'SC-OUTSIDE'",
+      "select count(*)::int as count from events where event_no = 'SC-OUTSIDE'",
     );
     expect(Number(row!.count)).toBe(0);
   });
@@ -585,7 +532,7 @@ describe('POST /v1/events', () => {
     expect(response.body.code).toBe('validation_error');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from event_instances where event_no = 'SC-CHURCH'",
+      "select count(*)::int as count from events where event_no = 'SC-CHURCH'",
     );
     expect(Number(row!.count)).toBe(0);
   });
@@ -689,7 +636,7 @@ describe('GET /v1/events/{eventId}', () => {
       eventNo: 'SC-2026',
       name: 'Strategic Conference',
       seriesId: null,
-      status: 'held',
+      status: 'active',
       offerings: [],
       stats: emptyStats,
     });
@@ -797,7 +744,7 @@ describe('POST /v1/events/generate', () => {
   let generatedSeriesId: string;
   let generatedIds: string[];
 
-  it('generates one event per weekly occurrence with inherited fields', async () => {
+  it('generates one occurrence per weekly date under one parent', async () => {
     const created = await createSeries({
       name: 'Generation Sunday Service',
       ministryCode: 'CHOIR',
@@ -815,7 +762,7 @@ describe('POST /v1/events/generate', () => {
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toMatchObject({ created: 3, skipped: 0 });
-    expect(response.body.eventIds).toHaveLength(3);
+    expect(response.body.eventIds).toEqual([generatedSeriesId]);
     generatedIds = response.body.eventIds as string[];
 
     const listed = await listEvents({
@@ -825,44 +772,36 @@ describe('POST /v1/events/generate', () => {
       limit: 100,
     });
     expect(listed.status).toBe(200);
-    expect(listed.body.items).toHaveLength(3);
-    expect(listed.body.items.map((event: { id: string }) => event.id).sort()).toEqual(
-      [...generatedIds].sort(),
-    );
-    expect(listed.body.items.map((event: { startDate: string }) => event.startDate)).toEqual([
+    expect(listed.body.items).toHaveLength(1);
+    const event = listed.body.items[0];
+    expect(event).toMatchObject({
+      id: generatedSeriesId,
+      name: 'Generation Sunday Service',
+      seriesId: generatedSeriesId,
+      ministry: { code: 'CHOIR', name: 'Choir' },
+      timezone: 'UTC',
+      startDate: '2026-02-01',
+      endDate: '2026-02-15',
+      startTime: '00:00',
+      endTime: null,
+      venueType: 'auditorium',
+      venueName: null,
+      description: null,
+      source: 'series',
+    });
+    expect(event.eventNo).toMatch(/^EVT-2026-\d{3}$/);
+    expect(event.sessions.map((session: { date: string }) => session.date)).toEqual([
       '2026-02-01',
       '2026-02-08',
       '2026-02-15',
     ]);
-
-    const eventNos = new Set<string>();
-    for (const event of listed.body.items) {
-      expect(event).toMatchObject({
-        name: 'Generation Sunday Service',
-        seriesId: generatedSeriesId,
-        ministry: { code: 'CHOIR', name: 'Choir' },
-        timezone: 'UTC',
-        startDate: event.startDate,
-        endDate: event.startDate,
-        startTime: '00:00',
-        endTime: null,
-        venueType: 'auditorium',
-        venueName: null,
-        description: null,
-        source: 'series',
-      });
-      expect(event.eventNo).toMatch(/^EVT-2026-\d{3}$/);
-      eventNos.add(event.eventNo as string);
-
-      expect(event.sessions).toHaveLength(1);
-      expect(event.sessions[0]).toMatchObject({
-        date: event.startDate,
+    for (const session of event.sessions) {
+      expect(session).toMatchObject({
         startTime: '00:00',
         endTime: null,
         status: 'scheduled',
       });
     }
-    expect(eventNos.size).toBe(3);
   });
 
   it('is idempotent and never overwrites an existing event', async () => {
@@ -914,15 +853,15 @@ describe('POST /v1/events/generate', () => {
       to: '2026-03-15',
       limit: 100,
     });
-    expect(listed.body.items.map((event: { startDate: string }) => event.startDate)).toEqual([
+    expect(listed.body.items).toHaveLength(1);
+    const event = listed.body.items[0];
+    expect(event.startDate).toBe('2026-03-01');
+    expect(event.endDate).toBe('2026-03-15');
+    expect(event.timezone).toBe('Africa/Lagos');
+    expect(event.sessions.map((session: { date: string }) => session.date)).toEqual([
       '2026-03-01',
       '2026-03-11',
       '2026-03-15',
-    ]);
-    expect(listed.body.items.map((event: { timezone: string }) => event.timezone)).toEqual([
-      'Africa/Lagos',
-      'Africa/Lagos',
-      'Africa/Lagos',
     ]);
   });
 
@@ -964,7 +903,7 @@ describe('POST /v1/events/generate', () => {
     expect(missing.body.code).toBe('validation_error');
   });
 
-  it('skips a manually assigned event number that outruns the counter', async () => {
+  it('keeps the series parent number when generation runs after a manual number', async () => {
     const created = await createSeries({
       name: 'Collision Generation Service',
       schedule: {
@@ -1001,6 +940,8 @@ describe('POST /v1/events/generate', () => {
     expect(response.body.created).toBe(1);
 
     const listed = await listEvents({ seriesId, from: '2026-06-07', to: '2026-06-07' });
-    expect(listed.body.items[0].eventNo).toBe('EVT-2026-778');
+    expect(listed.body.items).toHaveLength(1);
+    expect(listed.body.items[0].eventNo).toMatch(/^EVT-2026-\d{3}$/);
+    expect(listed.body.items[0].eventNo).not.toBe('EVT-2026-777');
   });
 });

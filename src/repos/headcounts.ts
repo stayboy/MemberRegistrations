@@ -65,7 +65,8 @@ export interface RecordHeadcountInput {
 
 interface HeadcountRow extends Row {
   id: string;
-  event_instance_id: string;
+  event_id: string;
+  occurrence_id: string;
   session_date: unknown;
   as_of: Date | string;
   mode: string;
@@ -83,12 +84,7 @@ interface BucketRow extends Row {
   sort_order: number;
 }
 
-interface StoredSession {
-  date?: unknown;
-  status?: string;
-}
-
-const COLUMNS = `h.id, h.event_instance_id, h.session_date, h.as_of, h.mode,
+const COLUMNS = `h.id, o.event_id, h.occurrence_id, h.session_date, h.as_of, h.mode,
   h.total, h.ended, h.recorded_by, h.recorded_at, h.supersedes_id,
   coalesce((
     select jsonb_agg(
@@ -99,6 +95,9 @@ const COLUMNS = `h.id, h.event_instance_id, h.session_date, h.as_of, h.mode,
       join headcount_buckets b on b.mode_code = l.mode_code and b.code = l.bucket_code
      where l.headcount_id = h.id
   ), '[]'::jsonb) as lines`;
+
+const FROM_OCCURRENCE =
+  'from event_session_headcounts h join event_occurrences o on o.id = h.occurrence_id';
 
 function isoDate(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -183,7 +182,7 @@ async function lockLane(
 function toHeadcount(row: HeadcountRow, supersededBy: string | null): Headcount {
   return {
     id: row.id,
-    eventId: row.event_instance_id,
+    eventId: row.event_id,
     sessionDate: isoDate(row.session_date),
     asOf: isoTimestamp(row.as_of),
     mode: row.mode as HeadcountReadMode,
@@ -221,8 +220,8 @@ export class HeadcountRepository {
 
     const rows = await this.db.query<HeadcountRow>(
       `select ${COLUMNS}
-         from event_session_headcounts h
-        where h.event_instance_id = $1 and h.session_date = $2
+         ${FROM_OCCURRENCE}
+        where o.event_id = $1 and o.date = $2
         order by h.as_of desc, h.recorded_at desc, h.id desc`,
       [eventId, sessionDate],
     );
@@ -258,8 +257,8 @@ export class HeadcountRepository {
   async getById(eventId: string, headcountId: string): Promise<Headcount | null> {
     const [row] = await this.db.query<HeadcountRow>(
       `select ${COLUMNS}
-         from event_session_headcounts h
-        where h.id = $1 and h.event_instance_id = $2`,
+         ${FROM_OCCURRENCE}
+        where h.id = $1 and o.event_id = $2`,
       [headcountId, eventId],
     );
     if (!row) return null;
@@ -301,7 +300,7 @@ export class HeadcountRepository {
     try {
       return await this.db.transaction(async (tx) => {
         const target = input.supersedesId
-          ? await this.requireCorrectionTarget(tx, eventId, sessionDate, input.supersedesId)
+          ? await this.requireCorrectionTarget(tx, event.occurrenceId, input.supersedesId)
           : null;
 
         // HC-2: the tip is resolved inside the write transaction under a lock
@@ -313,16 +312,16 @@ export class HeadcountRepository {
           await lockLane(tx, eventId, sessionDate, lane);
           await tx.query(
             `select id from event_session_headcounts
-              where event_instance_id = $1 and session_date = $2 and mode = $3
+              where occurrence_id = $1 and mode = $2
               for update`,
-            [eventId, sessionDate, lane],
+            [event.occurrenceId, lane],
           );
         }
 
         let supersedesId: string | null;
         let rowAsOf: Date;
         if (target) {
-          const tip = await this.currentOf(tx, eventId, sessionDate, target.mode);
+          const tip = await this.currentOf(tx, event.occurrenceId, target.mode);
           if (tip?.id !== target.id) {
             throw new ValidationError(
               'supersedesId must name the current, non-superseded observation',
@@ -331,7 +330,7 @@ export class HeadcountRepository {
           // HC-25: a correction may move into another lane only while that lane
           // has no current observation; the operator gets the named error.
           if (target.mode !== mode) {
-            const destination = await this.currentOf(tx, eventId, sessionDate, mode);
+            const destination = await this.currentOf(tx, event.occurrenceId, mode);
             if (destination) {
               throw new ValidationError(
                 `The ${mode} lane already has a current observation; a correction cannot move into it`,
@@ -345,7 +344,7 @@ export class HeadcountRepository {
           // A plain new count supersedes its lane's newest tip and takes asOf
           // now; older tips left by legacy data stay as the history they are
           // (HC-2, HC-27).
-          const tip = await this.currentOf(tx, eventId, sessionDate, mode);
+          const tip = await this.currentOf(tx, event.occurrenceId, mode);
           supersedesId = tip?.id ?? null;
           rowAsOf = input.asOf ? new Date(input.asOf) : new Date();
           if (Number.isNaN(rowAsOf.getTime())) {
@@ -360,12 +359,12 @@ export class HeadcountRepository {
 
         const [row] = await tx.query<{ id: string }>(
           `insert into event_session_headcounts (
-             event_instance_id, session_date, as_of, mode,
+             occurrence_id, session_date, as_of, mode,
              total, ended, recorded_by, supersedes_id
            ) values ($1,$2,$3,$4,$5,$6,$7,$8)
            returning id`,
           [
-            eventId,
+            event.occurrenceId,
             sessionDate,
             rowAsOf.toISOString(),
             mode,
@@ -386,7 +385,7 @@ export class HeadcountRepository {
         }
         const [stored] = await tx.query<HeadcountRow>(
           `select ${COLUMNS}
-             from event_session_headcounts h
+             ${FROM_OCCURRENCE}
             where h.id = $1`,
           [row!.id],
         );
@@ -417,39 +416,37 @@ export class HeadcountRepository {
    */
   private async currentOf(
     db: Pick<DbClient, 'query'>,
-    eventId: string,
-    sessionDate: string,
+    occurrenceId: string,
     mode: string,
   ): Promise<{ id: string; as_of: Date | string } | undefined> {
     const [row] = await db.query<{ id: string; as_of: Date | string }>(
       `select h.id, h.as_of
          from event_session_headcounts h
-        where h.event_instance_id = $1 and h.session_date = $2 and h.mode = $3
+        where h.occurrence_id = $1 and h.mode = $2
           and not exists (
             select 1 from event_session_headcounts s where s.supersedes_id = h.id
           )
         order by h.as_of desc, h.recorded_at desc, h.id desc
         limit 1`,
-      [eventId, sessionDate, mode],
+      [occurrenceId, mode],
     );
     return row;
   }
 
   /**
-   * The row a correction names, scoped to its event and session. Another
-   * session's or event's observation is refused with a validation error.
+   * The row a correction names, scoped to its occurrence. Another session's or
+   * event's observation is refused with a validation error.
    */
   private async requireCorrectionTarget(
     db: Pick<DbClient, 'query'>,
-    eventId: string,
-    sessionDate: string,
+    occurrenceId: string,
     headcountId: string,
   ): Promise<{ id: string; mode: string; as_of: Date | string }> {
     const [target] = await db.query<{ id: string; mode: string; as_of: Date | string }>(
       `select id, mode, as_of
          from event_session_headcounts
-        where id = $1 and event_instance_id = $2 and session_date = $3`,
-      [headcountId, eventId, sessionDate],
+        where id = $1 and occurrence_id = $2`,
+      [headcountId, occurrenceId],
     );
     if (!target) {
       throw new ValidationError('supersedesId does not name an observation of this session');
@@ -513,19 +510,22 @@ export class HeadcountRepository {
   private async requireEventSession(
     eventId: string,
     sessionDate: string,
-  ): Promise<{ timezone: string }> {
-    const [event] = await this.db.query<{ id: string; timezone: string; sessions: unknown }>(
-      'select id, timezone, sessions from event_instances where id = $1',
-      [eventId],
+  ): Promise<{ timezone: string; occurrenceId: string }> {
+    const [event] = await this.db.query<{
+      id: string;
+      timezone: string;
+      occurrence_id: string | null;
+    }>(
+      `select e.id, e.timezone, o.id as occurrence_id
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
     );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-
-    const session = parseJsonArray(event.sessions)
-      .map((entry) => entry as StoredSession)
-      .find((entry) => isoDate(entry.date) === sessionDate);
-    if (!session) {
+    if (!event.occurrence_id) {
       throw new NotFoundError(`Event ${eventId} has no session on ${sessionDate}`);
     }
-    return { timezone: event.timezone };
+    return { timezone: event.timezone, occurrenceId: event.occurrence_id };
   }
 }

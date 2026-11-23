@@ -112,9 +112,9 @@ async function attend(eventId: string, memberNo: string, date: string): Promise<
     [memberNo],
   );
   const [inserted] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
-     on conflict (event_instance_id, session_date, member_id) do nothing
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1, (select id from event_occurrences where event_id = $2 and date = $3), 'manual','seed')
+     on conflict (occurrence_id, member_id) do nothing
      returning id`,
     [member!.id, eventId, date],
   );
@@ -287,9 +287,9 @@ beforeAll(async () => {
   for (const id of profileEventIds) {
     const date = (
       await harness.db.query<{ session_date: string }>(
-        `select (s->>'date') as session_date
-           from event_instances e, jsonb_array_elements(e.sessions) s
-          where e.id = $1`,
+        `select o.date as session_date
+           from event_occurrences o
+          where o.event_id = $1`,
         [id],
       )
     )[0]!.session_date;
@@ -455,7 +455,8 @@ describe('USSD attendance, codes and clocking', () => {
       `select count(*) as count
          from attendance a
          join members m on m.id = a.member_id
-        where m.member_no = 'UA-PUNCH' and a.event_instance_id = $1 and a.session_date = $2`,
+         join event_occurrences o on o.id = a.occurrence_id
+        where m.member_no = 'UA-PUNCH' and o.event_id = $1 and o.date = $2`,
       [mainEventId, today],
     );
     expect(Number(row!.count)).toBe(1);
@@ -498,14 +499,10 @@ describe('USSD attendance, codes and clocking', () => {
     // capture and closes it; the punch refusal is the shared close.
     const closedDate = shiftDate(today, -2);
     const closedEventId = await createEvent('Closed Gathering', closedDate);
-    const [series] = await harness.db.query<{ id: string }>(
-      `insert into event_series (name, timezone, created_by, updated_by)
-       values ('USSD Closed Series', 'UTC', 'seed', 'seed')
-       returning id`,
-    );
     await harness.db.query(
-      'update event_instances set series_id = $1, timezone = $2 where id = $3',
-      [series!.id, 'UTC', closedEventId],
+      `insert into event_recurrence_versions (event_id, effective_from, rrule, ends_on, created_by)
+       values ($1,$2,'FREQ=DAILY',$2,'seed')`,
+      [closedEventId, closedDate],
     );
     const closed = await request(harness.app)
       .post('/v1/imports/attendance')
@@ -537,7 +534,7 @@ describe('USSD attendance, codes and clocking', () => {
 
     const [row] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-        where event_instance_id = $1 and session_date = $2`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = $2)`,
       [closedEventId, closedDate],
     );
     expect(Number(row!.count)).toBe(0);
@@ -576,8 +573,9 @@ describe('USSD attendance, codes and clocking', () => {
       `select count(*)::int as count
          from attendance a
          join members m on m.id = a.member_id
+         join event_occurrences o on o.id = a.occurrence_id
         where m.member_no = 'UA-NOTODAY'
-          and a.event_instance_id = $1 and a.session_date = $2`,
+          and o.event_id = $1 and o.date = $2`,
       [pastEventId, yesterday],
     );
     expect(Number(row!.count)).toBe(0);
@@ -617,8 +615,11 @@ describe('USSD attendance, codes and clocking', () => {
       code_id: string;
       event_instance_id: string;
     }>(
-      `select reference, first_name, last_name, phone_hash, status, code_id, event_instance_id
-         from registration_requests where reference = $1`,
+      `select r.reference, r.first_name, r.last_name, r.phone_hash, r.status, r.code_id,
+              o.event_id as event_instance_id
+         from registration_requests r
+         join event_occurrences o on o.id = r.occurrence_id
+        where r.reference = $1`,
       [reference],
     );
     expect(request).toMatchObject({
@@ -672,7 +673,8 @@ describe('USSD attendance, codes and clocking', () => {
       `select count(*) as count
          from attendance a
          join members m on m.id = a.member_id
-        where m.member_no = 'UA-SHEEP' and a.event_instance_id = $1`,
+         join event_occurrences o on o.id = a.occurrence_id
+        where m.member_no = 'UA-SHEEP' and o.event_id = $1`,
       [mainEventId],
     );
     expect(Number(row!.count)).toBe(1);
@@ -713,8 +715,10 @@ describe('USSD attendance, codes and clocking', () => {
     expect(reason.body.text).toContain('Delegate Presbyter');
 
     const [delegation] = await harness.db.query<{ count: number | string }>(
-      `select count(*) as count from clocking_delegations
-        where event_instance_id = $1 and session_date = $2`,
+      `select count(*) as count
+         from clocking_delegations d
+         join event_occurrences o on o.id = d.occurrence_id
+        where o.event_id = $1 and o.date = $2`,
       [mainEventId, today],
     );
     expect(Number(delegation!.count)).toBe(1);
@@ -782,9 +786,10 @@ describe('USSD attendance, codes and clocking', () => {
       recorded_by: string;
       supersedes_id: string | null;
     }>(
-      `select id, mode, as_of, total, recorded_by, supersedes_id
-         from event_session_headcounts
-        where event_instance_id = $1 and session_date = $2`,
+      `select h.id, h.mode, h.as_of, h.total, h.recorded_by, h.supersedes_id
+         from event_session_headcounts h
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2`,
       [mainEventId, today],
     );
     expect(first).toMatchObject({ mode: 'adults', total: 90, supersedes_id: null });
@@ -823,10 +828,11 @@ describe('USSD attendance, codes and clocking', () => {
       recorded_by: string;
       supersedes_id: string | null;
     }>(
-      `select as_of, mode, total, recorded_by, supersedes_id
-         from event_session_headcounts
-        where event_instance_id = $1 and session_date = $2
-        order by recorded_at`,
+      `select h.as_of, h.mode, h.total, h.recorded_by, h.supersedes_id
+         from event_session_headcounts h
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2
+        order by h.recorded_at`,
       [mainEventId, today],
     );
     expect(rows).toHaveLength(2);
@@ -887,7 +893,8 @@ describe('USSD attendance, codes and clocking', () => {
       `select h.mode, h.total, l.bucket_code, l.count
          from event_session_headcounts h
          join headcount_lines l on l.headcount_id = h.id
-        where h.event_instance_id = $1 and h.session_date = $2
+         join event_occurrences o on o.id = h.occurrence_id
+        where o.event_id = $1 and o.date = $2
           and h.mode in ('visitors','presbyters')
         order by h.mode, l.bucket_code`,
       [mainEventId, today],
@@ -921,9 +928,12 @@ describe('USSD attendance, codes and clocking', () => {
 
     const [seeded] = await harness.db.query<{ id: string }>(
       `insert into event_session_headcounts (
-         event_instance_id, session_date, as_of, mode, total, ended, recorded_by
+         occurrence_id, session_date, as_of, mode, total, ended, recorded_by
        )
-       values ($1,$2,$3,'mixed',18,false,'legacy')
+       values (
+         (select id from event_occurrences where event_id = $1 and date = $2),
+         $2,$3,'mixed',18,false,'legacy'
+       )
        returning id`,
       [mainEventId, today, new Date().toISOString()],
     );

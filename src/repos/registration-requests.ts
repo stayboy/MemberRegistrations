@@ -70,9 +70,10 @@ function isoTimestamp(value: Date | string | null | undefined): string | null {
 
 const SELECT_REQUEST = `
   select r.id, r.reference, r.first_name, r.last_name, r.phone_hash, r.phone_encrypted,
-         r.event_instance_id, r.session_date, r.status, r.created_at,
+         o.event_id as event_instance_id, r.session_date, r.status, r.created_at,
          r.decided_by, r.decided_at, m.member_no
     from registration_requests r
+    join event_occurrences o on o.id = r.occurrence_id
     left join members m on m.id = r.member_id`;
 
 /**
@@ -98,7 +99,7 @@ export class RegistrationRequestRepository {
     const rows = await this.db.query<RequestRow>(
       `${SELECT_REQUEST}
         where ($1::text is null or r.status = $1::text)
-          and ($2::uuid is null or r.event_instance_id = $2::uuid)
+          and ($2::uuid is null or o.event_id = $2::uuid)
           and ($3::date is null or r.session_date = $3::date)
         order by r.created_at desc, r.id desc`,
       [query.status ?? null, query.eventId ?? null, query.sessionDate ?? null],

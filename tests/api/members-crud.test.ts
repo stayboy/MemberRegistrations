@@ -51,22 +51,18 @@ async function seedAttendance(seriesId: string, memberNo: string, date: string):
     [memberNo],
   );
   const [instance] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
-     )
-     select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
-            jsonb_build_array(jsonb_build_object('date', $2::date, 'status', 'scheduled'))
-       from event_series s where s.id = $1
-     on conflict (series_id, start_date) do update set start_date = excluded.start_date
+    `insert into event_occurrences (event_id, date, start_time, end_time, status)
+     values ($1, $2, null, null, 'scheduled')
+     on conflict (event_id, date) do update set status = excluded.status
      returning id`,
     [seriesId, date],
   );
   const [inserted] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
-     on conflict (event_instance_id, session_date, member_id) do nothing
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1,$2,'manual','seed')
+     on conflict (occurrence_id, member_id) do nothing
      returning id`,
-    [member!.id, instance!.id, date],
+    [member!.id, instance!.id],
   );
   expect(inserted).toBeTruthy();
 }
@@ -627,7 +623,8 @@ describe('members list contract', () => {
     const [notWritten] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance a
          join members m on m.id = a.member_id
-        where m.member_no = 'L-3003' and a.session_date = '2026-09-06'`,
+         join event_occurrences o on o.id = a.occurrence_id
+        where m.member_no = 'L-3003' and o.date = '2026-09-06'`,
     );
     expect(Number(notWritten!.count)).toBe(0);
 

@@ -17,7 +17,7 @@ import type {
 
 interface CountRow extends Row {
   id: string;
-  event_instance_id: string;
+  event_id: string;
   offering_id: string;
   session_date: unknown;
   currency: string;
@@ -34,17 +34,11 @@ interface LineRow extends Row {
   pieces: number | string;
 }
 
-interface StoredSession {
-  date?: unknown;
-  status?: string;
-}
-
 type EventRow = {
   id: string;
   status: string;
   timezone: string;
-  sessions: unknown;
-  series_id: string | null;
+  occurrence_id: string;
 };
 
 type OfferingTermsRow = {
@@ -54,8 +48,11 @@ type OfferingTermsRow = {
 };
 
 const COLUMNS = `
-  id, event_instance_id, offering_id, session_date, currency, terms_version,
-  as_of, recorded_by, recorded_at, supersedes_id`;
+  c.id, o.event_id, c.offering_id, c.session_date, c.currency, c.terms_version,
+  c.as_of, c.recorded_by, c.recorded_at, c.supersedes_id`;
+
+const FROM_OCCURRENCE =
+  'from event_session_offering_counts c join event_occurrences o on o.id = c.occurrence_id';
 
 const LINE_COLUMNS = 'count_id, denomination_minor, pieces';
 
@@ -66,19 +63,6 @@ function isoDate(value: unknown): string {
 
 function isoTimestamp(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 /** The calendar date of an instant in the event's timezone. */
@@ -144,7 +128,7 @@ function toCount(
 ): OfferingCount {
   return {
     id: row.id,
-    eventId: row.event_instance_id,
+    eventId: row.event_id,
     offeringId: row.offering_id,
     sessionDate: isoDate(row.session_date),
     asOf: isoTimestamp(row.as_of),
@@ -173,9 +157,9 @@ export class OfferingCountRepository {
 
     const rows = await this.db.query<CountRow>(
       `select ${COLUMNS}
-         from event_session_offering_counts
-        where event_instance_id = $1 and offering_id = $2 and session_date = $3
-        order by as_of desc, recorded_at desc, id desc`,
+         ${FROM_OCCURRENCE}
+        where o.event_id = $1 and c.offering_id = $2 and o.date = $3
+        order by c.as_of desc, c.recorded_at desc, c.id desc`,
       [eventId, offeringId, date],
     );
 
@@ -212,9 +196,9 @@ export class OfferingCountRepository {
     let rowAsOf: Date;
     if (input.supersedesId) {
       const [target] = await this.db.query<{ id: string; as_of: Date | string }>(
-        `select id, as_of
-           from event_session_offering_counts
-          where id = $1 and event_instance_id = $2 and offering_id = $3 and session_date = $4`,
+        `select c.id, c.as_of
+           ${FROM_OCCURRENCE}
+          where c.id = $1 and o.event_id = $2 and c.offering_id = $3 and o.date = $4`,
         [input.supersedesId, eventId, input.offeringId, sessionDate],
       );
       if (!target) {
@@ -225,8 +209,8 @@ export class OfferingCountRepository {
 
       const [current] = await this.db.query<{ id: string }>(
         `select c.id
-           from event_session_offering_counts c
-          where c.event_instance_id = $1 and c.offering_id = $2 and c.session_date = $3
+           ${FROM_OCCURRENCE}
+          where o.event_id = $1 and c.offering_id = $2 and o.date = $3
             and not exists (
               select 1 from event_session_offering_counts s where s.supersedes_id = c.id
             )
@@ -254,14 +238,14 @@ export class OfferingCountRepository {
 
     try {
       return await this.db.transaction(async (tx) => {
-        const [row] = await tx.query<CountRow>(
+        const [inserted] = await tx.query<{ id: string }>(
           `insert into event_session_offering_counts (
-             event_instance_id, offering_id, session_date, currency, terms_version,
+             occurrence_id, offering_id, session_date, currency, terms_version,
              as_of, recorded_by, supersedes_id
            ) values ($1,$2,$3,$4,$5,$6,$7,$8)
-           returning ${COLUMNS}`,
+           returning id`,
           [
-            eventId,
+            event.occurrence_id,
             input.offeringId,
             sessionDate,
             currency,
@@ -276,12 +260,16 @@ export class OfferingCountRepository {
           `insert into event_session_offering_count_lines (count_id, denomination_minor, pieces)
            select $1, * from unnest($2::bigint[], $3::int[])`,
           [
-            row!.id,
+            inserted!.id,
             input.lines.map((line) => line.denominationMinor),
             input.lines.map((line) => line.pieces),
           ],
         );
 
+        const [row] = await tx.query<CountRow>(
+          `select ${COLUMNS} ${FROM_OCCURRENCE} where c.id = $1`,
+          [inserted!.id],
+        );
         return toCount(row!, input.lines, null);
       });
     } catch (error) {
@@ -320,46 +308,47 @@ export class OfferingCountRepository {
   private async requireEventSession(
     eventId: string,
     sessionDate: string,
-  ): Promise<{ timezone: string }> {
-    const [event] = await this.db.query<EventRow>(
-      'select id, status, timezone, sessions, series_id from event_instances where id = $1',
-      [eventId],
+  ): Promise<{ timezone: string; occurrenceId: string }> {
+    const [event] = await this.db.query<{
+      id: string;
+      timezone: string;
+      occurrence_id: string | null;
+    }>(
+      `select e.id, e.timezone, o.id as occurrence_id
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
     );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-
-    const session = this.findSession(event.sessions, sessionDate);
-    if (!session) {
+    if (!event.occurrence_id) {
       throw new NotFoundError(`Event ${eventId} has no session on ${sessionDate}`);
     }
-    return { timezone: event.timezone };
+    return { timezone: event.timezone, occurrenceId: event.occurrence_id };
   }
 
   private async requireActiveEventSession(eventId: string, sessionDate: string): Promise<EventRow> {
     const [event] = await this.db.query<EventRow>(
-      'select id, status, timezone, sessions, series_id from event_instances where id = $1',
-      [eventId],
+      `select e.id, e.status, e.timezone, o.id as occurrence_id, o.status as occurrence_status
+         from events e
+         left join event_occurrences o on o.event_id = e.id and o.date = $2
+        where e.id = $1`,
+      [eventId, sessionDate],
     );
     if (!event) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (event.status === 'cancelled' || event.status === 'archived') {
-      throw new EventNotActiveError(`Event ${eventId} is ${event.status} and cannot take counts`);
+    if (event.status === 'archived') {
+      throw new EventNotActiveError(`Event ${eventId} is archived and cannot take counts`);
     }
-
-    const session = this.findSession(event.sessions, sessionDate);
-    if (!session) {
+    if (!event.occurrence_id) {
       throw new SessionNotInEventError(`Event ${eventId} has no session on ${sessionDate}`);
     }
-    if (session.status === 'cancelled') {
+    const occurrence = event as EventRow & { occurrence_status?: string };
+    if (occurrence.occurrence_status === 'cancelled') {
       throw new EventNotActiveError(
         `The session on ${sessionDate} is cancelled and cannot take counts`,
       );
     }
     return event;
-  }
-
-  private findSession(sessions: unknown, sessionDate: string): StoredSession | undefined {
-    return parseJsonArray(sessions)
-      .map((entry) => entry as StoredSession)
-      .find((entry) => isoDate(entry.date) === sessionDate);
   }
 
   private async resolveOffering(
@@ -391,12 +380,13 @@ export class OfferingCountRepository {
   private async requireAttachment(event: EventRow, offeringId: string): Promise<void> {
     const [attachment] = await this.db.query<{ id: string }>(
       `select a.id
-         from event_instance_offerings a
+         from event_offerings a
         where a.offering_id = $1
           and a.detached_on is null
-          and (a.event_instance_id = $2 or ($3::uuid is not null and a.series_id = $3::uuid))
+          and a.event_id = $2
+          and (a.occurrence_id is null or a.occurrence_id = $3)
         limit 1`,
-      [offeringId, event.id, event.series_id],
+      [offeringId, event.id, event.occurrence_id],
     );
     if (!attachment) {
       throw new OfferingNotOnEventError(

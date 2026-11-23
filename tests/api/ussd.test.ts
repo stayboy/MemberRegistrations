@@ -9,6 +9,7 @@ import {
   writeHeaders,
   type TestApp,
 } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 const USSD_SECRET = 'test-ussd-gateway-secret-16';
@@ -113,21 +114,15 @@ async function assignShepherd(memberNo: string) {
 }
 
 async function insertEvent(name: string, date: string): Promise<string> {
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,null,$2,'UTC',$3,$3,'09:00',null,'auditorium',null,null,'scheduled','manual',$4::jsonb)
-     returning id`,
-    [
-      `USSD-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}`,
-      name,
-      date,
-      JSON.stringify([{ date, startTime: '09:00', endTime: null, status: 'scheduled' }]),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventNo: `USSD-${name.replace(/\W/g, '').slice(0, 12)}-${Date.now()}`,
+    name,
+    startDate: date,
+    endDate: date,
+    startTime: '09:00',
+    sessions: [{ date, startTime: '09:00', endTime: null, status: 'scheduled' }],
+  });
+  return seeded.eventId;
 }
 
 let attachSeq = 0;
@@ -135,9 +130,9 @@ let attachSeq = 0;
 async function attach(event: string, offeringId: string) {
   attachSeq += 1;
   await harness.db.query(
-    `insert into event_instance_offerings (
-       event_instance_id, series_id, offering_id, available_until, attached_on, attached_by
-     ) values ($1,null,$2,null, now() + make_interval(secs => $3), 'test')`,
+    `insert into event_offerings (
+       event_id, offering_id, available_until, attached_on, attached_by
+     ) values ($1,$2,null, now() + make_interval(secs => $3), 'test')`,
     [event, offeringId, attachSeq],
   );
 }
@@ -505,8 +500,10 @@ describe('USSD anonymous registration', () => {
       status: string;
       code_id: string;
     }>(
-      `select event_instance_id, session_date, status, code_id
-         from registration_requests where reference = $1`,
+      `select o.event_id as event_instance_id, r.session_date, r.status, r.code_id
+         from registration_requests r
+         join event_occurrences o on o.id = r.occurrence_id
+        where r.reference = $1`,
       [reference],
     );
     expect(requestRow!.event_instance_id).toBe(registrationEvent);
@@ -520,8 +517,11 @@ describe('USSD anonymous registration', () => {
       event_instance_id: string;
       session_date: string | Date;
     }>(
-      `select used_at, registration_request_id, event_instance_id, session_date
-         from attendance_codes where id = $1`,
+      `select c.used_at, c.registration_request_id, o.event_id as event_instance_id,
+              c.session_date
+         from attendance_codes c
+         join event_occurrences o on o.id = c.occurrence_id
+        where c.id = $1`,
       [issued.body.id],
     );
     expect(codeRow!.used_at).toBeTruthy();

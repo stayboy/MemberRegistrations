@@ -2,6 +2,7 @@ import request from 'supertest';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { occurrenceId, seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
@@ -47,22 +48,18 @@ async function seedAttendance(seriesId: string, memberNo: string, date: string):
     [memberNo],
   );
   const [instance] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       series_id, start_date, end_date, name, timezone, venue_type, status, source, sessions
-     )
-     select s.id, $2, $2, s.name, s.timezone, 'auditorium', 'scheduled', 'series',
-            jsonb_build_array(jsonb_build_object('date', $2::date, 'status', 'scheduled'))
-       from event_series s where s.id = $1
-     on conflict (series_id, start_date) do update set start_date = excluded.start_date
+    `insert into event_occurrences (event_id, date, start_time, end_time, status)
+     values ($1, $2, null, null, 'scheduled')
+     on conflict (event_id, date) do update set status = excluded.status
      returning id`,
     [seriesId, date],
   );
   const [inserted] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
-     on conflict (event_instance_id, session_date, member_id) do nothing
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1,$2,'manual','seed')
+     on conflict (occurrence_id, member_id) do nothing
      returning id`,
-    [member!.id, instance!.id, date],
+    [member!.id, instance!.id],
   );
   expect(inserted).toBeTruthy();
 }
@@ -77,11 +74,12 @@ async function seedManualAttendance(
     'select id from members where member_no = $1',
     [memberNo],
   );
+  const occurrence = await occurrenceId(harness.db, eventId, date);
   const [row] = await harness.db.query<{ id: string }>(
-    `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-     values ($1,$2,$3,'manual','seed')
+    `insert into attendance (member_id, occurrence_id, source, created_by)
+     values ($1,$2,'manual','seed')
      returning id`,
-    [member!.id, eventId, date],
+    [member!.id, occurrence],
   );
   return row!.id;
 }
@@ -206,7 +204,8 @@ describe('attendance counts', () => {
     const [row] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance a
          join members m on m.id = a.member_id
-        where m.member_no = 'M-5001' and a.session_date = '2026-01-25'`,
+         join event_occurrences o on o.id = a.occurrence_id
+        where m.member_no = 'M-5001' and o.date = '2026-01-25'`,
     );
     expect(Number(row!.count)).toBe(0);
   });
@@ -278,48 +277,34 @@ describe('imports', () => {
    * successful import takes its own session.
    */
   async function sessionEvent(date: string): Promise<{ id: string; eventNo: string }> {
-    const [series] = await harness.db.query<{ timezone: string }>(
-      'select timezone from event_series where id = $1',
-      [seriesId],
-    );
     const eventNo = `EVT-IMPORT-${date}`;
-    const [row] = await harness.db.query<{ id: string }>(
-      `insert into event_instances (
-         event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-         venue_type, status, source, sessions
-       )
-       values ($1,$2,$3,$4,$5,$5,'09:00','10:30','auditorium','scheduled','manual',$6::jsonb)
-       returning id`,
-      [
-        eventNo,
-        seriesId,
-        `Import session ${date}`,
-        series!.timezone,
-        date,
-        JSON.stringify([{ date, startTime: '09:00', endTime: '10:30', status: 'scheduled' }]),
-      ],
-    );
-    return { id: row!.id, eventNo };
+    const seeded = await seedEvent(harness.db, {
+      eventNo,
+      name: `Import session ${date}`,
+      timezone: 'UTC',
+      startDate: date,
+      endDate: date,
+      startTime: '09:00',
+      endTime: '10:30',
+      series: true,
+      sessions: [{ date, startTime: '09:00', endTime: '10:30', status: 'scheduled' }],
+    });
+    return { id: seeded.eventId, eventNo };
   }
 
   /** A series-backed event whose session is today, so captures are live. */
   async function liveSessionEvent(eventNo: string): Promise<string> {
-    const [row] = await harness.db.query<{ id: string }>(
-      `insert into event_instances (
-         event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-         venue_type, status, source, sessions
-       )
-       values ($1,$2,$3,'UTC',$4,$4,'00:00',null,'auditorium','scheduled','manual',$5::jsonb)
-       returning id`,
-      [
-        eventNo,
-        seriesId,
-        `Live ${eventNo}`,
-        day(0),
-        JSON.stringify([{ date: day(0), startTime: '00:00', endTime: null, status: 'scheduled' }]),
-      ],
-    );
-    return row!.id;
+    const seeded = await seedEvent(harness.db, {
+      eventNo,
+      name: `Live ${eventNo}`,
+      timezone: 'UTC',
+      startDate: day(0),
+      endDate: day(0),
+      startTime: '00:00',
+      series: true,
+      sessions: [{ date: day(0), startTime: '00:00', endTime: null, status: 'scheduled' }],
+    });
+    return seeded.eventId;
   }
 
   beforeAll(async () => {
@@ -350,28 +335,31 @@ describe('imports', () => {
       .query({ seriesId, from: '2026-01-01', to: '2026-02-10', limit: 100 })
       .set(readHeaders);
     expect(listed.status).toBe(200);
-
-    for (const entry of listed.body.items as Array<{
+    expect(listed.body.items).toHaveLength(1);
+    const parent = listed.body.items[0] as {
       id: string;
-      startDate: string;
       eventNo: string | null;
-    }>) {
-      if (entry.eventNo) events.set(entry.startDate, { id: entry.id, eventNo: entry.eventNo });
+      sessions: Array<{ date: string }>;
+    };
+    for (const session of parent.sessions) {
+      if (session.date !== '2026-01-11') {
+        events.set(session.date, { id: parent.id, eventNo: parent.eventNo! });
+      }
     }
 
     // 2026-01-11 is cancelled by the attendance-counts suite.
     expect(events.size).toBe(4);
 
-    const [cancelled] = await harness.db.query<{ id: string }>(
-      `insert into event_instances (
-         event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions
-       )
-       values ('EVT-2026-090','Cancelled Import Event','UTC','2026-02-08','2026-02-08',
-               '09:00','auditorium','cancelled','manual',
-               '[{"date":"2026-02-08","status":"scheduled"}]'::jsonb)
-       returning id`,
-    );
-    cancelledEventId = cancelled!.id;
+    const cancelled = await seedEvent(harness.db, {
+      eventNo: 'EVT-2026-090',
+      name: 'Cancelled Import Event',
+      startDate: '2026-02-08',
+      endDate: '2026-02-08',
+      startTime: '09:00',
+      status: 'cancelled',
+      sessions: [{ date: '2026-02-08', status: 'scheduled' }],
+    });
+    cancelledEventId = cancelled.eventId;
   });
 
   it('retires the event-list import', async () => {
@@ -397,7 +385,10 @@ describe('imports', () => {
     expect(response.body).not.toHaveProperty('rows');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1`,
       [unknownId],
     );
     expect(Number(row!.count)).toBe(0);
@@ -460,7 +451,8 @@ describe('imports', () => {
 
     expect(report.status).toBe(200);
     const [row] = await harness.db.query<{ id: string }>(
-      'select id from attendance where event_instance_id = $1 and session_date = $2',
+      `select id from attendance
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = $2)`,
       [target.id, '2026-01-25'],
     );
     expect(report.body.rows).toEqual([
@@ -512,7 +504,8 @@ describe('imports', () => {
       .set(readHeaders);
 
     const [row] = await harness.db.query<{ id: string }>(
-      'select id from attendance where event_instance_id = $1 and session_date = $2',
+      `select id from attendance
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = $2)`,
       [target.id, '2026-02-15'],
     );
     expect(report.body.rows).toEqual([
@@ -570,13 +563,19 @@ describe('imports', () => {
     ]);
 
     const [batch] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1 and o.date = '2026-01-18'`,
       [target.id],
     );
     expect(Number(batch!.count)).toBe(0);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from attendance where event_instance_id = $1',
+      `select count(*)::int as count
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1 and o.date = '2026-01-18'`,
       [target.id],
     );
     // The manual row from the attendance-counts suite is untouched.
@@ -628,13 +627,19 @@ describe('imports', () => {
     expect(response.body).not.toHaveProperty('rows');
 
     const [batch] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1`,
       [cancelledEventId],
     );
     expect(Number(batch!.count)).toBe(0);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from attendance where event_instance_id = $1',
+      `select count(*)::int as count
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1`,
       [cancelledEventId],
     );
     expect(Number(attendance!.count)).toBe(0);
@@ -655,7 +660,7 @@ describe('imports', () => {
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-       where event_instance_id = $1 and session_date = '2026-03-01'`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = '2026-03-01')`,
       [target.id],
     );
     expect(Number(attendance!.count)).toBe(0);
@@ -679,13 +684,19 @@ describe('imports', () => {
     ]);
 
     const [batch] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1 and o.date = '2026-01-18'`,
       [target.id],
     );
     expect(Number(batch!.count)).toBe(0);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from attendance where event_instance_id = $1',
+      `select count(*)::int as count
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1 and o.date = '2026-01-18'`,
       [target.id],
     );
     // Only the manual row from the attendance-counts suite remains.
@@ -712,7 +723,7 @@ describe('imports', () => {
 
     const [rows] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from import_batches
-        where event_instance_id = $1 and session_date = '2026-02-01'`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = '2026-02-01')`,
       [target.id],
     );
     expect(Number(rows!.count)).toBe(1);
@@ -734,7 +745,8 @@ describe('imports', () => {
     const [imported] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-5001' and a.event_instance_id = $1 and a.session_date = $2`,
+       join event_occurrences o on o.id = a.occurrence_id
+       where m.member_no = 'M-5001' and o.event_id = $1 and o.date = $2`,
       [targetId, day(0)],
     );
 
@@ -759,7 +771,8 @@ describe('imports', () => {
     const [surviving] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-5002' and a.event_instance_id = $1 and a.session_date = $2`,
+       join event_occurrences o on o.id = a.occurrence_id
+       where m.member_no = 'M-5002' and o.event_id = $1 and o.date = $2`,
       [targetId, day(0)],
     );
     expect(after.body.rows).toEqual([
@@ -815,7 +828,7 @@ describe('generation backfill', () => {
     expect(series.status).toBe(201);
     const backfillSeriesId = series.body.id as string;
 
-    // The manual entry creates the instance before generation has numbered it.
+    // The manual entry creates today's occurrence under the series parent.
     await request(app)
       .post('/v1/members/M-5101/attendance')
       .set(writeHeaders)
@@ -823,35 +836,35 @@ describe('generation backfill', () => {
       .expect(201);
 
     const [before] = await harness.db.query<{ id: string; event_no: string | null }>(
-      `select id, event_no from event_instances
-       where series_id = $1 and start_date = $2`,
-      [backfillSeriesId, day(0)],
+      `select id, event_no from events where id = $1`,
+      [backfillSeriesId],
     );
-    expect(before!.event_no).toBeNull();
+    expect(before!.event_no).toBeTruthy();
 
     const generated = await request(app)
       .post('/v1/events/generate')
       .query({ from: day(0), to: day(0) })
       .set(writeHeaders);
     expect(generated.status).toBe(200);
+    expect(generated.body.created).toBe(0);
+    expect(generated.body.skipped).toBeGreaterThanOrEqual(1);
 
     const [after] = await harness.db.query<{ id: string; event_no: string | null }>(
-      `select id, event_no from event_instances
-       where series_id = $1 and start_date = $2`,
-      [backfillSeriesId, day(0)],
+      `select id, event_no from events where id = $1`,
+      [backfillSeriesId],
     );
     expect(after!.id).toBe(before!.id);
-    expect(after!.event_no).toBeTruthy();
+    expect(after!.event_no).toBe(before!.event_no);
 
-    // Generation is idempotent: the manual instance is numbered, not duplicated.
+    // Generation is idempotent: the manual occurrence is not duplicated.
     const [instances] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from event_instances
-       where series_id = $1 and start_date = $2`,
+      `select count(*)::int as count from event_occurrences
+        where event_id = $1 and date = $2`,
       [backfillSeriesId, day(0)],
     );
     expect(Number(instances!.count)).toBe(1);
 
-    // The assigned number now lets an attendance import target that instance.
+    // The series parent is a valid import target.
     await request(app)
       .post('/v1/imports/attendance')
       .set(writeHeaders)
@@ -1039,24 +1052,17 @@ describe('event attendance per session', () => {
     }>;
     seriesId?: string | null;
   }): Promise<string> {
-    const [row] = await harness.db.query<{ id: string }>(
-      `insert into event_instances (
-         event_no, name, timezone, start_date, end_date, start_time, venue_type, status, source, sessions, series_id
-       )
-       values ($1,$2,'UTC',$3,$4,$5,'auditorium',$6,'manual',$7::jsonb,$8)
-       returning id`,
-      [
-        body.eventNo,
-        body.name,
-        body.startDate,
-        body.endDate,
-        body.startTime ?? '17:00',
-        body.status,
-        JSON.stringify(body.sessions),
-        body.seriesId ?? null,
-      ],
-    );
-    return row!.id;
+    const seeded = await seedEvent(harness.db, {
+      eventNo: body.eventNo,
+      name: body.name,
+      status: body.status as 'draft' | 'scheduled' | 'held' | 'cancelled' | 'archived',
+      startDate: body.startDate,
+      endDate: body.endDate,
+      startTime: body.startTime ?? '17:00',
+      series: body.seriesId !== null && body.seriesId !== undefined,
+      sessions: body.sessions,
+    });
+    return seeded.eventId;
   }
 
   /**
@@ -1134,28 +1140,21 @@ describe('event attendance per session', () => {
     expect(series.status).toBe(201);
     seriesId = series.body.id as string;
 
-    const event = await request(app)
-      .post('/v1/events')
-      .set(writeHeaders)
-      .send({
-        eventNo: EVENT_NO,
-        name: 'October Conference',
-        timezone: 'UTC',
-        startDate: '2026-10-13',
-        endDate: '2026-10-15',
-        startTime: '17:00',
-        endTime: '19:00',
-        venueType: 'auditorium',
-        sessions: [{ date: '2026-10-13' }, { date: '2026-10-14' }, { date: '2026-10-15' }],
-      });
-    expect(event.status).toBe(201);
-    eventId = event.body.id as string;
-    // An import needs a series-backed event; the create route makes a standalone
-    // one, so link it here.
-    await harness.db.query('update event_instances set series_id = $1 where id = $2', [
+    const event = await insertEvent({
+      eventNo: EVENT_NO,
+      name: 'October Conference',
+      status: 'scheduled',
+      startDate: '2026-10-13',
+      endDate: '2026-10-15',
+      startTime: '17:00',
       seriesId,
-      eventId,
-    ]);
+      sessions: [
+        { date: '2026-10-13', startTime: '17:00', endTime: '19:00' },
+        { date: '2026-10-14', startTime: '17:00', endTime: '19:00' },
+        { date: '2026-10-15', startTime: '17:00', endTime: '19:00' },
+      ],
+    });
+    eventId = event;
 
     cancelledEventId = await insertEvent({
       eventNo: 'EVT-2026-015',
@@ -1201,7 +1200,10 @@ describe('event attendance per session', () => {
     expect(response.status).toBe(201);
 
     const rows = await harness.db.query<{ session_date: Date | string; source: string }>(
-      'select session_date, source from attendance where event_instance_id = $1',
+      `select o.date as session_date, a.source
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1`,
       [eventId],
     );
     const dates = rows.map((row) =>
@@ -1226,24 +1228,27 @@ describe('event attendance per session', () => {
     expect(response.body).not.toHaveProperty('rows');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from attendance where event_instance_id = $1',
+      `select count(*)::int as count
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1`,
       [eventId],
     );
     expect(Number(row!.count)).toBe(1);
   });
 
-  it('rejects a direct write with a non-session date at the database trigger', async () => {
+  it('rejects a direct write naming an occurrence that does not exist', async () => {
     await expect(
       harness.db.query(
-        `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-         values ($1,$2,'2026-10-16','manual','test')`,
-        [memberIds['M-7001'], eventId],
+        `insert into attendance (member_id, occurrence_id, source, created_by)
+         values ($1,'00000000-0000-4000-8000-000000000000','manual','test')`,
+        [memberIds['M-7001']],
       ),
-    ).rejects.toMatchObject({ code: '23514' });
+    ).rejects.toMatchObject({ code: '23503' });
 
     const [row] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-       where event_instance_id = $1 and session_date = '2026-10-16'`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = '2026-10-16')`,
       [eventId],
     );
     expect(Number(row!.count)).toBe(0);
@@ -1259,8 +1264,9 @@ describe('event attendance per session', () => {
     expect(response.status).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
     const [importedRow] = await harness.db.query<{ id: string }>(
-      `select id from attendance
-       where event_instance_id = $1 and session_date = '2026-10-14' and source = 'import'`,
+      `select a.id from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1 and o.date = '2026-10-14' and a.source = 'import'`,
       [eventId],
     );
     expect(response.body).toEqual({
@@ -1411,7 +1417,8 @@ describe('event attendance per session', () => {
     const [row] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-7003' and a.event_instance_id = $1 and a.session_date = $2`,
+       join event_occurrences o on o.id = a.occurrence_id
+       where m.member_no = 'M-7003' and o.event_id = $1 and o.date = $2`,
       [target, day(0)],
     );
 
@@ -1422,7 +1429,8 @@ describe('event attendance per session', () => {
 
     const [suppression] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance_suppressions
-       where member_id = $1 and event_instance_id = $2 and session_date = $3`,
+        where member_id = $1
+          and occurrence_id = (select id from event_occurrences where event_id = $2 and date = $3)`,
       [memberIds['M-7003'], target, day(0)],
     );
     expect(Number(suppression!.count)).toBe(1);
@@ -1439,7 +1447,8 @@ describe('event attendance per session', () => {
     const [surviving] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-7001' and a.event_instance_id = $1 and a.session_date = $2`,
+       join event_occurrences o on o.id = a.occurrence_id
+       where m.member_no = 'M-7001' and o.event_id = $1 and o.date = $2`,
       [target, day(0)],
     );
     expect(report.body.rows).toEqual([
@@ -1460,7 +1469,8 @@ describe('event attendance per session', () => {
     const [row] = await harness.db.query<{ id: string }>(
       `select a.id from attendance a
        join members m on m.id = a.member_id
-       where m.member_no = 'M-7001' and a.event_instance_id = $1 and a.session_date = '2026-10-14'`,
+       join event_occurrences o on o.id = a.occurrence_id
+       where m.member_no = 'M-7001' and o.event_id = $1 and o.date = '2026-10-14'`,
       [eventId],
     );
 
@@ -1481,7 +1491,7 @@ describe('event attendance per session', () => {
 
     const [row] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from import_batches
-       where event_instance_id = $1 and session_date = '2026-10-14'`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = '2026-10-14')`,
       [eventId],
     );
     expect(Number(row!.count)).toBe(1);
@@ -1494,13 +1504,19 @@ describe('event attendance per session', () => {
     expect(response.body.code).toBe('series_required');
 
     const [batch] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1`,
       [standaloneEventId],
     );
     expect(Number(batch!.count)).toBe(0);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from attendance where event_instance_id = $1',
+      `select count(*)::int as count
+         from attendance a
+         join event_occurrences o on o.id = a.occurrence_id
+        where o.event_id = $1`,
       [standaloneEventId],
     );
     expect(Number(attendance!.count)).toBe(0);
@@ -1517,14 +1533,17 @@ describe('event attendance per session', () => {
     expect(response.body.detail).toContain('cancelled');
 
     const [batch] = await harness.db.query<{ count: number | string }>(
-      'select count(*)::int as count from import_batches where event_instance_id = $1',
+      `select count(*)::int as count
+         from import_batches b
+         join event_occurrences o on o.id = b.occurrence_id
+        where o.event_id = $1`,
       [cancelledSessionEventId],
     );
     expect(Number(batch!.count)).toBe(0);
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-       where event_instance_id = $1 and session_date = '2026-11-11'`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = '2026-11-11')`,
       [cancelledSessionEventId],
     );
     expect(Number(attendance!.count)).toBe(0);
@@ -1549,8 +1568,8 @@ describe('event attendance per session', () => {
 
   it('rejects deleting a row on a cancelled session', async () => {
     const [row] = await harness.db.query<{ id: string }>(
-      `insert into attendance (member_id, event_instance_id, session_date, source, created_by)
-       values ($1,$2,'2026-11-11','manual','test-admin')
+      `insert into attendance (member_id, occurrence_id, source, created_by)
+       values ($1, (select id from event_occurrences where event_id = $2 and date = '2026-11-11'), 'manual','test-admin')
        returning id`,
       [memberIds['M-7001'], cancelledSessionEventId],
     );

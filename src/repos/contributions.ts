@@ -49,9 +49,9 @@ type StoredContributionRow = ContributionRow & {
 
 type EventRow = {
   status: string;
-  sessions: unknown;
   end_date: unknown;
-  series_id: string | null;
+  occurrence_count: number | string;
+  cancelled_count: number | string;
 };
 
 type OfferingTermsRow = {
@@ -99,7 +99,7 @@ const CONTRIBUTION_COLUMNS = `
   m.member_no,
   c.visitor_name,
   c.offering_id,
-  c.event_instance_id,
+  c.event_id as event_instance_id,
   c.session_date,
   c.amount_minor,
   c.currency,
@@ -123,19 +123,6 @@ function isoDate(value: unknown): string | null {
 function isoTimestamp(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   return String(value);
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 function contributionFromRow(row: ContributionRow): ContributionItem {
@@ -168,16 +155,6 @@ function earliestExpiry(rows: AttachmentExpiryRow[], eventEndDate: string | null
     )
     .filter((date): date is string => date !== null);
   return dates.length === 0 ? null : dates.sort()[0]!;
-}
-
-function findSession(sessions: unknown, date: string): { status: string } | null {
-  for (const entry of parseJsonArray(sessions)) {
-    const session = entry as { date?: unknown; status?: unknown };
-    if (isoDate(session.date) === date) {
-      return { status: String(session.status ?? 'scheduled') };
-    }
-  }
-  return null;
 }
 
 export interface CreateWithinOptions {
@@ -250,7 +227,10 @@ export class ContributionRepository {
     const event = await this.resolveEvent(db, input.eventId, options.skipEventGates === true);
 
     if (options.skipEventGates !== true) {
-      const session = findSession(event.sessions, sessionDate);
+      const [session] = await db.query<{ status: string }>(
+        'select status from event_occurrences where event_id = $1 and date = $2',
+        [input.eventId, sessionDate],
+      );
       if (!session) {
         throw new SessionNotInEventError(`Event ${input.eventId} has no session on ${sessionDate}`);
       }
@@ -273,7 +253,7 @@ export class ContributionRepository {
       const attachments = await db.query<AttachmentExpiryRow>(
         `select a.available_until as attachment_available_until,
                 t.available_until as terms_available_until
-           from event_instance_offerings a
+           from event_offerings a
            join lateral (
              select available_until
                from offering_terms t
@@ -283,11 +263,14 @@ export class ContributionRepository {
            ) t on true
           where a.detached_on is null
             and a.offering_id = $1
+            and a.event_id = $2
             and (
-              a.event_instance_id = $2::uuid
-              or ($3::uuid is not null and a.series_id = $3::uuid)
+              a.occurrence_id is null
+              or a.occurrence_id = (
+                select id from event_occurrences where event_id = $2 and date = $3
+              )
             )`,
-        [input.offeringId, input.eventId, event.series_id],
+        [input.offeringId, input.eventId, sessionDate],
       );
       if (attachments.length === 0) {
         throw new OfferingNotOnEventError(
@@ -332,7 +315,7 @@ export class ContributionRepository {
       try {
         const [inserted] = await db.query<{ id: string }>(
           `insert into contributions (
-             member_id, visitor_name, visitor_phone_hash, offering_id, event_instance_id,
+             member_id, visitor_name, visitor_phone_hash, offering_id, event_id,
              session_date, amount_minor, currency, channel, status, reference, idempotency_key,
              terms_version, created_by, payment_group_id
            ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
@@ -377,7 +360,7 @@ export class ContributionRepository {
          ${CONTRIBUTION_FROM}
         where ($1::text is null or lower(m.member_no) = lower($1::text))
           and ($2::uuid is null or c.offering_id = $2::uuid)
-          and ($3::uuid is null or c.event_instance_id = $3::uuid)
+          and ($3::uuid is null or c.event_id = $3::uuid)
           and ($4::date is null or c.session_date >= $4::date)
           and ($5::date is null or c.session_date <= $5::date)
           and (
@@ -487,14 +470,24 @@ export class ContributionRepository {
     allowInactive = false,
   ): Promise<EventRow> {
     const [row] = await db.query<EventRow>(
-      `select status, sessions, end_date, series_id
-         from event_instances
-        where id = $1`,
+      `select e.status,
+              (select max(o.date) from event_occurrences o where o.event_id = e.id) as end_date,
+              (select count(*) from event_occurrences o where o.event_id = e.id)
+                as occurrence_count,
+              (select count(*) from event_occurrences o
+                where o.event_id = e.id and o.status = 'cancelled') as cancelled_count
+         from events e
+        where e.id = $1`,
       [eventId],
     );
     if (!row) throw new NotFoundError(`Event ${eventId} was not found`);
-    if (!allowInactive && (row.status === 'cancelled' || row.status === 'archived')) {
-      throw new EventNotActiveError(`Event ${eventId} is ${row.status} and cannot take gifts`);
+    const allCancelled =
+      Number(row.occurrence_count) > 0 &&
+      Number(row.cancelled_count) === Number(row.occurrence_count);
+    if (!allowInactive && (row.status === 'archived' || allCancelled)) {
+      throw new EventNotActiveError(
+        `Event ${eventId} is cancelled or archived and cannot take gifts`,
+      );
     }
     return row;
   }

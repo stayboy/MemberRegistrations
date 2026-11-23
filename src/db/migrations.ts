@@ -1286,4 +1286,832 @@ create unique index member_verification_codes_live
 alter table registration_requests add column phone_encrypted text;
 `,
   },
+  {
+    version: '0026_event_parent',
+    sql: `
+-- The event parent replaces the per-session instance and the JSONB sessions
+-- array. A series-backed instance becomes one occurrence of its series parent
+-- (the parent reuses the series id); a standalone instance becomes a parent
+-- that reuses the instance id with one occurrence per sessions[] entry.
+-- Every child row is rekeyed by (parent, date), the legacy columns and tables
+-- are dropped, and row counts are asserted before and after.
+create table events (
+  id uuid primary key default gen_random_uuid(),
+  event_no text,
+  name text not null,
+  audience_id uuid,
+  ministry_id uuid references ministries(id),
+  presbyter_only boolean not null default false,
+  timezone text not null default 'UTC',
+  description text,
+  venue_type text not null default 'auditorium'
+    check (venue_type in ('auditorium', 'virtual', 'hybrid')),
+  venue_name text,
+  start_time text,
+  end_time text,
+  tracks_members boolean not null default true,
+  status text not null default 'active'
+    check (status in ('draft', 'active', 'archived')),
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index events_event_no on events (event_no) where event_no is not null;
+
+create table event_recurrence_versions (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events(id) on delete cascade,
+  effective_from date not null,
+  rrule text not null,
+  ends_on date,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  check (ends_on is null or ends_on >= effective_from)
+);
+create unique index event_recurrence_versions_event_effective
+  on event_recurrence_versions (event_id, effective_from);
+
+create table event_recurrence_exceptions (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events(id) on delete cascade,
+  date date not null,
+  kind text not null check (kind in ('cancelled', 'extra')),
+  note text,
+  created_at timestamptz not null default now(),
+  created_by text not null
+);
+create index event_recurrence_exceptions_lookup
+  on event_recurrence_exceptions (event_id, date, created_at desc);
+
+create table event_occurrences (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events(id) on delete cascade,
+  date date not null,
+  start_time text,
+  end_time text,
+  status text not null default 'scheduled'
+    check (status in ('scheduled', 'held', 'cancelled')),
+  note text,
+  venue_type text check (venue_type in ('auditorium', 'virtual', 'hybrid')),
+  legacy_event_no text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index event_occurrences_event_date on event_occurrences (event_id, date);
+create index event_occurrences_event on event_occurrences (event_id);
+
+-- Row counts of every table whose key changes. A failure anywhere rolls the
+-- whole migration back, so the register is never left half rekeyed.
+create temp table _event_parent_counts (
+  table_name text primary key,
+  row_count bigint not null
+) on commit drop;
+insert into _event_parent_counts (table_name, row_count) values
+  ('attendance', (select count(*) from attendance)),
+  ('attendance_suppressions', (select count(*) from attendance_suppressions)),
+  ('event_session_headcounts', (select count(*) from event_session_headcounts)),
+  ('event_session_offering_counts', (select count(*) from event_session_offering_counts)),
+  ('registration_requests', (select count(*) from registration_requests)),
+  ('attendance_codes', (select count(*) from attendance_codes)),
+  ('clocking_delegations', (select count(*) from clocking_delegations)),
+  ('import_batches', (select count(*) from import_batches)),
+  ('contributions', (select count(*) from contributions)),
+  ('pledges', (select count(*) from pledges));
+
+-- Pre-conditions: a duplicate standalone session date aborts rather than
+-- minting two occurrences for one date, and the chains must already resolve.
+do $$
+declare
+  bad record;
+begin
+  select e.id as instance_id, s->>'date' as session_date, count(*) as n
+    into bad
+    from event_instances e
+    cross join lateral jsonb_array_elements(e.sessions) s
+   where e.series_id is null
+   group by e.id, s->>'date'
+  having count(*) > 1
+   limit 1;
+  if found then
+    raise exception 'Event instance % has % sessions on %', bad.instance_id, bad.n, bad.session_date
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1 from (
+      select event_instance_id, session_date, member_id
+        from attendance
+       group by event_instance_id, session_date, member_id
+      having count(*) > 1
+    ) duplicate
+  ) then
+    raise exception 'Attendance contains a duplicate (event, date, member) key'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1 from event_session_headcounts h
+     where h.supersedes_id is not null
+       and not exists (select 1 from event_session_headcounts p where p.id = h.supersedes_id)
+  ) then
+    raise exception 'A headcount supersedes_id does not resolve'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1 from event_session_offering_counts c
+     where c.supersedes_id is not null
+       and not exists (
+         select 1 from event_session_offering_counts p where p.id = c.supersedes_id
+       )
+  ) then
+    raise exception 'An offering-count supersedes_id does not resolve'
+      using errcode = '23514';
+  end if;
+end $$;
+
+-- Parents. A series parent reuses the series id; a standalone parent reuses
+-- the instance id.
+insert into events (
+  id, event_no, name, ministry_id, presbyter_only, timezone, description,
+  venue_type, venue_name, start_time, end_time, tracks_members, status, archived_at,
+  created_at, updated_at
+)
+select s.id, null, s.name, s.ministry_id, s.presbyter_only, s.timezone, s.description,
+       coalesce(first.venue_type, 'auditorium'), null,
+       coalesce(first.start_time, '00:00'), first.end_time, true,
+       case when s.archived_at is null then 'active' else 'archived' end,
+       s.archived_at, s.created_at, s.updated_at
+  from event_series s
+  left join lateral (
+    select e.venue_type, e.start_time, e.end_time
+      from event_instances e
+     where e.series_id = s.id and e.status <> 'cancelled'
+     order by e.start_date, e.id
+     limit 1
+  ) first on true
+on conflict (id) do nothing;
+
+insert into events (
+  id, event_no, name, ministry_id, presbyter_only, timezone, description,
+  venue_type, venue_name, start_time, end_time, tracks_members, status, archived_at,
+  created_at, updated_at
+)
+select e.id, e.event_no, e.name, null, e.presbyter_only, e.timezone, e.description,
+       e.venue_type, e.venue_name, e.start_time, e.end_time, e.tracks_members,
+       case e.status
+         when 'draft' then 'draft'
+         when 'archived' then 'archived'
+         else 'active'
+       end,
+       case when e.status = 'archived' then now() else null end,
+       e.created_at, now()
+  from event_instances e
+ where e.series_id is null
+on conflict (id) do nothing;
+
+-- Recurrence moves from the series tables to the parent.
+insert into event_recurrence_versions (
+  event_id, effective_from, rrule, ends_on, created_at, created_by
+)
+select s.series_id, s.effective_from, s.rrule, s.ends_on, s.created_at, s.created_by
+  from series_schedules s
+on conflict (event_id, effective_from) do nothing;
+
+insert into event_recurrence_exceptions (
+  event_id, date, kind, note, created_at, created_by
+)
+select x.series_id, x.occurs_on, x.kind, x.note, x.created_at, x.created_by
+  from series_exceptions x
+ where not exists (
+   select 1 from event_recurrence_exceptions r
+    where r.event_id = x.series_id
+      and r.date = x.occurs_on
+      and r.kind = x.kind
+      and r.note is not distinct from x.note
+ );
+
+-- The series number is minted once the schedule rows exist, so its year is
+-- the schedule's year rather than the deploy year.
+do $$
+declare
+  row record;
+  year_value integer;
+  next_value integer;
+  candidate text;
+  attempt integer;
+begin
+  for row in select id from events where event_no is null order by id loop
+    year_value := extract(
+      year from coalesce(
+        (select min(rv.effective_from) from event_recurrence_versions rv where rv.event_id = row.id),
+        current_date
+      )
+    )::int;
+    attempt := 0;
+    loop
+      insert into event_no_counters (year, last_value) values (year_value, 1)
+      on conflict (year) do update set last_value = event_no_counters.last_value + 1
+      returning last_value into next_value;
+      candidate := 'EVT-' || year_value::text || '-' || lpad(next_value::text, 3, '0');
+      exit when not exists (select 1 from events where event_no = candidate);
+      attempt := attempt + 1;
+      if attempt > 10 then
+        raise exception 'Could not mint a unique event number for %', row.id
+          using errcode = '23505';
+      end if;
+    end loop;
+    update events set event_no = candidate where id = row.id;
+  end loop;
+end $$;
+
+-- One occurrence per series instance, one per standalone sessions[] entry.
+insert into event_occurrences (
+  event_id, date, start_time, end_time, status, note, venue_type, legacy_event_no,
+  created_at, updated_at
+)
+select e.series_id, e.start_date, e.start_time, e.end_time,
+       coalesce(
+         (select case
+                   when s->>'status' in ('scheduled', 'held', 'cancelled') then s->>'status'
+                   else null
+                 end
+            from jsonb_array_elements(e.sessions) s
+           where (s->>'date')::date = e.start_date
+           limit 1),
+         case e.status
+           when 'held' then 'held'
+           when 'cancelled' then 'cancelled'
+           else 'scheduled'
+         end
+       ),
+       (select nullif(s->>'note', '')
+          from jsonb_array_elements(e.sessions) s
+         where (s->>'date')::date = e.start_date
+         limit 1),
+       e.venue_type, e.event_no, e.created_at, now()
+  from event_instances e
+ where e.series_id is not null
+on conflict (event_id, date) do nothing;
+
+insert into event_occurrences (
+  event_id, date, start_time, end_time, status, note, venue_type, legacy_event_no,
+  created_at, updated_at
+)
+select e.id,
+       (s->>'date')::date,
+       coalesce(s->>'startTime', e.start_time),
+       coalesce(s->>'endTime', e.end_time),
+       case
+         when e.status = 'draft' then 'scheduled'
+         when e.status = 'cancelled' then 'cancelled'
+         when s->>'status' in ('scheduled', 'held', 'cancelled') then s->>'status'
+         else 'scheduled'
+       end,
+       nullif(s->>'note', ''),
+       coalesce(
+         case when s->>'venueType' in ('auditorium', 'virtual', 'hybrid') then s->>'venueType' end,
+         e.venue_type
+       ),
+       e.event_no, e.created_at, now()
+  from event_instances e
+  cross join lateral jsonb_array_elements(e.sessions) s
+ where e.series_id is null
+on conflict (event_id, date) do nothing;
+
+-- Rekey: attendance. The (occurrence, member) pair replaces the triple.
+drop trigger if exists attendance_session_guard on attendance;
+drop function if exists attendance_session_guard();
+alter table attendance add column occurrence_id uuid;
+update attendance a
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = a.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = a.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from attendance where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Attendance row % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table attendance alter column occurrence_id set not null;
+alter table attendance drop constraint if exists attendance_event_instance_id_session_date_member_id_key;
+alter table attendance drop constraint if exists attendance_event_instance_id_fkey;
+alter table attendance drop column event_instance_id;
+alter table attendance drop column session_date;
+alter table attendance add constraint attendance_occurrence_member_key unique (occurrence_id, member_id);
+alter table attendance add constraint attendance_occurrence_fkey
+  foreign key (occurrence_id) references event_occurrences(id) on delete cascade;
+create index attendance_occurrence on attendance (occurrence_id);
+
+-- Rekey: attendance suppressions. The pair becomes the primary key.
+alter table attendance_suppressions add column occurrence_id uuid;
+update attendance_suppressions s
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = s.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = s.session_date;
+do $$
+declare bad record;
+begin
+  select member_id, event_instance_id, session_date into bad
+    from attendance_suppressions where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Suppression (%) (instance %, date %) has no occurrence',
+      bad.member_id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table attendance_suppressions drop constraint attendance_suppressions_pkey;
+alter table attendance_suppressions drop constraint if exists attendance_suppressions_event_instance_id_fkey;
+alter table attendance_suppressions alter column occurrence_id set not null;
+alter table attendance_suppressions drop column event_instance_id;
+alter table attendance_suppressions drop column session_date;
+alter table attendance_suppressions add primary key (member_id, occurrence_id);
+alter table attendance_suppressions add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+
+-- Rekey: headcounts. session_date stays as the derived read field.
+alter table event_session_headcounts add column occurrence_id uuid;
+update event_session_headcounts h
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = h.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = h.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from event_session_headcounts where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Headcount % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table event_session_headcounts alter column occurrence_id set not null;
+alter table event_session_headcounts drop constraint if exists event_session_headcounts_event_instance_id_fkey;
+alter table event_session_headcounts drop column event_instance_id;
+alter table event_session_headcounts add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+drop index if exists event_session_headcounts_session;
+create index event_session_headcounts_occurrence on event_session_headcounts (occurrence_id);
+
+-- Rekey: offering counts. The supersession chain and its lines stay.
+alter table event_session_offering_counts add column occurrence_id uuid;
+update event_session_offering_counts c
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = c.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = c.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from event_session_offering_counts where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Offering count % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table event_session_offering_counts alter column occurrence_id set not null;
+alter table event_session_offering_counts drop constraint if exists event_session_offering_counts_event_instance_id_fkey;
+alter table event_session_offering_counts drop column event_instance_id;
+alter table event_session_offering_counts add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+drop index if exists event_session_offering_counts_group;
+create index event_session_offering_counts_occurrence
+  on event_session_offering_counts (occurrence_id, offering_id);
+
+-- Rekey: registration requests. session_date stays denormalised.
+alter table registration_requests add column occurrence_id uuid;
+update registration_requests r
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = r.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = r.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from registration_requests where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Registration request % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table registration_requests alter column occurrence_id set not null;
+alter table registration_requests drop constraint if exists registration_requests_event_instance_id_fkey;
+alter table registration_requests drop column event_instance_id;
+alter table registration_requests add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+drop index if exists registration_requests_event;
+create index registration_requests_occurrence
+  on registration_requests (occurrence_id, status);
+
+-- Rekey: attendance codes. session_date stays.
+alter table attendance_codes add column occurrence_id uuid;
+update attendance_codes c
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = c.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = c.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from attendance_codes where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Attendance code % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table attendance_codes alter column occurrence_id set not null;
+alter table attendance_codes drop constraint if exists attendance_codes_event_instance_id_fkey;
+alter table attendance_codes drop column event_instance_id;
+alter table attendance_codes add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+drop index if exists attendance_codes_session;
+create index attendance_codes_occurrence on attendance_codes (occurrence_id, purpose);
+
+-- Rekey: clocking delegations. The pair is the identity; session_date goes.
+alter table clocking_delegations add column occurrence_id uuid;
+update clocking_delegations d
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = d.event_instance_id
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = d.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from clocking_delegations where occurrence_id is null limit 1;
+  if found then
+    raise exception 'Delegation % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table clocking_delegations alter column occurrence_id set not null;
+alter table clocking_delegations drop constraint if exists clocking_delegations_event_instance_id_fkey;
+alter table clocking_delegations drop column event_instance_id;
+alter table clocking_delegations drop column session_date;
+alter table clocking_delegations add foreign key (occurrence_id)
+  references event_occurrences(id) on delete cascade;
+drop index if exists clocking_delegations_active;
+create unique index clocking_delegations_active
+  on clocking_delegations (occurrence_id) where ended_at is null;
+
+-- Rekey: import batches. A legacy batch with neither occurrence nor date
+-- stays null; nothing is guessed.
+alter table import_batches add column occurrence_id uuid;
+update import_batches b
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = b.event_instance_id
+   and b.session_date is not null
+   and o.event_id = coalesce(i.series_id, i.id)
+   and o.date = b.session_date;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id, session_date into bad
+    from import_batches
+   where event_instance_id is not null and occurrence_id is null
+   limit 1;
+  if found then
+    raise exception 'Import batch % (instance %, date %) has no occurrence',
+      bad.id, bad.event_instance_id, bad.session_date using errcode = '23514';
+  end if;
+end $$;
+alter table import_batches drop constraint if exists import_batches_event_instance_id_fkey;
+alter table import_batches drop column event_instance_id;
+alter table import_batches add foreign key (occurrence_id)
+  references event_occurrences(id);
+
+-- Rekey: contributions and pledges resolve the parent only and keep
+-- session_date; the session-offerings round adds their session target later.
+alter table contributions add column event_id uuid;
+update contributions c
+   set event_id = coalesce(i.series_id, i.id)
+  from event_instances i
+ where i.id = c.event_instance_id;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id into bad from contributions where event_id is null limit 1;
+  if found then
+    raise exception 'Contribution % (instance %) has no parent event',
+      bad.id, bad.event_instance_id using errcode = '23514';
+  end if;
+end $$;
+alter table contributions alter column event_id set not null;
+alter table contributions drop constraint if exists contributions_event_instance_id_fkey;
+alter table contributions drop column event_instance_id;
+alter table contributions add foreign key (event_id) references events(id);
+create index contributions_event on contributions (event_id);
+
+alter table pledges add column event_id uuid;
+update pledges p
+   set event_id = coalesce(i.series_id, i.id)
+  from event_instances i
+ where i.id = p.event_instance_id;
+do $$
+declare bad record;
+begin
+  select id, event_instance_id into bad from pledges where event_id is null limit 1;
+  if found then
+    raise exception 'Pledge % (instance %) has no parent event',
+      bad.id, bad.event_instance_id using errcode = '23514';
+  end if;
+end $$;
+alter table pledges alter column event_id set not null;
+alter table pledges drop constraint if exists pledges_event_instance_id_fkey;
+alter table pledges drop column event_instance_id;
+alter table pledges add foreign key (event_id) references events(id);
+create index pledges_event on pledges (event_id);
+
+-- The offering attachment stays legacy until the session-offerings round, but
+-- its target is now the parent: both an instance and its series map to one
+-- events row. offering_exceptions keeps pointing at the attachment.
+alter table event_instance_offerings add column event_id uuid;
+alter table event_instance_offerings add column occurrence_id uuid;
+update event_instance_offerings a
+   set event_id = coalesce(i.series_id, i.id)
+  from event_instances i
+ where i.id = a.event_instance_id;
+update event_instance_offerings a
+   set occurrence_id = o.id
+  from event_instances i, event_occurrences o
+ where i.id = a.event_instance_id
+   and i.series_id is not null
+   and o.event_id = i.series_id
+   and o.date = i.start_date;
+update event_instance_offerings a
+   set event_id = a.series_id
+ where a.event_instance_id is null and a.series_id is not null;
+do $$
+declare
+  bad record;
+  expected bigint;
+  actual bigint;
+begin
+  select id into bad from event_instance_offerings where event_id is null limit 1;
+  if found then
+    raise exception 'Offering attachment % has no parent event', bad.id
+      using errcode = '23514';
+  end if;
+
+  select count(*) into expected
+    from event_instance_offerings a
+    join event_instances i on i.id = a.event_instance_id
+   where i.series_id is not null;
+  select count(*) into actual
+    from event_instance_offerings where occurrence_id is not null;
+  if expected <> actual then
+    raise exception 'Offering attachment occurrence mapping covered % of % rows',
+      actual, expected using errcode = '23514';
+  end if;
+end $$;
+drop index if exists event_instance_offerings_active_event;
+drop index if exists event_instance_offerings_active_series;
+alter table event_instance_offerings
+  drop constraint if exists event_instance_offerings_event_instance_id_fkey;
+alter table event_instance_offerings
+  drop constraint if exists event_instance_offerings_series_id_fkey;
+alter table event_instance_offerings drop column event_instance_id;
+alter table event_instance_offerings drop column series_id;
+alter table event_instance_offerings alter column event_id set not null;
+alter table event_instance_offerings add foreign key (event_id) references events(id);
+alter table event_instance_offerings add foreign key (occurrence_id)
+  references event_occurrences(id);
+alter table event_instance_offerings rename to event_offerings;
+create index event_offerings_event on event_offerings (event_id, offering_id);
+create unique index event_offerings_active_occurrence
+  on event_offerings (offering_id, occurrence_id)
+  where occurrence_id is not null and detached_on is null;
+create unique index event_offerings_active_event
+  on event_offerings (offering_id, event_id)
+  where occurrence_id is null and detached_on is null;
+
+-- Post-conditions: row counts unchanged, no unresolved child, the attendance
+-- unique pair preserved, and every supersession chain still resolves.
+do $$
+declare
+  row record;
+  actual bigint;
+  total bigint;
+  distinct_pairs bigint;
+begin
+  for row in select * from _event_parent_counts loop
+    execute format('select count(*) from %I', row.table_name) into actual;
+    if actual <> row.row_count then
+      raise exception 'Row count of % changed from % to %', row.table_name, row.row_count, actual
+        using errcode = '23514';
+    end if;
+  end loop;
+
+  select count(*), count(distinct (occurrence_id, member_id))
+    into total, distinct_pairs
+    from attendance;
+  if total <> distinct_pairs then
+    raise exception 'Attendance unique (occurrence, member) pairs were not preserved'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1 from event_session_headcounts h
+     where h.supersedes_id is not null
+       and not exists (select 1 from event_session_headcounts p where p.id = h.supersedes_id)
+  ) then
+    raise exception 'A headcount supersedes_id no longer resolves'
+      using errcode = '23514';
+  end if;
+
+  if exists (
+    select 1 from event_session_offering_counts c
+     where c.supersedes_id is not null
+       and not exists (
+         select 1 from event_session_offering_counts p where p.id = c.supersedes_id
+       )
+  ) then
+    raise exception 'An offering-count supersedes_id no longer resolves'
+      using errcode = '23514';
+  end if;
+end $$;
+
+-- Legacy source goes once nothing references it. events.ministry_id and
+-- presbyter_only stay as the audience round's read-only projections;
+-- event_offerings and offering_exceptions stay for the offerings round.
+drop table series_schedules;
+drop table series_exceptions;
+drop table event_instances;
+drop table event_series;
+`,
+  },
+  {
+    version: '0027_event_audience_membership',
+    sql: `
+-- An event's applicability becomes one audience. The seven seeded groups (the
+-- ministry group is one per ministry) plus the legacy pair's combination
+-- audience are reference data; the legacy ministry_id/presbyter_only columns
+-- stay, written from the audience, until the downstream round deletes them.
+create table audiences (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  system boolean not null default false,
+  system_key text,
+  active boolean not null default true,
+  rule jsonb not null,
+  created_at timestamptz not null default now(),
+  created_by text,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+create unique index audiences_system_key
+  on audiences (system_key) where system_key is not null;
+create unique index audiences_name_ci on audiences (lower(name));
+
+create table member_status_events (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  kind text not null check (kind in ('promoted')),
+  from_status text not null,
+  to_status text not null,
+  reason text,
+  actor text not null,
+  at timestamptz not null default now()
+);
+create index member_status_events_member on member_status_events (member_id, at);
+
+-- Append-only: the only link between a first-time visitor gift's phone hash and
+-- the person, and it is never rewritten.
+create table first_time_visitor_identities (
+  phone_hash text primary key,
+  member_id uuid not null references members(id),
+  linked_by text not null,
+  linked_at timestamptz not null default now()
+);
+
+-- Archived is derived from archived_at, so it is not a stored status value.
+alter table members add column membership_status text;
+update members set membership_status = 'active';
+alter table members alter column membership_status set default 'active';
+alter table members alter column membership_status set not null;
+alter table members add constraint members_membership_status_check
+  check (membership_status in ('visitor', 'active'));
+
+insert into audiences (name, system, system_key, active, rule, created_by, updated_by) values
+  ('Everyone', true, 'everyone', true,
+   '{"operator":"allOf","clauses":[{"attribute":"membershipStatus","value":"active"}]}'::jsonb,
+   'migration', 'migration'),
+  ('Presbyters', true, 'presbyters', true,
+   '{"operator":"allOf","clauses":[{"attribute":"presbyter","value":true}]}'::jsonb,
+   'migration', 'migration'),
+  ('Children 0-12', true, 'age:0-12', true,
+   '{"operator":"allOf","clauses":[{"attribute":"ageBand","minYears":0,"maxYears":12}]}'::jsonb,
+   'migration', 'migration'),
+  ('Youth 13-17', true, 'age:13-17', true,
+   '{"operator":"allOf","clauses":[{"attribute":"ageBand","minYears":13,"maxYears":17}]}'::jsonb,
+   'migration', 'migration'),
+  ('Adults 18+', true, 'age:18+', true,
+   '{"operator":"allOf","clauses":[{"attribute":"ageBand","minYears":18,"maxYears":null}]}'::jsonb,
+   'migration', 'migration'),
+  ('Visitors only', true, 'status:visitor', true,
+   '{"operator":"allOf","clauses":[{"attribute":"membershipStatus","value":"visitor"}]}'::jsonb,
+   'migration', 'migration')
+on conflict (system_key) where system_key is not null do nothing;
+
+insert into audiences (name, system, system_key, active, rule, created_by, updated_by)
+select m.name, true, 'ministry:' || m.code, true,
+       jsonb_build_object(
+         'operator', 'allOf',
+         'clauses', jsonb_build_array(
+           jsonb_build_object('attribute', 'ministry', 'ministryCode', m.code)
+         )
+       ),
+       'migration', 'migration'
+  from ministries m
+on conflict (system_key) where system_key is not null do nothing;
+
+-- A ministry + presbyter pair is one custom audience, shared by every event
+-- with that pair; its natural key lets a re-run reuse it.
+insert into audiences (name, system, system_key, active, rule, created_by, updated_by)
+select m.name || ' · Presbyters', false, 'legacy:' || m.code || ':presbyters', true,
+       jsonb_build_object(
+         'operator', 'allOf',
+         'clauses', jsonb_build_array(
+           jsonb_build_object('attribute', 'ministry', 'ministryCode', m.code),
+           jsonb_build_object('attribute', 'presbyter', 'value', true)
+         )
+       ),
+       'migration', 'migration'
+  from ministries m
+ where exists (
+   select 1 from events e
+    where e.ministry_id = m.id and e.presbyter_only
+ )
+on conflict (system_key) where system_key is not null do nothing;
+
+-- audience_id is nullable from 0026; backfill from the legacy pair, then
+-- require the foreign key.
+update events e
+   set audience_id = (
+     select a.id
+       from audiences a
+      where a.system_key = case
+              when e.ministry_id is null and not e.presbyter_only then 'everyone'
+              when e.ministry_id is null and e.presbyter_only then 'presbyters'
+              when not e.presbyter_only then
+                'ministry:' || (select m.code from ministries m where m.id = e.ministry_id)
+              else
+                'legacy:' || (select m.code from ministries m where m.id = e.ministry_id)
+                  || ':presbyters'
+            end
+   )
+ where e.audience_id is null;
+
+do $$
+declare bad record;
+begin
+  select id, ministry_id, presbyter_only into bad
+    from events where audience_id is null limit 1;
+  if found then
+    raise exception 'Event % (ministry %, presbyter_only %) has no audience',
+      bad.id, bad.ministry_id, bad.presbyter_only using errcode = '23514';
+  end if;
+end $$;
+
+alter table events alter column audience_id set not null;
+alter table events add constraint events_audience_fkey
+  foreign key (audience_id) references audiences(id);
+
+-- The legacy columns are written from the audience, never by a route again.
+update events e
+   set ministry_id = (
+         select mi.id
+           from audiences a
+           cross join lateral jsonb_array_elements(a.rule -> 'clauses') c
+           join ministries mi on mi.code = c ->> 'ministryCode'
+          where a.id = e.audience_id and c ->> 'attribute' = 'ministry'
+          limit 1
+       ),
+       presbyter_only = exists (
+         select 1
+           from audiences a
+           cross join lateral jsonb_array_elements(a.rule -> 'clauses') c
+          where a.id = e.audience_id
+            and c ->> 'attribute' = 'presbyter'
+            and (c ->> 'value')::boolean
+       );
+`,
+  },
 ];

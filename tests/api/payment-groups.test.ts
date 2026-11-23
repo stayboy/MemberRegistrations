@@ -14,6 +14,7 @@ import {
   writeHeaders,
   type TestApp,
 } from '../helpers/app.js';
+import { seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 const TEST_PAYMENT_SECRET = 'test-payment-gateway-secret-16';
@@ -89,29 +90,20 @@ function attach(event: string, offeringId: string) {
 
 async function insertEvent(seed: SeedEvent): Promise<string> {
   eventSeq += 1;
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, venue_name, description, status, source, sessions
-     )
-     values ($1,null,$2,'UTC',$3,$4,'09:00',null,'auditorium',null,null,'scheduled','manual',$5::jsonb)
-     returning id`,
-    [
-      `PAY-${eventSeq}`,
-      seed.name,
-      seed.startDate,
-      seed.endDate,
-      JSON.stringify(
-        seed.sessions.map((session) => ({
-          date: session.date,
-          startTime: '09:00',
-          endTime: null,
-          status: 'scheduled',
-        })),
-      ),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventNo: `PAY-${eventSeq}`,
+    name: seed.name,
+    startDate: seed.startDate,
+    endDate: seed.endDate,
+    startTime: '09:00',
+    sessions: seed.sessions.map((session) => ({
+      date: session.date,
+      startTime: '09:00',
+      endTime: null,
+      status: 'scheduled',
+    })),
+  });
+  return seeded.eventId;
 }
 
 function baseGroup(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -572,9 +564,10 @@ describe('pledge redemption groups', () => {
       sessionDate: todayUtc(),
       idempotencyKey: nextKey('pledge-cancelled-event'),
     });
-    await harness.db.query(`update event_instances set status = 'cancelled' where id = $1`, [
-      redemptionEventId,
-    ]);
+    await harness.db.query(
+      `update event_occurrences set status = 'cancelled' where event_id = $1`,
+      [redemptionEventId],
+    );
 
     const response = await postGroup(
       baseGroup({

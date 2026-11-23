@@ -103,6 +103,8 @@ export const members = pgTable(
     movedOutOn: date('moved_out_on'),
     /** The assembly the member moved to, free text; null when not recorded. */
     movedToAssembly: text('moved_to_assembly'),
+    /** The person kind: `visitor` or `active`; archived is `archivedAt` (A-7). */
+    membershipStatus: text('membership_status').notNull().default('active'),
     isPresbyter: boolean('is_presbyter').notNull().default(false),
     presbyterRank: integer('presbyter_rank'),
     /** The member's office; nullable and independent of `isPresbyter` (O-4). */
@@ -135,44 +137,87 @@ export const members = pgTable(
       .on(table.titleCode)
       .where(sql`${table.titleCode} is not null`),
     check(
+      'members_membership_status_check',
+      sql`${table.membershipStatus} in ('visitor','active')`,
+    ),
+    check(
       'members_photo_content_type_check',
       sql`${table.photoContentType} in ('image/webp','image/jpeg','image/png')`,
     ),
   ],
 );
 
-export const eventSeries = pgTable(
-  'event_series',
+/**
+ * An audience is reference data: exactly one operator over a flat clause list
+ * (A-1). A seeded row is `system = true` and read-only; the combination
+ * audiences the migration derives from a legacy ministry + presbyter pair are
+ * custom rows so an operator can rename them.
+ */
+export const audiences = pgTable(
+  'audiences',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
-    ministryId: uuid('ministry_id').references(() => ministries.id),
-    presbyterOnly: boolean('presbyter_only').notNull().default(false),
-    timezone: text('timezone').notNull().default('Africa/Lagos'),
-    description: text('description'),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    system: boolean('system').notNull().default(false),
+    systemKey: text('system_key'),
+    active: boolean('active').notNull().default(true),
+    rule: jsonb('rule').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text('created_by'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    createdBy: text('created_by').notNull(),
-    updatedBy: text('updated_by').notNull(),
+    updatedBy: text('updated_by'),
   },
   (table) => [
-    uniqueIndex('event_series_name_ministry')
-      .on(
-        sql`lower(${table.name})`,
-        sql`coalesce(${table.ministryId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
-      )
-      .where(sql`${table.archivedAt} is null`),
+    uniqueIndex('audiences_system_key')
+      .on(table.systemKey)
+      .where(sql`${table.systemKey} is not null`),
+    uniqueIndex('audiences_name_ci').on(sql`lower(${table.name})`),
   ],
 );
 
-export const seriesSchedules = pgTable(
-  'series_schedules',
+/**
+ * The event parent. `ministry_id` and `presbyter_only` are the audience
+ * round's read-only legacy projections; `audience_id` is the applicability.
+ */
+export const events = pgTable(
+  'events',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    seriesId: uuid('series_id')
+    eventNo: text('event_no'),
+    name: text('name').notNull(),
+    audienceId: uuid('audience_id')
       .notNull()
-      .references(() => eventSeries.id, { onDelete: 'cascade' }),
+      .references(() => audiences.id),
+    ministryId: uuid('ministry_id').references(() => ministries.id),
+    presbyterOnly: boolean('presbyter_only').notNull().default(false),
+    timezone: text('timezone').notNull().default('UTC'),
+    description: text('description'),
+    venueType: text('venue_type').notNull().default('auditorium'),
+    venueName: text('venue_name'),
+    startTime: text('start_time'),
+    endTime: text('end_time'),
+    tracksMembers: boolean('tracks_members').notNull().default(true),
+    status: text('status').notNull().default('active'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('events_event_no')
+      .on(table.eventNo)
+      .where(sql`${table.eventNo} is not null`),
+    check('events_venue_type_check', sql`${table.venueType} in ('auditorium','virtual','hybrid')`),
+    check('events_status_check', sql`${table.status} in ('draft','active','archived')`),
+  ],
+);
+
+export const eventRecurrenceVersions = pgTable(
+  'event_recurrence_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
     effectiveFrom: date('effective_from').notNull(),
     rrule: text('rrule').notNull(),
     endsOn: date('ends_on'),
@@ -180,25 +225,94 @@ export const seriesSchedules = pgTable(
     createdBy: text('created_by').notNull(),
   },
   (table) => [
-    uniqueIndex('series_schedules_series_effective').on(table.seriesId, table.effectiveFrom),
-    index('series_schedules_series').on(table.seriesId, table.effectiveFrom),
+    uniqueIndex('event_recurrence_versions_event_effective').on(table.eventId, table.effectiveFrom),
+    check(
+      'event_recurrence_versions_ends_check',
+      sql`${table.endsOn} is null or ${table.endsOn} >= ${table.effectiveFrom}`,
+    ),
   ],
 );
 
-export const seriesExceptions = pgTable(
-  'series_exceptions',
+export const eventRecurrenceExceptions = pgTable(
+  'event_recurrence_exceptions',
   {
-    seriesId: uuid('series_id')
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
       .notNull()
-      .references(() => eventSeries.id, { onDelete: 'cascade' }),
-    occursOn: date('occurs_on').notNull(),
+      .references(() => events.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
     kind: text('kind').notNull(),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     createdBy: text('created_by').notNull(),
   },
-  (table) => [primaryKey({ columns: [table.seriesId, table.occursOn] })],
+  (table) => [
+    index('event_recurrence_exceptions_lookup').on(table.eventId, table.date, table.createdAt),
+    check('event_recurrence_exceptions_kind_check', sql`${table.kind} in ('cancelled','extra')`),
+  ],
 );
+
+export const eventOccurrences = pgTable(
+  'event_occurrences',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    startTime: text('start_time'),
+    endTime: text('end_time'),
+    status: text('status').notNull().default('scheduled'),
+    note: text('note'),
+    venueType: text('venue_type'),
+    legacyEventNo: text('legacy_event_no'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('event_occurrences_event_date').on(table.eventId, table.date),
+    index('event_occurrences_event').on(table.eventId),
+    check(
+      'event_occurrences_status_check',
+      sql`${table.status} in ('scheduled','held','cancelled')`,
+    ),
+    check(
+      'event_occurrences_venue_type_check',
+      sql`${table.venueType} is null or ${table.venueType} in ('auditorium','virtual','hybrid')`,
+    ),
+  ],
+);
+
+/** Append-only officer promotion of a visitor; the only status action this round. */
+export const memberStatusEvents = pgTable(
+  'member_status_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    fromStatus: text('from_status').notNull(),
+    toStatus: text('to_status').notNull(),
+    reason: text('reason'),
+    actor: text('actor').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('member_status_events_member').on(table.memberId, table.at),
+    check('member_status_events_kind_check', sql`${table.kind} in ('promoted')`),
+  ],
+);
+
+/** Append-only link from a first-time visitor gift's phone hash to the member. */
+export const firstTimeVisitorIdentities = pgTable('first_time_visitor_identities', {
+  phoneHash: text('phone_hash').primaryKey(),
+  memberId: uuid('member_id')
+    .notNull()
+    .references(() => members.id),
+  linkedBy: text('linked_by').notNull(),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const memberContacts = pgTable(
   'member_contacts',
@@ -458,9 +572,10 @@ export const registrationRequests = pgTable('registration_requests', {
   lastName: text('last_name').notNull(),
   phoneHash: text('phone_hash').notNull(),
   phoneEncrypted: text('phone_encrypted'),
-  eventInstanceId: uuid('event_instance_id')
+  occurrenceId: uuid('occurrence_id')
     .notNull()
-    .references(() => eventInstances.id),
+    .references(() => eventOccurrences.id, { onDelete: 'cascade' }),
+  /** Kept denormalised from the occurrence for the existing wire. */
   sessionDate: date('session_date').notNull(),
   codeId: uuid('code_id').notNull(),
   status: text('status').notNull().default('pending'),
@@ -504,16 +619,6 @@ export const ussdSessions = pgTable(
 );
 
 /**
- * The raw-SQL repository still owns event_instances; this partial mirror only
- * types the headcount foreign key. It is deliberately not in the drift test's
- * table list because the raw engine owns the rest of the row, including
- * `presbyter_only`, which must not look ORM-owned.
- */
-export const eventInstances = pgTable('event_instances', {
-  id: uuid('id').primaryKey().defaultRandom(),
-});
-
-/**
  * Headcount modes are reference data from `0022_headcount_lanes`: adding one is
  * an insert and retiring one is `retired = true`. `mixed` is seeded retired so
  * a legacy observation keeps its label and its lines stay readable.
@@ -543,9 +648,9 @@ export const eventSessionHeadcounts = pgTable(
   'event_session_headcounts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    eventInstanceId: uuid('event_instance_id')
+    occurrenceId: uuid('occurrence_id')
       .notNull()
-      .references(() => eventInstances.id),
+      .references(() => eventOccurrences.id, { onDelete: 'cascade' }),
     sessionDate: date('session_date').notNull(),
     asOf: timestamp('as_of', { withTimezone: true }).notNull(),
     mode: text('mode')
@@ -561,7 +666,7 @@ export const eventSessionHeadcounts = pgTable(
     uniqueIndex('event_session_headcounts_supersedes')
       .on(table.supersedesId)
       .where(sql`${table.supersedesId} is not null`),
-    index('event_session_headcounts_session').on(table.eventInstanceId, table.sessionDate),
+    index('event_session_headcounts_occurrence').on(table.occurrenceId),
     // No `where supersedes_id is null` unique index: a superseded root keeps
     // that column null, so such an index would guard roots rather than tips.
     // The write path resolves the tip in its transaction with the lane locked
@@ -607,9 +712,9 @@ export const eventSessionOfferingCounts = pgTable(
   'event_session_offering_counts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    eventInstanceId: uuid('event_instance_id')
+    occurrenceId: uuid('occurrence_id')
       .notNull()
-      .references(() => eventInstances.id),
+      .references(() => eventOccurrences.id, { onDelete: 'cascade' }),
     offeringId: uuid('offering_id')
       .notNull()
       .references(() => offerings.id),
@@ -627,11 +732,7 @@ export const eventSessionOfferingCounts = pgTable(
     uniqueIndex('event_session_offering_counts_supersedes')
       .on(table.supersedesId)
       .where(sql`${table.supersedesId} is not null`),
-    index('event_session_offering_counts_group').on(
-      table.eventInstanceId,
-      table.offeringId,
-      table.sessionDate,
-    ),
+    index('event_session_offering_counts_occurrence').on(table.occurrenceId, table.offeringId),
   ],
 );
 
@@ -651,5 +752,39 @@ export const eventSessionOfferingCountLines = pgTable(
       sql`${table.denominationMinor} > 0`,
     ),
     check('event_session_offering_count_lines_pieces_positive', sql`${table.pieces} > 0`),
+  ],
+);
+
+/**
+ * The legacy offering attachment, rekeyed to the event parent during the
+ * transition. The session-offerings round replaces it with a per-occurrence
+ * `session_offerings` row; until then it stays readable and writable.
+ */
+export const eventOfferings = pgTable(
+  'event_offerings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id),
+    /** Null for a series-level or standalone attachment; set for a series-backed instance. */
+    occurrenceId: uuid('occurrence_id').references(() => eventOccurrences.id),
+    offeringId: uuid('offering_id')
+      .notNull()
+      .references(() => offerings.id),
+    availableUntil: date('available_until'),
+    attachedOn: timestamp('attached_on', { withTimezone: true }).notNull().defaultNow(),
+    attachedBy: text('attached_by').notNull(),
+    detachedOn: timestamp('detached_on', { withTimezone: true }),
+    detachedBy: text('detached_by'),
+  },
+  (table) => [
+    index('event_offerings_event').on(table.eventId, table.offeringId),
+    uniqueIndex('event_offerings_active_occurrence')
+      .on(table.offeringId, table.occurrenceId)
+      .where(sql`${table.occurrenceId} is not null and ${table.detachedOn} is null`),
+    uniqueIndex('event_offerings_active_event')
+      .on(table.offeringId, table.eventId)
+      .where(sql`${table.occurrenceId} is null and ${table.detachedOn} is null`),
   ],
 );

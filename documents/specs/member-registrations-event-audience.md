@@ -1,6 +1,6 @@
 # Spec — event audience, membership status and visitor identity
 
-**Status:** **Approved 2026-11-22** (owner) — spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`).
+**Status:** **Approved 2026-11-22** (owner) — spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`). Amended 2026-11-22 (clarifying, migration round): the migration seeds **six** fixed system audiences, not seven — the A-2 table is the count of record (`Everyone`, `Presbyters`, `Children 0-12`, `Youth 13-17`, `Adults 18+`, `Visitors only`) plus one per ministry.
 
 **Author:** Solomon Owoo
 
@@ -376,7 +376,7 @@ number and is not reserved here. It is one transaction, idempotent by natural ke
 1. Create `audiences`, `member_status_events` and `first_time_visitor_identities`; add
    `members.membership_status text not null default 'active'` with a `visitor|active` check; backfill
    every existing row `active`.
-2. Seed the seven system audiences with their `system_key`, and one ministry audience per ministry row.
+2. Seed the six fixed system audiences with their `system_key`, and one ministry audience per ministry row.
 3. Add `events.audience_id` nullable, backfill, then `not null` with a foreign key to `audiences`.
 4. Backfill every event from its legacy pair. The mapping is by distinct `(ministry_id, presbyter_only)`
    and is created once per distinct pair, with a natural key so a re-run adds nothing:
@@ -396,8 +396,10 @@ number and is not reserved here. It is one transaction, idempotent by natural ke
 5. The legacy columns are **written by this migration** from each event's audience — `ministry_id` from
    the audience's first ministry clause (null when it has none) and `presbyter_only` from its presbyter
    clause — so readers that have not moved (`events.presbyter_only` in the roster SQL, the USSD list, the
-   `?ministry=` filter) keep working until the downstream round deletes them. No route writes them after
-   the migration. **Stated limit:** an audience the pair cannot express (age, gender, status or a custom
+   `?ministry=` filter) keep working until the downstream round deletes them. After the migration no route
+   writes them **independently**: slice 2a keeps the legacy `ministryCode`/`presbyterOnly` inputs, maps them
+   onto `audience_id`, and derives the two projections from the audience; slice 2b retires the inputs.
+   **Stated limit:** an audience the pair cannot express (age, gender, status or a custom
    rule) reads as _general_ to a reader that has not moved; the downstream round removes those readers,
    and until then the member-facing list and the roster are the surfaces to trust.
 6. No event, occurrence, attendance or offering row is rewritten.

@@ -200,7 +200,7 @@ describe('redemption', () => {
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-        where event_instance_id = $1 and session_date = $2`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = $2)`,
       [pastEventId, session],
     );
     expect(Number(attendance!.count)).toBe(0);
@@ -215,17 +215,13 @@ describe('redemption', () => {
   it('refuses a punch once the session is closed and leaves the code unused', async () => {
     const today = day(0);
     const closedEventId = await createEvent([today]);
-    // A punch code targets a session; an import needs the event to be
-    // series-backed, and an ended capture closes the shared session.
-    const [series] = await harness.db.query<{ id: string }>(
-      `insert into event_series (name, timezone, created_by, updated_by)
-       values ('Code Close Series', 'UTC', 'seed', 'seed')
-       returning id`,
+    // An import needs a series-backed parent, and an ended capture closes the
+    // shared session.
+    await harness.db.query(
+      `insert into event_recurrence_versions (event_id, effective_from, rrule, ends_on, created_by)
+       values ($1,$2,'FREQ=DAILY',$2,'seed')`,
+      [closedEventId, today],
     );
-    await harness.db.query('update event_instances set series_id = $1 where id = $2', [
-      series!.id,
-      closedEventId,
-    ]);
 
     const closed = await request(app)
       .post('/v1/imports/attendance')
@@ -250,7 +246,7 @@ describe('redemption', () => {
 
     const [attendance] = await harness.db.query<{ count: number | string }>(
       `select count(*)::int as count from attendance
-        where event_instance_id = $1 and session_date = $2`,
+        where occurrence_id = (select id from event_occurrences where event_id = $1 and date = $2)`,
       [closedEventId, today],
     );
     expect(Number(attendance!.count)).toBe(0);

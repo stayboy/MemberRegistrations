@@ -4,13 +4,20 @@ import { createPgliteDb } from '../../src/db/pglite.js';
 import { migrate } from '../../src/db/migrate.js';
 import { MIGRATIONS } from '../../src/db/migrations.js';
 import {
-  eventSeries,
+  audiences,
+  eventOccurrences,
+  eventOfferings,
+  eventRecurrenceExceptions,
+  eventRecurrenceVersions,
+  events,
   eventSessionHeadcounts,
   eventSessionOfferingCountLines,
   eventSessionOfferingCounts,
+  firstTimeVisitorIdentities,
   headcountBuckets,
   headcountLines,
   headcountModes,
+  memberStatusEvents,
   memberVerificationCodes,
   memberConfirmations,
   memberContacts,
@@ -19,8 +26,6 @@ import {
   ministryPositions,
   presbyterTitles,
   registrationRequests,
-  seriesExceptions,
-  seriesSchedules,
   subscriptionClaims,
   subscriptionCoverage,
   subscriptionPayments,
@@ -178,9 +183,14 @@ describe('ORM schema drift', () => {
     ['members', members],
     ['presbyter_titles', presbyterTitles],
     ['ministry_positions', ministryPositions],
-    ['event_series', eventSeries],
-    ['series_schedules', seriesSchedules],
-    ['series_exceptions', seriesExceptions],
+    ['audiences', audiences],
+    ['events', events],
+    ['event_recurrence_versions', eventRecurrenceVersions],
+    ['event_recurrence_exceptions', eventRecurrenceExceptions],
+    ['event_occurrences', eventOccurrences],
+    ['member_status_events', memberStatusEvents],
+    ['first_time_visitor_identities', firstTimeVisitorIdentities],
+    ['event_offerings', eventOfferings],
     ['subscriptions', subscriptions],
     ['subscription_products', subscriptionProducts],
     ['subscription_payments', subscriptionPayments],
@@ -218,6 +228,13 @@ describe('ORM schema drift', () => {
     expect(sortByName(await dbIndexes(db, 'ussd_sessions'))).toEqual(
       sortByName(schemaIndexes(ussdSessions)),
     );
+  });
+
+  it('matches the event offering attachment indexes', async () => {
+    expect(sortByName(await dbIndexes(db, 'event_offerings'))).toEqual(
+      sortByName(schemaIndexes(eventOfferings)),
+    );
+    expect(await dbForeignKeys(db, 'event_offerings')).toEqual(schemaForeignKeys(eventOfferings));
   });
 
   it('matches the offering-count indexes', async () => {

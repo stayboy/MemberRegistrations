@@ -210,62 +210,6 @@ function isoDate(value: unknown): string {
   return String(value);
 }
 
-/** `sessions` is JSONB: PGlite returns an array, `pg` may return the raw text. */
-function sessionEntries(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function sessionDates(value: unknown): string[] {
-  return sessionEntries(value).map((entry) => isoDate((entry as { date?: unknown })?.date));
-}
-
-/** The listed session's status, or null when the date is not one of the event's sessions. */
-function sessionStatus(value: unknown, date: string): string | null {
-  for (const entry of sessionEntries(value)) {
-    const session = entry as { date?: unknown; status?: unknown };
-    if (isoDate(session.date) === date) {
-      return typeof session.status === 'string' ? session.status : 'scheduled';
-    }
-  }
-  return null;
-}
-
-interface StoredSessionEntry {
-  date: string;
-  startTime: string | null;
-  endTime: string | null;
-  status: string;
-}
-
-/** The stored session on `date`, including the window the live check needs. */
-function sessionEntry(value: unknown, date: string): StoredSessionEntry | null {
-  for (const entry of sessionEntries(value)) {
-    const session = entry as {
-      date?: unknown;
-      startTime?: unknown;
-      endTime?: unknown;
-      status?: unknown;
-    };
-    if (isoDate(session.date) !== date) continue;
-    return {
-      date,
-      startTime: typeof session.startTime === 'string' ? session.startTime : null,
-      endTime: typeof session.endTime === 'string' ? session.endTime : null,
-      status: typeof session.status === 'string' ? session.status : 'scheduled',
-    };
-  }
-  return null;
-}
-
 function isoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -544,44 +488,50 @@ export class ImportRepository {
         event_no: string | null;
         name: string;
         status: string;
-        series_id: string | null;
         timezone: string;
         start_time: string | null;
         end_time: string | null;
-        sessions: unknown;
+        occurrence_id: string | null;
+        occurrence_start_time: string | null;
+        occurrence_end_time: string | null;
+        occurrence_status: string | null;
+        has_recurrence: boolean;
       }>(
-        `select event_no, name, status, series_id, timezone, start_time, end_time, sessions
-           from event_instances where id = $1`,
-        [request.eventId],
+        `select e.event_no, e.name, e.status, e.timezone, e.start_time, e.end_time,
+                o.id as occurrence_id,
+                o.start_time as occurrence_start_time,
+                o.end_time as occurrence_end_time,
+                o.status as occurrence_status,
+                exists (
+                  select 1 from event_recurrence_versions rv where rv.event_id = e.id
+                ) as has_recurrence
+           from events e
+           left join event_occurrences o on o.event_id = e.id and o.date = $2
+          where e.id = $1`,
+        [request.eventId, sessionDate],
       );
       if (!event) {
         throw new ImportError(`Unknown event id: ${request.eventId}`);
       }
+      if (event.occurrence_status === 'cancelled') {
+        throw new ImportError(`The session on ${sessionDate} is cancelled and read-only`);
+      }
       const eventLabel = event.event_no
         ? `Event ${event.event_no} (${event.name})`
         : `Event ${event.name}`;
-      if (event.status === 'cancelled' || event.status === 'archived') {
-        throw new ImportError(
-          `${eventLabel} is ${event.status} and cannot accept an attendance import`,
-        );
+      if (event.status === 'archived') {
+        throw new ImportError(`${eventLabel} is archived and cannot accept an attendance import`);
       }
-      if (!event.series_id) {
+      if (!event.has_recurrence) {
         throw new ValidationError(
           'A standalone event cannot accept an attendance import; use a series-backed event',
           'series_required',
         );
       }
-      if (!sessionDates(event.sessions).includes(sessionDate)) {
+      if (!event.occurrence_id) {
         throw new ImportError(`${eventLabel} has no session on ${sessionDate}`);
-      }
-      if (sessionStatus(event.sessions, sessionDate) === 'cancelled') {
-        throw new ImportError(`The session on ${sessionDate} is cancelled and read-only`);
       }
 
-      const session = sessionEntry(event.sessions, sessionDate);
-      if (!session) {
-        throw new ImportError(`${eventLabel} has no session on ${sessionDate}`);
-      }
       if (await sessionIsClosed(tx, request.eventId, sessionDate)) {
         throw new SessionClosedError(
           `The session on ${sessionDate} is closed; no further capture is accepted`,
@@ -592,8 +542,8 @@ export class ImportRepository {
       // capture outside that window is the end capture even without `ended`.
       const live = isSessionLive({
         date: sessionDate,
-        startTime: session.startTime ?? event.start_time ?? '00:00',
-        endTime: session.endTime ?? event.end_time,
+        startTime: event.occurrence_start_time ?? event.start_time ?? '00:00',
+        endTime: event.occurrence_end_time ?? event.end_time,
         timezone: event.timezone,
       });
       const ended = request.ended === true || !live;
@@ -636,11 +586,11 @@ export class ImportRepository {
 
       const [batchRow] = await tx.query<{ id: string; created_at: Date | string }>(
         `insert into import_batches (
-           kind, actor, row_count, checksum, event_instance_id, session_date, as_of, ended
+           kind, actor, row_count, checksum, occurrence_id, session_date, as_of, ended
          )
          values ('attendance',$1,$2,$3,$4,$5, now(), $6)
          returning id, created_at`,
-        [actor, request.rows.length, batchChecksum, request.eventId, sessionDate, ended],
+        [actor, request.rows.length, batchChecksum, event.occurrence_id, sessionDate, ended],
       );
       const batchId = batchRow!.id;
 
@@ -651,30 +601,30 @@ export class ImportRepository {
         // suppressions survive, and an end-only capture leaves rows untouched.
         await tx.query(
           `delete from attendance
-            where event_instance_id = $1 and session_date = $2 and source = 'import'`,
-          [request.eventId, sessionDate],
+            where occurrence_id = $1 and source = 'import'`,
+          [event.occurrence_id],
         );
 
         for (const row of prepared) {
           const memberId = memberMap.get(row.memberNo.toLowerCase())!;
           const inserted = await tx.query<{ id: string }>(
             `insert into attendance (
-               member_id, event_instance_id, session_date, session_time,
+               member_id, occurrence_id, session_time,
                source, import_batch_id, created_by
              )
-             select $1,$2,$3,$4::time,'import',$5,$6
+             select $1,$2,$3::time,'import',$4,$5
              where not exists (
                select 1 from attendance_suppressions s
-               where s.member_id = $1 and s.event_instance_id = $2 and s.session_date = $3
+               where s.member_id = $1 and s.occurrence_id = $2
              )
-             on conflict (event_instance_id, session_date, member_id) do update
+             on conflict (occurrence_id, member_id) do update
                set source = 'import',
                    session_time = excluded.session_time,
                    import_batch_id = excluded.import_batch_id,
                    created_by = excluded.created_by
                where attendance.source <> 'manual'
              returning id`,
-            [memberId, request.eventId, sessionDate, row.sessionTime, batchId, actor],
+            [memberId, event.occurrence_id, row.sessionTime, batchId, actor],
           );
           if (inserted.length > 0) written += 1;
           else skipped += 1;
@@ -709,12 +659,14 @@ export class ImportRepository {
       row_count: number;
       checksum: string;
       event_instance_id: string | null;
+      occurrence_id: string | null;
       session_date: Date | string | null;
       written_count: number | null;
       skipped_count: number | null;
       created_at: Date | string;
     }>(
-      `select id, kind, actor, row_count, checksum, event_instance_id, session_date,
+      `select id, kind, actor, row_count, checksum,
+              occurrence_id, session_date,
               written_count, skipped_count, created_at
        from import_batches where id = $1`,
       [id],
@@ -722,13 +674,22 @@ export class ImportRepository {
 
     if (!row) throw new NotFoundError(`Import batch ${id} was not found`);
 
+    let eventInstanceId: string | null = null;
+    if (row.occurrence_id) {
+      const [occurrence] = await this.db.query<{ event_id: string }>(
+        'select event_id from event_occurrences where id = $1',
+        [row.occurrence_id],
+      );
+      eventInstanceId = occurrence?.event_id ?? null;
+    }
+
     return {
       id: row.id,
       kind: row.kind,
       actor: row.actor,
       rowCount: row.row_count,
       checksum: row.checksum,
-      eventInstanceId: row.event_instance_id,
+      eventInstanceId,
       sessionDate: row.session_date === null ? null : isoDate(row.session_date),
       written: row.written_count === null ? null : Number(row.written_count),
       skipped: row.skipped_count === null ? null : Number(row.skipped_count),

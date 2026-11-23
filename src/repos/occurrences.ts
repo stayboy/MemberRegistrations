@@ -22,11 +22,17 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
     rrule: string;
     ends_on: string | null;
   }>(
-    'select effective_from, rrule, ends_on from series_schedules where series_id = $1 order by effective_from',
+    `select effective_from, rrule, ends_on
+       from event_recurrence_versions
+      where event_id = $1
+      order by effective_from`,
     [seriesId],
   );
-  const exceptions = await db.query<{ occurs_on: string; kind: 'cancelled' | 'extra' }>(
-    'select occurs_on, kind from series_exceptions where series_id = $1',
+  const exceptions = await db.query<{ date: string; kind: 'cancelled' | 'extra' }>(
+    `select distinct on (date) date, kind
+       from event_recurrence_exceptions
+      where event_id = $1
+      order by date, created_at desc, id desc`,
     [seriesId],
   );
 
@@ -37,7 +43,7 @@ export async function loadCalendar(db: DbClient, seriesId: string): Promise<Seri
       endsOn: row.ends_on ? isoDate(row.ends_on) : null,
     })),
     exceptions: exceptions.map((row) => ({
-      date: isoDate(row.occurs_on),
+      date: isoDate(row.date),
       kind: row.kind,
     })),
     // The event-list import is retired; occurrences come from schedules and exceptions only.

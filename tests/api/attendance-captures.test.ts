@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
+import { occurrenceId, seedEvent } from '../helpers/event-fixtures.js';
 import { reachableContacts } from '../helpers/member-fixtures.js';
 
 /**
@@ -48,26 +49,14 @@ interface SeedSession {
   status?: 'scheduled' | 'held' | 'cancelled';
 }
 
-/** A series row, so the event is series-backed and an import is allowed. */
-async function createSeries(name: string): Promise<string> {
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_series (name, timezone, created_by, updated_by)
-     values ($1,'UTC','seed','seed')
-     returning id`,
-    [name],
-  );
-  return row!.id;
-}
-
 /** A series-backed event, inserted directly so the session window is exact. */
 async function insertEvent(options: {
+  eventId?: string;
   sessions: SeedSession[];
   timezone?: string;
   status?: string;
   startTime?: string;
   endTime?: string | null;
-  /** Reuse a series that already has a schedule, so its occurrences resolve. */
-  seriesId?: string;
 }): Promise<string> {
   eventSeq += 1;
   const startTime = options.startTime ?? '00:00';
@@ -78,29 +67,20 @@ async function insertEvent(options: {
     endTime: session.endTime === undefined ? endTime : session.endTime,
     status: session.status ?? 'scheduled',
   }));
-  const seriesId = options.seriesId ?? (await createSeries(`Capture Series ${eventSeq}`));
-
-  const [row] = await harness.db.query<{ id: string }>(
-    `insert into event_instances (
-       event_no, series_id, name, timezone, start_date, end_date, start_time, end_time,
-       venue_type, status, source, sessions
-     )
-     values ($1,$2,$3,$4,$5,$6,$7,$8,'auditorium',$9,'series',$10::jsonb)
-     returning id`,
-    [
-      `CAP-${eventSeq}`,
-      seriesId,
-      `Capture event ${eventSeq}`,
-      options.timezone ?? 'UTC',
-      sessions[0]!.date,
-      sessions[sessions.length - 1]!.date,
-      startTime,
-      endTime,
-      options.status ?? 'scheduled',
-      JSON.stringify(sessions),
-    ],
-  );
-  return row!.id;
+  const seeded = await seedEvent(harness.db, {
+    eventId: options.eventId,
+    eventNo: `CAP-${eventSeq}`,
+    name: `Capture event ${eventSeq}`,
+    timezone: options.timezone ?? 'UTC',
+    startDate: sessions[0]!.date,
+    endDate: sessions[sessions.length - 1]!.date,
+    startTime,
+    endTime,
+    status: options.status as 'scheduled' | 'cancelled' | 'archived' | undefined,
+    series: true,
+    sessions,
+  });
+  return seeded.eventId;
 }
 
 /** A session dated today with no end time is live for its whole date. */
@@ -143,7 +123,8 @@ async function attendanceRows(
     `select m.member_no, a.source
        from attendance a
        join members m on m.id = a.member_id
-      where a.event_instance_id = $1 and a.session_date = $2
+       join event_occurrences o on o.id = a.occurrence_id
+      where o.event_id = $1 and o.date = $2
       order by m.member_no`,
     [eventId, sessionDate],
   );
@@ -160,10 +141,11 @@ async function batchRows(
     as_of: Date | string;
     ended: boolean;
   }>(
-    `select id, checksum, as_of, ended
-       from import_batches
-      where kind = 'attendance' and event_instance_id = $1 and session_date = $2
-      order by created_at`,
+    `select b.id, b.checksum, b.as_of, b.ended
+       from import_batches b
+       join event_occurrences o on o.id = b.occurrence_id
+      where b.kind = 'attendance' and o.event_id = $1 and o.date = $2
+      order by b.created_at`,
     [eventId, sessionDate],
   );
   return rows.map((row) => ({
@@ -176,8 +158,10 @@ async function batchRows(
 
 async function headcountCount(eventId: string, sessionDate: string): Promise<number> {
   const [row] = await harness.db.query<{ count: number | string }>(
-    `select count(*)::int as count from event_session_headcounts
-      where event_instance_id = $1 and session_date = $2`,
+    `select count(*)::int as count
+       from event_session_headcounts h
+       join event_occurrences o on o.id = h.occurrence_id
+      where o.event_id = $1 and o.date = $2`,
     [eventId, sessionDate],
   );
   return Number(row!.count);
@@ -191,16 +175,17 @@ async function seedBatch(options: {
   createdAt: string;
   ended?: boolean;
 }): Promise<string> {
+  const occurrence = await occurrenceId(harness.db, options.eventId, options.sessionDate);
   const [row] = await harness.db.query<{ id: string }>(
     `insert into import_batches (
-       kind, actor, row_count, checksum, event_instance_id, session_date,
+       kind, actor, row_count, checksum, occurrence_id, session_date,
        as_of, ended, created_at
      )
      values ('attendance','seed',1,$1,$2,$3,$4,$5,$6)
      returning id`,
     [
       `seed-${options.eventId}-${options.sessionDate}-${options.asOf}`,
-      options.eventId,
+      occurrence,
       options.sessionDate,
       options.asOf,
       options.ended ?? false,
@@ -219,15 +204,16 @@ async function seedHeadcount(options: {
   ended?: boolean;
   supersedesId?: string | null;
 }): Promise<string> {
+  const occurrence = await occurrenceId(harness.db, options.eventId, options.sessionDate);
   const [row] = await harness.db.query<{ id: string }>(
     `insert into event_session_headcounts (
-       event_instance_id, session_date, as_of, mode,
+       occurrence_id, session_date, as_of, mode,
        total, ended, recorded_by, recorded_at, supersedes_id
      )
      values ($1,$2,$3,'adults',10,$4,'seed',$5,$6)
      returning id`,
     [
-      options.eventId,
+      occurrence,
       options.sessionDate,
       options.asOf,
       options.ended ?? false,
@@ -485,8 +471,8 @@ describe('per-member writes', () => {
     expect(series.status).toBe(201);
 
     const eventId = await insertEvent({
+      eventId: series.body.id as string,
       sessions: [{ date: sessionDate, startTime: '09:00', endTime: '10:00' }],
-      seriesId: series.body.id as string,
     });
     await createMember('CAP-CLOSED');
     // A late import is the end capture for a past session, so the close exists

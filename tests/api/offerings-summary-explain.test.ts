@@ -65,18 +65,21 @@ beforeAll(async () => {
      values ($1, 1, 'Plan Tithe', 'Plan fixture', 'tithe', 'GHS', 'seed')`,
     [offering!.id],
   );
+  const [audience] = await db.query<{ id: string }>(
+    `select id from audiences where system_key = 'everyone'`,
+  );
   const [event] = await db.query<{ id: string }>(
-    `insert into event_instances (event_no, name, start_date, end_date, status, source, sessions)
-     values ('EX-EVT-1', 'Plan Service', $1::date, $1::date, 'scheduled', 'manual', '[]'::jsonb)
+    `insert into events (event_no, name, audience_id, timezone, venue_type, start_time, status)
+     values ('EX-EVT-1', 'Plan Service', $1, 'UTC', 'auditorium', '09:00', 'active')
      returning id`,
-    [from],
+    [audience!.id],
   );
 
   // A few hundred rows make the planner's index choice meaningful; the shape
   // assertion below still disables sequential scans for determinism.
   await db.query(
     `insert into contributions (
-       member_id, offering_id, event_instance_id, session_date, amount_minor, currency,
+       member_id, offering_id, event_id, session_date, amount_minor, currency,
        channel, status, reference, idempotency_key, terms_version, created_by
      )
      select $1, $2, $3, $4::date + (i % 20), 1000 + i, 'GHS', 'manual', 'paid',
@@ -86,7 +89,7 @@ beforeAll(async () => {
   );
   await db.query(
     `insert into pledges (
-       member_id, offering_id, event_instance_id, amount_minor, currency, expected_on,
+       member_id, offering_id, event_id, amount_minor, currency, expected_on,
        officer_member_id, status, terms_version, idempotency_key, created_by
      )
      select $1, $2, $3, 2000 + i, 'GHS', $4::date + (i % 60), $1, 'pending', 1,
