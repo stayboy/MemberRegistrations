@@ -202,6 +202,10 @@ deferred … · prose …` line. Because `mockups/` is git-ignored, the sha pin 
 - Each round verifies only its own track; the cross-track integration is a post-merge pass on `main`.
 - Full rules: `~/.agents/skills/orchestrator/references/parallel-workers.md`.
 - Incident evidence (once the owner accepts it): `documents/lessons.md`.
+- A UI-and-API round's contract seam, its generated mocks and its conformance gate are
+  `documents/agents/parallel-ui-api.md`'s, not this section's; this section owns only the track eligibility, the
+  worker cap and the parent's integration, and that document's eligibility rule (a **frozen** contract) governs
+  those rounds.
 
 ## Pre-flight for unattended rounds
 

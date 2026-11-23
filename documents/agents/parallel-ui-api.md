@@ -1,10 +1,10 @@
 # Parallel UI and API build — the contract-first workflow
 
-|            |                                                                                         |
-| ---------- | --------------------------------------------------------------------------------------- |
-| Status     | approved 2026-11-22 ("all as recommended"); binding after the policy PR's `0813` review |
-| Supersedes | nothing; it qualifies the "pipeline, do not overlap" ruling of the same day             |
-| Relates to | `AGENTS.md` §3a, `documents/agents/orchestrator-policy.md`, the event-parent round      |
+|            |                                                                                                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | approved 2026-11-22 ("all as recommended"); **binding since 2026-11-23** — `AGENTS.md` §3a names it, reviewed by `0813` in `documents/rounds/workflow-binding.md` |
+| Supersedes | nothing; it qualifies the "pipeline, do not overlap" ruling of the same day                                                                                       |
+| Relates to | `AGENTS.md` §3a, `documents/agents/orchestrator-policy.md`, the event-parent round                                                                                |
 
 ## Problem Statement
 
@@ -142,6 +142,6 @@ a handler's internals. The parallel build keeps the existing seams and adds one:
 - The first application is round 2b: contract the read surface, start round 3's read screens against it, then contract
   and implement the writes and the capture amendment, with a conformance pass closing each.
 - `AGENTS.md` §3a and `documents/agents/orchestrator-policy.md` are protected; the sentence that admits a frozen
-  contract as a parallel seam lands with its `0813` review, not silently.
+  contract as a parallel seam landed with its `0813` review on 2026-11-23 (this round), not silently.
 - The issue tracker is not used in this repository (`AGENTS.md` §13), so this spec is published in the repository, not
   as an issue.
