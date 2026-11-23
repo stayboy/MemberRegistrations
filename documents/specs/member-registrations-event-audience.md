@@ -353,7 +353,8 @@ otherNames?, memberNo? }`. The phone is normalised by the existing phone rule an
   attribute, an unknown key, an empty `allOf`/`anyOf`/`noneOf`, an inverted or negative band, a
   non-`true` presbyter value or an unknown ministry code is `422 validation_error`.
 - **The event** carries `audienceId`: required on create, defaulting to the `Everyone` audience when
-  omitted; `PUT /v1/events/{eventId}` may change it. Reads return the `audience` summary (`id`, `name`,
+  omitted; `PATCH /v1/events/{eventId}` may change it (the legacy `PUT` retires with the deployed form). Reads return
+  the `audience` summary (`id`, `name`,
   `system`, `summary`) alongside `audienceId`. `ministry` and `presbyterOnly` become **read-only legacy
   projections** during the transition (see A-7); they are no longer accepted on create or update, and a
   client that sends them is `422 validation_error` with the field named.
