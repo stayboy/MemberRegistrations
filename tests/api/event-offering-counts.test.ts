@@ -51,18 +51,7 @@ async function attach(eventId: string, offeringId: string): Promise<void> {
   expect(response.status).toBe(201);
 }
 
-async function createEvent(
-  eventNo: string,
-  dates: string[],
-  sessions: Array<{
-    date: string;
-    startTime?: string;
-    endTime?: string | null;
-    status?: 'scheduled' | 'held' | 'cancelled';
-    venueType?: 'auditorium' | 'virtual' | 'hybrid';
-    note?: string | null;
-  }> = dates.map((date) => ({ date })),
-): Promise<string> {
+async function createEvent(eventNo: string, dates: string[]): Promise<string> {
   const response = await request(harness.app)
     .post('/v1/events')
     .set(writeHeaders)
@@ -70,14 +59,14 @@ async function createEvent(
       eventNo,
       name: `Offering count ${eventNo}`,
       timezone: 'UTC',
-      startDate: dates[0],
-      endDate: dates[dates.length - 1],
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions,
+      occurrences: dates.map((date) => ({ date })),
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 function record(eventId: string, body: Record<string, unknown>, actor = 'count-admin') {
@@ -118,14 +107,7 @@ beforeAll(async () => {
   eventB = await createEvent('OC-200', [today]);
   otherEvent = await createEvent('OC-250', [today]);
   cancelledEvent = await createEvent('OC-280', [today]);
-  cancelledSessionEvent = await createEvent(
-    'OC-300',
-    [today, tomorrow],
-    [
-      { date: today, startTime: '09:00', status: 'cancelled', note: 'Venue flooded' },
-      { date: tomorrow, startTime: '09:00', status: 'scheduled' },
-    ],
-  );
+  cancelledSessionEvent = await createEvent('OC-300', [today, tomorrow]);
   archivedEvent = await createEvent('OC-400', [today]);
   summaryEvent = await createEvent('OC-500', [shiftDate(summaryDate, -1), summaryDate]);
 
@@ -147,6 +129,11 @@ beforeAll(async () => {
   await harness.db.query(`update event_occurrences set status = 'cancelled' where event_id = $1`, [
     cancelledEvent,
   ]);
+  await harness.db.query(
+    `update event_occurrences set status = 'cancelled', note = 'Venue flooded'
+      where event_id = $1 and date = $2`,
+    [cancelledSessionEvent, today],
+  );
   await harness.db.query(
     `update events set status = 'archived', archived_at = now() where id = $1`,
     [archivedEvent],

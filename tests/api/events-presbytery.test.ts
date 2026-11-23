@@ -38,22 +38,27 @@ async function createEvent(
   dates: string[],
   presbyterOnly = false,
 ): Promise<string> {
+  const [audience] = presbyterOnly
+    ? await harness.db.query<{ id: string }>(
+        `select id from audiences where system_key = 'presbyters'`,
+      )
+    : [];
   const response = await request(harness.app)
     .post('/v1/events')
     .set(writeHeaders)
     .send({
       eventNo,
       name: `Presbytery ${eventNo}`,
-      startDate: dates[0],
-      endDate: dates[dates.length - 1],
       startTime: '09:00',
       venueType: 'auditorium',
-      presbyterOnly,
-      sessions: dates.map((date) => ({ date })),
+      ...(audience ? { audienceId: audience.id } : {}),
+      occurrences: dates.map((date) => ({ date })),
     });
   expect(response.status).toBe(201);
   expect(response.body.presbyterOnly).toBe(presbyterOnly);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 beforeAll(async () => {

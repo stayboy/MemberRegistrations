@@ -51,15 +51,15 @@ async function createEvent(
     .send({
       eventNo: `ATT-${eventNo}`,
       name,
-      startDate: date,
-      endDate: date,
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: [{ date }],
+      occurrences: [{ date }],
       ...extra,
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 /**

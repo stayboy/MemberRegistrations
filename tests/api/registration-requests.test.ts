@@ -50,14 +50,14 @@ async function createEvent(dates: string[]): Promise<string> {
     .send({
       eventNo: `REG-${eventNo}`,
       name: `Registration event ${eventNo}`,
-      startDate: dates[0],
-      endDate: dates[dates.length - 1],
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: dates.map((date) => ({ date })),
+      occurrences: dates.map((date) => ({ date })),
     });
   expect(response.status).toBe(201);
-  return response.body.id as string;
+  const id = response.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [id]);
+  return id;
 }
 
 /** An adult with an own contact, so it can guard an approved request (MR-50). */
@@ -525,14 +525,13 @@ describe.skipIf(!testDatabaseUrl)('registration requests on the pooled pg driver
       .send({
         eventNo: 'REG-PG-1',
         name: 'Pooled registration event',
-        startDate: pgSessionDate,
-        endDate: day(-1),
         startTime: '09:00',
         venueType: 'auditorium',
-        sessions: [{ date: pgSessionDate }, { date: day(-1) }],
+        occurrences: [{ date: pgSessionDate }, { date: day(-1) }],
       });
     expect(event.status).toBe(201);
     pgEventId = event.body.id as string;
+    await pooled.query("update events set status = 'active' where id = $1", [pgEventId]);
   });
 
   afterAll(async () => {

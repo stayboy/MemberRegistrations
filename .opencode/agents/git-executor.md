@@ -88,8 +88,9 @@ brief authorises one verb: a commit brief cannot push.
 - `branch`: `git switch -c <branch>` from `main`; never from a dirty tree — except when every modified
   or untracked path is this round's own `documents/rounds/<slug>.md`, which the brief lists and the
   round's first commit carries.
-- `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. Append
-  `Model-Seat: git-executor (opencode/beam-free)` if the message lacks a `Model-Seat` trailer.
+- `commit`: stage exactly `files:`, then `git commit -F -` with the exact message. When a listed path no
+  longer exists in the worktree, `git add -A -- <files>` stages its deletion; otherwise `git add -- <files>`.
+  Append `Model-Seat: git-executor (opencode/beam-free)` if the message lacks a `Model-Seat` trailer.
 - `push`: `git push -u origin <branch>`; never bare `git push`, never `main`.
 - `pr`: `gh pr create --base main --head <branch> --body-file <path>` with the path the brief names (the
   parent authors the body); if a PR already exists for the head, adopt it rather than opening a second.

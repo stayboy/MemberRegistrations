@@ -72,14 +72,13 @@ beforeAll(async () => {
     .send({
       eventNo: 'CLK-EVENT',
       name: 'Clocking event',
-      startDate: sessions.delegation,
-      endDate: sessions.delegated,
       startTime: '09:00',
       venueType: 'auditorium',
-      sessions: [...new Set(Object.values(sessions))].map((date) => ({ date })),
+      occurrences: [...new Set(Object.values(sessions))].map((date) => ({ date })),
     })
     .expect(201);
   eventId = event.body.id as string;
+  await harness.db.query("update events set status = 'active' where id = $1", [eventId]);
 });
 
 afterAll(async () => {

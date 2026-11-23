@@ -232,6 +232,63 @@ describe('member row operations', () => {
   });
 });
 
+describe('membership status', () => {
+  it('defaults a create to active and stores a visitor when asked', async () => {
+    const active = await create('MS-1001');
+    expect(active.status).toBe(201);
+
+    const visitor = await create('MS-1002', { membershipStatus: 'visitor' });
+    expect(visitor.status).toBe(201);
+
+    const rows = await harness.db.query<{ member_no: string; membership_status: string }>(
+      `select member_no, membership_status from members
+        where member_no in ('MS-1001', 'MS-1002') order by member_no`,
+    );
+    expect(rows).toEqual([
+      { member_no: 'MS-1001', membership_status: 'active' },
+      { member_no: 'MS-1002', membership_status: 'visitor' },
+    ]);
+
+    const [archivedRow] = await harness.db.query<{ archived_at: unknown }>(
+      `select archived_at from members where member_no = 'MS-1002'`,
+    );
+    // `archived` is derived from archivedAt, never a stored status value.
+    expect(archivedRow!.archived_at).toBeNull();
+  });
+
+  it('edits membership status and refuses the archived value', async () => {
+    await create('MS-2001');
+
+    const edited = await request(app)
+      .put('/v1/members/MS-2001')
+      .set(writeHeaders)
+      .send({ membershipStatus: 'visitor' })
+      .expect(200);
+    expect(edited.status).toBe(200);
+
+    const [row] = await harness.db.query<{ membership_status: string }>(
+      `select membership_status from members where member_no = 'MS-2001'`,
+    );
+    expect(row!.membership_status).toBe('visitor');
+
+    const refused = await request(app)
+      .put('/v1/members/MS-2001')
+      .set(writeHeaders)
+      .send({ membershipStatus: 'archived' });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('validation_error');
+
+    const createRefused = await request(app).post('/v1/members').set(writeHeaders).send({
+      memberNo: 'MS-2002',
+      firstName: 'No',
+      lastName: 'Archive',
+      membershipStatus: 'archived',
+    });
+    expect(createRefused.status).toBe(422);
+    expect(createRefused.body.code).toBe('validation_error');
+  });
+});
+
 describe('members import', () => {
   function importMembers(rows: unknown[]) {
     return request(app).post('/v1/imports/members').set(writeHeaders).send({ rows });
