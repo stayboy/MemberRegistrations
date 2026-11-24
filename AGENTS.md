@@ -142,11 +142,21 @@ Durable process rules live in `documents/lessons.md`; `npm run verify` and `veri
 - The **git-executor** seat (`.opencode/agents/git-executor.md`; class `git-executor`, a free provider
   first and the metered one last, mapped in `documents/agents/seats.json`) may execute the command on a
   brief that quotes the owner's verb; the parent keeps the decision and verifies every result. The seat
-  never infers consent, runs one verb per brief, and parks when unavailable. The round doc declares
+  never infers consent, runs one verb per brief, and parks when unavailable. Its verbs are `branch`, `commit`,
+  `push`, `pr`, `merge`, `sync`, `tag` and `restore`; `restore` is the narrow undo
+  (`git checkout <revision> -- <paths>`), used only to undo the parent's own **uncommitted** edit, with the
+  revision, the exact paths and the reason stated - never a bare pathspec, never a glob, never a discard the
+  owner has not seen. The round doc declares
   `Verbs this round needs:` so the owner's go names them, and every write names its actor in the round
   doc's per-write table. The budget, its default, the retry, the probe and the ranking are
   `documents/agents/orchestrator-policy.md`'s; the model ids are
   `documents/agents/seats.json`'s.
+- **Branch before you edit.** A round cuts its branch and commits its round doc before anything else is written;
+  the doc is the one path the branch rule already allows to be dirty. A round that parks commits its work, or
+  names its dirty paths and the branch their lineage lives on, and the next round starts from a clean tree.
+- **Copy the brief's fields from the preflight.** A brief's `branch:`, `tree:` and `files:` come from
+  `npm run round:preflight` (or `node scripts/round/git-preflight.mjs`), never from memory: a stale hash is a
+  refusal, and a fabricated one is worse.
 - **`publish` is a seat, and it runs on clean `main` after the merge.** Dispatch the
   `publish-executor` seat (`.opencode/agents/publish-executor.md`; class `publish-executor` in
   `documents/agents/seats.json`) with a brief quoting the owner’s `publish`. It rebuilds the
