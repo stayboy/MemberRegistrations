@@ -21,6 +21,9 @@ import {
 } from './offerings.js';
 import { parentWindowSummary } from './series.js';
 import { renderAudienceSummary } from '../domain/audiences.js';
+import { evaluateAudience, evaluateAudienceDates } from '../domain/audience-evaluator.js';
+import { audienceMembers } from './audience-members.js';
+import { parseAudienceRule } from './row-values.js';
 import type { AudienceRule } from '../schemas/audiences.js';
 import type { SeriesSummary } from '../schemas/reference.js';
 import type {
@@ -891,7 +894,6 @@ type OccurrenceRow = {
   legacy_event_no: string | null;
   present: number | string;
   imported_rows: number | string;
-  expected: number | string;
   capture: unknown;
 };
 
@@ -958,11 +960,6 @@ select d.id
    and ($5::text is null or e.venue_type = $5::text)
  order by d.start_date, d.id
  limit $6::int offset $7::int`;
-
-function parseAudienceRule(value: unknown): AudienceRule {
-  if (typeof value === 'string') return JSON.parse(value) as AudienceRule;
-  return value as AudienceRule;
-}
 
 function occurrenceStatus(
   parentStatus: string,
@@ -1149,11 +1146,6 @@ export class EventRepository {
               (select count(*)::int from attendance a where a.occurrence_id = o.id) as present,
               (select count(*)::int from attendance a
                 where a.occurrence_id = o.id and a.source = 'import') as imported_rows,
-              (select count(*)::int from members m
-                where coalesce(m.joined_on, m.created_at::date) <= o.date
-                  and m.archived_at is null
-                  and m.purged_at is null
-                  and (not $4::boolean or m.is_presbyter)) as expected,
               (select jsonb_build_object(
                         'asOf', coalesce(g.as_of, g.any_as_of),
                         'ended', coalesce(g.ended, false)
@@ -1188,8 +1180,22 @@ export class EventRepository {
         where o.event_id = $1
           and o.date between $2::date and $3::date
         order by o.date`,
-      [parent.id, from, to, parent.presbyter_only],
+      [parent.id, from, to],
     );
+
+    // `expected` is the event's audience evaluated at each occurrence date; a
+    // headcount-only event has no per-member roster and reports zero. The rows
+    // arrive ordered by date, so one register read up to the last date serves
+    // every session in the window.
+    const dates = rows.map((row) => isoDate(row.date));
+    const expectedByDate =
+      parent.tracks_members && dates.length > 0
+        ? evaluateAudienceDates(
+            parseAudienceRule(parent.audience_rule),
+            await audienceMembers(this.db, dates[dates.length - 1]),
+            dates,
+          )
+        : new Map<string, number>();
 
     return rows.map((row) => {
       const date = isoDate(row.date);
@@ -1208,7 +1214,7 @@ export class EventRepository {
         capture,
         note: row.note,
         present,
-        expected: Number(row.expected),
+        expected: expectedByDate.get(date) ?? 0,
         importedRows,
         source: sessionSource(present, importedRows),
         legacyEventNo: row.legacy_event_no,
@@ -1847,11 +1853,13 @@ export class EventRepository {
 
     const [event] = await this.db.query<{
       id: string;
-      presbyter_only: boolean;
+      tracks_members: boolean;
+      audience_rule: unknown;
       occurrence_id: string | null;
     }>(
-      `select e.id, e.presbyter_only, o.id as occurrence_id
+      `select e.id, e.tracks_members, a.rule as audience_rule, o.id as occurrence_id
          from events e
+         join audiences a on a.id = e.audience_id
          left join event_occurrences o on o.event_id = e.id and o.date = $2
         where e.id = $1`,
       [eventId, sessionDate],
@@ -1880,21 +1888,21 @@ export class EventRepository {
       [event.occurrence_id],
     );
 
-    const [register] = await this.db.query<{ count: number | string }>(
-      `select count(*)::int as count
-       from members
-       where coalesce(joined_on, created_at::date) <= $1::date
-         and archived_at is null
-         and purged_at is null
-         and ($2::boolean = false or is_presbyter)`,
-      [sessionDate, event.presbyter_only],
-    );
+    // The roster is the audience at this occurrence's date. A headcount-only
+    // event keeps its audience for visibility but has no per-member roster.
+    const expected = event.tracks_members
+      ? evaluateAudience(
+          parseAudienceRule(event.audience_rule),
+          await audienceMembers(this.db, sessionDate),
+          sessionDate,
+        )
+      : 0;
 
     return {
       eventId,
       sessionDate,
       present: rows.length,
-      expected: Number(register?.count ?? 0),
+      expected,
       importedRows: rows.filter((row) => row.source === 'import').length,
       rows: rows.map((row) => ({
         id: row.id,

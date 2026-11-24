@@ -2,6 +2,7 @@ import type { Db, DbClient, Row } from '../db/sql.js';
 import { renderAudienceSummary } from '../domain/audiences.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
+import { parseAudienceRule } from './row-values.js';
 import type {
   Audience,
   AudienceRule,
@@ -26,13 +27,8 @@ function isoTimestamp(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-function parseRule(value: unknown): AudienceRule {
-  if (typeof value === 'string') return JSON.parse(value) as AudienceRule;
-  return value as AudienceRule;
-}
-
 function toAudience(row: AudienceRow): Audience {
-  const rule = parseRule(row.rule);
+  const rule = parseAudienceRule(row.rule);
   return {
     id: row.id,
     name: row.name,

@@ -222,9 +222,10 @@ active` clause (that is what `Everyone` is). There is no "matches everybody" sho
 
 - The rule is evaluated **at a date** (an occurrence's date for the roster and for visibility of that
   occurrence; today for a member-facing summary that asks about "my events").
-- A member is **in the evaluated register** when they are not purged, not archived, and `joined_on` is
-  null or `<= date`. This is the predicate today's roster uses, and it applies to visibility too: a
-  member does not see an occurrence dated before they joined.
+- A member is **in the evaluated register** when they are not purged, not archived, and their joined date is
+  null or `<= date` — where a null `joined_on` falls back to the member record's creation date, so a member
+  created after the occurrence is excluded from it. This is the predicate today's roster uses, and it applies to
+  visibility too: a member does not see an occurrence dated before they joined.
 - **Age is at the date.** Ministry membership, presbyter status and membership status are **current**,
   with no history: a member added to the choir today changes what the choir's audience reports for past
   dates, and a presbyter who steps down stops matching past presbyters' events. The register keeps no
