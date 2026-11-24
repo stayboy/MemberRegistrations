@@ -509,6 +509,12 @@ missing one as blocking:
   AC 17 here pins the behaviour. A stored daily rule no longer has to be read-only, and the test fixtures that used it
   stay valid. This is a behavioural amendment to an approved spec, so it carries its own review.
 - **Changelog 2026-11-24 (post-approval, owner ruling - behaviour):** **a period event keeps its provenance.** The earlier decision - resolve once, store dates, store nothing about the period - is reversed: the event now records `period_id`, `period_cycle` and a `period_name` snapshot, the **server** resolves the dates from `period { id, cycleMonth }` at create so preview and create share one authority, the read and the list expose it (`?period=`), and the detail shows one line. The name is a snapshot, so a renamed definition leaves the event reading as it was. This adds columns and changes the create body, which is why it re-enters both §17 gates.
+- **Changelog 2026-11-24 (post-approval, owner ruling — behaviour):** the period model becomes **ordinal**. The boundary
+  definition ("the week ending before the month's first Sunday") is **superseded**: on the pentecostal basis the communion
+  service is the Sunday of the **first week**, so a period is now a position — cadence, month in quarter, this month or
+  the month before, week 1–4 or last, weekday — and a week belongs to the month its Sunday falls in. This changes
+  Communion Week's dates in months that begin on a Sunday, which is the point of the ruling, and the code catalogue and
+  its date table change with it. Per-cycle exceptions stay in the event admin; the period carries none.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;
