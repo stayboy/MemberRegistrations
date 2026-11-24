@@ -394,12 +394,18 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
 - **Removing a period never touches an event** — there is no foreign key from events to periods, since the event holds
   dates and a snapshot.
 
+**The events list gains the matching filter** (owner, 2026-11-24): `#/events?period=<id>` shows the events created
+from that period, in the list's existing shape, with the period shown as a removable filter chip so the officer can see
+why the list is short and clear it. The count on the landing page and the filter's result must agree - both read the
+same `period_id` - so a click never lands on an empty list while the count says otherwise.
+
 **Routes** (officer-authenticated, through the same gateway): `GET /v1/periods?includeArchived`, `POST /v1/periods`,
 `GET /v1/periods/{id}`, `PUT /v1/periods/{id}` (edit name, definition, rule, active). The event form keeps reading
 `GET /v1/events/periods`, which now reads the table.
 
-**The screen.** A list of periods — name, definition, the rule in words, active/archived, and how many future events
-are scheduled into it (a count, not a link, in this round) — with one **New period** verb, and each row opening an
+**The screen.** A list of periods — name, definition, the rule in words, active/archived, and **how many events use it** - the count is a link that opens the events
+list filtered to that period (owner, 2026-11-24), at `#/events?period=<id>`, so the landing page answers "which events
+is this period for?" in one click rather than making an officer filter by hand — with one **New period** verb, and each row opening an
 edit dialog carrying **only** name, rule kind and its parameters, with the optional **definition last** (owner,
 2026-11-24) - it follows the weekday-of-cycle-month control and adds no explaining text of its own. **Archiving is a row action on the list,
 not part of the dialog** (owner, 2026-11-24): the dialog was stretching taller than the page it opens over, and the
