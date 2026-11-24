@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN - spec APPROVED, both gates GRANTED 2026-11-24; unattended from here                                                                                                                               |
+| Status                 | PARKED 2026-11-24 at the signed designs; the form is the next round's opening move                                                                                                                      |
 | Tier                   | 2 (wire contract + migration, by inspection: `event_audiences`, event number)                                                                                                                           |
 | Mode                   | `unattended (auto-accept recommendations)`                                                                                                                                                              |
 | Base                   | `b11adae`                                                                                                                                                                                               |
@@ -149,7 +149,15 @@ gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 
 ## Open
 
-- Owner approval of the amended spec, and the `0813` review verdict on this exact text.
-- The two §17 gates are not granted yet; no implementation brief is valid before they are named with the round.
-- No git verbs given: the round needs `branch` first (this slot is detached at `b11adae`), then `commit` per PR.
-- The original draft copy still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.
+- **Parked at the signed designs, not at a question.** Three PRs merged (contract, API + migration + resolver,
+  daily vocabulary), the fourth opened and its first commit landed: nine wire-design states, auto-signed and attested.
+- **The form is the next round's opening move.** It builds against those states: the builder component at both call
+  sites, the audience chips, the period control, the preview wiring, the guard's read-only state, its DOM tests, and
+  the `Mock coverage:` line R6 wants when `ui/src` changes.
+- **Budget: the round overran its declared 16.** Twenty-two git writes ran (three branch cuts, one refused twice, five
+  commits, four pushes, three PRs and three merges, plus the parent-run `sync`). The seats were unavailable for nearly
+  all of them — rung 1 free-usage limit, rung 2 shell-permission-denied — so the parent ran them with the reasons in
+  the `## Git writes` table. The overrun is recorded rather than rounded down: the next round's budget should be set
+  from this evidence, not from the default.
+- The round's lineage lives on `feat/event-periods-ui`, pushed, one commit ahead of `main@46f4886`.
+- The original draft still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.
