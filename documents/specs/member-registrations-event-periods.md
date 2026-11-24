@@ -241,6 +241,12 @@ Four changes to the event surface, and none to the money, attendance or import p
 - **A period resolves once, at save, into an ordinary standalone event.** The form submits the previewed dates as
   `occurrences[]`; no period id and no rule are stored, so nothing ever re-resolves and
   `POST /v1/events/generate` cannot touch it. The period's name may prefill the description.
+  - **A period can be added, edited or removed without touching a single event** (owner ruling, 2026-11-24): an event stores
+    dates, not a reference, so there is no foreign key and nothing to migrate. Editing a definition is not retroactive -
+    an event created last year keeps the dates it resolved to - and removing one only stops the form offering it. When
+    the catalogue becomes data and gets a screen (backlog: "named-period catalogue and authoring screen"), the rule is
+    the one audiences already follow: **archive, never delete**, so a form open across the change cannot fail on submit
+    against an id that vanished between render and save.
 - **Two read-only contract entries:** `GET /v1/events/periods` (id, name, definition) served from the code
   constants, registered before `/:id`; and `POST /v1/events/preview` - no persistence - accepting either the create's
   `recurrence` or `period: { id, cycleMonth }`, returning
