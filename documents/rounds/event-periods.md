@@ -100,6 +100,12 @@ Acceptance criteria are the amended spec's AC 1-16; they were written with the t
   "Mock" here means the **UI wire design**, not an API handler mock, which needs no sign-off. This supersedes the
   earlier order in which the states were re-cut from the build. The round therefore carries four PRs - contract
   (merged), API and migration, **the wire design**, then the UI - and the budget is 16 + N rather than 15.
+- **Design-first, second ruling of the same day (owner, 2026-11-24):** the wire design is an input to the **contract**,
+  not only to the UI - spec -> wire design (signed) -> contract -> API -> UI. Recorded in
+  `documents/agents/parallel-ui-api.md`, which is now a **protected** document (this commit adds it to the set with its
+  review record). **Debt:** this round's contract merged in PR #233 before any design existed, so the design is drawn
+  next and any gap it exposes is a small spec amendment plus a contract change **before** the UI PR. That means this
+  PR (2a + 2b) is the last one that can land before the designs exist.
   `documents/agents/parallel-ui-api.md` now records the distinction, because the contract-first seam is what allowed
   the two to be conflated.
 - Tier 2 parent-authored: the spec text and this round doc were authored by the parent, because the round's worker

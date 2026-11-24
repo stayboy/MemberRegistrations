@@ -15,6 +15,7 @@ const REPO_PROTECTED = [
   'AGENTS.md',
   'documents/agents/orchestrator-policy.md',
   'documents/agents/component-first.md',
+  'documents/agents/parallel-ui-api.md',
   'documents/lessons.md',
   'documents/rounds/README.md',
   '.github/merge-policy.md',
@@ -98,6 +99,7 @@ describe('protected documents', () => {
     expect(paths).toContain('AGENTS.md');
     expect(paths).toContain('documents/agents/orchestrator-policy.md');
     expect(paths).toContain('documents/agents/component-first.md');
+    expect(paths).toContain('documents/agents/parallel-ui-api.md');
     expect(paths).toContain('documents/lessons.md');
     expect(paths).toContain('documents/rounds/README.md');
     expect(paths).toContain('.github/merge-policy.md');
