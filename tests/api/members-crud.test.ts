@@ -691,7 +691,11 @@ describe('members list contract', () => {
       .send({
         name: 'Write Rule Today Series',
         timezone: 'UTC',
-        schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY', endsOn: day(0) },
+        schedule: {
+          effectiveFrom: day(0),
+          rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+          endsOn: day(0),
+        },
       });
     expect(todaySeries.status).toBe(201);
 

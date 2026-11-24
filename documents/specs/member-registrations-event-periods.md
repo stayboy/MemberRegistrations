@@ -265,11 +265,26 @@ missing one as blocking:
 
 ## Further Notes
 
-- **Order it lands in, and why:** contract (schemas, `openapi.json` snapshot, examples) -> API, migration and the
-  readers -> UI and mocks. `documents/agents/parallel-ui-api.md`'s frozen-contract seam makes this binding, and the
-  UI track builds against generated mocks only after the contract merges.
+- **Order it lands in, and why:** spec -> **the wire design** (`10-event-create` and its edit state drawn as `target`
+  and signed by the owner, or `auto-signed` under §17 if the round is unattended) -> contract (schemas, `openapi.json`
+  snapshot, examples) authored from both -> API, migration and the readers -> UI built to the frozen contract and the
+  signed design -> capture and the 1:1 comparison that closes the mock row. Design-first, per the owner's 2026-11-24
+  ruling recorded in `documents/agents/parallel-ui-api.md`: the wire design is an input to the contract because the
+  screen is its first consumer, and the frozen-contract seam never licenses building a screen whose states are
+  unsigned.
+  **Debt carried by this round:** the contract merged in PR #233 (the contract PR) before any wire design existed, so
+  the design is drawn now and any gap it exposes is a small spec amendment plus a contract change before the UI PR,
+  not a UI workaround.
 - **Gates:** the migration (`event_audiences`, `event_no NOT NULL`) and the wire contract both park until the owner
   names this round and the gate in one instruction (AGENTS.md §17).
+- **Changelog 2026-11-24 (post-approval, owner rulings):** the landing order changed twice in one day, in one
+  direction. First the **wire design** was placed before the UI code instead of the states being re-cut from the build;
+  then the owner adopted **design-first** outright, so the wire design is now an input to the **contract** as well:
+  spec -> wire design (signed) -> contract -> API -> UI. "Mock" in these decisions means the UI wire design, not an API
+  handler mock. Recorded in `documents/agents/parallel-ui-api.md`, which separates the two meanings and states the
+  gap rule (a field the design needs after the freeze is a spec amendment plus a contract change). The round carries
+  four PRs and its contract froze before any design existed, so that re-order is recorded as debt on the round. No
+  behaviour changes.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;

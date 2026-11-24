@@ -251,8 +251,14 @@ describe('0022 headcount lanes backfill', () => {
       expect(migration).toBeTruthy();
       await db.exec(migration!.sql);
       // The parent model lands after the lane reshape; the repository reads it.
+      // 0028 is excluded on purpose: it asserts that every event already has an
+      // `event_audiences` row, and this synthetic legacy event predates that
+      // writer obligation. The refusal itself is covered by
+      // `event-audiences-migration.test.ts`.
       for (const later of MIGRATIONS) {
-        if (later.version > '0022_headcount_lanes') await db.exec(later.sql);
+        if (later.version > '0022_headcount_lanes' && later.version < '0028_event_audiences') {
+          await db.exec(later.sql);
+        }
       }
 
       // The reshape tolerates the duplicate tips: no row added, none rewritten,

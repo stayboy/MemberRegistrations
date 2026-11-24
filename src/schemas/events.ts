@@ -400,8 +400,11 @@ export const eventRecurrenceSchema = z.object({
 });
 
 /**
- * The recurrence write contract. `rrule` is the RRULE body only: `COUNT` and
- * `UNTIL` are refused inside it because the end is `endsOn` (Recurrence).
+ * The recurrence write contract. `rrule` is the RRULE body only, inside the
+ * closed authored vocabulary: weekly with `BYDAY` and `INTERVAL` 1-4, monthly
+ * with `BYMONTHDAY`, or monthly positional with `BYSETPOS=±1` and exactly one
+ * `BYDAY`. A weekly rule carrying `INTERVAL` is stored with `WKST=SU`.
+ * `COUNT` and `UNTIL` are refused inside it because the end is `endsOn`.
  */
 export const recurrenceRuleInputSchema = z
   .string()
@@ -410,7 +413,10 @@ export const recurrenceRuleInputSchema = z
   .max(200)
   .refine((value) => !/(^|;)\s*(?:COUNT|UNTIL)\s*=/i.test(value), {
     message: 'rrule must not carry COUNT or UNTIL; set endsOn instead',
-  });
+  })
+  .describe(
+    'The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU.',
+  );
 
 /** A standalone event's date row. Blank times inherit the parent's defaults. */
 export const eventOccurrenceInputSchema = z.object({

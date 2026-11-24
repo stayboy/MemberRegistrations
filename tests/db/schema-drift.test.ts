@@ -5,6 +5,7 @@ import { migrate } from '../../src/db/migrate.js';
 import { MIGRATIONS } from '../../src/db/migrations.js';
 import {
   audiences,
+  eventAudiences,
   eventOccurrences,
   eventOfferings,
   eventRecurrenceExceptions,
@@ -185,6 +186,7 @@ describe('ORM schema drift', () => {
     ['ministry_positions', ministryPositions],
     ['audiences', audiences],
     ['events', events],
+    ['event_audiences', eventAudiences],
     ['event_recurrence_versions', eventRecurrenceVersions],
     ['event_recurrence_exceptions', eventRecurrenceExceptions],
     ['event_occurrences', eventOccurrences],
@@ -227,6 +229,16 @@ describe('ORM schema drift', () => {
     );
     expect(sortByName(await dbIndexes(db, 'ussd_sessions'))).toEqual(
       sortByName(schemaIndexes(ussdSessions)),
+    );
+  });
+
+  it('matches the event audience set and the required event number', async () => {
+    expect(sortByName(await dbIndexes(db, 'events'))).toEqual(sortByName(schemaIndexes(events)));
+    expect(await dbForeignKeys(db, 'event_audiences')).toEqual(schemaForeignKeys(eventAudiences));
+    // The only index on the set is its composite primary key; the drift helper
+    // excludes primary keys, so both sides are empty.
+    expect(sortByName(await dbIndexes(db, 'event_audiences'))).toEqual(
+      sortByName(schemaIndexes(eventAudiences)),
     );
   });
 

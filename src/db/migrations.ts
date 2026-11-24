@@ -2114,4 +2114,53 @@ update events e
        );
 `,
   },
+  {
+    version: '0028_event_audiences',
+    sql: `
+-- An event carries an ordered set of audiences and they compose by
+-- intersection (member-registrations-event-audience.md A-2a). This table is the
+-- only authority for who an event is for; events.audience_id stays a
+-- write-only revert shim that mirrors the primary.
+create table if not exists event_audiences (
+  event_id uuid not null references events(id) on delete cascade,
+  audience_id uuid not null references audiences(id),
+  sort_order integer not null,
+  primary key (event_id, audience_id)
+);
+
+-- Assert before constraining, in this order. A dev database that still holds
+-- an event whose writer did not write the set must fail the deploy rather than
+-- ship a zero-roster event; the register is empty, so the assertions are a
+-- tripwire and not a backfill.
+do $$
+declare bad record;
+begin
+  select e.id, e.name into bad
+    from events e
+   where not exists (
+     select 1 from event_audiences ea where ea.event_id = e.id
+   )
+   limit 1;
+  if found then
+    raise exception 'Event % (%) has no event_audiences row; every writer must write the audience set',
+      bad.id, bad.name using errcode = '23514';
+  end if;
+
+  select e.id, e.name into bad
+    from events e
+   where e.event_no is null
+   limit 1;
+  if found then
+    raise exception 'Event % (%) has no event number; the register must mint one before the column is required',
+      bad.id, bad.name using errcode = '23514';
+  end if;
+end $$;
+
+-- The event number is minted and required on read, so the column is no longer
+-- optional and the partial unique index becomes a plain one.
+alter table events alter column event_no set not null;
+drop index if exists events_event_no;
+create unique index if not exists events_event_no on events (event_no);
+`,
+  },
 ];

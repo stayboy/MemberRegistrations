@@ -61,10 +61,147 @@ export function todayIn(timeZone: string, at: Date = new Date()): string {
   }).format(at);
 }
 
+const WEEKDAYS: readonly string[] = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+const AUTHORED_KEYS = new Set(['FREQ', 'BYDAY', 'INTERVAL', 'BYMONTHDAY', 'BYSETPOS', 'WKST']);
+
+function parseBody(normalized: string): Map<string, string> {
+  const parts = new Map<string, string>();
+  for (const chunk of normalized.split(';')) {
+    const separator = chunk.indexOf('=');
+    if (separator <= 0) {
+      throw new ValidationError(
+        `rrule must be semicolon-separated KEY=VALUE pairs, such as FREQ=WEEKLY;BYDAY=SU: ${normalized}`,
+      );
+    }
+    const key = chunk.slice(0, separator);
+    const value = chunk.slice(separator + 1);
+    if (!value) {
+      throw new ValidationError(`rrule: ${key} has no value`);
+    }
+    if (!AUTHORED_KEYS.has(key)) {
+      throw new ValidationError(
+        `rrule: ${key} is outside the authored vocabulary (FREQ, BYDAY, INTERVAL, BYMONTHDAY, BYSETPOS, WKST)`,
+      );
+    }
+    if (parts.has(key)) {
+      throw new ValidationError(`rrule: ${key} appears more than once`);
+    }
+    parts.set(key, value);
+  }
+  return parts;
+}
+
 /**
- * Accepts an RRULE body only (`FREQ=WEEKLY;BYDAY=SU`). `COUNT` and `UNTIL` are
+ * The authored schedule vocabulary is closed (member-registrations-event-periods.md,
+ * "Schedules"): a weekly rule with a weekday set and an interval of 1-4, a
+ * monthly rule on a day-of-month, or a monthly positional rule
+ * (`BYSETPOS=±1` with exactly one weekday). Anything else - `FREQ=DAILY`,
+ * `COUNT`, `BYMONTH`, positional weekly days, a second `BYSETPOS` - is refused
+ * on a **write**; a stored rule outside it still expands and reads (a read
+ * never calls this function), which is why the scheduler keeps working on
+ * legacy rows.
+ */
+function assertVocabulary(normalized: string): Map<string, string> {
+  const parts = parseBody(normalized);
+  const freq = parts.get('FREQ');
+  if (freq !== 'WEEKLY' && freq !== 'MONTHLY') {
+    throw new ValidationError(
+      `rrule: FREQ must be WEEKLY or MONTHLY; the schedule vocabulary has no other cadence`,
+    );
+  }
+
+  const interval = parts.get('INTERVAL');
+  if (interval !== undefined && !/^[1-4]$/.test(interval)) {
+    throw new ValidationError('rrule: INTERVAL must be 1, 2, 3 or 4');
+  }
+
+  const weekStart = parts.get('WKST');
+  if (weekStart !== undefined && !WEEKDAYS.includes(weekStart)) {
+    throw new ValidationError(`rrule: WKST must be one of ${WEEKDAYS.join(', ')}`);
+  }
+
+  const byDay = parts.get('BYDAY');
+  const byMonthDay = parts.get('BYMONTHDAY');
+  const bySetPos = parts.get('BYSETPOS');
+
+  if (freq === 'WEEKLY') {
+    if (byMonthDay || bySetPos) {
+      throw new ValidationError(
+        'rrule: a weekly rule takes BYDAY only; BYMONTHDAY and BYSETPOS belong to a monthly rule',
+      );
+    }
+    if (!byDay) {
+      throw new ValidationError(
+        'rrule: a weekly rule needs BYDAY (a weekday set such as MO,TH,FR)',
+      );
+    }
+    for (const day of byDay.split(',')) {
+      if (!WEEKDAYS.includes(day)) {
+        throw new ValidationError(
+          `rrule: BYDAY must be plain weekdays (${WEEKDAYS.join(', ')}); positional days belong in a monthly BYSETPOS rule`,
+        );
+      }
+    }
+    return parts;
+  }
+
+  if (bySetPos !== undefined) {
+    if (bySetPos !== '1' && bySetPos !== '-1') {
+      throw new ValidationError('rrule: BYSETPOS must be 1 or -1');
+    }
+    if (!byDay) {
+      throw new ValidationError(
+        'rrule: a monthly positional rule needs BYDAY naming exactly one weekday',
+      );
+    }
+    const days = byDay.split(',');
+    if (days.length !== 1 || !WEEKDAYS.includes(days[0]!)) {
+      throw new ValidationError(
+        'rrule: a monthly positional rule takes exactly one plain weekday in BYDAY',
+      );
+    }
+    if (byMonthDay !== undefined) {
+      throw new ValidationError('rrule: a monthly rule takes BYMONTHDAY or BYSETPOS, not both');
+    }
+    return parts;
+  }
+
+  if (byMonthDay !== undefined) {
+    if (byDay !== undefined) {
+      throw new ValidationError(
+        'rrule: monthly on a day-of-month takes BYMONTHDAY alone; a weekday needs BYSETPOS',
+      );
+    }
+    if (!/^(?:[1-9]|[12]\d|3[01])$/.test(byMonthDay)) {
+      throw new ValidationError('rrule: BYMONTHDAY must be a single day of the month, 1-31');
+    }
+    return parts;
+  }
+
+  throw new ValidationError(
+    'rrule: a monthly rule needs BYMONTHDAY or BYSETPOS with exactly one BYDAY',
+  );
+}
+
+/**
+ * RFC 5545 counts `INTERVAL` weeks from `WKST` (Monday by default), while the
+ * church week is Sunday-to-Saturday, so every weekly rule carrying an interval
+ * is stored with `WKST=SU`. A rule without `INTERVAL` is untouched: the week
+ * start changes nothing there. Stored rules are never rewritten on read, so a
+ * legacy rule without `WKST` keeps its Monday meaning.
+ */
+function withWeekStart(parts: Map<string, string>, normalized: string): string {
+  if (parts.get('FREQ') !== 'WEEKLY') return normalized;
+  if (!parts.has('INTERVAL') || parts.has('WKST')) return normalized;
+  return `${normalized};WKST=SU`;
+}
+
+/**
+ * Accepts an RRULE body only (`FREQ=WEEKLY;BYDAY=SU`), inside the closed
+ * authored vocabulary, and normalises it to upper case. `COUNT` and `UNTIL` are
  * rejected: the series end date is the `endsOn` column, and two sources of
- * truth for "when does this stop" is one too many.
+ * truth for "when does this stop" is one too many. A weekly rule with an
+ * interval gains `WKST=SU`; an accepted `WKST` round-trips unchanged.
  */
 export function validateRrule(body: string): string {
   const normalized = body.trim().toUpperCase();
@@ -75,14 +212,15 @@ export function validateRrule(body: string): string {
     throw new ValidationError('rrule must not contain COUNT or UNTIL; use endsOn instead');
   }
 
+  const stored = withWeekStart(assertVocabulary(normalized), normalized);
   try {
-    const rule = rrulestr(`DTSTART:20260101T000000Z\nRRULE:${normalized}`);
+    const rule = rrulestr(`DTSTART:20260101T000000Z\nRRULE:${stored}`);
     rule.between(toUtc('2026-01-01'), toUtc('2026-12-31'), true);
   } catch {
     throw new ValidationError(`rrule is not valid: ${body}`);
   }
 
-  return normalized;
+  return stored;
 }
 
 /** Dates the schedule produces inside [from, to], bounded by its own start/end. */

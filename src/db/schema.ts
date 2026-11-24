@@ -177,13 +177,15 @@ export const audiences = pgTable(
 
 /**
  * The event parent. `ministry_id` and `presbyter_only` are the audience
- * round's read-only legacy projections; `audience_id` is the applicability.
+ * round's read-only legacy projections; `event_audiences` (below) is the
+ * applicability, and `audience_id` is the write-only revert shim that mirrors
+ * its primary row.
  */
 export const events = pgTable(
   'events',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    eventNo: text('event_no'),
+    eventNo: text('event_no').notNull(),
     name: text('name').notNull(),
     audienceId: uuid('audience_id')
       .notNull()
@@ -203,12 +205,28 @@ export const events = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('events_event_no')
-      .on(table.eventNo)
-      .where(sql`${table.eventNo} is not null`),
+    uniqueIndex('events_event_no').on(table.eventNo),
     check('events_venue_type_check', sql`${table.venueType} in ('auditorium','virtual','hybrid')`),
     check('events_status_check', sql`${table.status} in ('draft','active','archived')`),
   ],
+);
+
+/**
+ * The ordered audience set: the only authority for who an event is for
+ * (A-2a). The first row is the primary and mirrors into `events.audience_id`.
+ */
+export const eventAudiences = pgTable(
+  'event_audiences',
+  {
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    audienceId: uuid('audience_id')
+      .notNull()
+      .references(() => audiences.id),
+    sortOrder: integer('sort_order').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.eventId, table.audienceId] })],
 );
 
 export const eventRecurrenceVersions = pgTable(

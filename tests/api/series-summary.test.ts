@@ -221,7 +221,7 @@ beforeAll(async () => {
       name: 'Draft Series',
       timezone: 'UTC',
       effectiveFrom: held1,
-      rrule: 'FREQ=DAILY',
+      rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
       endsOn: held2,
     },
     'seed',

@@ -10,25 +10,27 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "6d02d8d358dfb49507fcd9fa6dec9a1b88c4ab5677c30a6c8ab47830bd3b4e5b",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
-      "model": "deepseek-v4-pro",
+      "sha256": "35a71354b7388e217b6d7be4e7ff3dd7826a7f33fb0acab1f2ae8c41ff67ac67",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
+      "model": "mimo-v2.6-pro",
       "build": "0813",
-      "reason": "changes: section 2 gains a bullet defining `grill-me` as the session trigger rather than the name of a skill file (the method is the `grilling` skill, the seat is section 17's `grill-flash` class), and recording the owner's 2026-11-24 ruling that the round records the seat's frontier and the seat's answers, with a parent-written and relayed frontier named as the owner answering directly under section 2 - legal, but recorded in `## Deviations` rather than labelled a grill. why: the owner asked whether `grill` and `grill-me` are verbs in the vocabulary and whether they load a skill; they are absent from the merge-policy glossary, section 17 pins the class without saying what the instruction is, and the parent twice opened a round with its own frontier and had it recorded as a grill. rejected: the first wording (\"not a git verb and loads no file\"), which contradicted section 1's placement of the procedure in the `orchestrator` skill and was replaced; stating the seat requirement as a description of existing fact rather than as the owner's ruling; and \"refuse or re-run\" as the consequence, which section 2's direct-answer allowance rules out.",
-      "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; outside the 12:00-18:00 window) read the working-tree text of `AGENTS.md` sections 1, 2 and 17, `.github/merge-policy.md`'s glossary, `documents/agents/orchestrator-policy.md`, `documents/agents/seats.json` and `documents/rounds/README.md`, and returned ACCEPT on a confirmation pass after an earlier REWORK. The REWORK found two things: the phrase \"loads no file\" contradicted section 1, which places the grill procedure in the orchestrator skill, and the seat-authored-frontier requirement was presented as existing fact when neither section 17 nor the round-doc template states it. Both were fixed, and the confirmation confirmed that the recording home named (`## Deviations`) exists, that the section 2 direct-answer path is reconciled so \"not a grill\" corrects only the label, and that no clause survives which a future round could cite to skip the seat. Noted: the reviewer could not read `~/.agents/skills/` itself, so the `grilling` skill name rests on the parent's assertion.",
-      "at": "2026-11-24"
+      "reason": "changes: section 10a adds documents/agents/parallel-ui-api.md to the protected set, dated 2026-11-24, so editing the design-first workflow now needs the reviewer seat and a hash record. why: the document owns a non-negotiable (the wire design precedes UI code and shapes the contract) and was amended twice in a day without that gate. rejected: leaving protection to the backlog row alone, which is what allowed the two amendments to land ahead of a review.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
+      "at": "2026-11-24T17:45:00Z",
+      "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813."
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "55df47ba991201b587b374d36aa4f8c15470cc659f3222c2239fe804413d39a1",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
-      "model": "deepseek-v4-pro",
+      "sha256": "1cb28ba459fcc804d3b3aa5e64d5b786568224c7cc02ed6274a0c25c378f63a8",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
+      "model": "mimo-v2.6-pro",
       "build": "0813",
-      "reason": "changes: `## Parallel workers` gains one pointer bullet: a UI-and-API round's contract seam, generated mocks and conformance gate are `documents/agents/parallel-ui-api.md`'s, while this section keeps the general track eligibility, the worker cap and the parent's integration; that document's frozen-contract rule governs those rounds. why: the workflow binds from 2026-11-23 by the `AGENTS.md` section 3a sentence, and this section is the one an orchestrator reads before a parallel round. rejected: a second statement of the frozen-contract rule and the conformance gate here (the one-owner rule keeps them in the workflow document); leaving the pointer out and relying on section 3a alone.",
-      "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` reviewed the exact working-tree text on 2026-11-23: ACCEPT, with one non-blocking nit - the word 'eligibility' carries two referents (the general track eligibility owned here and the frozen-contract eligibility added by the document); not applied, and the wording is accepted as reviewed. It confirmed the bullet delegates the seam, mocks and conformance without restating them, and does not contradict the eligibility, worker-cap or integration rules that stay. The reviewer could not recompute the sha256 (shell denied); the parent computed it and the test recomputes it.",
-      "at": "2026-11-23"
+      "reason": "changes: the \"Protected documents\" list names documents/agents/parallel-ui-api.md, matching AGENTS.md section 10a and tests/meta/protected-doc-review.test.ts. why: the policy and the guard must name the same set, or a document is protected in one file and not another. rejected: protecting it only in the guard, which would make the test the only source of truth.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
+      "at": "2026-11-24T17:45:00Z",
+      "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813."
     },
     {
       "path": "documents/agents/component-first.md",
@@ -261,6 +263,17 @@
       "verdict": "ACCEPT",
       "attestation": "`deepseek-v4-pro:0813` (first choice; outside the 12:00-18:00 window) read the exact working-tree text of both catalogues, `ui/e2e/attendance-panel.spec.ts`, `documents/specs/member-registrations-events-offerings.md` (the amended AC-7a and its changelog) and `documents/backlog.md`, and returned ACCEPT with two P2s. It confirmed `target` is honest and that voiding an owner signature through it follows section 17 (only the owner restores `signed`), that AC-20's case proves \"lists the offending rows against the chosen session\" without overclaiming, that the confirmation clause of AC-7a is asserted, and that changing `acsMatch` to the shipped label was the correct fix rather than keeping the old one. P2s: AC-7a's \"offered only while live\" clause is unproven and is backlogged rather than claimed; `AD-END-SESSION`'s wording is stale and corrects at the re-cut. Hash recomputation is the parent's; `tests/meta/mock-claims.test.ts` and `tests/meta/protected-doc-review.test.ts` are the tripwires.",
       "at": "2026-11-23"
+    },
+    {
+      "path": "documents/agents/parallel-ui-api.md",
+      "sha256": "3903ce377416c94971165936de025ce26327c334fa8ea684a2f73c2d675204da",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
+      "model": "mimo-v2.6-pro",
+      "reason": "changes: the document joins the protected set and gains two rules from the owner 2026-11-24 - a surface wire design is signed before UI code that adds or changes its states, and (design-first) the wire design is an input to the contract, which is rendered from the approved spec and the signed design with the spec as authority. It also separates an API mock (generated from the frozen contract, no sign-off) from a wire design, which is the confusion the contract-first seam allowed. why: the seam let a round start UI work with unsigned states, and the owner ruled the look is agreed before code and that the screen shapes the contract while the contract is still cheap. rejected: a UI-code-only gate (too late to shape the contract); leaving the document unprotected (it owns a non-negotiable ordering rule and qualifies the canonical parallel-workers eligibility rule); and an exclusion-clause style rule written into this document instead of borrowing Mock parity exemptions.",
+      "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
+      "at": "2026-11-24T17:45:00Z"
     }
   ]
 }

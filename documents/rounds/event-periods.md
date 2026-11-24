@@ -1,18 +1,18 @@
 # Round — event-periods
 
-|                        |                                                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN - spec APPROVED, both gates GRANTED 2026-11-24; unattended from here                            |
-| Tier                   | 2 (wire contract + migration, by inspection: `event_audiences`, event number)                        |
-| Mode                   | `unattended (auto-accept recommendations)`                                                           |
-| Base                   | `b11adae`                                                                                            |
-| Review rounds          | 1 (behavioural: four passes, contradicted x3 then consistent)                                        |
-| Gate runs in parent    | 0                                                                                                    |
-| Spec                   | `documents/specs/member-registrations-event-periods.md` (APPROVED 2026-11-24)                        |
-| Workers                | `single`                                                                                             |
-| Implementer            | `parent cline-pass/deepseek-v4.1-flash-1017 (grill, integration)`                                    |
-| Verbs this round needs | `branch, commit, push, pr, merge` — granted 2026-11-24 by the owner's "go"                           |
-| git-seat-budget        | 15 (owner, 2026-11-24: `3 branch + N commits + 3 push + 3 pr + 3 merge` = 12 + N, one commit per PR) |
+|                        |                                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                 | OPEN - spec APPROVED, both gates GRANTED 2026-11-24; unattended from here                                                                                                                               |
+| Tier                   | 2 (wire contract + migration, by inspection: `event_audiences`, event number)                                                                                                                           |
+| Mode                   | `unattended (auto-accept recommendations)`                                                                                                                                                              |
+| Base                   | `b11adae`                                                                                                                                                                                               |
+| Review rounds          | 1 (behavioural: four passes, contradicted x3 then consistent)                                                                                                                                           |
+| Gate runs in parent    | 0                                                                                                                                                                                                       |
+| Spec                   | `documents/specs/member-registrations-event-periods.md` (APPROVED 2026-11-24)                                                                                                                           |
+| Workers                | `single`                                                                                                                                                                                                |
+| Implementer            | `parent cline-pass/deepseek-v4.1-flash-1017 (grill, integration)`                                                                                                                                       |
+| Verbs this round needs | `branch, commit, push, pr, merge` — granted 2026-11-24 by the owner's "go"                                                                                                                              |
+| git-seat-budget        | 16 (owner, 2026-11-24: now `4 branch + N commits + 4 push + 4 pr + 4 merge` = 16 + N, because the look gets its own PR; 15 was the three-PR arithmetic before the owner ruled the look precedes the UI) |
 
 ## Grill
 
@@ -95,6 +95,19 @@ Acceptance criteria are the amended spec's AC 1-16; they were written with the t
   `presbyterOnly` derivation, so it **shrinks** a multi-audience event to one audience. That matches AC 9's blessed
   shrink path (`PATCH` to one audience) and is accepted for this round because the legacy route exists only for
   unmoved callers; the route is retired with the shim column in the backlog row that drops `audience_id`.
+- **The wire design precedes the UI (owner, 2026-11-24, direct answer):** the states for `10-event-create` and its edit
+  form are drawn as `target` and signed **before** any UI code, and the build is captured and compared 1:1 afterwards.
+  "Mock" here means the **UI wire design**, not an API handler mock, which needs no sign-off. This supersedes the
+  earlier order in which the states were re-cut from the build. The round therefore carries four PRs - contract
+  (merged), API and migration, **the wire design**, then the UI - and the budget is 16 + N rather than 15.
+- **Design-first, second ruling of the same day (owner, 2026-11-24):** the wire design is an input to the **contract**,
+  not only to the UI - spec -> wire design (signed) -> contract -> API -> UI. Recorded in
+  `documents/agents/parallel-ui-api.md`, which is now a **protected** document (this commit adds it to the set with its
+  review record). **Debt:** this round's contract merged in PR #233 before any design existed, so the design is drawn
+  next and any gap it exposes is a small spec amendment plus a contract change **before** the UI PR. That means this
+  PR (2a + 2b) is the last one that can land before the designs exist.
+  `documents/agents/parallel-ui-api.md` now records the distinction, because the contract-first seam is what allowed
+  the two to be conflated.
 - Tier 2 parent-authored: the spec text and this round doc were authored by the parent, because the round's worker
   seat builds code and this opening commit carries none.
 
@@ -119,6 +132,8 @@ because this commit carries no code.
 | --------------------- | -------------------------- | ------ |
 | pre-commit (this doc) | `npm run verify:precommit` | pass   |
 | PR 1 contract         | `npm run verify:fast`      | pass   |
+| PR 2 API + migration  | `npm run verify:fast`      | pass   |
+| PR 2 smoke            | `npm run smoke`            | pass   |
 
 gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 

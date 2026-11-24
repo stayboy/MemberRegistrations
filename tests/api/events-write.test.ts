@@ -669,7 +669,7 @@ describe('recurrence writes', () => {
     expect(appended.body.schedules[0]).toMatchObject({ effectiveFrom: '2027-01-03' });
     expect(appended.body.schedules[1]).toMatchObject({
       effectiveFrom: '2027-02-07',
-      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
       endsOn: '2027-12-26',
     });
 

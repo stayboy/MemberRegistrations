@@ -1,10 +1,11 @@
-# Parallel UI and API build — the contract-first workflow
+# Parallel UI and API build - design-first, contract-frozen
 
-|            |                                                                                                                                                                   |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | approved 2026-11-22 ("all as recommended"); **binding since 2026-11-23** — `AGENTS.md` §3a names it, reviewed by `0813` in `documents/rounds/workflow-binding.md` |
-| Supersedes | nothing; it qualifies the "pipeline, do not overlap" ruling of the same day                                                                                       |
-| Relates to | `AGENTS.md` §3a, `documents/agents/orchestrator-policy.md`, the event-parent round                                                                                |
+|            |                                                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status     | approved 2026-11-22 ("all as recommended"); **binding since 2026-11-23** — `AGENTS.md` §3a names it, reviewed by `0813` in `documents/rounds/workflow-binding.md`         |
+| Supersedes | nothing; it qualifies the "pipeline, do not overlap" ruling of the same day                                                                                               |
+| Amended    | 2026-11-24 (twice): the wire design precedes UI code, and an API mock is separated from a wire design; then **design-first** - the wire design also precedes the contract |
+| Relates to | `AGENTS.md` §3a, `documents/agents/orchestrator-policy.md`, the event-parent round                                                                                        |
 
 ## Problem Statement
 
@@ -19,9 +20,10 @@ complete, not by a single green request.
 
 ## Solution
 
-Split "the API is written" from "the API is implemented". The contract is authored from the approved spec before the
-backend work starts: every endpoint, request and **successful response** (status and body shape, with one realistic
-example). The UI builds against that contract through generated mocks; the backend builds to the same contract. When
+Split "the API is written" from "the API is implemented". The contract is authored from the **approved spec and the
+signed wire design** before the backend work starts: every endpoint, request and **successful response** (status and
+body shape, with one realistic example). The UI builds against that contract through generated mocks; the backend
+builds to the same contract. When
 the backend completes, the work moves to a **conformance pass** — the implemented API is diffed against the contract,
 the examples are exercised against the real server, and the UI's mock for each endpoint is replaced only when its
 endpoint conforms.
@@ -65,7 +67,8 @@ does not exist.
 
 ## Implementation Decisions
 
-- **The contract is the approved spec, rendered.** For a round, the contract document lists every endpoint the round
+- **The contract is the approved spec and the signed wire design, rendered - the spec is the authority, the design the
+  shaping input.** For a round, the contract document lists every endpoint the round
   needs, its request, and its **successful** response: status (`200`, `201`, `204`, …) and body shape, plus one
   realistic example per response. Error shapes stay in the spec's problem+json table; the contract is not an
   error-catalogue replacement.
@@ -77,7 +80,7 @@ does not exist.
   document is the candidate.
 - **The round opens with a contract-only PR.** Schemas, examples and the snapshot, no handler change, merged before
   either track branches. Without it the contract is not frozen and the tracks are not parallel-eligible.
-- **The UI mock is generated from the contract.** The UI's handlers and fixtures are produced from the contract's
+- **The API mock is generated from the contract.** The UI's handlers and fixtures are produced from the contract's
   examples (one handler per endpoint), not written from prose. Hand-written mock bodies are rejected because they
   invent shapes.
 - **Conformance covers the whole document.** Any drift fails; the round's endpoints are the merge gate, and unrelated
@@ -102,6 +105,37 @@ does not exist.
   endpoint passes with the mock removed. A single 200 in a unit test is not delivery.
 - **The focus moves after implementation.** When the backend dispatch completes, the next dispatch is the conformance
   pass, not the next feature. It reports the endpoints conformant, the drift found, and the mocks still in play.
+- **The wire design is an input to the contract, not only to the UI (owner, 2026-11-24).** The screen is the
+  contract's first consumer, and the data it needs _is_ the contract's shape, so the signed wire design precedes the
+  contract's freeze rather than following it: spec -> wire design (states drawn as `target`, signed) -> contract
+  authored from both -> API -> UI built to the frozen contract and the signed design -> capture. That chain is the
+  **landing order**, not a bar to parallel development: once the contract freezes the two tracks run in parallel as
+  "Two clocks, one merge gate" describes, and the pipeline interleave is unchanged. Where a round draws no screen -
+  a contract-only entry such as the legacy aliases, or a round with no UI at all - there is no wire design to author
+  from, and the spec alone governs. A contract authored before any state exists cannot be validated by its consumer.
+  - **A gap the design exposes is a spec amendment, not a UI workaround - before the freeze or after it.** If the
+    signed design wants a field the spec or the contract lacks, the spec is amended first (AGENTS.md §1) and the
+    contract follows, with the same review the contract had; the UI does not bend to a shape the screen cannot use,
+    and the backend does not invent one. The pre-freeze case is the idiomatic one - the design is exactly what
+    reveals a missing field while the contract is still a cheap text file - and the post-freeze case costs a contract
+    amendment PR.
+  - **A round that already froze its contract without a wire design** (the case on 2026-11-24, round `event-periods`,
+    where the contract merged first) carries the debt explicitly: the wire designs are drawn next, and any gap they
+    expose is that small contract amendment before the UI PR, recorded in the round doc as a known re-order.
+- **The wire design precedes the UI track, and "mock" means two unrelated things.** The word has been used for both and
+  once was confused: an **API mock** is a handler or fixture generated from the frozen contract and needs no visual
+  sign-off at all, while a **wire design** (the mockup) is the drawn state of a screen, recorded under `mockups/` with
+  a catalogue entry. The contract-first seam licenses the UI track to start _reading_ against generated API mocks; it
+  does **not** license the screen. **A surface's wire design is agreed and signed before UI code that adds or changes
+  that surface's states is written** (owner, 2026-11-24) - signed by the owner, or `auto-signed` under `AGENTS.md` §17
+  in an unattended round. Its states are drawn as `target`, signed, and only then built; the build is captured
+  afterwards and compared 1:1 against the signed state, which is the state the round cites under `check-round`'s R6.
+  A round that builds a screen whose states are unsigned is out of order even when its contract is frozen. **Any
+  re-cut voids the signature** - including one taken from the build - and the state returns to `target` until it is
+  signed again; the 1:1 comparison against the archived previous version is the disposition recorded when it is.
+  **Exemptions are Mock parity's, not this bullet's**: a Tier 0/Tier 1 bug or copy-only round needs no drawn state,
+  and a test-only or helper change under `ui/src/` is not a surface, exactly as `check-round`'s R6 already decides.
+  The gate is a UI-surface gate; a USSD flow's states follow Mock parity's timing, not this bullet.
 - **The pipeline order survives.** Inside a parallel build the read surface is contracted and implemented first, the
   read screens follow, then the write surface, its screens, then capture and the import panel. Parallelism shortens
   the waits; it does not reorder the risk.

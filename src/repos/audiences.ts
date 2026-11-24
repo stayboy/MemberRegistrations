@@ -1,5 +1,7 @@
 import type { Db, DbClient, Row } from '../db/sql.js';
 import { renderAudienceSummary } from '../domain/audiences.js';
+import { evaluateAudience } from '../domain/audience-evaluator.js';
+import { audienceMembers } from './audience-members.js';
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { parseAudienceRule } from './row-values.js';
@@ -72,7 +74,13 @@ async function assertMinistryCodes(db: DbClient, rule: AudienceRule): Promise<vo
 export class AudienceRepository {
   constructor(private readonly db: Db) {}
 
-  async list(includeArchived = false): Promise<Audience[]> {
+  /**
+   * Reference data, ordered by name. `countAt` evaluates each audience's own
+   * rule at that UTC date and adds `memberCount`; without it the field is
+   * absent, because there is no invented "today". The counts are each audience
+   * on its own and do not sum to an event's roster, which is the intersection.
+   */
+  async list(includeArchived = false, countAt?: string): Promise<Audience[]> {
     const rows = await this.db.query<AudienceRow>(
       `select ${COLUMNS}
          from audiences
@@ -80,7 +88,14 @@ export class AudienceRepository {
         order by lower(name), id`,
       [includeArchived],
     );
-    return rows.map(toAudience);
+    const items = rows.map(toAudience);
+    if (!countAt) return items;
+
+    const register = await audienceMembers(this.db, countAt);
+    return items.map((item) => ({
+      ...item,
+      memberCount: evaluateAudience(item.rule, register, countAt),
+    }));
   }
 
   async get(id: string): Promise<Audience | null> {

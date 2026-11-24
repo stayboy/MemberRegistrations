@@ -100,6 +100,7 @@ import {
   updateEventSchema,
   voidCodeSchema,
 } from './schemas/events.js';
+import { EVENT_PERIODS } from './domain/periods.js';
 import {
   registrationApproveSchema,
   registrationRejectSchema,
@@ -502,7 +503,7 @@ const recurrenceVersionsExample = {
     { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
     {
       effectiveFrom: '2027-01-03',
-      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
       endsOn: '2027-12-26',
     },
   ],
@@ -554,33 +555,13 @@ const editedYoungAdultsAudienceExample = {
   updatedAt: '2026-11-23T11:40:00.000Z',
 };
 
-const eventPeriodExample = {
-  id: 'communion-week',
-  name: 'Communion Week',
-  definition:
-    'The Sunday-to-Saturday week whose last day is the Saturday before the first Sunday of the cycle month.',
-};
-
-const eventPeriodListExample = {
-  items: [
-    eventPeriodExample,
-    {
-      id: 'gospel-week',
-      name: 'Gospel Week',
-      definition:
-        'Communion Week shifted back seven days; it ends on the Saturday eight days before the cycle month begins.',
-    },
-    {
-      id: 'home-cells',
-      name: 'Home Cells',
-      definition: 'The Monday of Communion Week.',
-    },
-  ],
-};
+/** The served catalogue itself, so the contract example cannot drift from it. */
+const eventPeriodListExample = { items: EVENT_PERIODS };
 
 /** A period preview: the resolved dates and both counts, nothing persisted. */
 const eventPeriodPreviewExample = {
   occurrences: [
+    { date: '2026-12-27', expected: 410 },
     { date: '2026-12-28', expected: 402 },
     { date: '2026-12-29', expected: 118 },
     { date: '2026-12-30', expected: 96 },

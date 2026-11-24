@@ -201,7 +201,6 @@ async function runScenario() {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
-      eventNo: 'SMOKE-9001',
       name: 'Smoke Offering Event',
       venueType: 'auditorium',
       startTime: '09:00',
@@ -238,7 +237,6 @@ async function runScenario() {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
-      eventNo: 'SMOKE-TODAY',
       name: 'Smoke Today Event',
       venueType: 'auditorium',
       startTime: '09:00',
@@ -291,7 +289,6 @@ async function runScenario() {
     method: 'POST',
     headers: write,
     body: JSON.stringify({
-      eventNo: 'SMOKE-HEAD',
       name: 'Smoke Headcount Event',
       // Dated yesterday so it never competes with today's giving event in the
       // USSD activity picker; the headcount writes below target the today event,

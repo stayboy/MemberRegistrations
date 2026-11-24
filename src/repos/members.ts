@@ -24,10 +24,11 @@ import {
 import { seriesStart, todayIn } from '../domain/series.js';
 import type { PhotoContentType } from '../domain/photos.js';
 import { legacyProjection } from '../domain/audiences.js';
-import { memberMatchesAudience, type AudienceMember } from '../domain/audience-evaluator.js';
+import type { AudienceMember } from '../domain/audience-evaluator.js';
+import { memberMatchesEventAudiences } from '../domain/event-audiences.js';
 import type { AudienceRule } from '../schemas/audiences.js';
 import { audienceMember } from './audience-members.js';
-import { parseAudienceRule } from './row-values.js';
+import { audienceRules, eventAudiencesFor } from './event-audiences.js';
 import { sessionIsClosed } from './captures.js';
 import type { Db, DbClient, OrmClient, Row } from '../db/sql.js';
 import {
@@ -227,7 +228,6 @@ interface ScopedSessionRow extends Row {
   name: string;
   session_date: string | Date;
   start_time: string | null;
-  audience_rule: unknown;
   attended: boolean;
 }
 
@@ -235,7 +235,7 @@ interface ScopedSessionRow extends Row {
 interface SeriesAttendanceWindow {
   id: string;
   name: string;
-  rule: AudienceRule;
+  rules: AudienceRule[];
   windowStart: string;
   windowEnd: string;
   endsOn: string | null;
@@ -1002,14 +1002,12 @@ export class MemberRepository {
               e.name,
               o.date as session_date,
               e.start_time,
-              au.rule as audience_rule,
               exists (
                 select 1 from attendance a
                  where a.occurrence_id = o.id
                    and a.member_id = $1
               ) as attended
          from events e
-         join audiences au on au.id = e.audience_id
          join event_occurrences o on o.event_id = e.id
          join members m
            on m.id = $1
@@ -1047,10 +1045,20 @@ export class MemberRepository {
         if (!register) return [];
       }
       const member = register;
+      const rulesByEvent = new Map(
+        [
+          ...(await eventAudiencesFor(
+            this.db,
+            rows.map((row) => row.event_id),
+          )),
+        ].map(([eventId, audiences]) => [eventId, audienceRules(audiences)] as const),
+      );
 
       for (const row of rows) {
         const sessionDate = isoDate(row.session_date)!;
-        if (!memberMatchesAudience(parseAudienceRule(row.audience_rule), member, sessionDate)) {
+        if (
+          !memberMatchesEventAudiences(rulesByEvent.get(row.event_id) ?? [], member, sessionDate)
+        ) {
           continue;
         }
         scoped.push({
@@ -2622,15 +2630,13 @@ export class MemberRepository {
       id: string;
       name: string;
       timezone: string;
-      audience_rule: unknown;
     }>(
       // A-4 evaluates every occurrence against the member's register, so an
       // event whose whole life ended before the member joined cannot qualify.
       // That is a pre-filter only - it cannot drop a qualifying event - and the
       // rule itself stays in the predicate.
-      `select e.id, e.name, e.timezone, a.rule as audience_rule
+      `select e.id, e.name, e.timezone
        from events e
-       join audiences a on a.id = e.audience_id
        where e.archived_at is null
          and e.status = 'active'
          and exists (
@@ -2648,6 +2654,11 @@ export class MemberRepository {
          )
        order by e.name`,
       [joinedOn],
+    );
+
+    const audiencesByEvent = await eventAudiencesFor(
+      this.db,
+      series.map((item) => item.id),
     );
 
     // The label a projected ministry code renders as, read once for the page.
@@ -2721,7 +2732,7 @@ export class MemberRepository {
       windows.push({
         id: item.id,
         name: item.name,
-        rule: parseAudienceRule(item.audience_rule),
+        rules: audienceRules(audiencesByEvent.get(item.id) ?? []),
         windowStart,
         windowEnd,
         endsOn,
@@ -2754,11 +2765,17 @@ export class MemberRepository {
         window.windowStart,
         window.windowEnd,
       );
-      if (!occurrences.some((date) => memberMatchesAudience(window.rule, register, date))) {
+      if (!occurrences.some((date) => memberMatchesEventAudiences(window.rules, register!, date))) {
         continue;
       }
 
-      const projection = legacyProjection(window.rule);
+      // The ministry label stays primary-derived for one round (A-2a's stated
+      // inaccuracy): it reads the first audience's legacy projection, not the
+      // composition, so a multi-audience event still reads as its primary.
+      const primaryRule = window.rules[0];
+      const projection = primaryRule
+        ? legacyProjection(primaryRule)
+        : { ministryCode: null, presbyterOnly: false };
       const ministry = projection.ministryCode
         ? (ministryNames.get(projection.ministryCode.toLowerCase()) ?? null)
         : null;

@@ -466,7 +466,11 @@ describe('per-member writes', () => {
       .send({
         name: 'Closed Manual Series',
         timezone: 'UTC',
-        schedule: { effectiveFrom: day(-3), rrule: 'FREQ=DAILY', endsOn: day(0) },
+        schedule: {
+          effectiveFrom: day(-3),
+          rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+          endsOn: day(0),
+        },
       });
     expect(series.status).toBe(201);
 

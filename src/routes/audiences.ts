@@ -19,9 +19,9 @@ export function audiencesRouter(repo: AudienceRepository): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
-    const { includeArchived } = audienceListQuerySchema.parse(req.query);
+    const { includeArchived, countAt } = audienceListQuerySchema.parse(req.query);
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ items: await repo.list(includeArchived) });
+    res.json({ items: await repo.list(includeArchived, countAt) });
   });
 
   router.post('/', async (req, res) => {
