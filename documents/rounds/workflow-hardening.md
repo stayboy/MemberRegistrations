@@ -113,6 +113,11 @@ n/a - no drawing changes.
 
 - **The preflight landed alone.** The round is otherwise not built: the runner, the seat files and the two protected
   documents wait for a round that starts from a clean tree, which is the rule this round is about.
+- **`restore` landed in both seat files; the brief-file runner is still owed.** `.opencode/agents/git-executor.md` and
+  `.opencode/agents/git-executor-fallback.md` now carry the `restore` verb in identical wording - the brief field,
+  the action and the `REFUSED` conditions - which narrows the first bullet above. `scripts/git/verb.mjs` still
+  waits: it changes how a brief is executed, so it needs the same review as the two protected documents rather than a
+  drive-by edit.
 - **The tidy that exposed all this is still uncommitted** (`documents/backlog.md`, `documents/specs/member-registrations-ui.md`,
   the two round docs). It cannot branch from `main` because its backlog edits build on the parked branch's copy — the
   exact case answer 5 forbids, and the reason the rule is worth having.

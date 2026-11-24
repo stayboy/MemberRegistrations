@@ -95,6 +95,16 @@ gate-run 2026-11-24T05:26:52.018Z profile=fast steps=4/4 lines=4 bytes=891
 
 Seat: consistent - worker `ollama-cloud/deepseek-v4.1-flash:1017`; reviewer `ollama-cloud/deepseek-v4-pro:0813`.
 
+**Pass 3 (commit `b322f51`) - ACCEPT.** The withdrawal is complete in both specs: every surviving mention is either
+explicitly withdrawn, recorded as "not part of this model", stated as "no replacement / no such column", or a
+superseded changelog entry. FR-22/23/24/25/43, AC-12/AC-32, the route contract and OS-14 describe event-level
+attachment with per-session collection, and a reader building the schema from these documents cannot mint
+`session_offerings` or a `session_offering_id`. **The round is unblocked for its migration.**
+
+One observation the reviewer left for the owner, not a finding: `event_offerings.occurrence_id` still documents the
+settled 0026 per-instance rekey as a nullable legacy column, which the "legacy history" qualifier and the "no
+`session_offerings` replaces it" note keep from reading as a forward target.
+
 **Pass 1 (commit `511844b`) - REWORK.** The amendment changed the transition paragraph and left a dozen sentences
 elsewhere describing per-occurrence attachment as the plan. Fixed in `0d6bb33`: FR-10/FR-11, the parent-scope
 bullet, the `view` contract, the contribution and pledge sessions, `?ministry=`, the error list, two data-model
