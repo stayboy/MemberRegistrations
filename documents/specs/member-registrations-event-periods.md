@@ -268,11 +268,17 @@ and a name that stops describing its rule is renamed with the rule.
     diverge; a create that sends both a period and explicit dates is refused. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
   - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
-    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line -
-    "Communion Week - 29 Nov - 5 Dec 2026" - beside when and where.
+    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line directly under its **identity** (not beside when and where): for a one-off period
+    event it is "Communion Week - 29 Nov - 5 Dec 2026", and for a recurring period event it is the **period - day or span - frequency**: "Communion Week - Sundays - monthly" when
+    `day` is given, "Communion Week - whole week - monthly" when it is not, and "Home Cells - monthly" for a
+    single-date period (which cannot take a day). A recurring period event names no single cycle.
   - **A period can recur, not only resolve once** (owner, 2026-11-24): an event may be scheduled **by period** instead of
     on literal dates — the create's period arm takes either `{ id, cycleMonth }` (one cycle, resolved once, as above) or
-    `{ id, frequency: 'monthly', day? }`, which **generates** one date per cycle. With `day` given it is that weekday
+    `{ id, frequency: 'monthly', day?, effectiveFrom? }`, which **generates** one date per cycle. The optional
+    `effectiveFrom` anchors the 90-day window the generator walks - defaulting to today, so "Miracle Sunday from January"
+    means what the officer chose rather than whatever the clock says this morning. **It is input-only and never
+    stored**: it anchors the initial window, and once occurrences exist `generate` walks `from&to` instead; it is not
+    derivable from the first occurrence, because the anchor may precede it. With `day` given it is that weekday
     inside each cycle's period ("Miracle Sunday" is the Sunday of Communion Week, every month); without it the whole
     period is generated (seven dates for Communion Week). Home Cells is a single date, so `day` is refused there.
     - **`frequency` is a closed enum that starts with `monthly`** — every named period is cycle-month based today — but

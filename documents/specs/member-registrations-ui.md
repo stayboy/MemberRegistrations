@@ -759,6 +759,14 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   screen states that the event is read-only. **Add exception** MUST offer extra dates only, because canceling a
   scheduled date is the occurrence row's **Cancel**; a `cancelled` exception is not authored from the UI while the
   two writes do not agree on the occurrence row.
+- FR-42b (event-form layout, owner 2026-11-24): the form is two columns. The **main column** holds **Identity**
+  first and, directly beneath it, the event's **period provenance or repeating cycle** line, then the schedule (Repeats or the session date rows), with the resolved-dates summary line and its **Preview dates** control at the foot of that schedule area - for a
+  recurring or period event only, since a standalone event has no rule to resolve. The **narrow right rail** holds the event's **start date, the default start and end times, and the venue**. For a
+  period recurrence the rail's start date **is** the period arm's anchor - one field, not two. Order is a
+  contract, not taste: the recurring cycle is the thing the officer is choosing and reading, so it sits with identity;
+  where and when it happens are supporting facts and belong in the rail. A single-column stack of all sections is a defect under this clause. The split is a **visual** rule, so the mock
+  catalogue and R6 are the gate that enforces it; a DOM test can assert only the field-to-column mapping (identity,
+  provenance line and schedule in the main container, the times and venue in the rail), never the layout itself.
 - FR-42f: The recurrence MUST be authored through a closed vocabulary, never a raw `rrule`: **daily** (with an
   interval of 1-7, so "every other day" is `INTERVAL=2`), **weekly**, **fortnightly** and **monthly on the day** taken
   from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules — and a **named
