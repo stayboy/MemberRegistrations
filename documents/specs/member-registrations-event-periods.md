@@ -158,10 +158,53 @@ Four changes to the event surface, and none to the money, attendance or import p
   `INTERVAL` weeks from `WKST` (default Monday) while the church week is Sunday-to-Saturday; a daily rule carries no
   `WKST`, where it would be meaningless. Stored rules without `WKST` keep their Monday meaning and are never rewritten;
   a stored rule the vocabulary cannot express still renders read-only.
+- **Explicit dates are unbounded by the preview window** (owner, 2026-11-24): a standalone event's rows are
+  occurrences, not a generated window, so a date a year out is legitimate even though `POST /v1/events/preview`
+  reports only the create's 90-day horizon; the form marks the rows beyond the window, so the officer is not surprised
+  by the table and the preview disagreeing.
 - `effectiveFrom` need not fall on a chosen weekday: the first occurrence is the first matching date on or after it,
   and the preview shows it. A monthly day-of-month of 31 skips short months.
 - **One builder, both call sites.** `EventFormPage` and `AddScheduleVersionDialog` share one builder component;
   weekly, fortnightly and monthly-on-day remain as presets that fill it.
+- **The event's type is fixed at create** (owner, 2026-11-24). Recurring and standalone are two event types, chosen by
+  the form's **Repeats** switch on the create only; the edit form does not offer the switch at all - not disabled, not
+  inert, absent - because turning a recurrence into a list of dates (or the reverse) is a different event, not an edit.
+  A standalone event's edit form edits its rows; a recurring event's edit form edits its rule within F1's guard.
+- **The rule is editable from the edit form, under a guard** (owner, 2026-11-24). It is editable only while the event
+  is **untouched by history**; any one of these closes the guard:
+  - an occurrence **dated today or earlier** in UTC - the event has started (there is no "started" column:
+    `event_occurrences.status` is `scheduled | held | cancelled`, so the test is the occurrence's date against the
+    UTC calendar date, and a same-day edit is refused rather than split by a wall-clock time the form does not
+    collect);
+  - an **offering attached** to any occurrence, or a **recorded offering count** for one (money is history);
+  - a **headcount or attendance row**, or an **import suppression**, for any occurrence (attendance evidence is
+    history).
+    When the guard is closed the builder renders read-only with the specific cause named.
+  - **"Rewrite" and "extend" are pinned by `effectiveFrom` against the last generated occurrence** (reviewer,
+    2026-11-24). A version whose `effectiveFrom` is **on or before** the last generated occurrence **rewrites** dates
+    the calendar already holds - that is the edit form's save, and it answers `409 recurrence_locked` once the guard is
+    closed. A version whose `effectiveFrom` is **after** it **extends** the series - that is
+    `AddScheduleVersionDialog`, allowed with or without history, because it adds dates ahead of the record and replaces
+    none. The same split governs the exception writes: an exception on a generated date is a rewrite, one on a future
+    date is an extension.
+  - **A locked event's parent `PATCH` omits `recurrence` entirely**, and an unchanged rule is not a write: editing a
+    name, description, audience or time on a locked event succeeds, and `409 recurrence_locked` fires only on an actual
+    recurrence write.
+- **Saving the edited rule replaces the version in force, and it never rewrites a past date.** The write is
+  `POST /v1/events/{id}/recurrence/versions` with `{ rrule, endsOn? }` - **`effectiveFrom` is not part of the edit
+  request body; the server derives it**, and the schema requires the field today, so the edit's input is a distinct
+  shape that omits it. In **one transaction** the server **deletes the version in force - the newest `effective_from` at or before today
+  (api.md) - and inserts the new one with the same `effective_from`**, then regenerates the window, so the preview and the calendar agree. That delete is
+  permitted precisely because the guard is open: the guard is the test for "nothing has happened against these dates
+  yet", so the version being replaced is not history (§5 protects records that have history, and this one provably has
+  none). The `(event_id, effective_from)` unique index is satisfied because the old row is gone in the same
+  transaction, not shadowed by a duplicate; the version-in-force rule ("newest `effective_from` at or before the date")
+  is unaffected because the replacement carries the same start. The officer is told what happens ("this replaces the
+  nine dates from Mon 30 Nov"), the response carries `generated: false` when the window could not be produced, and the
+  form then reports the rule as saved and the dates as not yet generated rather than failing silently or twice. No
+  occurrence on or before the last generated date is ever deleted or moved, and the guard is what makes the replacement
+  safe rather than merely stated. **A version with no occurrences behind it cannot be a rewrite; an extension never
+  replaces a row** - it appends one whose `effectiveFrom` is after the last generated date.
 
 ### The event number
 
@@ -188,8 +231,10 @@ Four changes to the event surface, and none to the money, attendance or import p
   - **Home Cells** - the single Monday of Communion Week.
 - **The cycle is the month of the Communion Sunday the week precedes**, written `YYYY-MM`: cycle `2027-01` is the
   week 27 Dec 2026 - 2 Jan 2027, which is the week **before** January 2027's first Sunday; cycle `2026-12` would be
-  the week before December 2026's first Sunday. The form defaults it to the month of the start date, else the server's
-  current UTC month, and always shows the resolved range, because a cycle can cross a month boundary.
+  the week before December 2026's first Sunday. The form defaults it to **the next cycle, never a past one** (owner,
+  2026-11-24): the start date's month is preferred only when that cycle has not already run, otherwise the next cycle,
+  so opening the form on 24 November 2026 offers December (29 Nov - 5 Dec) rather than November's 25-31 October. It
+  always shows the resolved range, because a cycle can cross a month boundary.
 - **Dates are UTC calendar dates server-side and are formatted, never shifted, by the UI** (AGENTS.md §4 and
   `ui-date-time-formatting.md`): the resolver takes no clock and no `events.timezone`, which keeps its current job of
   deciding "today" and held status.
@@ -236,6 +281,14 @@ Four changes to the event surface, and none to the money, attendance or import p
     lowest tier among the projecting audiences.
 17. A daily rule with `INTERVAL=3` resolves every third day from its start date, the list labels it "Every 3 days", and
     a daily rule with `INTERVAL=1` labels "Daily"; both are authorable in the builder.
+18. The event type is chosen at create and the edit form offers no Repeats switch at all. The rule is editable while no occurrence is dated today or earlier, no offering is attached or counted,
+    and no headcount, attendance row or import suppression exists; saving it replaces the version in force - the
+    current row is deleted and the replacement inserted with the same `effective_from` in one transaction, allowed
+    because the guard means nothing has happened against those dates - then
+    regenerates the window so the calendar matches the preview; once the guard is closed the builder is read-only
+    with the cause named, rewriting the rule answers `409 recurrence_locked`, appending a version that starts after the
+    last generated occurrence still succeeds through the dialog, and a locked parent `PATCH` that omits `recurrence`
+    succeeds.
 
 ## Testing Decisions
 
@@ -266,6 +319,9 @@ missing one as blocking:
 - **The committed contract's own vocabulary description** - `src/schemas/events.ts`'s `recurrenceRuleInputSchema`
   description (rendered into `openapi.json`) enumerated WEEKLY/MONTHLY only and bounded `INTERVAL` to 1-4;
   **this change amends it** to name daily with its optional 1-7 interval, so the contract and this spec agree.
+- **`member-registrations-api.md`'s `event_recurrence_versions` row** - it called the table "append-only" with no
+  carve-out, while §24d's guarded rewrite deletes the version in force. The row now states the carve-out and the
+  reason, matching the `event_recurrence_exceptions` row's existing reasoning about records that carry no history.
 
 ## Out of Scope
 

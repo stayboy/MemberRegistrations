@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "ef89d53db78dcdf91e2d93d5022a4dfce3a65e7ab746163a540fe08e94cd97ff",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
+      "sha256": "7e0e7d2170ace9f5ed92d058e8b962b53fe9f3f6fbb32a3e51711714db4bb0e9",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: `02-event-detail` gains a rebuilt mock (new sha256 and a `source` that did not exist before), and three states are added - `12-audience-dialog`, `13-event-detail-draft` and `14-event-detail-archived` - all `coverage: \"target\"` with no baseline and no signed block; `10-event-create` is pinned unchanged. why: the round rebuilt the one state with no HTML source, drew the picker dialog the shipped form now carries, and split the detail into three documents because AC-62 has three parent branches one image cannot carry. `target` is the honest coverage for drawings nobody has signed, and the round doc now states the same value. rejected: recording the four states `auto-signed` while the catalogue said `target` (the first review caught the contradiction and the round doc was corrected, not the catalogue); adding `entry` rows that claim rendering evidence for unsigned drawings, which is why the round doc defers them to the signature; and describing the archived state as \"no verbs\" when the build disables the row controls rather than removing them - the drawing follows the build and the AC wording gap is backlogged.",
-      "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; outside the 12:00-18:00 window) read the catalogue's state blocks, the round doc, the UI spec's AC-62 and the offerings spec's AC-10, and returned ACCEPT on a confirmation pass after an earlier REWORK. The REWORK found the catalogue and the round doc claiming different sign-off values for five states, the new states carrying no resolving entry, and a description of the archived state that misrepresented the build; all three were fixed in the round doc, the catalogue being unchanged since. It confirmed that `target` is honest for unsigned drawings, that deferring an entry to the signature is a correct scope rather than an avoidance, and that the archived wording now matches the build while backlogging AC-62's broader sentence. Hash recomputation is the parent's; the meta tests are the tripwires.",
-      "at": "2026-11-24"
+      "reason": "changes: the catalogue records nine event-form wire designs as auto-signed - the create form (re-cut from a target whose pin had gone stale at 95cfe358 against a live 7a5823a5), four create variants (daily, monthly, named period, empty intersection), the recurring edit, the locked edit, the standalone create and the standalone edit. why: round event-periods is unattended and its design-first ruling means the wire designs must be signed before any UI code, so the round cannot proceed without these entries; the nine were target or absent, never owner-signed, which is what section 17 requires for auto-signed. rejected: recording the advisory pass that ran without the seat model named (a false attestation), leaving 10-event-create pinned at its stale hash, and marking any of the nine as signed by the owner.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - nine auto-signed states verified against history.json and the mockup inventory, all §17-legal, one basis wording fixed after the review (18/19 had no archived predecessor). PNG hashes were recomputed from disk by the parent before the review; the seat could not run shell to repeat it.",
+      "at": "2026-11-24T20:05:00Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

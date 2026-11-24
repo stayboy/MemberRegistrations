@@ -698,7 +698,15 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
 - FR-42b: The event form's date rows MUST carry a date and optional start/end times, and nothing else:
   no per-date venue, note or status control, so a new occurrence is `scheduled`. Each date MUST be
   unique; a blank time inherits the event's time. With **Repeats** on, the date rows are replaced by the
-  recurrence fields (FR-42f) and the API generates the first window. The form MUST NOT send the parent's `status`
+  recurrence fields (FR-42f) and the API generates the first window - **on the create only**. **Repeats chooses the
+  event's type**, so the edit form offers no switch at all (not disabled, not inert, absent): a standalone event's edit
+  form edits its date rows, a recurring one edits its rule. **On the edit form the rule is editable only while the
+  event has no history** - no occurrence dated today or earlier, no offering attached or counted, and no headcount,
+  attendance row or import suppression - and saving it is a **rewrite** (a version whose `effectiveFrom` is on or
+  before the last generated occurrence) that replaces the future dates the old rule generated; otherwise the builder
+  renders read-only with the cause shown and the rewrite is refused `409 recurrence_locked`. **Appending a version
+  that starts after the last generated occurrence is an extension, not a rewrite**, and stays available through
+  `AddScheduleVersionDialog` with or without history. The form MUST NOT send the parent's `status`
   or an occurrence's `source`, which the API derives, and a successful create MUST open the event detail
   (`#/events/:id`). The form MUST offer **two commit controls**: **Save draft** creates the parent as `draft`, and
   **Save and activate** creates it as `draft` and then activates it with a `PATCH` carrying only `status: active`, so
@@ -732,7 +740,10 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
 - FR-42e: The event detail's write verbs MUST sit where FR-9a groups them. **Edit**, **Activate** and **Archive**
   belong in the page's single `Actions` menu with `Refresh` as the bare utility to their left; **Cancel** is a
   control on the occurrence's own row, not a page verb; **Add schedule version** and **Add exception** are buttons
-  inside the recurrence panel. The verbs MUST follow the parent's state: on a `draft`, **Activate** is the primary
+  inside the recurrence panel. **Add schedule version is an extension** - its `effectiveFrom` is after the last
+  generated occurrence and it needs no guard - while an **exception on a generated date is a rewrite** and answers
+  `409 recurrence_locked` once the guard is closed; an exception on a future date is an extension. The verbs MUST
+  follow the parent's state: on a `draft`, **Activate** is the primary
   action and **Cancel** is disabled with the reason shown (a draft cannot cancel a date), never hidden; on an
   `active` parent **Archive** and **Cancel** are offered; on an `archived` parent every write is absent and the
   screen states that the event is read-only. **Add exception** MUST offer extra dates only, because canceling a
