@@ -312,6 +312,61 @@ and a name that stops describing its rule is renamed with the rule.
   the backlog row "named-period catalogue and authoring screen", triggered by a fourth period or a definition change
   that must not need a deploy.
 
+## Managing the period catalogue (draft, 2026-11-24)
+
+**Status: DRAFT - not approved.** This section is the trigger the backlog row named ("a fourth period is named, or a
+definition must change without a deploy"). It moves the catalogue from code constants into data and adds the screen
+that manages it. It needs its own grill round, the owner's approval, a `0813` review, and **both §17 gates** — a
+migration and a wire contract — before any of it is built.
+
+**The move is mechanical, and that is why it was designed for.** The three periods today are code constants with a
+quoted definition; they become rows in a `named_periods` table seeded from those constants, each row carrying:
+
+| field         | meaning                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| `id`          | the wire id, stable and never reused (`communion-week`, `gospel-week`, `home-cells`, any added later) |
+| `name`        | the parish's name for it — the label an officer picks                                                 |
+| `definition`  | the rule **in plain words**, shown beside the choice and in the admin list                            |
+| `rule_kind`   | the resolver's shape: `week-before-first-weekday` or `single-date`                                    |
+| `rule_params` | what the kind needs (the weekday, an offset in days for a second week, or nothing)                    |
+| `active`      | archived rather than deleted, so a form open across the change cannot fail on submit                  |
+
+**Names are free text; there is no enum of periods** (owner, 2026-11-24). A period is a row an officer creates, with an
+opaque `id` minted at creation and a **free-text name** — "Communion Week" is seed data, not a type, and the system never
+enumerates periods or branches on their names. `EVENT_PERIOD_IDS` therefore **retires with this move**: the create's
+`period.id` becomes an opaque id validated against the table, and the compile-time "a fourth id fails the build"
+guarantee is replaced by a data check. The **rule kinds stay a closed set** (`week-before-first-weekday`,
+`single-date`), because those are resolver shapes rather than parish vocabulary; a new shape is a code change.
+
+**The screen lives at `#/admin/calendar-periods`** (owner, 2026-11-24), in the Admin section beside audiences.
+
+**The rules that keep it honest:**
+
+- **A period is a declarative rule, never code.** The admin screen offers `rule_kind` and its parameters; it cannot
+  hold a script or an arbitrary date list, because a rule only the database understands cannot be previewed, and the
+  preview is what the officer trusts. A shape the resolver does not have is a new `rule_kind` in code with its own
+  change — not a data entry.
+- **A name must describe its rule.** Saving is refused (`422`) when the `definition` text is blank, and the admin list
+  shows the definition under the name, so a period whose name and rule have drifted apart is visible rather than
+  inferred.
+- **Archive, never delete.** `active = false` removes it from the create form; `GET /v1/events/periods` serves active
+  rows by default and `includeArchived=true` for the admin list. A stored `period_id` on an event is never validated
+  against the live catalogue after save.
+- **Nothing is retroactive.** Editing a `definition`, `rule_kind` or `rule_params` changes what **future** resolutions
+  produce; an event already created keeps its stored dates and its `period_name` snapshot. The Named periods section
+  already states this; it is restated here because the admin screen is where an officer would expect otherwise.
+- **Removing a period never touches an event** — there is no foreign key from events to periods, since the event holds
+  dates and a snapshot.
+
+**Routes** (officer-authenticated, through the same gateway): `GET /v1/periods?includeArchived`, `POST /v1/periods`,
+`GET /v1/periods/{id}`, `PUT /v1/periods/{id}` (edit name, definition, rule, active). The event form keeps reading
+`GET /v1/events/periods`, which now reads the table.
+
+**The screen.** A list of periods — name, definition, the rule in words, active/archived, and how many future events
+are scheduled into it (a count, not a link, in this round) — with one **New period** verb, and each row opening an
+edit dialog carrying name, definition, rule kind and its parameters, plus the archive toggle. It follows the
+application shell and the audiences page's idiom (`FR-42e`'s actions, `FR-42c`'s dialog shape).
+
 ## Acceptance Criteria
 
 1. One event authors Monday, Thursday and Friday and resolves to those three weekdays.
