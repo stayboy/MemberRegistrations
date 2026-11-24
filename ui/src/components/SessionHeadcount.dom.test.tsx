@@ -123,15 +123,26 @@ describe('SessionHeadcount', () => {
     expect(within(dialog).getByText('Record a headcount', { exact: false })).toBeVisible();
   });
 
-  it('closes a live capture from the row with the end-only import', async () => {
+  it('confirms the close from the row and sends nothing until it is confirmed', async () => {
     current = { adults: headcount('adults', 120) };
+    vi.mocked(importsApi.postAttendanceImport).mockClear();
     renderWithProviders(
       <DateTimeProvider>
         <SessionHeadcount eventId="event-1" sessionDate="2026-11-08" endAction="enabled" />
       </DateTimeProvider>,
     );
     await userEvent.click(await screen.findByRole('button', { name: 'End of session' }));
+
+    // FR-6f/AC-7a: the close is irreversible, so it confirms first and the click sends nothing.
+    expect(importsApi.postAttendanceImport).not.toHaveBeenCalled();
+    const dialogs = await screen.findAllByRole('dialog');
+    const confirm = dialogs[dialogs.length - 1]!;
+    expect(within(confirm).getByText('End this session?')).toBeVisible();
+    expect(within(confirm).getByText(/Further captures will be refused/)).toBeVisible();
+
+    await userEvent.click(within(confirm).getByRole('button', { name: 'End of session' }));
     // One shared close per event and session: no rows, ended true - the request the page made.
+    expect(importsApi.postAttendanceImport).toHaveBeenCalledTimes(1);
     expect(importsApi.postAttendanceImport).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),

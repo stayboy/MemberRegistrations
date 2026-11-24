@@ -23,7 +23,7 @@
         "a CSV with 10,001 rows",
         "the batch id, kind, row count, checksum",
         "falls on a different date from the selected session",
-        "End session"
+        "End of session"
       ]
     },
     {
@@ -139,14 +139,14 @@
         {
           "file": "documents/specs/member-registrations-ui.md",
           "id": "AC-20",
-          "disposition": "deferred",
-          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
+          "disposition": "e2e-only",
+          "test": "ui/e2e/attendance-panel.spec.ts::a datetime on another day is refused in the panel before any request leaves it"
         },
         {
           "file": "documents/specs/member-registrations-events-offerings.md",
           "id": "AC-7a",
-          "disposition": "deferred",
-          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
+          "disposition": "e2e-only",
+          "test": "ui/e2e/attendance-panel.spec.ts::the occurrence row ends a live session only after the confirmation, then disables the action"
         }
       ]
     },

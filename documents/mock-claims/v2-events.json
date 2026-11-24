@@ -178,15 +178,16 @@
     "07-import-attendance-panel": {
       "mock": {
         "path": "mockups/v2-events/07-import-attendance-panel.png",
-        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f",
+        "sha256": "d8b0b88a67117881428ca94618a8e4f80b115e5dc7ddafe5e1e6cce111de4b33",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": "event-import-panel.png",
-      "coverage": "signed",
+      "coverage": "auto-signed",
       "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "a26c426ce239b63bf0a860e0c53cecdec351c115717160d78efab05ddc505b2f"
+        "by": "unattended",
+        "at": "2026-11-24",
+        "sha256": "d8b0b88a67117881428ca94618a8e4f80b115e5dc7ddafe5e1e6cce111de4b33",
+        "basis": "§17 target re-cut for the Close control, the commit pair moving into the content and the invented header close being removed; the owner signature of 2026-11-22 is void and only the owner restores it"
       }
     }
   },
@@ -475,7 +476,7 @@
       "id": "AD-END-SESSION",
       "story": "AD-SESSIONS",
       "state": "07-import-attendance-panel",
-      "claim": "The open past session shows one explicit End session action.",
+      "claim": "The open past session shows one explicit End of session action.",
       "expect": "PRESENT",
       "class": "mock-only",
       "assert": "image"

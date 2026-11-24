@@ -14,6 +14,7 @@ import { isUnauthorized } from '../api/errors';
 import { useSession } from '../auth/SessionProvider';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { HeadcountDialog } from './HeadcountDialog';
+import { EndOfSessionConfirm } from './EndOfSessionConfirm';
 import {
   HEADCOUNT_MODE_OPTIONS,
   emptyHeadcountForm,
@@ -125,6 +126,7 @@ export function SessionHeadcount({
   const [error, setError] = useState<string | null>(null);
   const [correction, setCorrection] = useState<Headcount | null>(null);
   const [endError, setEndError] = useState<string | null>(null);
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   /**
    * Open the dialog for a new count, or for a correction of one lane's observation. A correction keeps
@@ -186,19 +188,22 @@ export function SessionHeadcount({
 
   /**
    * The shared close: one capture per event and session, sent as an end-only import (rows: []). It is
-   * the same request the retired operator page made, so the API sees no difference.
+   * the same request the retired operator page made, so the API sees no difference. It confirms first
+   * (`EndOfSessionConfirm`): the close is irreversible and nothing reopens the session.
    */
   const endMutation = useMutation({
     mutationFn: () =>
       postAttendanceImport(baseUrl, token, { eventId, sessionDate, rows: [], ended: true }),
     onSuccess: () => {
       setEndError(null);
+      setConfirmEnd(false);
       void queryClient.invalidateQueries({
         queryKey: ['headcounts', baseUrl, eventId, sessionDate],
       });
       void queryClient.invalidateQueries({ queryKey: ['events', baseUrl, 'detail', eventId] });
     },
     onError: (failure: unknown) => {
+      setConfirmEnd(false);
       if (isUnauthorized(failure)) {
         signOut();
         return;
@@ -278,7 +283,7 @@ export function SessionHeadcount({
             disabled={disabled || endAction === 'disabled' || endMutation.isPending}
             onClick={() => {
               setEndError(null);
-              endMutation.mutate();
+              setConfirmEnd(true);
             }}
           >
             End of session
@@ -317,6 +322,13 @@ export function SessionHeadcount({
           setCorrection(null);
           resetForm();
         }}
+      />
+
+      <EndOfSessionConfirm
+        open={confirmEnd}
+        busy={endMutation.isPending}
+        onConfirm={() => endMutation.mutate()}
+        onCancel={() => setConfirmEnd(false)}
       />
     </div>
   );

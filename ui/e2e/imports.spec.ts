@@ -4,8 +4,8 @@ import { expect, open, seedSession, SESSION_TOKEN, storedValues, test } from './
 /**
  * The member import, end to end (UI spec AC-18, AC-19; FR-35-FR-39). The panel parses the file in the
  * browser and sends nothing until the operator confirms, so the request log is the evidence for the
- * AC that says "sends no request". AC-20's attendance cases are parked with the panel's open/close
- * defect (`documents/backlog.md`, "Remaining behavioural ACs behind the v2 mock catalogues").
+ * AC that says "sends no request". AC-20's attendance cases are still absent here; the FR-8a panel case
+ * below is live again since the panel's mount fix.
  */
 
 /**
@@ -94,11 +94,11 @@ test('a member CSV whose serialised body passes 1,048,576 bytes shows split guid
 
 // --- FR-8a: the attendance panel opens for the occurrence a deep link names ----------------------
 
-// Parked, not weakened: the panel's deep-link opening fails under a parallel run and the
-// backlog row ("The import panel's deep-link opening is unverified end to end") says it is
-// parked rather than retried a third time. The matching logic is covered in the DOM lane
-// (`EventDetailPage.dom.test.tsx`: a matching date opens the panel, an unmatched one does not).
-test.fixme('?import=<date> opens the attendance panel for that occurrence and nothing else', async ({
+// Reopened with the panel's mount fix: `SessionImportPanel` now keeps its `Dialog` mounted closed and
+// gives it a focusable Close, so tabster keeps the modalizer active and the dialog stays in the
+// accessibility tree under a parallel run. It was parked while the surface mounted already open and
+// left the tree about 100 ms after mount; the matching logic is also covered in the DOM lane.
+test('?import=<date> opens the attendance panel for that occurrence and nothing else', async ({
   page,
 }) => {
   // FR-8a: the retired attendance route and a hand-written link both land here.
@@ -106,9 +106,9 @@ test.fixme('?import=<date> opens the attendance panel for that occurrence and no
   // panel can never open for a date the event does not carry.
   await open(page, '/events/event-1?kind=event&import=2026-01-18');
 
-  // The panel opens once the parent read resolves; under a parallel run that can
-  // exceed the default 5s (the backlog records the panel's load-sensitive opening).
-  await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
+  // The panel opens once the parent read resolves, because the occurrence comes from that read. The
+  // dialog itself is the evidence: a modal makes the page behind it inert, so the page's own h1 is
+  // deliberately not queryable while the panel is open.
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: 15_000 });
   await expect(dialog.getByRole('heading', { name: 'Import attendance' })).toBeVisible();
@@ -124,9 +124,11 @@ test.fixme('?import=<date> opens the attendance panel for that occurrence and no
   await expect(dialog.getByRole('button', { name: 'Choose file' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: 'Change occurrence' })).toHaveCount(0);
 
-  // Closing drops the parameter with the panel, so a reload does not reopen it.
+  // Closing drops the parameter with the panel, so a reload does not reopen it. The event page is
+  // readable again, which is the same modal contract seen from the other side.
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
   await expect(page).not.toHaveURL(/import=/);
 });
 
