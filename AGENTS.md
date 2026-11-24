@@ -15,6 +15,11 @@ delta is `documents/agents/orchestrator-policy.md`. This file owns the non-negot
 
 - For a non-trivial feature, run the grilling interview: map the design tree, ask the whole frontier
   in one round (numbered questions, each with a recommendation and its cost), and wait for answers.
+- **`grill-me` is the session trigger, not the name of a skill file.** The method is the `grilling` skill and the
+  seat is §17's `grill-flash` class. **The owner rules (2026-11-24) that the round records the seat's frontier and
+  the seat's answers.** A frontier the parent wrote and relayed is the owner answering directly under §2 - legal,
+  but not a grill - so the round records it in `## Deviations` rather than labelling it a seat-run grill. The ruling
+  followed a round that opened with the parent's own questions.
 - **Every open question is settled by a grill round** — a spec, a round or a design decision with
   behaviour or design consequence, not yet recorded as settled, is put to the numbered frontier with a
   recommendation and a cost per question; the agent must not settle it by a binary choice, a silent
