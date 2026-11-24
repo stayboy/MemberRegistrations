@@ -161,5 +161,10 @@ gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
   all of them — rung 1 free-usage limit, rung 2 shell-permission-denied — so the parent ran them with the reasons in
   the `## Git writes` table. The overrun is recorded rather than rounded down: the next round's budget should be set
   from this evidence, not from the default.
+- **After the park, three amendments were taken on the owner's rulings**: the resolved dates moved to a preview
+  dialog (ten states, the forms 190-372px shorter), a period event keeps its provenance (`period_id`, `period_cycle`,
+  `period_name` snapshot; the server resolves at create; `?period=` filter), and a period may **recur monthly**
+  (`period { id, frequency: 'monthly', day? }`, field-based on the event, one generator over two rule kinds). Each was
+  reviewed by `0813` and each re-enters both gates.
 - The round's lineage lives on `feat/event-periods-ui`, pushed, one commit ahead of `main@46f4886`.
 - The original draft still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.

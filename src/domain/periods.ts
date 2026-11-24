@@ -8,6 +8,15 @@ import { EVENT_PERIOD_IDS, type EventPeriodId } from '../schemas/events.js';
  *
  * The catalogue is keyed by the wire ids the schema fixes, so a fourth id added
  * to `EVENT_PERIOD_IDS` fails the build here until its definition is written.
+ *
+ * The names are the parish's own vocabulary, not system jargon - a reader who
+ * does not know the calendar cannot infer them, so each carries a `definition`
+ * in the parish's words:
+ * - Communion Week is the week preparing for the monthly communion service: the
+ *   seven days ending on the Saturday before the month's first Sunday.
+ * - Gospel Week is the week before it, when ministries hold their meetings.
+ * - Home Cells is that cycle's Monday, when the small groups meet - one date.
+ * The system never reinterprets a name; the rule is what the resolver evaluates.
  */
 export interface NamedPeriod {
   id: EventPeriodId;
