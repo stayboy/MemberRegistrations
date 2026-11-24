@@ -364,7 +364,9 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
 
 **The screen.** A list of periods — name, definition, the rule in words, active/archived, and how many future events
 are scheduled into it (a count, not a link, in this round) — with one **New period** verb, and each row opening an
-edit dialog carrying name, definition, rule kind and its parameters, plus the archive toggle. It follows the
+edit dialog carrying **only** name, definition, rule kind and its parameters. **Archiving is a row action on the list,
+not part of the dialog** (owner, 2026-11-24): the dialog was stretching taller than the page it opens over, and the
+lifecycle of a period belongs with its row, beside Show archived. It follows the
 application shell and the audiences page's idiom (`FR-42e`'s actions, `FR-42c`'s dialog shape).
 
 ## Acceptance Criteria
