@@ -2,7 +2,7 @@
 
 |                        |                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| Status                 | PARKED                                                                                              |
+| Status                 | OPEN                                                                                                |
 | Tier                   | 2                                                                                                   |
 | Mode                   | `unattended (auto-accept recommendations)` - owner pre-authorisation of the gates                   |
 | Base                   | `c4b2fad`                                                                                           |
@@ -150,6 +150,10 @@ n/a - no drawing changes.
 
 ## Deviations
 
+- **The sweep rewrote rather than annotated**, as the second review required: ~30 sentences across the two specs, the
+  schema rows included. `session_offerings` and `session_offering_events` are now recorded as **not part of the
+  model** rather than as tables to build, the migration outline no longer promises a conversion, and FR-22/23/24/43
+  with AC-12/AC-32 describe parent-level attachment and per-session collection.
 - **The branch is deliberately unpushed at two commits** (`511844b`, `0d6bb33`). A PR carrying spec text refused twice
   invites a review of the wrong thing, and the protected-doc rule hashes exact bytes, so it goes up once the text
   passes.
