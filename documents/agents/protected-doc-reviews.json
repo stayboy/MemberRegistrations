@@ -167,7 +167,7 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "28d36bc17bdea81ff70a5b30b3fd11daa8be6fbcde20d1b96758d5438b181eef",
+      "sha256": "afde1ca7c2999fc97859945c38fd6fad3a98e424435137ecbd3e9da408dbe6eb",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",

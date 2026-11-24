@@ -257,7 +257,7 @@
     "10-event-create-period": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-period.png",
-        "sha256": "943e3ed6df4826d81ec7d7d4ad268ef157cf24fd598912cc362704a0291a1238",
+        "sha256": "16e49ee58ff43cc3d9de3aba79707ea47612580f3101e6f11cb94b40b1ec893f",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
       "baseline": null,
@@ -265,7 +265,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "943e3ed6df4826d81ec7d7d4ad268ef157cf24fd598912cc362704a0291a1238",
+        "sha256": "16e49ee58ff43cc3d9de3aba79707ea47612580f3101e6f11cb94b40b1ec893f",
         "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a named period and its cycle month"
       }
     },
@@ -362,7 +362,7 @@
     "21-event-create-period-recurring": {
       "mock": {
         "path": "mockups/v2-events/21-event-create-period-recurring.png",
-        "sha256": "dbc0ca61371f9dace9582f16105b9c2af7ffc9f77b2c3ac46dfc909ed76fdca0",
+        "sha256": "84954df0a94872731759116ef286121cd89ae6cc7b74c89b3189f5384b7ce1ea",
         "source": "mockups/v2-events/21-event-create-period-recurring.html"
       },
       "baseline": null,
@@ -370,14 +370,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "dbc0ca61371f9dace9582f16105b9c2af7ffc9f77b2c3ac46dfc909ed76fdca0",
+        "sha256": "84954df0a94872731759116ef286121cd89ae6cc7b74c89b3189f5384b7ce1ea",
         "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form in the period mode, monthly on Sunday - Miracle Sunday - anchored on the rail start date, three cycles in the window"
       }
     },
     "22-event-detail-period": {
       "mock": {
         "path": "mockups/v2-events/22-event-detail-period.png",
-        "sha256": "0ce40030aed211332b9620a0b54f6417073436b4a06e0f9ff4062a10254f8160",
+        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3",
         "source": "mockups/v2-events/22-event-detail-period.html"
       },
       "baseline": null,
@@ -385,14 +385,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "0ce40030aed211332b9620a0b54f6417073436b4a06e0f9ff4062a10254f8160",
+        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3",
         "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the event detail of a period-created event: the provenance line under the identity, the period rule in the schedule panel"
       }
     },
     "23-event-detail-period-preview": {
       "mock": {
         "path": "mockups/v2-events/23-event-detail-period-preview.png",
-        "sha256": "a5c4a4eec9eecb9de21873b65a0bad733264babdde260d90f8b892bf6a3b29a0",
+        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7",
         "source": "mockups/v2-events/23-event-detail-period-preview.html"
       },
       "baseline": null,
@@ -400,7 +400,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "a5c4a4eec9eecb9de21873b65a0bad733264babdde260d90f8b892bf6a3b29a0",
+        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7",
         "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the detail schedule panel with its Preview dates dialog open"
       }
     }
