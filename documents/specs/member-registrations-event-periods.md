@@ -238,15 +238,28 @@ Four changes to the event surface, and none to the money, attendance or import p
 - **Dates are UTC calendar dates server-side and are formatted, never shifted, by the UI** (AGENTS.md §4 and
   `ui-date-time-formatting.md`): the resolver takes no clock and no `events.timezone`, which keeps its current job of
   deciding "today" and held status.
-- **A period resolves once, at save, into an ordinary standalone event.** The form submits the previewed dates as
-  `occurrences[]`; no period id and no rule are stored, so nothing ever re-resolves and
-  `POST /v1/events/generate` cannot touch it. The period's name may prefill the description.
-  - **A period can be added, edited or removed without touching a single event** (owner ruling, 2026-11-24): an event stores
-    dates, not a reference, so there is no foreign key and nothing to migrate. Editing a definition is not retroactive -
-    an event created last year keeps the dates it resolved to - and removing one only stops the form offering it. When
-    the catalogue becomes data and gets a screen (backlog: "named-period catalogue and authoring screen"), the rule is
-    the one audiences already follow: **archive, never delete**, so a form open across the change cannot fail on submit
-    against an id that vanished between render and save.
+- **A period resolves once, at save, and the event keeps its provenance** (owner, 2026-11-24 - this reverses the
+  earlier "no provenance" decision). The dates are materialised as ordinary occurrences, so nothing ever re-resolves
+  and `POST /v1/events/generate` cannot touch them; **and the event records what it was created from**:
+  `period_id`, `period_cycle` (`YYYY-MM`) and `period_name` as it was written at save. The name is a **snapshot**, not
+  a live lookup - a renamed definition leaves the event reading as it did, which is the truthful rendering of what
+  happened - and the id is what makes "every Communion Week event" answerable.
+  - **A period's dates are materialised as resolved, not clamped to the 90-day preview window** - they are a fixed
+    week, not a generated horizon, exactly as F4 holds explicit dates unbounded; uniqueness is the resolver's, since it
+    returns distinct dates.
+  - **The server resolves at create.** Create accepts `period: { id, cycleMonth }` instead of the client's
+    `occurrences[]`, and the server resolves it with the same function the preview uses, so preview and create cannot
+    diverge; a create that sends both a period and explicit dates is refused. `POST /v1/events/preview` keeps taking
+    the same shape, so the form previews exactly what the create will store.
+  - **The read and the list carry it.** The event read gains `period: { id, cycle, name }` (null for events not
+    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line -
+    "Communion Week - 29 Nov - 5 Dec 2026" - beside when and where.
+  - **A period can still be added, edited or removed without rewriting an event**: the reference is to what was
+    chosen, so editing a definition is not retroactive and removing one only stops the form offering it. The date
+    columns and the name snapshot mean neither operation can orphan an event. When the catalogue becomes data and gets
+    a screen (backlog: "named-period catalogue and authoring screen"), the rule is the one audiences already follow:
+    **archive, never delete**, so a form open across the change cannot fail on submit against an id that vanished
+    between render and save.
 - **Two read-only contract entries:** `GET /v1/events/periods` (id, name, definition) served from the code
   constants, registered before `/:id`; and `POST /v1/events/preview` - no persistence - accepting either the create's
   `recurrence` or `period: { id, cycleMonth }`, returning
@@ -275,7 +288,7 @@ Four changes to the event surface, and none to the money, attendance or import p
 10. Each of the three periods resolves to the dates named in its definition for a table of month boundaries, both
     leap and non-leap, including the year boundary - the table is written into
     `tests/domain/periods.test.ts` with the expected dates enumerated per cycle month, not derived by the same code.
-11. Selecting a period and saving stores ordinary occurrences and no provenance.
+11. Selecting a period and saving stores ordinary occurrences **and the provenance** - `period_id`, `period_cycle` and the `period_name` snapshot - resolves the dates **on the server** from `period { id, cycleMonth }`, refuses a create that sends both a period and explicit dates, reports `period` on the read, filters by `?period=`, and shows one line on the detail; a renamed definition leaves the stored name and dates unchanged.
 12. The USSD anonymous screen shows an event only when its whole audience set is `Everyone`.
 13. A registered visitor is in an event only when every selected audience names visitors, so
     `Visitors only` intersected with `Choir` resolves to zero members and the preview says so.
@@ -366,8 +379,10 @@ missing one as blocking:
   label branches for "Daily" / "Every N days"; `member-registrations-ui.md` FR-42f and AC-63 are amended to match, and
   AC 17 here pins the behaviour. A stored daily rule no longer has to be read-only, and the test fixtures that used it
   stay valid. This is a behavioural amendment to an approved spec, so it carries its own review.
+- **Changelog 2026-11-24 (post-approval, owner ruling - behaviour):** **a period event keeps its provenance.** The earlier decision - resolve once, store dates, store nothing about the period - is reversed: the event now records `period_id`, `period_cycle` and a `period_name` snapshot, the **server** resolves the dates from `period { id, cycleMonth }` at create so preview and create share one authority, the read and the list expose it (`?period=`), and the detail shows one line. The name is a snapshot, so a renamed definition leaves the event reading as it was. This adds columns and changes the create body, which is why it re-enters both §17 gates.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;
-  provenance for period events; `COUNT`/`BYMONTH`/`BYSETPOS` beyond ±1 in the authored vocabulary; rewriting stored
+  **provenance for period events - reversed 2026-11-24, the event now keeps it, see the changelog**;
+  `COUNT`/`BYMONTH`/`BYSETPOS` beyond ±1 in the authored vocabulary; rewriting stored
   rrules to add `WKST`.

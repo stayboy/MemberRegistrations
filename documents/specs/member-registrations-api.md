@@ -26,10 +26,10 @@ downstream round. No migration or code lands in the spec round.
   a schedule instruction, so nothing with history depends on it; the append-only rule in `AGENTS.md` §5 governs records
   that carry history (attendance, headcounts, offerings, calls). The route table names the route as removal of the
   directives. Rejected: a removal-marker row (a migration and a fourth directive kind for no history benefit).
-- 2026-11-23: **the parent write is `PATCH`, and the create body is `occurrences` XOR one `recurrence`** (owner:
+- 2026-11-23: **the parent write is `PATCH`, and the create body is exactly one of `occurrences`, one `recurrence` or a `period`** (owner:
   "all as recommended", write round). The route table's `PUT` becomes the legacy per-instance write kept only for the
   deployed form, and `PATCH` carries the parent's partial update with the same `If-Match` rule. The create body accepts
-  `eventNo` (optional; the server mints it when absent) and either manual occurrences or one recurrence, never both;
+  `eventNo` (optional; the server mints it when absent) and exactly one of **one or more** manual occurrences, one recurrence, or a `period { id, cycleMonth }`, never more than one;
   the derived range stays read-only.
 - 2026-11-23: **the read transition** (owner: unattended, 2026-11-23): `/v1/events`, `/v1/events/:id` and
   `/v1/series/:id` keep their legacy shapes as the default and serve the parent read with `view=parent`; the legacy
@@ -703,7 +703,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 
 ### Event (parent)
 
-`{ id, eventNo, name, audienceIds, audiences[], audienceId, audience, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
+`{ id, eventNo, name, audienceIds, audiences[], audienceId, audience, period, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
 
 An **event is the parent** of its recurrence and its dates. It owns its identity, when and where it
 happens, how it is tracked, and either a recurrence that generates its dates or the dates recorded on
@@ -730,6 +730,12 @@ has no recurrence; a **recurring** event owns one recurrence and the occurrences
     `audienceIds`. If both are sent, `audienceIds` wins and `audienceId` must equal its first element,
     else `422` naming both. The read carries `audiences[]` (each with its rendered `summary`) plus the
     legacy `audienceId` and `audience` for the primary (first) audience.
+- `period` is the **provenance of a period-created event** (owner, 2026-11-24): `{ id, cycle, name }`, where
+  `cycle` is the `YYYY-MM` chosen at create and `name` is the **snapshot** taken at save, so a renamed definition never
+  rewrites a stored name or date. It is null for an event not created from a period. The create accepts
+  `period: { id, cycleMonth }` **instead of** `occurrences[]` and resolves the dates on the server with the same
+  function `POST /v1/events/preview` uses, so preview and create cannot diverge; a create sending both a period and
+  explicit dates is refused. `GET /v1/events?period=<id>` filters on it.
 - `ministry` and `presbyterOnly` are **read-only legacy projections** during the transition: the
   migration maps each event's old pair onto a seeded or combination audience and writes the columns from
   that audience. They are no longer accepted on create or update, and a client that sends one is `422
@@ -1440,8 +1446,8 @@ is the plain alias. There is no series list, series create or series schedule ro
 
 | Method   | Path                                                | Result                                                                                                                                                 |
 | -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/v1/events?from&to&ministry&venueType`             | Parents with their occurrences in the window and attendance/offering summaries                                                                         |
-| `POST`   | `/v1/events`                                        | Create the parent, an optional recurrence and, without one, manual occurrences; `201` + `Location`                                                     |
+| `GET`    | `/v1/events?from&to&ministry&venueType&period`      | Parents with their occurrences in the window and attendance/offering summaries                                                                         |
+| `POST`   | `/v1/events`                                        | Create the parent with exactly one of manual occurrences, one recurrence, or a `period { id, cycleMonth }` the server resolves; `201` + `Location`     |
 | `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                                                                     |
 | `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); stale `If-Match` → `409`                                                                                                  |
 | `PUT`    | `/v1/events/{eventId}`                              | The legacy per-instance update during the transition; it retires when the UI moves                                                                     |
@@ -1461,7 +1467,7 @@ The event-wide cancel becomes an **occurrence cancel** and the **parent archive*
 cancels a whole event by rewriting the parent. `POST /v1/events` with a recurrence generates its first
 window atomically; `POST /v1/events/generate` is the refresh for later windows and is idempotent on
 `(eventId, date)`. The create body carries `audienceId` (default `Everyone`), `eventNo` (optional; the
-server mints it when absent) and either **manual `occurrences`** or **one `recurrence`**, never both: the derived
+server mints it when absent) and exactly **one** of **manual `occurrences`**, **one `recurrence`** or a **`period { id, cycleMonth }`** the server resolves, never more than one: the derived
 range is not accepted, and `startDate`/`endDate` are read-only. `PATCH` carries the parent fields (no recurrence, no
 `eventNo`, no occurrence set) and is the write the UI uses; `PUT` stays only for the legacy per-instance form until
 that form moves. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
