@@ -346,9 +346,10 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
   hold a script or an arbitrary date list, because a rule only the database understands cannot be previewed, and the
   preview is what the officer trusts. A shape the resolver does not have is a new `rule_kind` in code with its own
   change — not a data entry.
-- **A name must describe its rule.** Saving is refused (`422`) when the `definition` text is blank, and the admin list
-  shows the definition under the name, so a period whose name and rule have drifted apart is visible rather than
-  inferred.
+- **The `definition` is optional, and the rule is the authority** (owner, 2026-11-24). It is a free-text description
+  of what the period means, kept for comprehension and shown when present; a blank one is accepted, because the
+  `rule_kind` and its parameters are what the resolver evaluates and what the preview renders. The list shows the
+  definition under the name when there is one, and the rule in words always, so a period is legible either way.
 - **Archive, never delete.** `active = false` removes it from the create form; `GET /v1/events/periods` serves active
   rows by default and `includeArchived=true` for the admin list. A stored `period_id` on an event is never validated
   against the live catalogue after save.
@@ -364,7 +365,8 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
 
 **The screen.** A list of periods — name, definition, the rule in words, active/archived, and how many future events
 are scheduled into it (a count, not a link, in this round) — with one **New period** verb, and each row opening an
-edit dialog carrying **only** name, definition, rule kind and its parameters. **Archiving is a row action on the list,
+edit dialog carrying **only** name, rule kind and its parameters, with the optional **definition last** (owner,
+2026-11-24) - it follows the weekday-of-cycle-month control and adds no explaining text of its own. **Archiving is a row action on the list,
 not part of the dialog** (owner, 2026-11-24): the dialog was stretching taller than the page it opens over, and the
 lifecycle of a period belongs with its row, beside Show archived. It follows the
 application shell and the audiences page's idiom (`FR-42e`'s actions, `FR-42c`'s dialog shape).
