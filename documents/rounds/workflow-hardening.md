@@ -106,11 +106,19 @@ n/a - no drawing changes.
 
 ## Acceptance
 
-| #   | Criterion | Met | Evidence |
-| --- | --------- | --- | -------- |
+| #   | Criterion                                                                                        | Met                  | Evidence                                                                            |
+| --- | ------------------------------------------------------------------------------------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| 1   | `git-preflight.mjs` prints branch, HEAD, tree, dirty paths and the declared/undeclared split     | yes                  | run against two round docs; it caught an undeclared path                            |
+| 2   | `verb.mjs` performs a branch, a commit and a restore from a JSON brief, refusing a tree mismatch | yes                  | `tests/meta/git-verb.test.ts` (10 validator, 3 command-shape cases) and a CLI smoke |
+| 3   | Both seat files carry identical `restore` wording, and the runner is named                       | yes, seat files only | `ae3ec7f`; the runner is **not** yet named in them, which is the deviation below    |
+| 4   | `AGENTS.md` and `merge-policy.md` carry the two rules and the verb, with a recorded review       | yes                  | `c1e964a`; `0813` ACCEPT after one REWORK, both hashes in the record                |
 
 ## Deviations
 
+- **The runner exists but the seat files do not yet name it.** `scripts/git/verb.mjs` implements the checks and the
+  tests cover every refusal, but pointing the seat at it changes how a brief is executed, and that belongs in the
+  same review as the two protected documents rather than a second edit to the seat files. Until it is named, the
+  runner is a parent-side tool: the parent builds the brief, runs it, and the seat remains the executor of record.
 - **The preflight landed alone.** The round is otherwise not built: the runner, the seat files and the two protected
   documents wait for a round that starts from a clean tree, which is the rule this round is about.
 - **`restore` landed in both seat files; the brief-file runner is still owed.** `.opencode/agents/git-executor.md` and
