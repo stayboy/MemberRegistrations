@@ -695,6 +695,16 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   **read-only** and derived: the
   form MUST NOT collect a range, and the event list and detail render the API's range with every
   occurrence inside it.
+- FR-42b (preview placement, owner 2026-11-24): the **resolved dates are a preview, not an input**, so the form shows a
+  one-line summary (range, count of dates, and the first date's member count) with a **Preview dates** control that opens
+  a dialog holding the full table - date and members - for the rule or period as it stands. **The summary is populated by the same endpoint, never locally:** the form fetches
+  `POST /v1/events/preview` once the rule settles (a short debounce, never on every keystroke) and caches the response,
+  so its range, date count and first-date member count are all the server's - a client-computed count would violate
+  AC-60. The dialog re-fetches on open so the officer sees the current dates, and it reports its own failure in the
+  dialog without ever disabling **Save** (the preview is not an input). Range and date count mean the preview's
+  90-day window, not every date the rule could ever produce. The event detail's **recurrence panel** carries the same
+  **Preview dates** control, previewing the stored rule read-only. A table rendered inline on the form is a defect under
+  this clause.
 - FR-42b: The event form's date rows MUST carry a date and optional start/end times, and nothing else:
   no per-date venue, note or status control, so a new occurrence is `scheduled`. Each date MUST be
   unique; a blank time inherits the event's time. With **Repeats** on, the date rows are replaced by the
@@ -739,8 +749,8 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   shares has already been built for the picker (FR-42c), so the page is a read surface plus that reuse.
 - FR-42e: The event detail's write verbs MUST sit where FR-9a groups them. **Edit**, **Activate** and **Archive**
   belong in the page's single `Actions` menu with `Refresh` as the bare utility to their left; **Cancel** is a
-  control on the occurrence's own row, not a page verb; **Add schedule version** and **Add exception** are buttons
-  inside the recurrence panel. **Add schedule version is an extension** - its `effectiveFrom` is after the last
+  control on the occurrence's own row, not a page verb; **Add schedule version**, **Add exception** and the **Preview dates** control
+  (FR-42b: previewing the stored rule read-only) are buttons inside the recurrence panel. **Add schedule version is an extension** - its `effectiveFrom` is after the last
   generated occurrence and it needs no guard - while an **exception on a generated date is a rewrite** and answers
   `409 recurrence_locked` once the guard is closed; an exception on a future date is an extension. The verbs MUST
   follow the parent's state: on a `draft`, **Activate** is the primary
@@ -1150,6 +1160,8 @@ exist yet. (FR-1, FR-9)
 ### AC-60: **Given** the event detail, its form and the audience picker (the Admin page is deferred, FR-42d), **When** any audience is rendered, **Then** only the API's `summary` sentence is shown, no rule JSON or client-computed member count appears, and the caption states that ministry and presbyter status are read as of today. (FR-84)
 
 ### AC-62: **Given** an event detail, **When** the parent is `draft`, **Then** **Activate** is the primary action beside the `Actions` menu (MR-1's rule for a page's primary action), **Archive** is unavailable, and **Cancel** on an occurrence row is disabled with the reason shown rather than hidden; **When** the parent is `active`, **Then** **Archive** and a row **Cancel** that collects a reason are offered, and a cancelled occurrence reads `cancelled` with its note in the row; **When** the parent is `archived`, **Then** every write verb is absent, no **Restore** is offered, and the screen says the event is read-only. (FR-42, FR-42e)
+
+### AC-63a: **Given** a recurring event or a selected period, **When** the form is open, **Then** the resolved dates appear only as a one-line summary plus a **Preview dates** control, the summary and the dialog both take their numbers from `POST /v1/events/preview` (never a client count, AC-60), the summary is fetched once the rule settles and the dialog re-fetches on open, a failed preview reports in the dialog and never disables **Save**, and no inline table lengthens the form. (FR-42b)
 
 ### AC-63: **Given** **Repeats** is on in the event form, **When** the operator picks daily, weekly, fortnightly or monthly, **Then** the request carries the matching `rrule` with the weekday, interval or day taken from `effectiveFrom` and no raw `rrule` is typed, and a daily interval of 3 carries `INTERVAL=3`; **Given** a schedule version read from the API, **When** it is rendered, **Then** it shows the same label that authored it ("Daily", "Every 3 days", the weekday set), and a schedule outside the vocabulary renders read-only from the stored string. (FR-42f)
 

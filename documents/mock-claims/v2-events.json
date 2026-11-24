@@ -119,7 +119,7 @@
     "10-event-create": {
       "mock": {
         "path": "mockups/v2-events/10-event-create.png",
-        "sha256": "7a5823a54210d7d1236e86bb89f2a604d87dfcd37e1ccedad8fced0693b61263",
+        "sha256": "59aef7da452c07f1eea310d5c170fa74db17e488fbd3ed05f280f7b76e2ae329",
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
@@ -127,7 +127,7 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "7a5823a54210d7d1236e86bb89f2a604d87dfcd37e1ccedad8fced0693b61263",
+        "sha256": "59aef7da452c07f1eea310d5c170fa74db17e488fbd3ed05f280f7b76e2ae329",
         "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form: audience set with per-audience counts, the four-cadence builder, the period choice, resolved dates with the intersection count"
       }
     },
@@ -227,7 +227,7 @@
     "10-event-create-daily": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-daily.png",
-        "sha256": "4ab281fd64ad92445241711b80f30c7a08b7888d05c75f60874f86f70ecf62f5",
+        "sha256": "fd4fb67b819992f0a2754f4490c3102b497fdf05953e51efae3becdab9766463",
         "source": "mockups/v2-events/10-event-create-daily.html"
       },
       "baseline": null,
@@ -235,14 +235,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "4ab281fd64ad92445241711b80f30c7a08b7888d05c75f60874f86f70ecf62f5",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a daily cadence and its 1-7 interval"
+        "sha256": "fd4fb67b819992f0a2754f4490c3102b497fdf05953e51efae3becdab9766463",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a daily cadence and its 1-7 interval"
       }
     },
     "10-event-create-monthly": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-monthly.png",
-        "sha256": "bc320b810c26ce9f75ca21a256777ddaf88d0cb90fa5930e88516537778b4445",
+        "sha256": "5c3b0a32570f71ec1a71a3558006252562f8bc0339d077d5bf64761de582ea3a",
         "source": "mockups/v2-events/10-event-create-monthly.html"
       },
       "baseline": null,
@@ -250,14 +250,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "bc320b810c26ce9f75ca21a256777ddaf88d0cb90fa5930e88516537778b4445",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a monthly cadence and its day-of-month / positional choice"
+        "sha256": "5c3b0a32570f71ec1a71a3558006252562f8bc0339d077d5bf64761de582ea3a",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a monthly cadence and its day-of-month / positional choice"
       }
     },
     "10-event-create-period": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-period.png",
-        "sha256": "089a951bb640b8d080d213ddcb62cfef18c89d3a2aee876dea128abfc8dd4f34",
+        "sha256": "01c17f189098ac49b97a0807f1e42f598d5d384aed005a7589fe3f212216d9f3",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
       "baseline": null,
@@ -265,14 +265,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "089a951bb640b8d080d213ddcb62cfef18c89d3a2aee876dea128abfc8dd4f34",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a named period and its cycle month"
+        "sha256": "01c17f189098ac49b97a0807f1e42f598d5d384aed005a7589fe3f212216d9f3",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a named period and its cycle month"
       }
     },
     "10-event-create-no-match": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-no-match.png",
-        "sha256": "c292c0ef1fecabd72b37fe6a9dc20a29995250413940d2299b67e4681d31cae6",
+        "sha256": "0eb9c2748d00ba18039503f72cefd847cfbea72430aac0a8a1c8ac414b7549f9",
         "source": "mockups/v2-events/10-event-create-no-match.html"
       },
       "baseline": null,
@@ -280,14 +280,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "c292c0ef1fecabd72b37fe6a9dc20a29995250413940d2299b67e4681d31cae6",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form when the audience intersection is empty, and the warning that says so"
+        "sha256": "0eb9c2748d00ba18039503f72cefd847cfbea72430aac0a8a1c8ac414b7549f9",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form when the audience intersection is empty, and the warning that says so"
       }
     },
     "16-event-edit": {
       "mock": {
         "path": "mockups/v2-events/16-event-edit.png",
-        "sha256": "37059693371c5733b762a1877c88c9d8ed39d41657fbf897e36c1b0287bc8c77",
+        "sha256": "3e5c3695b53df69055d091f0a98aa0bac5e96ad9e7e34efc1457d02912466778",
         "source": "mockups/v2-events/16-event-edit.html"
       },
       "baseline": null,
@@ -295,14 +295,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "37059693371c5733b762a1877c88c9d8ed39d41657fbf897e36c1b0287bc8c77",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event with the rule editable (no history): the rewrite notice and the dates it resolves to"
+        "sha256": "3e5c3695b53df69055d091f0a98aa0bac5e96ad9e7e34efc1457d02912466778",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event with the rule editable (no history): the rewrite notice and the dates it resolves to"
       }
     },
     "17-event-edit-locked": {
       "mock": {
         "path": "mockups/v2-events/17-event-edit-locked.png",
-        "sha256": "5906bf446e6bf4d3ce1a123638c597e13255ac0bede896c5e0e1642ef9dde824",
+        "sha256": "577d08add9588174047f222b4cccd9301bcd5d2c3cb1bd4bb4837da97a1a11c4",
         "source": "mockups/v2-events/17-event-edit-locked.html"
       },
       "baseline": null,
@@ -310,14 +310,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "5906bf446e6bf4d3ce1a123638c597e13255ac0bede896c5e0e1642ef9dde824",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event once history exists: the cause named, the builder inert, the schedule outside the save"
+        "sha256": "577d08add9588174047f222b4cccd9301bcd5d2c3cb1bd4bb4837da97a1a11c4",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event once history exists: the cause named, the builder inert, the schedule outside the save"
       }
     },
     "18-event-create-standalone": {
       "mock": {
         "path": "mockups/v2-events/18-event-create-standalone.png",
-        "sha256": "5a582f809811dd8d94157b4f3a182832e5d0e081c62201cfa800a89bc319dc2c",
+        "sha256": "280a74b15064eafeead2523b5a3b29cb75c67222d174b4c40c65d2d462ca3a4d",
         "source": "mockups/v2-events/18-event-create-standalone.html"
       },
       "baseline": null,
@@ -325,14 +325,14 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "5a582f809811dd8d94157b4f3a182832e5d0e081c62201cfa800a89bc319dc2c",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): a first cut drawn from the approved spec before any UI code, with every later re-cut compared 1:1 against this one; pending the reviewer second look when the unattended work ends. the create form with Repeats off: explicit date rows, no range, no cadence"
+        "sha256": "280a74b15064eafeead2523b5a3b29cb75c67222d174b4c40c65d2d462ca3a4d",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with Repeats off: explicit date rows, no range, no cadence"
       }
     },
     "19-event-edit-standalone": {
       "mock": {
         "path": "mockups/v2-events/19-event-edit-standalone.png",
-        "sha256": "77fc8258a5a8e0cfd3e2a8140d14824f1e00751a23a784cc9f3f47dc8a58efb7",
+        "sha256": "8aa6ceee89188846ce47950b07e7b8a24b8ce749e27264c17a0412e7479d9630",
         "source": "mockups/v2-events/19-event-edit-standalone.html"
       },
       "baseline": null,
@@ -340,8 +340,23 @@
       "signed": {
         "by": "unattended",
         "at": "2026-11-24",
-        "sha256": "77fc8258a5a8e0cfd3e2a8140d14824f1e00751a23a784cc9f3f47dc8a58efb7",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): a first cut drawn from the approved spec before any UI code, with every later re-cut compared 1:1 against this one; pending the reviewer second look when the unattended work ends. the edit form of a standalone event: its date rows, no switch, the type fixed at create"
+        "sha256": "8aa6ceee89188846ce47950b07e7b8a24b8ce749e27264c17a0412e7479d9630",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a standalone event: its date rows, no switch, the type fixed at create"
+      }
+    },
+    "20-event-preview-dialog": {
+      "mock": {
+        "path": "mockups/v2-events/20-event-preview-dialog.png",
+        "sha256": "43f160d37e94418a5a3cd022fc93ed8489c12bf64680d844f93064f561b1cb4c",
+        "source": "mockups/v2-events/20-event-preview-dialog.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "signed": {
+        "by": "unattended",
+        "at": "2026-11-24",
+        "sha256": "43f160d37e94418a5a3cd022fc93ed8489c12bf64680d844f93064f561b1cb4c",
+        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): first drafts drawn from the approved spec before any UI code, re-cutting the earlier target, with the 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with the resolved-dates dialog open: the date and members table the form no longer carries inline"
       }
     }
   },

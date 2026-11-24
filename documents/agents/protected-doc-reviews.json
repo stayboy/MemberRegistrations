@@ -167,13 +167,13 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "7e0e7d2170ace9f5ed92d058e8b962b53fe9f3f6fbb32a3e51711714db4bb0e9",
+      "sha256": "ca39dad81ccaa6dada3e0ec1fb53af4e847555c8b5582e2a4515a49c57ea9e3c",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the catalogue records nine event-form wire designs as auto-signed - the create form (re-cut from a target whose pin had gone stale at 95cfe358 against a live 7a5823a5), four create variants (daily, monthly, named period, empty intersection), the recurring edit, the locked edit, the standalone create and the standalone edit. why: round event-periods is unattended and its design-first ruling means the wire designs must be signed before any UI code, so the round cannot proceed without these entries; the nine were target or absent, never owner-signed, which is what section 17 requires for auto-signed. rejected: recording the advisory pass that ran without the seat model named (a false attestation), leaving 10-event-create pinned at its stale hash, and marking any of the nine as signed by the owner.",
+      "reason": "changes: the catalogue records TEN event-form wire designs as auto-signed - the create form (re-cut from a target whose pin had gone stale at 95cfe358 against a live 7a5823a5), four create variants (daily, monthly, named period, empty intersection), the recurring edit, the locked edit, the standalone create, the standalone edit, and the resolved-dates dialog the form now defers to after the owner ruled the table a preview rather than an input. why: round event-periods is unattended and its design-first ruling means the wire designs must be signed before any UI code, so the round cannot proceed without these entries; all ten were target or absent, never owner-signed, which is what section 17 requires for auto-signed. rejected: recording the advisory pass that ran without the seat model named (a false attestation), leaving 10-event-create pinned at its stale hash, keeping the resolved-dates table inline, and marking any of the ten as signed by the owner.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - nine auto-signed states verified against history.json and the mockup inventory, all §17-legal, one basis wording fixed after the review (18/19 had no archived predecessor). PNG hashes were recomputed from disk by the parent before the review; the seat could not run shell to repeat it.",
+      "attestation": "Seat: consistent - ten auto-signed states verified against history.json and the mockup inventory, all section 17-legal; basis wording fixed for the two first cuts, and the preview dialog added after the owner ruling. PNG hashes recomputed from disk by the parent before and after the re-cut; the seat reported shell denied, so it could not repeat that.",
       "at": "2026-11-24T20:05:00Z"
     },
     {
