@@ -1,6 +1,6 @@
 # Spec — event audience, membership status and visitor identity
 
-**Status:** **Approved 2026-11-22** (owner) — spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`). Amended 2026-11-22 (clarifying, migration round): the migration seeds **six** fixed system audiences, not seven — the A-2 table is the count of record (`Everyone`, `Presbyters`, `Children 0-12`, `Youth 13-17`, `Adults 18+`, `Visitors only`) plus one per ministry.
+**Status:** **Approved 2026-11-22** (owner) - spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`). Amended 2026-11-22; **amended 2026-11-24** ("all as recommended", audience-predicate round): the regularity window moves onto the predicate, an unauthenticated caller sees `Everyone` only, `?ministry=` resolves through the legacy projection, and A-7 step 5 is all-or-nothing. (clarifying, migration round): the migration seeds **six** fixed system audiences, not seven — the A-2 table is the count of record (`Everyone`, `Presbyters`, `Children 0-12`, `Youth 13-17`, `Adults 18+`, `Visitors only`) plus one per ministry.
 
 **Author:** Solomon Owoo
 
@@ -23,8 +23,8 @@ An event's applicability is currently two columns: an optional `ministry_id` and
 flag. Those two facts decide three different things — the roster the attendance report calls `expected`,
 which events a member sees in USSD and in Activities, and what the event form asks for. Each surface
 re-implements the pair, so the rule lives in several places and every new grouping needs another column
-and another branch. (The member regularity window in the USSD spec also reads the pair today; this spec
-leaves that read where it is and records the alignment as out of scope.)
+and another branch. The member regularity window in the USSD spec also read the pair; the audience-predicate
+round (2026-11-24) moves it onto the same rule, so there is one predicate and one read.
 
 The pair cannot express the groups the church actually runs: "children and youth", "everyone except the
 choir", "adults", "the choir's presbyters", "our visitors". An operator who needs one of those either
@@ -232,9 +232,9 @@ active` clause (that is what `Everyone` is). There is no "matches everybody" sho
   membership history, so retroactive accuracy is not offered; this limit MUST be stated in the Audiences
   page hint and in the event detail's audience caption.
 - Ministry membership carries **no `assigned_on` floor** in the audience rule, for the same reason: the
-  register keeps no ministry history. (The member regularity window in the USSD spec keeps its own
-  existing floor and its own general/ministry scope; aligning it with the audience is out of scope and
-  waits for that spec's own amendment.)
+  register keeps no ministry history. The member regularity window in the USSD spec **moves onto this rule** in
+  the audience-predicate round (2026-11-24), so its floor and its general/ministry scope go with it - a member's
+  regularity can change as a result.
 - The roster and the visibility predicate MUST be the same implementation. A test asserts they agree
   for the same member, date and audience; a second copy of the rule is a defect.
 - `expected` is the count of evaluated members matching the rule at the occurrence date. It is not
@@ -259,6 +259,12 @@ active` clause (that is what `Everyone` is). There is no "matches everybody" sho
   event is visible when at least one occurrence in the read window matches.
 - A hidden event is **absent**, not refused: it is omitted from the USSD list and answers the existing
   hidden `404` on a member-scoped route. There is no `403` and no message that implies an event exists.
+- **An unauthenticated caller sees the `Everyone` audience and nothing else.** A first-time visitor has no record
+  and matches no rule, so applying the rule literally would empty the pre-login Activities list; an anonymous read
+  therefore returns the events whose `audienceId` **is** the seeded `Everyone` audience, without evaluating any rule.
+  A cancelled occurrence is absent from that list, as it is from every member-facing list. Age-band, `anyOf` and `noneOf` events are therefore
+  absent until someone signs in, and a ministry-restricted event is never public - the legacy "general" pair
+  derived an age-band event to general, and is not used for this.
 - A `Presbyters` audience is therefore hidden from non-presbyters by the ordinary rule; the
   `presbyter_only` special case is retired.
 - **Guardian.** An occurrence visible to a member under 18 at its date is also visible to that member's
@@ -359,9 +365,11 @@ otherNames?, memberNo? }`. The phone is normalised by the existing phone rule an
   `system`, `summary`) alongside `audienceId`. `ministry` and `presbyterOnly` become **read-only legacy
   projections** during the transition (see A-7); they are no longer accepted on create or update, and a
   client that sends them is `422 validation_error` with the field named.
-- The events list's `?ministry=` filter resolves through the audience: it selects events whose audience
-  contains a `ministry` clause with that code (and, during the transition, the legacy column). Its
-  meaning is unchanged.
+- The events list's `?ministry=` filter resolves through the **legacy projection**, not through clause presence:
+  it selects events whose projection's ministry is that code, which is an `allOf` over exactly one ministry.
+  Clause presence would make `noneOf(ministry CHOIR)` match `?ministry=CHOIR` and turn an inclusion filter into
+  an exclusion one. The filter is a legacy convenience, cannot express an age-band or `anyOf` event, and dies
+  with the columns.
 - The event detail carries the resolved roster summary the UI renders: per occurrence, `expected` (the
   audience's roster at that date), and per event the `audience` block above. No new roster route is
   added.
@@ -395,10 +403,14 @@ number and is not reserved here. It is one transaction, idempotent by natural ke
    (`legacy:‹ministryCode›:presbyters`) so the migration can reuse it. Two events with the same pair
    share one audience, because the pair is what the legacy column expressed.
 
-5. The legacy columns are **written by this migration** from each event's audience — `ministry_id` from
-   the audience's first ministry clause (null when it has none) and `presbyter_only` from its presbyter
-   clause — so readers that have not moved (`events.presbyter_only` in the roster SQL, the USSD list, the
-   `?ministry=` filter) keep working until the downstream round deletes them. After the migration no route
+5. The legacy columns are **written by this migration** from each event's audience, **all-or-nothing**:
+   `ministry_id` carries a code only when the rule is an `allOf` over exactly one ministry clause and, optionally, the
+   presbyter clause; `presbyter_only` is true only for the presbyter clause alone or that same
+   ministry-plus-presbyter `allOf`; every other rule projects null/false - a first-clause reading would write
+   `ministry_id = CHOIR` for `noneOf(ministry CHOIR)`, which every legacy reader reads as "only CHOIR", the
+   opposite of the rule. The columns exist so readers that have not moved (`events.presbyter_only` in the roster SQL
+   and the USSD list) keep working until the downstream round deletes them; the `?ministry=` filter is no longer
+   one of them, because it resolves through this projection. After the migration no route
    writes them **independently**: slice 2a keeps the legacy `ministryCode`/`presbyterOnly` inputs, maps them
    onto `audience_id`, and derives the two projections from the audience; slice 2b retires the inputs.
    **Stated limit:** an audience the pair cannot express (age, gender, status or a custom
@@ -500,9 +512,10 @@ member-facing surface is unchanged.
 - **Merging two member records.** Registering a giver whose phone already belongs to a member is a
   `409`, not a merge.
 - **A chained guardian's visibility.** Only the direct `guardian` edge is honoured.
-- **Changing the regularity calculation's scope.** The USSD profile's regularity window keeps its
-  general/ministry scope and its `assigned_on` floor; aligning it with the audience is a later amendment
-  to `member-registrations-ussd.md`, not this spec.
+- **Changing the regularity calculation's scope - reversed 2026-11-24.** The USSD profile's regularity window
+  used to keep its general/ministry scope and its `assigned_on` floor; the audience-predicate round moves it onto
+  the rule, so there is one predicate and one read. A member's `expected` and regular/non-regular status can
+  change as a result.
 
 ## Further Notes
 

@@ -1024,9 +1024,9 @@ supersedesId? }` returns `201`; the headcount write carries **no** `ended` — t
   `GET`; at most three events are shown, so at most three reads. These routes and the table are the 2026-11-05 headcount correction, delivered by 24d; they sit beside the 24b attendance seam and replace its `/expected` route.
 - **Attendance summary.** Returns `{ from, to, attended, expected, events: [{ eventId, name,
 sessionDate }] }`: `events` lists the member's attended rows in the window newest first, never
-  fabricated absences; `expected` is the number of held member-trackable sessions that apply to the
-  member in the same window (general events plus their ministries, with the join-date and
-  ministry-assignment floors). Headcount-only events never count.
+  fabricated absences; `expected` is the number of held member-trackable sessions in the same window whose
+  event's audience the member matches at that session's date - the register's own join rule is the only floor.
+  Headcount-only events never count.
 - **Profile.** Returns `{ memberNo, name, gender, age, ministries: [name], shepherd: { memberNo, name,
 gender, age } | null, attendance: { status, attended, expected, window: 5, lastAttendedOn } }` exactly
   as the USSD spec defines the regularity window and floors.
@@ -1449,9 +1449,9 @@ server mints it when absent) and either **manual `occurrences`** or **one `recur
 range is not accepted, and `startDate`/`endDate` are read-only. `PATCH` carries the parent fields (no recurrence, no
 `eventNo`, no occurrence set) and is the write the UI uses; `PUT` stays only for the legacy per-instance form until
 that form moves. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
-**parent** and take the date. The list's `?ministry=` filter selects events
-whose audience contains a `ministry` clause with that code (and, during the transition, the legacy
-column), so its meaning is unchanged. The retired `ministry` and `presbyterOnly` fields are refused with
+**parent** and take the date. The list's `?ministry=` filter selects events whose **legacy projection's** ministry is that code - an `allOf`
+over exactly one ministry - not events whose audience merely contains such a clause, which would turn an inclusion
+filter into an exclusion one for `noneOf`. The filter is a legacy convenience and dies with the columns. The retired `ministry` and `presbyterOnly` fields are refused with
 `422 validation_error`.
 
 ```ts

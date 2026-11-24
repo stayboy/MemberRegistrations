@@ -120,6 +120,13 @@ n/a - no drawing changes.
 
 ## Deviations
 
+- **The four spec amendments took three review passes, and the first two refusals were mine.** Each was the same fault:
+  the rule changed in one place while other sentences kept the old one - A-3 and the Problem Statement still called the
+  regularity alignment out of scope, the API spec still defined `?ministry=` as clause presence, and two later
+  sentences still scoped the regularity window by ministry. The third pass grep-read the concept across every spec and
+  found the set consistent. Amended: `member-registrations-event-audience.md` (A-3, A-4, A-6, A-7, Out of Scope and
+  the Problem Statement), `member-registrations-api.md` (the filter and the attendance summary), and
+  `member-registrations-ussd.md` (the regularity window).
 - **The round first opened on the parent's frontier, without a Grill row in its Seats table.** The owner caught it and
   the seat's eight replaced the parent's four. The rule that makes this a deviation rather than a grill is `AGENTS.md`
   §2's 2026-11-24 bullet, added in the same commit.
