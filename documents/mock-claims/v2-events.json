@@ -128,7 +128,8 @@
     "02-event-detail": {
       "mock": {
         "path": "mockups/v2-events/02-event-detail.png",
-        "sha256": "1d2cd1cbb86d437d6f8b9f0dd7027161e3951c533e9d3eaddd25d13ac93cea51"
+        "sha256": "7c27535a8f4205e5025db6f0e790371fc144048e75298e187c0bd0e24f019190",
+        "source": "mockups/v2-events/02-event-detail.html"
       },
       "baseline": null,
       "coverage": "target"
@@ -189,6 +190,33 @@
         "sha256": "d8b0b88a67117881428ca94618a8e4f80b115e5dc7ddafe5e1e6cce111de4b33",
         "basis": "§17 target re-cut for the Close control, the commit pair moving into the content and the invented header close being removed; the owner signature of 2026-11-22 is void and only the owner restores it"
       }
+    },
+    "12-audience-dialog": {
+      "mock": {
+        "path": "mockups/v2-events/12-audience-dialog.png",
+        "sha256": "5b91e33fdd23f91079659b62ef95b950ff25e37d732dc54f99a1e31a62943b7d",
+        "source": "mockups/v2-events/12-audience-dialog.html"
+      },
+      "baseline": null,
+      "coverage": "target"
+    },
+    "13-event-detail-draft": {
+      "mock": {
+        "path": "mockups/v2-events/13-event-detail-draft.png",
+        "sha256": "00fec6cb44703efca2783c0ddfb948abfeb9e1fd3f529744eeb93b17007829d6",
+        "source": "mockups/v2-events/13-event-detail-draft.html"
+      },
+      "baseline": null,
+      "coverage": "target"
+    },
+    "14-event-detail-archived": {
+      "mock": {
+        "path": "mockups/v2-events/14-event-detail-archived.png",
+        "sha256": "5dc7d095709050f20722e0a6591d7630ee933a39566e1ca2726848cef8b49a16",
+        "source": "mockups/v2-events/14-event-detail-archived.html"
+      },
+      "baseline": null,
+      "coverage": "target"
     }
   },
   "inventory": [
