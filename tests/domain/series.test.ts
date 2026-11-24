@@ -68,7 +68,6 @@ describe('the authored schedule vocabulary', () => {
 
   it('refuses a rule outside the closed vocabulary', () => {
     for (const body of [
-      'FREQ=DAILY',
       'FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25',
       'FREQ=WEEKLY',
       'FREQ=WEEKLY;BYDAY=SU;INTERVAL=5',
@@ -82,12 +81,63 @@ describe('the authored schedule vocabulary', () => {
       'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA;BYMONTHDAY=1',
       'FREQ=MONTHLY;BYMONTHDAY=0',
       'FREQ=MONTHLY;BYMONTHDAY=32',
+      'FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=5',
     ]) {
       expect(() => validateRrule(body), body).toThrow(ValidationError);
     }
   });
 
-  it('still expands a stored rule the vocabulary cannot express, so a read never refuses it', () => {
+  it('accepts a daily rule and expands it every day at INTERVAL=1', () => {
+    expect(validateRrule('FREQ=DAILY')).toBe('FREQ=DAILY');
+    expect(validateRrule('freq=daily;interval=1')).toBe('FREQ=DAILY;INTERVAL=1');
+
+    for (const rrule of ['FREQ=DAILY', 'FREQ=DAILY;INTERVAL=1']) {
+      expect(
+        expandSchedule({ effectiveFrom: '2026-01-04', rrule }, '2026-01-04', '2026-01-07'),
+        rrule,
+      ).toEqual(['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07']);
+    }
+  });
+
+  it('expands a daily rule at INTERVAL=3 to every third day', () => {
+    const rule = validateRrule('FREQ=DAILY;INTERVAL=3');
+
+    expect(rule).toBe('FREQ=DAILY;INTERVAL=3');
+    expect(
+      expandSchedule({ effectiveFrom: '2026-01-04', rrule: rule }, '2026-01-04', '2026-01-13'),
+    ).toEqual(['2026-01-04', '2026-01-07', '2026-01-10', '2026-01-13']);
+  });
+
+  it('bounds a daily interval to 1-7 and keeps weekly and monthly at 1-4', () => {
+    expect(validateRrule('FREQ=DAILY;INTERVAL=7')).toBe('FREQ=DAILY;INTERVAL=7');
+    expect(validateRrule('FREQ=WEEKLY;BYDAY=SU;INTERVAL=4')).toBe(
+      'FREQ=WEEKLY;BYDAY=SU;INTERVAL=4;WKST=SU',
+    );
+
+    for (const body of [
+      'FREQ=DAILY;INTERVAL=8',
+      'FREQ=DAILY;INTERVAL=0',
+      'FREQ=DAILY;INTERVAL=x',
+    ]) {
+      expect(() => validateRrule(body), body).toThrow(ValidationError);
+    }
+    expect(() => validateRrule('FREQ=DAILY;INTERVAL=8')).toThrow(/daily INTERVAL/);
+  });
+
+  it('refuses a key beside FREQ and INTERVAL on a daily rule, naming the field', () => {
+    for (const [body, key] of [
+      ['FREQ=DAILY;BYDAY=MO', 'BYDAY'],
+      ['FREQ=DAILY;BYMONTHDAY=1', 'BYMONTHDAY'],
+      ['FREQ=DAILY;BYSETPOS=1', 'BYSETPOS'],
+      ['FREQ=DAILY;INTERVAL=2;WKST=SU', 'WKST'],
+    ] as const) {
+      expect(() => validateRrule(body), body).toThrow(new RegExp(key));
+    }
+  });
+
+  it('still expands a stored daily rule written straight to the database', () => {
+    // The read path never calls assertVocabulary, so a row the fixtures seed
+    // with FREQ=DAILY expands as the rrule library reads it.
     expect(
       expandSchedule(
         { effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY' },
@@ -95,6 +145,26 @@ describe('the authored schedule vocabulary', () => {
         '2026-01-06',
       ),
     ).toEqual(['2026-01-04', '2026-01-05', '2026-01-06']);
+
+    expect(
+      resolveOccurrences({
+        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY;INTERVAL=3', endsOn: null }],
+        from: '2026-01-04',
+        to: '2026-01-10',
+        exceptions: [],
+        importedDates: [],
+      }),
+    ).toEqual(['2026-01-04', '2026-01-07', '2026-01-10']);
+  });
+
+  it('still expands a stored rule the vocabulary cannot express, so a read never refuses it', () => {
+    expect(
+      expandSchedule(
+        { effectiveFrom: '2026-12-01', rrule: 'FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25' },
+        '2026-12-01',
+        '2026-12-31',
+      ),
+    ).toEqual(['2026-12-25']);
   });
 
   it('keeps the Monday week of a stored rule without WKST and honours WKST=SU', () => {

@@ -738,9 +738,10 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   screen states that the event is read-only. **Add exception** MUST offer extra dates only, because canceling a
   scheduled date is the occurrence row's **Cancel**; a `cancelled` exception is not authored from the UI while the
   two writes do not agree on the occurrence row.
-- FR-42f: The recurrence MUST be authored through a closed vocabulary, never a raw `rrule`: **weekly**,
-  **fortnightly** and **monthly on the day** taken from the chosen `effectiveFrom`, with an optional `endsOn`. One
-  mapping module MUST produce and parse the API's `rrule` string, and its round trip MUST be tested, so a schedule
+- FR-42f: The recurrence MUST be authored through a closed vocabulary, never a raw `rrule`: **daily** (with an
+  interval of 1-7, so "every other day" is `INTERVAL=2`), **weekly**, **fortnightly** and **monthly on the day** taken
+  from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules.
+  One mapping module MUST produce and parse the API's `rrule` string, and its round trip MUST be tested, so a schedule
   version read from the API renders as the label that authored it. A recurrence outside that vocabulary is rendered
   read-only from the API's stored string rather than guessed at.
 - FR-42g: Write failures MUST be surfaced where the operator acted, never as a silent no-op: a `409` carrying a
@@ -1139,7 +1140,7 @@ exist yet. (FR-1, FR-9)
 
 ### AC-62: **Given** an event detail, **When** the parent is `draft`, **Then** **Activate** is the primary action beside the `Actions` menu (MR-1's rule for a page's primary action), **Archive** is unavailable, and **Cancel** on an occurrence row is disabled with the reason shown rather than hidden; **When** the parent is `active`, **Then** **Archive** and a row **Cancel** that collects a reason are offered, and a cancelled occurrence reads `cancelled` with its note in the row; **When** the parent is `archived`, **Then** every write verb is absent, no **Restore** is offered, and the screen says the event is read-only. (FR-42, FR-42e)
 
-### AC-63: **Given** **Repeats** is on in the event form, **When** the operator picks weekly, fortnightly or monthly, **Then** the request carries the matching `rrule` with the weekday or day taken from `effectiveFrom` and no raw `rrule` is typed; **Given** a schedule version read from the API, **When** it is rendered, **Then** it shows the same label that authored it, and a schedule outside the vocabulary renders read-only from the stored string. (FR-42f)
+### AC-63: **Given** **Repeats** is on in the event form, **When** the operator picks daily, weekly, fortnightly or monthly, **Then** the request carries the matching `rrule` with the weekday, interval or day taken from `effectiveFrom` and no raw `rrule` is typed, and a daily interval of 3 carries `INTERVAL=3`; **Given** a schedule version read from the API, **When** it is rendered, **Then** it shows the same label that authored it ("Daily", "Every 3 days", the weekday set), and a schedule outside the vocabulary renders read-only from the stored string. (FR-42f)
 
 ### AC-64: **Given** a write the API refuses, **When** it answers `409 event_draft`, `409 recurrence`, `409 status`, `409 audience_system`, `409 audience_name_in_use`, any create `409` (a duplicate `eventNo`), or a `422`, **Then** the message appears on the surface the operator acted on (a banner on the parent or panel, the dialog field, or the **Event number** field), the form or dialog keeps its values, and no request is silently dropped; **Given** a blank cancellation reason, **Then** the form refuses it before sending and the API's `reason_required` is never reached. (FR-42g)
 

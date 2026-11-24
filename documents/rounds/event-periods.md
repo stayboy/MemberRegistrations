@@ -30,7 +30,7 @@ written into the spec, not only here.
    endpoint's counts. Cost: a new query parameter, and the number is "at a date", so the caption must say so.
 5. **Which readers move.** Recommendation: all eight readers of `audience_id` move in this round. Cost: the round
    reaches USSD, both member reads and the series summary, and each surface needs its own test.
-6. **The schedule builder.** Recommendation: one builder component at both call sites, the three cadences kept as
+6. **The schedule builder.** Recommendation: one builder component at both call sites, the four cadences kept as
    presets. Cost: FR-42f, AC-63 and the dialog's DOM tests change.
 7. **The vocabulary's extent.** Recommendation: the closed set - weekday set, interval 1-4, end date, monthly
    day-of-month, monthly positional ±1, extra dates as exceptions. Cost: anything else stays read-only.
@@ -80,7 +80,7 @@ Expected files: `src/schemas/events.ts`, `src/db/migrations.ts`, `src/db/schema.
 rrule mapping, the period resolver, the exclusion-free audience schema), `src/openapi.ts`, `ui/src/format/rrule.ts`,
 the event form and `AddScheduleVersionDialog`, their tests, and the two mocks.
 
-Acceptance criteria are the amended spec's AC 1-16; they were written with the text, not after it.
+Acceptance criteria are the amended spec's AC 1-17; they were written with the text, not after it.
 
 ## Deviations
 
