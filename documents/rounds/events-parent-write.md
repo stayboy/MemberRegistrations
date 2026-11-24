@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Status                 | CLOSED                                                                                                                  |
+| Status                 | OPEN                                                                                                                    |
 | Tier                   | 2                                                                                                                       |
 | Mode                   | `unattended (auto-accept recommendations)` — the owner's Q8 answer, this round only                                     |
 | Base                   | `4496884`                                                                                                               |

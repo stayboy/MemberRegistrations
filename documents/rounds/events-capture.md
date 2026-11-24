@@ -142,6 +142,10 @@ Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
 
 ## Deviations
 
+- **The three merged rounds stay `OPEN`.** Closing them was the first commit of this round, but CI proved the
+  intent wrong: `check-round` judges _every_ round doc in the diff, so a closed `event-parent-ui.md` was re-checked
+  under R6 against `02-event-detail`, which is now `target`. Reverting left them byte-identical to `main`, so they
+  are out of this diff; the closure belongs to a docs-only change from a round that touches no `ui/src/`.
 - **The seat's diagnosis was wrong, and the truth was worse.** It predicted the panel lost `import=` from the URL; the trace shows the parameter present at failure and the dialog painted but `aria-hidden`. Fluent focused the already-open surface before tabster registered it, so tabster marked its own modalizer inactive ~200 ms after mount. Every opening of that panel was queryable for ~100 ms — a screen-reader defect, not a test artefact. Fixed by mounting the dialog closed and giving it a **Close** control, which is how every other dialog in the app behaves.
 - **A spec defect surfaced and was corrected in the same round.** AC-7a offered the end action on past and not-yet-started occurrences while its own changelog and `format/capture.ts` offered it only while live, and it named "End session" where the UI says "End of session". Amended with a clarifying changelog line; the `acsMatch` pattern in `v2-imports.json` moved with it, which is what caught it.
 - **Q3's premise did not survive reading the file**: every entry in `v2-events` asserts `image`, so there was no `test` field to re-point there. The claims that needed re-pointing live in `v2-imports`, and that is where they moved.
