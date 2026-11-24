@@ -322,14 +322,14 @@ migration and a wire contract — before any of it is built.
 **The move is mechanical, and that is why it was designed for.** The three periods today are code constants with a
 quoted definition; they become rows in a `named_periods` table seeded from those constants, each row carrying:
 
-| field         | meaning                                                                                               |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| `id`          | the wire id, stable and never reused (`communion-week`, `gospel-week`, `home-cells`, any added later) |
-| `name`        | the parish's name for it — the label an officer picks                                                 |
-| `definition`  | the rule **in plain words**, shown beside the choice and in the admin list                            |
-| `rule_kind`   | the resolver's shape: `week-before-first-weekday` or `single-date`                                    |
-| `rule_params` | what the kind needs (the weekday, an offset in days for a second week, or nothing)                    |
-| `active`      | archived rather than deleted, so a form open across the change cannot fail on submit                  |
+| field         | meaning                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `id`          | the wire id, stable and never reused (`communion-week`, `gospel-week`, `home-cells`, any added later)                          |
+| `name`        | the parish's name for it — the label an officer picks                                                                          |
+| `definition`  | the rule **in plain words**, shown beside the choice and in the admin list                                                     |
+| `rule_kind`   | the resolver's shape: `week-before-first-weekday` or `single-date`                                                             |
+| `rule_params` | what the kind needs: the weekday and `weeksBack` (0, 1, 2) for the week kind, or the weekday and its ordinal for a single date |
+| `active`      | archived rather than deleted, so a form open across the change cannot fail on submit                                           |
 
 **Names are free text; there is no enum of periods** (owner, 2026-11-24). A period is a row an officer creates, with an
 opaque `id` minted at creation and a **free-text name** — "Communion Week" is seed data, not a type, and the system never
@@ -352,6 +352,11 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
   tooltips**, not inline prose (owner, 2026-11-24): each control that needs one carries an info affordance beside its
   label, and the dialog keeps a short vertical rhythm rather than a column of sentences. The list shows the
   definition under the name when there is one, and the rule in words always, so a period is legible either way.
+- **The parameters are asked in sentences, never in resolver arithmetic** (owner, 2026-11-24). An officer does not type
+  an offset: the week kind asks **which week** — "the week before the month's first _[weekday]_", "the week before
+  that", "two weeks before that" — and stores `weeksBack` 0-2; the rule kind itself is chosen from human labels rather
+  than `week-before-first-weekday`. The raw values live in the API and in the list's rule-in-words line, never in a
+  form field.
 - **Archive, never delete.** `active = false` removes it from the create form; `GET /v1/events/periods` serves active
   rows by default and `includeArchived=true` for the admin list. A stored `period_id` on an event is never validated
   against the live catalogue after save.
