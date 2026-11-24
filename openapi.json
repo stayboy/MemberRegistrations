@@ -18190,17 +18190,17 @@
                         {
                           "id": "communion-week",
                           "name": "Communion Week",
-                          "definition": "The Sunday-to-Saturday week whose last day is the Saturday before the first Sunday of the cycle month."
+                          "definition": "The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday."
                         },
                         {
                           "id": "gospel-week",
                           "name": "Gospel Week",
-                          "definition": "Communion Week shifted back seven days: it ends on the Saturday eight days before the cycle month’s first Sunday."
+                          "definition": "The last week of the month before, when ministries hold their meetings: the week before Communion Week."
                         },
                         {
                           "id": "home-cells",
                           "name": "Home Cells",
-                          "definition": "The Monday of Communion Week."
+                          "definition": "The Monday of week 1 of the cycle month - the Monday of Communion Week, one date."
                         }
                       ]
                     }
@@ -18260,31 +18260,31 @@
                     "value": {
                       "occurrences": [
                         {
-                          "date": "2026-12-27",
+                          "date": "2026-12-28",
                           "expected": 410
                         },
                         {
-                          "date": "2026-12-28",
+                          "date": "2026-12-29",
                           "expected": 402
                         },
                         {
-                          "date": "2026-12-29",
+                          "date": "2026-12-30",
                           "expected": 118
                         },
                         {
-                          "date": "2026-12-30",
+                          "date": "2026-12-31",
                           "expected": 96
                         },
                         {
-                          "date": "2026-12-31",
+                          "date": "2027-01-01",
                           "expected": 88
                         },
                         {
-                          "date": "2027-01-01",
+                          "date": "2027-01-02",
                           "expected": 54
                         },
                         {
-                          "date": "2027-01-02",
+                          "date": "2027-01-03",
                           "expected": 76
                         }
                       ],

@@ -229,21 +229,35 @@ cadence            every month  |  quarterly
 month in quarter   1st | 2nd | 3rd            (quarterly only)
 month              this month | the month before
 week               1 | 2 | 3 | 4 | last
+week starts on     Monday | Sunday
 weekday            Sunday ... Saturday
 ```
 
-**A week belongs to the month its Sunday falls in**, Sunday-to-Saturday, so "week 1" is the week containing the
+**The week-start convention is a field on each period** (owner, 2026-11-24), defaulting to Monday for the seeded
+calendar: Monday-start makes Communion Week 30 Nov - 6 Dec 2026 and Home Cells 30 Nov, while Sunday-start makes the same
+week 6-12 Dec with Home Cells on 7 Dec. The **Communion Sunday is the same either way** - the month's first Sunday -
+and only the week's span moves. **A week belongs to the month its Sunday falls in**, so "week 1" is the week containing the
 month's first Sunday and "last" is the final such week - no week-4-versus-week-5 arithmetic, and a month with five
 Sundays does not create a fifth week. A **week** period returns seven dates from its Sunday; a **single-date** period
 returns the named weekday inside that week.
 
-**The three seeded periods, in this vocabulary:**
+**The three seeded periods are an example calendar, not the system's opinion** (owner, 2026-11-24): they are the
+Church of Pentecost's pattern - Communion Week, Gospel Week and Home Cells - shipped so a parish starts with a working
+calendar. The engine is denomination-agnostic; another church edits, archives or replaces all three, and nothing in the
+code assumes this set exists. In this vocabulary:
 
 - **Communion Week** - every month, week 1, Sunday. The pentecostal basis: the communion service is the Sunday of the
-  first week, so the week itself is week 1, Sunday to Saturday.
+  first week, so the week itself is week 1 - which under the seeded Monday-start is 30 Nov - 6 Dec 2026.
 - **Gospel Week** - every month, **the month before**, week last, Sunday: the week before Communion Week, when
   ministries hold their meetings.
-- **Home Cells** - every month, week 1, Monday: the Monday of Communion Week, one date.
+- **Home Cells** - every month, week 1, Monday: **the Monday in Communion Week**, one date. It is expressed as week
+  1 rather than as a reference to the other period, because under either week-start convention week 1's Monday _is_ the
+  Monday inside Communion Week - so the two agree without one depending on the other.
+
+**Two order rules the model needs** (owner, 2026-11-24): **`week 4` is not `last`** — in a five-Sunday month the fourth
+week and the final week are different weeks, and `last` is never an alias for 4; and for a **quarterly** rule the
+month-in-quarter test happens **before** `monthOffset`, so "quarterly, 1st month, the month before" resolves in the
+previous quarter rather than in the quarter's third month.
 
 **Exceptions are the event admin's, not the period's** (owner, 2026-11-24). A period never carries a per-cycle override:
 when a month's service moves, the officer adjusts or creates **that event** in the event admin with the existing

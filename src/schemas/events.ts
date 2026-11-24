@@ -473,7 +473,7 @@ export const eventPeriodListSchema = z.object({
   items: z.array(eventPeriodSchema),
 });
 
-/** A period resolves against the month of the Communion Sunday it precedes: `YYYY-MM`. */
+/** The cycle is the calendar month the period resolves in: `YYYY-MM`. */
 export const eventPeriodPreviewSchema = z.object({
   id: eventPeriodIdSchema,
   cycleMonth: z

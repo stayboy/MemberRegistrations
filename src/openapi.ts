@@ -561,13 +561,13 @@ const eventPeriodListExample = { items: EVENT_PERIODS };
 /** A period preview: the resolved dates and both counts, nothing persisted. */
 const eventPeriodPreviewExample = {
   occurrences: [
-    { date: '2026-12-27', expected: 410 },
-    { date: '2026-12-28', expected: 402 },
-    { date: '2026-12-29', expected: 118 },
-    { date: '2026-12-30', expected: 96 },
-    { date: '2026-12-31', expected: 88 },
-    { date: '2027-01-01', expected: 54 },
-    { date: '2027-01-02', expected: 76 },
+    { date: '2026-12-28', expected: 410 },
+    { date: '2026-12-29', expected: 402 },
+    { date: '2026-12-30', expected: 118 },
+    { date: '2026-12-31', expected: 96 },
+    { date: '2027-01-01', expected: 88 },
+    { date: '2027-01-02', expected: 54 },
+    { date: '2027-01-03', expected: 76 },
   ],
   audienceCounts: [
     { id: everyoneAudienceExample.id, count: 480 },

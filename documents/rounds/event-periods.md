@@ -166,5 +166,10 @@ gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
   `period_name` snapshot; the server resolves at create; `?period=` filter), and a period may **recur monthly**
   (`period { id, frequency: 'monthly', day? }`, field-based on the event, one generator over two rule kinds). Each was
   reviewed by `0813` and each re-enters both gates.
+- **The period model was rebuilt twice on 2026-11-24** and landed as the ordinal-position model: a period is
+  cadence, month in quarter, this month or the month before, week (1-4 or last), weekday, and a **week-start
+  convention per row** (the seeded calendar is Monday-start). Communion Sunday is the month's first Sunday under
+  either convention; only the week's span moves. Resolver, date table (hand-computed for both conventions), OpenAPI
+  examples and the catalogue definitions all follow, and per-cycle exceptions stay in the event admin.
 - The round's lineage lives on `feat/event-periods-ui`, pushed, one commit ahead of `main@46f4886`.
 - The original draft still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.
