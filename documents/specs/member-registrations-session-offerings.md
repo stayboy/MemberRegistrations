@@ -1,6 +1,16 @@
 # Spec — session offerings
 
-**Status:** **Approved 2026-11-22** (owner) — spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`).
+**Status:** **Withdrawn 2026-11-24** by the owner, before any code was built against it. **The decision that
+replaced it:** an offering is **defined at the parent event** — the attachment is event-level, one row per
+(offering, event) — and it is **collected against a session**, through the per-session offering count
+(`POST`/`GET /v1/events/{eventId}/offering-counts` with a `sessionDate`). The per-occurrence attachment this
+spec specified, and the round it named, are **not happening**; the event-level routes stay where they are, and
+the five `/v1/series/:id/offerings` aliases are deleted with the rest of `/v1/series/*`. The offering
+exceptions remain keyed to the attachment. The rest of this document is kept as the record of what was
+considered and rejected. **Owner, 2026-11-24:** "offerings are collected against sessions, but defined at
+parent event."
+
+**Previously:** **Approved 2026-11-22** (owner) - spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`).
 
 **Author:** Solomon Owoo
 
@@ -17,9 +27,10 @@ the source of truth for the attachment unit, its terms pin, the per-session oper
 money rows; `member-registrations-events-offerings.md` keeps the catalogue, the terms of reference, the
 contributions/pledges rules and the landing, and points here for the attachment.
 
-**Round order.** This is a **separate round after the event-as-parent (B) migration and API round**: the
-occurrence rows and their ids are its prerequisite. It lands no code until that round has merged, and its
-migration and wire are reviewed as that round's gates.
+**Round order — withdrawn.** This was to be a **separate round after the event-as-parent (B) migration and API
+round**, with the occurrence rows as its prerequisite. **It does not run** (owner, 2026-11-24): the attachment stays
+at the parent event and the session carries the collection, so its migration and wire gates are never opened. The
+paragraph is kept as part of the record.
 
 ## Problem Statement
 
@@ -398,6 +409,6 @@ their own rounds without a flag day.
 - **Rollback.** Every migration step is additive in this round: the old tables and columns stay, the new
   ones are additive and nullable until backfilled, and reverting is a code revert plus a down migration
   that drops only the new tables. No money row loses its original target.
-- **Round order and gates.** This spec is a separate round after the event-parent migration and API
-  round; the occurrence ids are its prerequisite. Its own migration and wire are reviewed as that
-  round's gates, and the owner authorises that round by name before any code or data moves.
+- **Round order and gates — withdrawn.** This was to be a separate round after the event-parent migration and
+  API round, with its own migration and wire gates. It does not run (owner, 2026-11-24); the requirement is
+  superseded by the parent-level attachment recorded at the top of this document.

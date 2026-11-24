@@ -73,9 +73,9 @@
     "publish-executor": "Runs only on clean `main` after a merge (owner, 2026-11-18). Like the git executor it is unclocked, so probe it on first use after a merge rather than at round open. `opencode/deepseek-v4.1-flash-free` is the free rung and `publish-executor-fallback.md` serves the metered second rung; a free provider exhausted twice in a day is replaced at the round’s end."
   },
   "probedAt": {
-    "worker-flash": "2026-11-17",
-    "reviewer-pro": "2026-11-17",
-    "grill-flash": "2026-11-17",
-    "git-executor": "2026-11-17"
+    "worker-flash": "2026-11-24",
+    "reviewer-pro": "2026-11-24",
+    "grill-flash": "2026-11-24",
+    "git-executor": "2026-11-24"
   }
 }

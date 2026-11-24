@@ -78,17 +78,19 @@ The brief must contain:
 
 - the owner's sentence, quoted verbatim, containing the verb you are asked to run (or the round doc's
   `Verbs this round needs:` line that the owner's go approved);
-- `verb:` one of `branch`, `commit`, `push`, `pr`, `merge`, `tag`, `sync`;
+- `verb:` one of `branch`, `commit`, `push`, `pr`, `merge`, `tag`, `sync`, `restore`;
 - `branch:`;
 - `files:` for a commit;
 - `message:` for a commit;
 - `tree:` the `git rev-parse 'HEAD^{tree}'` the parent showed;
+- `revision:` and `paths:` for a restore - the revision to restore from and the exact paths;
 - `checks:` for a merge - the PR number and `verify`, `ui` and `ui-e2e` reported green;
 - a `merge` brief on uncommitted work also carries `files:` and `message:` for its commit step.
 
 Return `REFUSED: <reason>` when the verb is absent from the owner's sentence, the tree hash does not
 match `git rev-parse 'HEAD^{tree}'`, the file list is not what is staged, a merge brief names neither all
-three checks green nor the chain's wait condition, or the brief contains a secret or a credential. One
+three checks green nor the chain's wait condition, a restore brief has no `revision:`, names an ambiguous
+path or does not state what is discarded, or the brief contains a secret or a credential. One
 brief authorises one verb: a commit brief cannot push.
 
 ## Actions
@@ -104,6 +106,12 @@ brief authorises one verb: a commit brief cannot push.
   longer exists in the worktree, `git add -A -- <files>` stages its deletion; otherwise `git add -- <files>`.
   Append `Model-Seat: git-executor (ollama-cloud/mimo-v2.6-flash)` and `Fallback-Reason: <classification>` if
   the message lacks them.
+- `restore`: `git checkout <revision> -- <paths>` - the narrow undo for a bad edit. `revision:` must name
+  a commit or `HEAD`, never a branch that is not local, and `paths:` must be the exact paths the brief
+  lists; never `--`, never `.`, never a glob. The brief must state what is being discarded and why. This
+  verb never stages, never commits and never touches a path outside `paths:`. Use it only to undo the
+  parent's own uncommitted edit; a restore that would discard work the owner has not seen is
+  `REFUSED: undisclosed discard`.
 - `push`: `git push -u origin <branch>`; never bare `git push`, never `main`.
 - `pr`: `gh pr create --base main --head <branch> --body-file <path>` with the path the brief names (the
   parent authors the body); if a PR already exists for the head, adopt it rather than opening a second.
