@@ -1,6 +1,16 @@
 # Spec — session offerings
 
-**Status:** **Approved 2026-11-22** (owner) — spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`).
+**Status:** **Withdrawn 2026-11-24** by the owner, before any code was built against it. **The decision that
+replaced it:** an offering is **defined at the parent event** — the attachment is event-level, one row per
+(offering, event) — and it is **collected against a session**, through the per-session offering count
+(`POST`/`GET /v1/events/{eventId}/offering-counts` with a `sessionDate`). The per-occurrence attachment this
+spec specified, and the round it named, are **not happening**; the event-level routes stay where they are, and
+the five `/v1/series/:id/offerings` aliases are deleted with the rest of `/v1/series/*`. The offering
+exceptions remain keyed to the attachment. The rest of this document is kept as the record of what was
+considered and rejected. **Owner, 2026-11-24:** "offerings are collected against sessions, but defined at
+parent event."
+
+**Previously:** **Approved 2026-11-22** (owner) - spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`).
 
 **Author:** Solomon Owoo
 

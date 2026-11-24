@@ -97,12 +97,11 @@ contracts they will use.
 - **Offering definition** with a versioned **terms of reference** (name, purpose, kind, currency,
   target, start/end, payment-gateway metadata). The name is optional; the display defaults to
   `${event.name} · ${kind}`. Special offerings may have their own name.
-- **Session attachment**: two or more offerings per event, one **session offering** per occurrence
-  (`member-registrations-session-offerings.md`): a recurring event declares its set on its recurrence,
-  each generated occurrence receives a session offering, and an operator may skip, opt in or adjust one
-  session. Each session offering pins its terms version and carries its own `availableUntil`, whose
-  effective expiry is its own date, else the terms date, else the occurrence's date. Expiry blocks new
-  gifts; a pending pledge can still be honored.
+- **Session attachment**: **withdrawn 2026-11-24** (owner) — the attachment stays at the **parent event**, and
+  what a session carries is the **collection**: the per-session offering count records what was given on that
+  date. The per-occurrence attachment described in `member-registrations-session-offerings.md` was considered
+  and rejected; that spec is withdrawn, and the event-level routes stay where they are. An operator still
+  records a count per session, and exceptions remain keyed to the attachment.
 - **Contributions**: active members, registered visitors and first-time visitors can give to a session
   offering, by app, USSD or manual entry; amount is stored in integer minor units.
 - **First-time visitors**: name + phone, receipt/reference, no member record. First-time visitor totals
@@ -125,10 +124,12 @@ contracts they will use.
 
 ### V3 phase 1 - offering definitions and attachments (ticket 20)
 
-> **Forward pointer (2026-11-22).** This phase is the contract **until** the session-offerings round
-> (`member-registrations-session-offerings.md`), which makes the attachment per occurrence, moves these
-> event-level routes, and turns the exception table into the session offering's `active` flag. Read the
-> attachment rules below as today's shape, not the target; the catalogue and terms rules are unchanged.
+> **Forward pointer (2026-11-24, superseding the 2026-11-22 note).** The session-offerings round that would
+> have made the attachment per occurrence is **withdrawn by the owner**: an offering is **defined at the parent
+> event** and **collected against a session**, which is exactly what these event-level routes and the
+> per-session offering count already do. Read the attachment rules below as the shape, not as "today's
+> temporary shape"; `member-registrations-session-offerings.md` is kept only as the record of what was
+> considered and rejected. The catalogue and terms rules are unchanged.
 
 Ticket 20 ships the offering domain and its wire contract. Contributions, pledges, reminders, the USSD
 flow, the gateway and the offerings UI are tickets 21–24; the contribution route is where the expiry

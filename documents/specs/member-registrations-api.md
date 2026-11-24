@@ -744,9 +744,11 @@ validation_error` with the field named. A recurring event's name and audience ar
   parent: see `member-registrations-session-offerings.md`.
 - **Transition.** Until the UI and downstream rounds move, `/v1/events`, `/v1/events/:id` and `/v1/series/:id` serve
   their **legacy shapes by default**, and the parent read with `view=parent` (the window's `from`/`to` apply to
-  both; any other `view` value is `422 validation_error`). The flag and the legacy serialisers retire in the downstream
-  round once the UI and USSD have moved, when the default flips to the parent (the `/v1/series` alias flips with the
-  UI alone). This keeps the deployed UI working
+  both; any other `view` value is `422 validation_error`). **The flip (owner, 2026-11-24):** the default becomes the
+  parent read, the legacy serialisers retire, and **`view=parent` stays accepted as an ignored alias** rather than
+  being removed — the UI sends it on every event read, and removing it would force a UI change into a round that
+  carries a migration and a public-route deletion. The flag retires in a later UI-only round, with the mock rebuild.
+  The `/v1/series` alias retires with the deletion of `/v1/series/*`. This keeps the deployed UI working
   across the migration and is the only additive wire exception on the events read.
 
 ### Recurrence
