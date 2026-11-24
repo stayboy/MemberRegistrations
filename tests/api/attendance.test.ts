@@ -30,7 +30,11 @@ async function createTodaySeries(name: string): Promise<string> {
     .send({
       name,
       timezone: 'UTC',
-      schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY', endsOn: day(0) },
+      schedule: {
+        effectiveFrom: day(0),
+        rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+        endsOn: day(0),
+      },
     });
   expect(response.status).toBe(201);
   return response.body.id as string;
@@ -821,7 +825,7 @@ describe('generation backfill', () => {
         timezone: 'UTC',
         schedule: {
           effectiveFrom: day(0),
-          rrule: 'FREQ=DAILY',
+          rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
           endsOn: day(0),
         },
       });

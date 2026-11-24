@@ -859,7 +859,7 @@ describe('membership fields and the overview projection', () => {
       .send({
         name: 'Overview Today Series',
         timezone: 'UTC',
-        schedule: { effectiveFrom: day(0), rrule: 'FREQ=DAILY' },
+        schedule: { effectiveFrom: day(0), rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU' },
       });
     expect(series.status).toBe(201);
 

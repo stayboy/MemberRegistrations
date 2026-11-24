@@ -10,7 +10,9 @@ import { sqlState } from '../errors/sqlstate.js';
 import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
 import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
-import { resolveSeriesOccurrences } from './occurrences.js';
+import { resolveCalendarOccurrences, resolveSeriesOccurrences } from './occurrences.js';
+import { resolve as resolvePeriod } from '../domain/periods.js';
+import { memberMatchesAudience } from '../domain/audience-evaluator.js';
 import { sessionIsClosed } from './captures.js';
 import type { Gender } from './members.js';
 import {
@@ -30,6 +32,8 @@ import type { SeriesSummary } from '../schemas/reference.js';
 import type {
   CreateEventParentInput,
   EventListQuery,
+  EventPreview,
+  EventPreviewInput,
   RecurrenceExceptionInput,
   RecurrenceScheduleInput,
   UpdateEventInput,
@@ -1471,6 +1475,65 @@ export class EventRepository {
 
     const window = await this.parentWindow(id);
     return (await this.getParent(id, window.from, window.to))!;
+  }
+
+  /**
+   * `POST /v1/events/preview`: the dates a create would store and the audience
+   * counts the form shows, with **nothing written**. A recurrence resolves
+   * through the same calendar resolver the create uses, over the same 90-day
+   * first window; a named period resolves through the pure resolver and needs
+   * no window. `expected` is the intersection count from the composition
+   * function, never the primary audience and never a sum.
+   */
+  async preview(input: EventPreviewInput): Promise<EventPreview> {
+    const requestedAudienceIds = input.audienceIds ?? (input.audienceId ? [input.audienceId] : []);
+    const audiences = requestedAudienceIds.length
+      ? await Promise.all(
+          requestedAudienceIds.map((audienceId) => assertAudienceUsable(this.db, audienceId)),
+        )
+      : [await assertAudienceUsable(this.db, await audienceIdFor(this.db, false))];
+
+    let dates: string[];
+    // Each audience's own count is a label at the first resolved date. With no
+    // resolved date at all, the window's start is the only date the form knows.
+    let countDate: string;
+    if (input.period) {
+      dates = resolvePeriod(input.period.id, input.period.cycleMonth);
+      countDate = dates[0]!;
+    } else {
+      const recurrence = input.recurrence!;
+      const schedules = recurrence.schedules.map(normalizeSchedule);
+      const window = firstWindow(schedules);
+      dates = resolveCalendarOccurrences(
+        {
+          schedules,
+          exceptions: recurrence.exceptions.map((exception) => ({
+            date: assertDate(exception.date, 'date'),
+            kind: exception.kind,
+          })),
+          importedDates: [],
+        },
+        window.from,
+        window.to,
+      );
+      countDate = dates[0] ?? window.from;
+    }
+
+    const rules = audiences.map((audience) => audience.rule);
+    const register = await audienceMembers(this.db, dates[dates.length - 1] ?? countDate);
+
+    return {
+      occurrences: dates.map((date) => ({
+        date,
+        expected: register.filter((member) => memberMatchesEventAudiences(rules, member, date))
+          .length,
+      })),
+      audienceCounts: audiences.map((audience) => ({
+        id: audience.id,
+        count: register.filter((member) => memberMatchesAudience(audience.rule, member, countDate))
+          .length,
+      })),
+    };
   }
 
   /**

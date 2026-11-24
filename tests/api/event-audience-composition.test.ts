@@ -179,7 +179,9 @@ describe('event audience composition', () => {
         startTime: '09:00',
         venueType: 'auditorium',
         audienceIds: [everyoneId, choirId],
-        recurrence: { schedules: [{ effectiveFrom: DATE, rrule: 'FREQ=DAILY' }] },
+        recurrence: {
+          schedules: [{ effectiveFrom: DATE, rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU' }],
+        },
       });
     expect(first.status).toBe(201);
 
@@ -191,7 +193,11 @@ describe('event audience composition', () => {
         startTime: '09:00',
         venueType: 'auditorium',
         audienceIds: [choirId, everyoneId],
-        recurrence: { schedules: [{ effectiveFrom: '2030-02-11', rrule: 'FREQ=DAILY' }] },
+        recurrence: {
+          schedules: [
+            { effectiveFrom: '2030-02-11', rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU' },
+          ],
+        },
       });
     expect(reordered.status).toBe(409);
     expect(reordered.body.detail).toContain('audience set');
@@ -205,7 +211,11 @@ describe('event audience composition', () => {
         name: 'Choir Weekly',
         ministryCode: 'CHOIR',
         timezone: 'UTC',
-        schedule: { effectiveFrom: DATE, rrule: 'FREQ=DAILY', endsOn: DATE },
+        schedule: {
+          effectiveFrom: DATE,
+          rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+          endsOn: DATE,
+        },
       });
     expect(series.status).toBe(201);
 

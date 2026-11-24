@@ -132,6 +132,8 @@ because this commit carries no code.
 | --------------------- | -------------------------- | ------ |
 | pre-commit (this doc) | `npm run verify:precommit` | pass   |
 | PR 1 contract         | `npm run verify:fast`      | pass   |
+| PR 2 API + migration  | `npm run verify:fast`      | pass   |
+| PR 2 smoke            | `npm run smoke`            | pass   |
 
 gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 

@@ -6832,7 +6832,8 @@
                     "rrule": {
                       "type": "string",
                       "minLength": 6,
-                      "maxLength": 200
+                      "maxLength": 200,
+                      "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
                     },
                     "endsOn": {
                       "anyOf": [
@@ -7551,7 +7552,8 @@
                     "rrule": {
                       "type": "string",
                       "minLength": 6,
-                      "maxLength": 200
+                      "maxLength": 200,
+                      "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
                     },
                     "endsOn": {
                       "anyOf": [
@@ -7826,7 +7828,8 @@
           "rrule": {
             "type": "string",
             "minLength": 6,
-            "maxLength": 200
+            "maxLength": 200,
+            "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
           },
           "endsOn": {
             "anyOf": [
@@ -18192,7 +18195,7 @@
                         {
                           "id": "gospel-week",
                           "name": "Gospel Week",
-                          "definition": "Communion Week shifted back seven days; it ends on the Saturday eight days before the cycle month begins."
+                          "definition": "Communion Week shifted back seven days: it ends on the Saturday eight days before the cycle month’s first Sunday."
                         },
                         {
                           "id": "home-cells",
@@ -18256,6 +18259,10 @@
                     "summary": "Communion Week 2027-01 resolved, with both counts",
                     "value": {
                       "occurrences": [
+                        {
+                          "date": "2026-12-27",
+                          "expected": 410
+                        },
                         {
                           "date": "2026-12-28",
                           "expected": 402
@@ -19337,7 +19344,7 @@
                         },
                         {
                           "effectiveFrom": "2027-01-03",
-                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU",
                           "endsOn": "2027-12-26"
                         }
                       ],
@@ -19411,7 +19418,7 @@
                         },
                         {
                           "effectiveFrom": "2027-01-03",
-                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU",
                           "endsOn": "2027-12-26"
                         }
                       ],
@@ -19490,7 +19497,7 @@
                         },
                         {
                           "effectiveFrom": "2027-01-03",
-                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+                          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU",
                           "endsOn": "2027-12-26"
                         }
                       ],

@@ -77,7 +77,7 @@ beforeAll(async () => {
       description: 'Sunday service',
       schedule: {
         effectiveFrom: SERIES_START,
-        rrule: 'FREQ=DAILY',
+        rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
       },
     });
   expect(series.status).toBe(201);
@@ -229,7 +229,11 @@ describe('GET /v1/events?view=parent', () => {
     });
     expect(event.audience.summary).toContain('ministry CHOIR');
     expect(event.recurrence.schedules).toEqual([
-      { effectiveFrom: SERIES_START, rrule: 'FREQ=DAILY', endsOn: null },
+      {
+        effectiveFrom: SERIES_START,
+        rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+        endsOn: null,
+      },
     ]);
     expect(event.occurrences.map((row: { date: string }) => row.date)).toEqual([
       FIRST_HELD,
@@ -496,7 +500,7 @@ describe('parent next occurrence uses the event timezone', () => {
         .send({
           name,
           timezone,
-          schedule: { effectiveFrom: origin, rrule: 'FREQ=DAILY' },
+          schedule: { effectiveFrom: origin, rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU' },
         });
 
     const kiritimati = await create('Kiritimati Daily Service', 'Pacific/Kiritimati');

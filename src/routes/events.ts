@@ -13,6 +13,7 @@ import {
   eventListQuerySchema,
   eventParentDetailQuerySchema,
   eventParentListQuerySchema,
+  eventPreviewInputSchema,
   eventViewQuerySchema,
   headcountInputSchema,
   headcountListQuerySchema,
@@ -23,6 +24,7 @@ import {
   updateEventSchema,
 } from '../schemas/events.js';
 import { offeringCountInputSchema, offeringCountQuerySchema } from '../schemas/offering-counts.js';
+import { EVENT_PERIODS } from '../domain/periods.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventDetail, EventRepository } from '../repos/events.js';
 import type { HeadcountRepository } from '../repos/headcounts.js';
@@ -118,6 +120,20 @@ export function eventsRouter(
     const result = await repo.generate(query.from, query.to, actorOf(req));
     res.setHeader('Cache-Control', 'no-store');
     res.json(result);
+  });
+
+  // The read-only period catalogue; before /:id so `periods` is never an id.
+  router.get('/periods', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ items: EVENT_PERIODS });
+  });
+
+  // Non-persistent: the form's dates and counts, with nothing written. Before
+  // /:id for the same reason as /generate.
+  router.post('/preview', async (req, res) => {
+    const input = eventPreviewInputSchema.parse(req.body);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await repo.preview(input));
   });
 
   // Defined before /:id so the nested attendance paths can never be shadowed.

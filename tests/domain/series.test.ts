@@ -31,6 +31,95 @@ describe('rrule validation', () => {
   });
 });
 
+describe('the authored schedule vocabulary', () => {
+  it('accepts a weekday set, a monthly day and a monthly positional rule', () => {
+    expect(validateRrule('FREQ=WEEKLY;BYDAY=MO,TH,FR')).toBe('FREQ=WEEKLY;BYDAY=MO,TH,FR');
+    expect(validateRrule('FREQ=WEEKLY;BYDAY=SU;INTERVAL=4')).toBe(
+      'FREQ=WEEKLY;BYDAY=SU;INTERVAL=4;WKST=SU',
+    );
+    expect(validateRrule('FREQ=MONTHLY;BYMONTHDAY=31')).toBe('FREQ=MONTHLY;BYMONTHDAY=31');
+    expect(validateRrule('FREQ=MONTHLY;BYSETPOS=1;BYDAY=SA')).toBe(
+      'FREQ=MONTHLY;BYSETPOS=1;BYDAY=SA',
+    );
+    expect(validateRrule('FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA')).toBe(
+      'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA',
+    );
+  });
+
+  it('emits WKST=SU on a weekly rule carrying an interval', () => {
+    expect(validateRrule('FREQ=WEEKLY;INTERVAL=2;BYDAY=SU')).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
+    );
+    // A rule that already carries it round-trips unchanged.
+    expect(validateRrule('FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU')).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
+    );
+    expect(validateRrule('freq=weekly;interval=2;byday=su;wkst=su')).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
+    );
+  });
+
+  it('leaves a rule without an interval alone, because WKST changes nothing there', () => {
+    expect(validateRrule('FREQ=WEEKLY;BYDAY=MO,TH,FR')).toBe('FREQ=WEEKLY;BYDAY=MO,TH,FR');
+    expect(validateRrule('FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=2')).toBe(
+      'FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=2',
+    );
+  });
+
+  it('refuses a rule outside the closed vocabulary', () => {
+    for (const body of [
+      'FREQ=DAILY',
+      'FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25',
+      'FREQ=WEEKLY',
+      'FREQ=WEEKLY;BYDAY=SU;INTERVAL=5',
+      'FREQ=WEEKLY;BYDAY=SU;INTERVAL=x',
+      'FREQ=WEEKLY;BYDAY=1SU',
+      'FREQ=WEEKLY;BYDAY=SU;BYMONTH=12',
+      'FREQ=WEEKLY;BYDAY=SU;BYSETPOS=1',
+      'FREQ=MONTHLY',
+      'FREQ=MONTHLY;BYSETPOS=2;BYDAY=SA',
+      'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA,SU',
+      'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA;BYMONTHDAY=1',
+      'FREQ=MONTHLY;BYMONTHDAY=0',
+      'FREQ=MONTHLY;BYMONTHDAY=32',
+    ]) {
+      expect(() => validateRrule(body), body).toThrow(ValidationError);
+    }
+  });
+
+  it('still expands a stored rule the vocabulary cannot express, so a read never refuses it', () => {
+    expect(
+      expandSchedule(
+        { effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY' },
+        '2026-01-04',
+        '2026-01-06',
+      ),
+    ).toEqual(['2026-01-04', '2026-01-05', '2026-01-06']);
+  });
+
+  it('keeps the Monday week of a stored rule without WKST and honours WKST=SU', () => {
+    // Stored without WKST: RFC 5545 counts INTERVAL weeks from Monday, so the
+    // Monday after a Sunday start belongs to the skipped week.
+    expect(
+      expandSchedule(
+        { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO' },
+        '2026-01-01',
+        '2026-02-10',
+      ),
+    ).toEqual(['2026-01-04', '2026-01-12', '2026-01-18', '2026-01-26', '2026-02-01', '2026-02-09']);
+
+    // With WKST=SU the Sunday-to-Saturday week is the unit, so Sunday and
+    // Monday are in the same active week.
+    expect(
+      expandSchedule(
+        { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU' },
+        '2026-01-01',
+        '2026-02-10',
+      ),
+    ).toEqual(['2026-01-04', '2026-01-05', '2026-01-18', '2026-01-19', '2026-02-01', '2026-02-02']);
+  });
+});
+
 describe('the event timezone calendar day', () => {
   it('resolves two zones to different dates at the same instant', () => {
     const instant = new Date('2026-06-15T12:00:00Z');
@@ -74,6 +163,26 @@ describe('schedule expansion', () => {
       '2026-01-25',
       '2026-02-01',
     ]);
+  });
+
+  it('resolves a monthly positional rule to the first or last named weekday', () => {
+    const first = validateRrule('FREQ=MONTHLY;BYSETPOS=1;BYDAY=SA');
+    const last = validateRrule('FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA');
+
+    expect(
+      expandSchedule({ effectiveFrom: '2026-01-01', rrule: first }, '2026-01-01', '2026-03-31'),
+    ).toEqual(['2026-01-03', '2026-02-07', '2026-03-07']);
+    expect(
+      expandSchedule({ effectiveFrom: '2026-01-01', rrule: last }, '2026-01-01', '2026-03-31'),
+    ).toEqual(['2026-01-31', '2026-02-28', '2026-03-28']);
+  });
+
+  it('skips short months for a monthly day-of-month of 31', () => {
+    const rule = validateRrule('FREQ=MONTHLY;BYMONTHDAY=31');
+
+    expect(
+      expandSchedule({ effectiveFrom: '2026-01-01', rrule: rule }, '2026-01-01', '2026-04-30'),
+    ).toEqual(['2026-01-31', '2026-03-31']);
   });
 });
 
