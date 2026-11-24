@@ -251,9 +251,31 @@ Four changes to the event surface, and none to the money, attendance or import p
     `occurrences[]`, and the server resolves it with the same function the preview uses, so preview and create cannot
     diverge; a create that sends both a period and explicit dates is refused. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
-  - **The read and the list carry it.** The event read gains `period: { id, cycle, name }` (null for events not
+  - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
     created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line -
     "Communion Week - 29 Nov - 5 Dec 2026" - beside when and where.
+  - **A period can recur, not only resolve once** (owner, 2026-11-24): an event may be scheduled **by period** instead of
+    on literal dates — the create's period arm takes either `{ id, cycleMonth }` (one cycle, resolved once, as above) or
+    `{ id, frequency: 'monthly', day? }`, which **generates** one date per cycle. With `day` given it is that weekday
+    inside each cycle's period ("Miracle Sunday" is the Sunday of Communion Week, every month); without it the whole
+    period is generated (seven dates for Communion Week). Home Cells is a single date, so `day` is refused there.
+    - **`frequency` is a closed enum that starts with `monthly`** — every named period is cycle-month based today — but
+      the field exists so a genuinely annual period arrives as a new value, not a new shape. The preview and the generator use the **same 90-day horizon the create and `generate` already use**, so a monthly
+      period recurrence previews and materialises every cycle falling inside that window - typically three - never a
+      different span, and the generated occurrences materialise
+      through the same forward window every recurrence uses, so past dates are never rewritten.
+    - **The period rule is stored on the event, not as an rrule version** (owner, 2026-11-24): field-based rules
+      (`period_id`, `period_frequency`, `period_day`) live with the event because they are not an RFC 5545 string, and
+      `event_recurrence_versions` stays what it is - the version history of **rrule** schedules. There is **one generator**:
+      `POST /v1/events/generate` walks both kinds through a common expand step (rrule version, or period rule), over the
+      same forward window, so a period event materialises exactly as a recurrence does and past dates are never rewritten.
+    - **The period rule is editable under the same guard, and replaced rather than versioned** (AC 19): while the event
+      has no history the stored `frequency`/`day` may change, and saving replaces those fields in one transaction because
+      there is no version row to supersede; once the guard closes the rule is read-only and a write answers
+      `recurrence_locked`. There is no "extend" operation for a period rule - a future change is a new event.
+    - **Provenance for a recurring period event** records what generates it: `period { id, name, frequency, day? }`,
+      with no single `cycle` — the cycle belongs to each occurrence, not to the event. A one-off period event keeps
+      `period { id, name, cycle }` and no frequency.
   - **A period can still be added, edited or removed without rewriting an event**: the reference is to what was
     chosen, so editing a definition is not retroactive and removing one only stops the form offering it. The date
     columns and the name snapshot mean neither operation can orphan an event. When the catalogue becomes data and gets
@@ -300,14 +322,19 @@ Four changes to the event surface, and none to the money, attendance or import p
     lowest tier among the projecting audiences.
 17. A daily rule with `INTERVAL=3` resolves every third day from its start date, the list labels it "Every 3 days", and
     a daily rule with `INTERVAL=1` labels "Daily"; both are authorable in the builder.
-18. The event type is chosen at create and the edit form offers no Repeats switch at all. The rule is editable while no occurrence is dated today or earlier, no offering is attached or counted,
+18. A **period-relative recurrence** (`period { id, frequency: 'monthly', day }`) generates one date per cycle —
+    Communion Week's Sunday in every month for "Miracle Sunday" — previews across several months rather than one
+    window, and materialises forward without rewriting past dates. It is refused when sent alongside `occurrences` or
+    a `recurrence`, and refused when both `cycleMonth` and `frequency` are sent; without `day` it generates the whole
+    period, and `day` is refused on Home Cells.
+19. The event type is chosen at create and the edit form offers no Repeats switch at all. **For an rrule schedule** the rule is editable while no occurrence is dated today or earlier, no offering is attached or counted,
     and no headcount, attendance row or import suppression exists; saving it replaces the version in force - the
     current row is deleted and the replacement inserted with the same `effective_from` in one transaction, allowed
     because the guard means nothing has happened against those dates - then
     regenerates the window so the calendar matches the preview; once the guard is closed the builder is read-only
     with the cause named, rewriting the rule answers `409 recurrence_locked`, appending a version that starts after the
     last generated occurrence still succeeds through the dialog, and a locked parent `PATCH` that omits `recurrence`
-    succeeds.
+    succeeds. A **period rule** is governed the same way but replaces stored fields rather than a version row (AC 18).
 
 ## Testing Decisions
 

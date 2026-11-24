@@ -730,11 +730,12 @@ has no recurrence; a **recurring** event owns one recurrence and the occurrences
     `audienceIds`. If both are sent, `audienceIds` wins and `audienceId` must equal its first element,
     else `422` naming both. The read carries `audiences[]` (each with its rendered `summary`) plus the
     legacy `audienceId` and `audience` for the primary (first) audience.
-- `period` is the **provenance of a period-created event** (owner, 2026-11-24): `{ id, cycle, name }`, where
+- `period` is the **provenance of a period-created event** (owner, 2026-11-24): `{ id, name, cycle?, frequency?, day? }`, where
   `cycle` is the `YYYY-MM` chosen at create and `name` is the **snapshot** taken at save, so a renamed definition never
-  rewrites a stored name or date. It is null for an event not created from a period. The create accepts
-  `period: { id, cycleMonth }` **instead of** `occurrences[]` and resolves the dates on the server with the same
-  function `POST /v1/events/preview` uses, so preview and create cannot diverge; a create sending both a period and
+  rewrites a stored name or date. It is null for an event not created from a period. The create period arm takes **one of two forms**:
+  `{ id, cycleMonth }` for a single cycle, or `{ id, frequency: 'monthly', day? }` for a period-relative recurrence that
+  generates one date per cycle; sending both forms is refused, and so is sending a period alongside `occurrences` or a
+  `recurrence`. Either form is resolved on the server with the same function `POST /v1/events/preview` uses, so preview and create cannot diverge; a create sending both a period and
   explicit dates is refused. `GET /v1/events?period=<id>` filters on it.
 - `ministry` and `presbyterOnly` are **read-only legacy projections** during the transition: the
   migration maps each event's old pair onto a seeded or combination audience and writes the columns from
