@@ -2,7 +2,7 @@
 
 |                        |                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                |
+| Status                 | BLOCKED                                                                                             |
 | Tier                   | 2                                                                                                   |
 | Mode                   | `unattended (auto-accept recommendations)` - owner pre-authorisation of the gates                   |
 | Base                   | `c4b2fad`                                                                                           |
@@ -46,6 +46,33 @@ three hard gates: the migration that drops `events.ministry_id` and `events.pres
 unique indexes for recurring `(lower(name), audience_id)` and audience `(lower(name))`; the deletion of the public
 `/v1/series/*` routes (including the five offering aliases); and the wire-contract change that flips the default read
 to the parent while `view=parent` remains accepted.
+
+## Blocked — the worker's audit, 2026-11-24
+
+The round cannot run as scoped. A worker audited the tree before its first write and stopped. Four findings, each
+verified in the source:
+
+1. **`ministry_id`/`presbyter_only` still have readers** beyond the serialisers this round deletes:
+   `src/repos/clocking.ts` (clock-in gates), `src/repos/members.ts` (`scopedSessions`, `attendanceFor`),
+   `src/ussd/services.ts` (Activities tiers), and the parent DTO itself — `PARENT_COLUMNS`, `loadParentCore`,
+   `parentEtagFor`, and `UPDATE_SQL` which still writes `presbyter_only` for the legacy `PUT`. Dropping the columns
+   requires moving those readers onto the audience rule, which needs a **per-member predicate** the evaluator does
+   not expose yet (it answers counts only).
+2. **`/v1/series/*` still has UI clients**: `MembersPage` uses `listSeries`, `SeriesActivityRow` uses
+   `getSeriesOccurrences`. Deleting the routes breaks those screens, and the round's own criterion says the UI is
+   untouched.
+3. **The read flip breaks five UI reads** that send no `view` and expect the legacy shape:
+   `EventSessionPicker`, `OfferingsPage`, `UssdActivitiesPage`, `UssdRegistrationsPage`, `UssdOfferingsPage`.
+   The spec's claim that "the UI sends `view=parent` on every event read" is false.
+4. **The two indexes cannot be created as written.** "Recurring" is only expressible as an `exists` subquery, which a
+   PostgreSQL partial-index predicate cannot contain, and `events` carries no recurrence flag; the audience name index
+   is already global (`audiences_name_ci`, 0027) and must be **replaced** by a partial one rather than added beside
+   it.
+
+**Recommended sequence:** a UI round first, so this round's premises become true — move the five reads to the parent
+shape, move `MembersPage` and `SeriesActivityRow` off `/v1/series`; then this round moves the four remaining reader
+groups onto a per-member audience predicate (a spec-visible addition, worth a grill question), edits
+`src/db/schema.ts` with the drop, and settles the recurrence-index shape.
 
 ## Plan
 

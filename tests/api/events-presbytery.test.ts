@@ -125,9 +125,11 @@ describe('presbyter-only events on the officer bearer surface', () => {
     expect(response.body.code).toBe('validation_error');
   });
 
-  it('answers 404 to clocking and delegation at a presbyter-only session for a non-presbyter actor', async () => {
+  it('answers not_presbyter (not 404) to clocking and delegation by a non-presbyter actor', async () => {
     const clocking = new ClockingRepository(harness.db);
 
+    // Clocking is authority, not audience: the event's audience no longer
+    // decides which refusal a non-presbyter gets.
     await expect(
       clocking.clockIn({
         eventId: presbyterEventId,
@@ -136,7 +138,7 @@ describe('presbyter-only events on the officer bearer surface', () => {
         actorMemberNo: 'PR-PLAIN',
         actor: 'test',
       }),
-    ).rejects.toMatchObject({ code: 'not_found' });
+    ).rejects.toMatchObject({ code: 'not_presbyter' });
 
     await expect(
       clocking.delegate(
@@ -148,9 +150,8 @@ describe('presbyter-only events on the officer bearer surface', () => {
           reason: 'not a presbyter',
         },
         'test',
-        { surface: 'member' },
       ),
-    ).rejects.toMatchObject({ code: 'not_found' });
+    ).rejects.toMatchObject({ code: 'not_presbyter' });
   });
 
   it('answers 422 not_presbyter to a bearer delegation from a non-presbyter', async () => {

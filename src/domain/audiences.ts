@@ -32,3 +32,41 @@ export function renderAudienceSummary(name: string, rule: AudienceRule): string 
         : `none of ${clauses.join(' or ')}`;
   return `${name} - ${body}`;
 }
+
+/** The retired `ministry_id`/`presbyter_only` pair, as a rule projects onto it. */
+export interface LegacyAudienceProjection {
+  ministryCode: string | null;
+  presbyterOnly: boolean;
+}
+
+/**
+ * The legacy pair is faithful only for an `allOf` over exactly one ministry
+ * clause and, optionally, the presbyter clause (A-7). Every other operator or
+ * attribute (age, gender, membership status, `anyOf`, `noneOf`) has no legacy
+ * expression, so the projection is null/false - which a reader that has not
+ * moved reads as "general". It is all-or-nothing: a first-clause reading would
+ * write `ministry_id = CHOIR` for `noneOf(ministry CHOIR)`.
+ *
+ * The write path still stores the pair from this projection, and the readers
+ * that have moved take their ministry label and priority tier from it.
+ */
+export function legacyProjection(rule: AudienceRule): LegacyAudienceProjection {
+  if (rule.operator !== 'allOf') return { ministryCode: null, presbyterOnly: false };
+  if (
+    rule.clauses.some(
+      (clause) => clause.attribute !== 'ministry' && clause.attribute !== 'presbyter',
+    )
+  ) {
+    return { ministryCode: null, presbyterOnly: false };
+  }
+  const ministries = rule.clauses.filter((clause) => clause.attribute === 'ministry');
+  if (ministries.length > 1) return { ministryCode: null, presbyterOnly: false };
+  const ministryClause = ministries[0];
+  return {
+    ministryCode:
+      ministryClause && ministryClause.attribute === 'ministry'
+        ? ministryClause.ministryCode
+        : null,
+    presbyterOnly: rule.clauses.some((clause) => clause.attribute === 'presbyter'),
+  };
+}

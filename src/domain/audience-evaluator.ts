@@ -57,8 +57,16 @@ function matchesClause(clause: AudienceClause, member: AudienceMember, date: str
  * A registered visitor is evaluated only when the rule names the `visitor`
  * status; otherwise it matches nothing, whatever other attributes it has
  * (A-3). First-time visitors have no member record and never reach the register.
+ *
+ * This is the one predicate: the roster counts it, and every member-facing
+ * visibility read asks it about one member. A second copy of the rule is a
+ * defect (A-3).
  */
-function memberMatches(rule: AudienceRule, member: AudienceMember, date: string): boolean {
+export function memberMatchesAudience(
+  rule: AudienceRule,
+  member: AudienceMember,
+  date: string,
+): boolean {
   if (member.joinedOn > date) return false;
   if (member.membershipStatus === 'visitor' && !ruleNamesVisitor(rule)) return false;
 
@@ -81,7 +89,7 @@ export function evaluateAudienceDates(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const date of new Set(dates)) {
-    counts.set(date, members.filter((member) => memberMatches(rule, member, date)).length);
+    counts.set(date, members.filter((member) => memberMatchesAudience(rule, member, date)).length);
   }
   return counts;
 }

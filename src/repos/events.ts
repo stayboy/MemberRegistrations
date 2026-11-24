@@ -20,7 +20,7 @@ import {
   type OfferingStatsItem,
 } from './offerings.js';
 import { parentWindowSummary } from './series.js';
-import { renderAudienceSummary } from '../domain/audiences.js';
+import { legacyProjection, renderAudienceSummary } from '../domain/audiences.js';
 import { evaluateAudience, evaluateAudienceDates } from '../domain/audience-evaluator.js';
 import { audienceMembers } from './audience-members.js';
 import { parseAudienceRule } from './row-values.js';
@@ -595,8 +595,6 @@ interface ParentCoreRow extends Row {
   event_no: string | null;
   name: string;
   audience_id: string;
-  ministry_id: string | null;
-  presbyter_only: boolean;
   timezone: string;
   description: string | null;
   venue_type: string;
@@ -651,41 +649,27 @@ async function loadAudience(
 }
 
 /**
- * The legacy `ministry_id`/`presbyter_only` pair is only faithful for an
- * `allOf` over ministry and presbyter clauses. Any other operator or attribute
- * (age, gender, membership status, `anyOf`) has no legacy expression, so the
- * projections stay null/false.
+ * The ministry the legacy projection names, or null when the code no longer
+ * resolves. The projection itself is `legacyProjection` in the domain module.
  */
-function legacyProjection(rule: AudienceRule): {
-  ministryCode: string | null;
-  presbyterOnly: boolean;
-} {
-  if (rule.operator !== 'allOf') return { ministryCode: null, presbyterOnly: false };
-  if (
-    rule.clauses.some(
-      (clause) => clause.attribute !== 'ministry' && clause.attribute !== 'presbyter',
-    )
-  ) {
-    return { ministryCode: null, presbyterOnly: false };
-  }
-  const ministries = rule.clauses.filter((clause) => clause.attribute === 'ministry');
-  if (ministries.length > 1) return { ministryCode: null, presbyterOnly: false };
-  const ministryClause = ministries[0];
-  return {
-    ministryCode:
-      ministryClause && ministryClause.attribute === 'ministry'
-        ? ministryClause.ministryCode
-        : null,
-    presbyterOnly: rule.clauses.some((clause) => clause.attribute === 'presbyter'),
-  };
-}
-
 async function ministryIdFor(db: DbClient, code: string): Promise<string | null> {
   const [ministry] = await db.query<{ id: string }>(
     'select id from ministries where lower(code) = lower($1)',
     [code],
   );
   return ministry?.id ?? null;
+}
+
+/** The label a projected ministry code renders as; reference data is never deleted. */
+async function ministryByCode(
+  db: DbClient,
+  code: string,
+): Promise<{ code: string; name: string } | null> {
+  const [ministry] = await db.query<{ code: string; name: string }>(
+    'select code, name from ministries where lower(code) = lower($1)',
+    [code],
+  );
+  return ministry ?? null;
 }
 
 /** A supplied `audienceId` must exist and be active; the current one may be re-sent. */
@@ -789,13 +773,18 @@ async function assertRecurringNameFree(
   }
 }
 
+/**
+ * Event rows have no version column, so the parent validator is a digest of the
+ * mutable content. The audience is the applicability field, so `audience_id`
+ * is hashed and the retired `ministry_id`/`presbyter_only` projections are not:
+ * they follow the audience, and a reader that compares them to a stale copy
+ * would see a change that is not one (A-6).
+ */
 function parentEtagFor(row: ParentCoreRow): string {
   const payload = JSON.stringify([
     row.event_no,
     row.name,
     row.audience_id,
-    row.ministry_id,
-    row.presbyter_only,
     row.timezone,
     row.description,
     row.venue_type,
@@ -870,9 +859,6 @@ type ParentRow = {
   audience_name: string;
   audience_system: boolean;
   audience_rule: unknown;
-  ministry_code: string | null;
-  ministry_name: string | null;
-  presbyter_only: boolean;
   timezone: string;
   description: string | null;
   venue_type: string;
@@ -905,9 +891,6 @@ const PARENT_COLUMNS = `
   a.name as audience_name,
   a.system as audience_system,
   a.rule as audience_rule,
-  m.code as ministry_code,
-  m.name as ministry_name,
-  e.presbyter_only,
   e.timezone,
   e.description,
   e.venue_type,
@@ -919,10 +902,9 @@ const PARENT_COLUMNS = `
 
 const PARENT_FROM = `
   from events e
-  join audiences a on a.id = e.audience_id
-  left join ministries m on m.id = e.ministry_id`;
+  join audiences a on a.id = e.audience_id`;
 
-/** The parent ids whose derived range overlaps the requested window. */
+/** The parent ids whose derived range overlaps the window, in the list's order. */
 const PARENT_IDS_SQL = `
 with derived as (
   select e.id,
@@ -945,21 +927,40 @@ with derived as (
          end as end_date
     from events e
 )
-select d.id
+select d.id, a.rule
   from derived d
   join events e on e.id = d.id
-  left join ministries m on m.id = e.ministry_id
+  join audiences a on a.id = e.audience_id
  where ($1::date is null or d.end_date is null or d.end_date >= $1::date)
    and ($2::date is null or d.start_date <= $2::date)
    and ($3::uuid is null or e.id = $3::uuid)
-   and (
-     $4::text is null
-     or lower(m.code) = lower($4::text)
-     or lower(m.name) = lower($4::text)
-   )
-   and ($5::text is null or e.venue_type = $5::text)
- order by d.start_date, d.id
- limit $6::int offset $7::int`;
+   and ($4::text is null or e.venue_type = $4::text)
+ order by d.start_date, d.id`;
+
+/**
+ * The unfiltered path takes its page in SQL: the query's order *is* the list's
+ * page order, so the database pages it. The `?ministry=` path cannot page here,
+ * because each row's rule has to be projected before the page is known; it
+ * pages after the filter instead.
+ */
+const PARENT_PAGE_SQL = `${PARENT_IDS_SQL}
+ limit $5::int offset $6::int`;
+
+/**
+ * A `?ministry=` value names a ministry by code or by name. The filter then
+ * selects events whose **legacy projection's** ministry is one of those codes -
+ * an `allOf` over exactly one ministry - not events whose audience merely
+ * carries such a clause, which would turn an inclusion filter into an exclusion
+ * one for `noneOf` (A-6).
+ */
+async function ministryFilterCodes(db: DbClient, value: string): Promise<Set<string>> {
+  const rows = await db.query<{ code: string }>(
+    `select code from ministries
+      where lower(code) = lower($1) or lower(name) = lower($1)`,
+    [value],
+  );
+  return new Set(rows.map((row) => row.code.toLowerCase()));
+}
 
 function occurrenceStatus(
   parentStatus: string,
@@ -977,17 +978,40 @@ export class EventRepository {
 
   /** One row per event parent, with its window occurrences and figures. */
   async listParents(query: EventParentListQuery): Promise<EventParentItem[]> {
-    const rows = await this.db.query<{ id: string }>(PARENT_IDS_SQL, [
-      query.from,
-      query.to,
-      query.seriesId ?? null,
-      query.ministry ?? null,
-      query.venueType ?? null,
-      query.limit,
-      query.offset,
-    ]);
+    // Without `?ministry=` the page is the query's own order, so the database
+    // takes it. With a ministry the filter reads each row's legacy projection,
+    // which is a pure function of the row, so the page is taken after it.
+    const rows = query.ministry
+      ? await this.db.query<{ id: string; rule: unknown }>(PARENT_IDS_SQL, [
+          query.from,
+          query.to,
+          query.seriesId ?? null,
+          query.venueType ?? null,
+        ])
+      : await this.db.query<{ id: string; rule: unknown }>(PARENT_PAGE_SQL, [
+          query.from,
+          query.to,
+          query.seriesId ?? null,
+          query.venueType ?? null,
+          query.limit,
+          query.offset,
+        ]);
+
+    let candidates = rows;
+    if (query.ministry) {
+      const codes = await ministryFilterCodes(this.db, query.ministry);
+      candidates = rows
+        .filter((row) => {
+          const projection = legacyProjection(parseAudienceRule(row.rule));
+          return (
+            projection.ministryCode !== null && codes.has(projection.ministryCode.toLowerCase())
+          );
+        })
+        .slice(query.offset, query.offset + query.limit);
+    }
+
     const items = await Promise.all(
-      rows.map((row) => this.getParent(row.id, query.from, query.to)),
+      candidates.map((row) => this.getParent(row.id, query.from, query.to)),
     );
     return items.filter((item): item is EventParentItem => item !== null);
   }
@@ -1012,6 +1036,13 @@ export class EventRepository {
     );
     const offeringsByEvent = await eventOfferingsFor(this.db, [row.id], todayUtc());
     const rule = parseAudienceRule(row.audience_rule);
+    const projection = legacyProjection(rule);
+    // The retired pair is a read-only projection of the audience (A-7): the
+    // ministry label and the presbyter flag are derived from the rule, never
+    // read from the columns that the dual write still maintains.
+    const ministry = projection.ministryCode
+      ? await ministryByCode(this.db, projection.ministryCode)
+      : null;
 
     return {
       id: row.id,
@@ -1024,11 +1055,8 @@ export class EventRepository {
         system: row.audience_system,
         summary: renderAudienceSummary(row.audience_name, rule),
       },
-      ministry:
-        row.ministry_code && row.ministry_name
-          ? { code: row.ministry_code, name: row.ministry_name }
-          : null,
-      presbyterOnly: row.presbyter_only,
+      ministry,
+      presbyterOnly: projection.presbyterOnly,
       timezone: row.timezone,
       description: row.description,
       venueType: asVenueType(row.venue_type),
@@ -1623,7 +1651,7 @@ export class EventRepository {
 
   private async loadParentCore(id: string): Promise<ParentCoreRow | null> {
     const [row] = await this.db.query<ParentCoreRow>(
-      `select id, event_no, name, audience_id, ministry_id, presbyter_only, timezone,
+      `select id, event_no, name, audience_id, timezone,
               description, venue_type, venue_name, start_time, end_time, tracks_members,
               status, archived_at
          from events

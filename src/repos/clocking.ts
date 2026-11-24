@@ -58,9 +58,9 @@ export class ClockingRepository {
   }
 
   /**
-   * `surface` names who is asking. The USSD member session hides a
-   * presbyter-only session as `404`; the officer bearer route supplied the
-   * member number itself, so it gets the domain error instead.
+   * `POST /v1/events/{eventId}/delegations`: a senior presbyter grants a
+   * presbyter this session's clock-in authority. Clocking is authority, not
+   * audience, so the event's audience does not gate either party.
    */
   async delegate(
     input: {
@@ -71,17 +71,13 @@ export class ClockingRepository {
       reason: string;
     },
     actor: string,
-    { surface = 'member' }: { surface?: 'member' | 'operator' } = {},
   ): Promise<DelegationItem> {
-    const session = await this.requireSession(input.eventId, input.sessionDate);
+    await this.requireSession(input.eventId, input.sessionDate);
     const reason = input.reason.trim();
     if (reason.length < 3) throw new ValidationError('reason must be 3-500 characters');
 
     const from = await this.requireActiveMember(input.fromMemberNo);
     const to = await this.requireActiveMember(input.toMemberNo);
-    if (session.presbyterOnly && !from.is_presbyter && surface === 'member') {
-      throw new NotFoundError(`Event ${input.eventId} was not found`);
-    }
     if (!from.is_presbyter) {
       throw new NotPresbyterError(`Member ${from.member_no} is not a presbyter`);
     }
@@ -171,6 +167,12 @@ export class ClockingRepository {
     };
   }
 
+  /**
+   * A presbyter clocks a member in for one session; a delegate inherits the
+   * senior's authority for that session only. Authority is the presbyter flag
+   * and the shepherding edge, never the event's audience: a presbyter clocks a
+   * youth event as readily as any other.
+   */
   async clockIn(input: {
     eventId: string;
     sessionDate: string;
@@ -178,12 +180,9 @@ export class ClockingRepository {
     actorMemberNo: string;
     actor: string;
   }): Promise<EventAttendanceEntry> {
-    const session = await this.requireSession(input.eventId, input.sessionDate);
+    await this.requireSession(input.eventId, input.sessionDate);
 
     const actor = await this.requireActiveMember(input.actorMemberNo);
-    if (session.presbyterOnly && !actor.is_presbyter) {
-      throw new NotFoundError(`Event ${input.eventId} was not found`);
-    }
     if (!actor.is_presbyter) {
       throw new NotPresbyterError(`Member ${actor.member_no} is not a presbyter`);
     }
@@ -219,17 +218,18 @@ export class ClockingRepository {
     );
   }
 
-  private async requireSession(
-    eventId: string,
-    sessionDate: string,
-  ): Promise<{ presbyterOnly: boolean }> {
+  /**
+   * The session must exist, be read-write and not cancelled. The legacy
+   * `presbyter_only` flag is not read: clocking authority is the presbyter flag
+   * and the delegation, so the audience has no gate here.
+   */
+  private async requireSession(eventId: string, sessionDate: string): Promise<void> {
     const [event] = await this.db.query<{
       status: string;
-      presbyter_only: boolean;
       occurrence_id: string | null;
       occurrence_status: string | null;
     }>(
-      `select e.status, e.presbyter_only,
+      `select e.status,
               o.id as occurrence_id, o.status as occurrence_status
          from events e
          left join event_occurrences o on o.event_id = e.id and o.date = $2
@@ -246,7 +246,6 @@ export class ClockingRepository {
     if (event.occurrence_status === 'cancelled') {
       throw new ValidationError(`The session on ${sessionDate} is cancelled and read-only`);
     }
-    return { presbyterOnly: event.presbyter_only };
   }
 
   private async requireActiveMember(memberNo: string): Promise<MemberRef> {

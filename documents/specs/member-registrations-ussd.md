@@ -514,25 +514,24 @@ USSD.
 shepherd: { memberNo, name, gender, age } | null, attendance: { status: 'regular' | 'non_regular' |
 'not_enough_data', attended,
 expected, window: 5, lastAttendedOn: string | null } }`. `attendance` counts the member's **tracked** attendance
-  across the events that apply to them: every **general** event (its series has no ministry, or it has no
-  series) and every event whose ministry the member belongs to — a `member_ministries` row to an active
-  ministry, with the member active (not archived or purged) — and only where the event is
-  **member-trackable**
-  (`tracksMembers = true`). The window is the last five **held** scoped sessions ending today: a session
-  is held when its date is on or before the event's today in the event's timezone and the session is not
-  cancelled; sessions are ordered by date, then event `start_time`, then event id. **Floors:** a session
-  before the member's `joined_on` never counts (a null `joined_on` imposes no floor), and a ministry-event
-  session before that membership's `assigned_on` never counts. The floors apply to this regularity
-  calculation only; the day, period and per-event views keep showing the actual records. Removing a
-  ministry membership drops that ministry's events from the scope retroactively (the current-affiliation
-  limitation recorded in Q4). A presbyter-only session is dropped entirely for a non-presbyter, so it is
-  neither an `expected` nor an `attended` session; for a presbyter it counts like any other event they
-  may attend. With **fewer
+  across the events that apply to them: a session is in scope when the member **matches that event's
+  audience at the session's date** - the same predicate the roster and every other member-facing read use
+  (`member-registrations-event-audience.md`, A-3 and A-4), so there is one rule and one read - and only where the
+  event is **member-trackable** (`tracksMembers = true`). The window is the last five **held** scoped sessions
+  ending today: a session is held when its date is on or before the event's today in the event's timezone and the
+  session is not cancelled; sessions are ordered by date, then event `start_time`, then event id. **Floor:** the
+  register's own join rule applies and nothing else - a member is in the register from its member record's creation
+  date when `joined_on` is null - so the ministry `assigned_on` floor this calculation used to apply is **gone**
+  (2026-11-24), as is the "general event" scope it used to combine with. The floor applies to this regularity
+  calculation only; the day, period and per-event views keep showing the actual records. A presbyter-only session is
+  no longer special-cased: the audience decides, so a non-presbyter is out of scope by the rule rather than by a
+  branch. With **fewer
   than three** held scoped sessions the status is `not_enough_data`; otherwise `regular` when
   `attended / expected >= 0.6` (60%) and `non_regular` when below it. `expected` is the window size (up
   to 5) and `attended` is the number present, both reported in every status. `lastAttendedOn` is the most recent attended date in scope. A
-  headcount-only event never counts, and neither does attendance at an event whose ministry the member
-  does not belong to. With no scoped sessions the status is `not_enough_data`, `attended` and `expected`
+  headcount-only event never counts, and attendance at an event whose audience the member does not match at that
+  session's date does not count either - the audience decides, not a ministry the member may or may not hold.
+  With no scoped sessions the status is `not_enough_data`, `attended` and `expected`
   are `0`, the date is null, and the screen says "No attendance" (`attendance.no_data`); with one or two
   it shows "No data" (`status.not_enough_data`) with the ratio and, when `lastAttendedOn` is set, the
   date (for example, "No data · 2 of 2 · 5 Oct 2026"); when nothing was attended it shows "No data · 0

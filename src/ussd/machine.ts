@@ -109,7 +109,6 @@ export interface UssdActivity {
 /** The optional member identity that scopes Activities eligibility. */
 export interface UssdActivityViewer {
   memberNo: string | null;
-  isPresbyter: boolean;
   pageSize: number;
 }
 
@@ -721,7 +720,6 @@ async function activityViewer(
   return {
     viewer: {
       memberNo,
-      isPresbyter: memberContext?.isPresbyter ?? false,
       pageSize: activityPageSize(session),
     },
     memberContext,
