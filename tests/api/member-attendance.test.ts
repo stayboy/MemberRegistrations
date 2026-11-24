@@ -131,19 +131,24 @@ beforeAll(async () => {
 
   await createMember('ATT-JOINED', { joinedOn: day(-25) });
 
-  for (const offset of [-7, -6, -5, -4, -3]) {
+  for (const offset of [-9, -8, -7, -6, -5, -4, -3]) {
     profileEvent.set(offset, await createEvent(day(offset), `Profile ${offset}`));
   }
 
   await createMember('PROFILE-REG', { joinedOn: day(-8) });
   await createMember('PROFILE-NON', { joinedOn: day(-8) });
   await createMember('PROFILE-FEW', { joinedOn: day(-4) });
+  await createMember('PROFILE-WINDOW', { joinedOn: day(-10) });
 
   for (const offset of [-7, -6, -5]) {
     await seedAttendance(profileEvent.get(offset)!, 'PROFILE-REG', day(offset));
   }
   for (const offset of [-7, -6]) {
     await seedAttendance(profileEvent.get(offset)!, 'PROFILE-NON', day(offset));
+  }
+  // Seven held sessions are in scope; the oldest and the two newest are attended.
+  for (const offset of [-9, -4, -3]) {
+    await seedAttendance(profileEvent.get(offset)!, 'PROFILE-WINDOW', day(offset));
   }
 });
 
@@ -204,7 +209,7 @@ describe('attendance summary', () => {
     });
   });
 
-  it('scopes ministry events to active membership and its assignment floor', async () => {
+  it('scopes a ministry event to current ministry membership, with no assignment floor', async () => {
     const before = await summary('ATT-MAIN', day(-60), day(-10));
     expect(before.body.expected).toBe(5);
 
@@ -216,20 +221,22 @@ describe('attendance summary', () => {
       .send({ code: 'CHOIR' })
       .expect(201);
 
-    // Assigned today: the earlier ministry session is floored out.
-    const floored = await summary('ATT-MINISTRY', day(-60), day(-10));
-    expect(floored.body.expected).toBe(5);
+    // Ministry membership is current, with no history: the assignment is dated
+    // today and still puts the earlier ministry session in scope. The retired
+    // `assigned_on` floor would have dropped it (AGENTS/spec 2026-11-24).
+    const included = await summary('ATT-MINISTRY', day(-60), day(-10));
+    expect(included.body.expected).toBe(6);
 
     await harness.db.query(
       `update member_ministries mm
           set assigned_on = $2
         from ministries mi
        where mm.ministry_id = mi.id and mm.member_id = $1 and mi.code = 'CHOIR'`,
-      [memberId, day(-60)],
+      [memberId, day(0)],
     );
 
-    const included = await summary('ATT-MINISTRY', day(-60), day(-10));
-    expect(included.body.expected).toBe(6);
+    const unfloored = await summary('ATT-MINISTRY', day(-60), day(-10));
+    expect(unfloored.body.expected).toBe(6);
 
     await seedAttendance(ministryEventId, 'ATT-MINISTRY', day(-25));
     const attended = await summary('ATT-MINISTRY', day(-60), day(-10));
@@ -280,6 +287,25 @@ describe('member profile', () => {
       attended: 2,
       expected: 5,
       lastAttendedOn: day(-6),
+    });
+  });
+
+  it('keeps exactly the five most recent scoped sessions', async () => {
+    const response = await request(app)
+      .get('/v1/members/PROFILE-WINDOW/profile')
+      .set(readHeaders)
+      .expect(200);
+
+    // Seven held sessions are in scope; the window is the newest five
+    // (-7..-3), so the oldest attendance (-9) is outside it and the two newest
+    // (-4, -3) are inside. A first-five window would instead report one
+    // attendance, dated -9.
+    expect(response.body.attendance).toEqual({
+      status: 'non_regular',
+      attended: 2,
+      expected: 5,
+      window: 5,
+      lastAttendedOn: day(-3),
     });
   });
 

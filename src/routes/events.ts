@@ -217,7 +217,6 @@ export function eventsRouter(
     const delegation = await clocking.delegate(
       { eventId: id, sessionDate, ...input },
       actorOf(req),
-      { surface: 'operator' },
     );
     res.setHeader('Cache-Control', 'no-store');
     res.status(201).json(delegation);

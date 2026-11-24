@@ -120,6 +120,24 @@ n/a - no drawing changes.
 
 ## Deviations
 
+- **Seven things this round found and did not improvise around**, all now open items rather than silent gaps:
+  1. `addManualAttendance` still reads `events.presbyter_only` to refuse a non-presbyter attendance target. It is a
+     domain reader of the retired column and is not in this round's move list; the migration round's "nothing reads
+     them" audit must find it.
+  2. **The legacy `PUT /v1/events/{id}` derives the audience from the presbyter flag alone**, so editing a ministry
+     event through the deployed per-instance form rewrites `audience_id` to `Everyone` and leaves `ministry_id`
+     stale. Pre-existing, exposed by this round because the DTO now derives from the audience; the fixture moved to
+     `PATCH`. Fixing it needs a decision on what a legacy ministry input means.
+  3. `findCurrentEvent()` has no viewer and no audience filter, so the USSD "current/next event" can name a
+     restricted event to a member who does not match.
+  4. **A-4's guardian clause is unimplemented** - there is no member-scoped route in this round's steps to apply it to.
+  5. `attendanceFor` follows A-4, so a recurring event the member attended but whose audience they no longer match
+     loses its series row; the standalone attendance-only rows still show the actual records.
+  6. A visitor can still sign in to USSD and use the member menus; only their Activities list is rule-bound.
+  7. **`sessionCounts`' `session_expected` still counts `presbyter_only`** (`src/repos/events.ts`) and serves it as
+     each session's legacy `expected`. It is grandfathered by A-7 step 5 - the columns exist so readers that have
+     not moved keep working until the downstream round deletes them - so it is not this round's to move. The
+     migration round's "nothing reads them" audit must include it as the seventh reader.
 - **The four spec amendments took three review passes, and the first two refusals were mine.** Each was the same fault:
   the rule changed in one place while other sentences kept the old one - A-3 and the Problem Statement still called the
   regularity alignment out of scope, the API spec still defined `?ministry=` as clause presence, and two later

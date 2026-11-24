@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTestApp, writeHeaders, type TestApp } from '../helpers/app.js';
+import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
 
 const USSD_SECRET = 'test-ussd-gateway-secret-16';
 const USSD_PHONE_PEPPER = 'test-ussd-phone-pepper-16';
@@ -123,8 +123,11 @@ async function createMinistryEvent(
   expect(generated.status).toBe(200);
   expect(generated.body.created).toBe(1);
   const id = generated.body.eventIds[0] as string;
+  // PATCH is the UI write and keeps the event's audience. The legacy PUT is
+  // derived from the presbyter flag alone and would turn the ministry event
+  // into an `Everyone` one.
   const renamed = await request(harness.app)
-    .put(`/v1/events/${id}`)
+    .patch(`/v1/events/${id}`)
     .set(writeHeaders)
     .send({ name: `${name} ${eventSeq}` });
   expect(renamed.status).toBe(200);
@@ -344,5 +347,216 @@ describe('Activities zero-today horizon', () => {
     expect(week.body.text).toContain('0 events this week');
     expect(week.body.text).toContain('1 Date');
     expect(week.body.text).toContain('9 Back');
+  });
+});
+
+/**
+ * The one audience predicate behind Activities (member-registrations-event-
+ * audience.md A-3, A-4): visibility is the rule, the tier is the rule's legacy
+ * projection, an anonymous caller sees the `Everyone` audience, and the roster
+ * and the phone list agree.
+ */
+describe('Activities audiences', () => {
+  const visitorPhone = '0850 000 1001';
+  const youthPhone = '0851 000 1002';
+  const presbyterReaderPhone = '0852 000 1003';
+  const matchPhone = '0853 000 1004';
+  const otherPhone = '0854 000 1005';
+  const anonymousReaderPhone = '0898 000 1006';
+
+  let visibilityDate: string;
+  let tierDate: string;
+  let agreementDate: string;
+
+  let agreementAudienceId: string;
+  let agreementEventId: string;
+
+  function dobYearsAgo(years: number): string {
+    const date = new Date(`${today}T00:00:00Z`);
+    date.setUTCFullYear(date.getUTCFullYear() - years);
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
+  }
+
+  async function audienceByKey(key: string): Promise<string> {
+    const [audience] = await harness.db.query<{ id: string }>(
+      'select id from audiences where system_key = $1',
+      [key],
+    );
+    expect(audience).toBeTruthy();
+    return audience!.id;
+  }
+
+  async function createAudience(name: string, rule: Record<string, unknown>): Promise<string> {
+    const response = await request(harness.app)
+      .post('/v1/audiences')
+      .set(writeHeaders)
+      .send({ name, rule });
+    expect(response.status).toBe(201);
+    return response.body.id as string;
+  }
+
+  /** Start a session, open Activities and ask for one date. */
+  async function activitiesOn(
+    phone: string,
+    ip: string,
+    date: string,
+    entry: '2' | '3' = '2',
+  ): Promise<{ sessionId: string; text: string }> {
+    const started = await start(phone, ip);
+    const sessionId = started.body.sessionId as string;
+    await frame(sessionId, phone, entry, 2, ip);
+    await frame(sessionId, phone, '8', 3, ip);
+    const response = await frame(sessionId, phone, ddmmyyyy(date), 4, ip);
+    expect(response.body.state).toBe('activities');
+    return { sessionId, text: response.body.text as string };
+  }
+
+  beforeAll(async () => {
+    visibilityDate = shiftDate(today, 60);
+    tierDate = shiftDate(today, 61);
+    agreementDate = shiftDate(today, 62);
+
+    await createMember('AUD-VISITOR', visitorPhone, {
+      gender: 'male',
+      dob: dobYearsAgo(30),
+      membershipStatus: 'visitor',
+    });
+    await createMember('AUD-YOUTH', youthPhone, { gender: 'female', dob: dobYearsAgo(15) });
+    await createMember('AUD-PRES', presbyterReaderPhone, {
+      gender: 'male',
+      dob: dobYearsAgo(45),
+      isPresbyter: true,
+      ministries: ['CHOIR'],
+    });
+    await createMember('AUD-MATCH', matchPhone, { gender: 'male', dob: dobYearsAgo(36) });
+    await createMember('AUD-OTHER', otherPhone, { gender: 'female', dob: dobYearsAgo(36) });
+
+    // One event per audience that matters to visibility.
+    await createEvent('AUD-EVERYONE', visibilityDate, '09:00', {
+      name: 'Everybody Service',
+      audienceId: await audienceByKey('everyone'),
+    });
+    await createEvent('AUD-VISITORS', visibilityDate, '10:00', {
+      name: 'Newcomers Welcome',
+      audienceId: await audienceByKey('status:visitor'),
+    });
+    await createEvent('AUD-YOUTH', visibilityDate, '11:00', {
+      name: 'Youth Night',
+      audienceId: await audienceByKey('age:13-17'),
+    });
+    await createEvent('AUD-PRESBYTERS', visibilityDate, '12:00', {
+      name: 'Elders Study',
+      audienceId: await audienceByKey('presbyters'),
+    });
+
+    // The visitor's own today, so the phone flow has a list to page from: the
+    // date entry is offered only when the day is not empty.
+    await createEvent('AUD-VISITOR-TODAY', today, '08:00', {
+      name: 'Welcome Desk',
+      audienceId: await audienceByKey('status:visitor'),
+    });
+
+    // The four legacy shapes, for the priority tier.
+    const combination = await createAudience('Choir Presbyters Tier', {
+      operator: 'allOf',
+      clauses: [
+        { attribute: 'ministry', ministryCode: 'CHOIR' },
+        { attribute: 'presbyter', value: true },
+      ],
+    });
+    await createEvent('AUD-TIER-GENERAL', tierDate, '09:00', {
+      name: 'Tier General',
+      audienceId: await audienceByKey('everyone'),
+    });
+    await createEvent('AUD-TIER-MINISTRY', tierDate, '10:00', {
+      name: 'Tier Ministry',
+      audienceId: await audienceByKey('ministry:CHOIR'),
+    });
+    await createEvent('AUD-TIER-BOTH', tierDate, '11:00', {
+      name: 'Tier Ministry Presbyters',
+      audienceId: combination,
+    });
+    await createEvent('AUD-TIER-PRESBYTERS', tierDate, '12:00', {
+      name: 'Tier Presbyters',
+      audienceId: await audienceByKey('presbyters'),
+    });
+
+    // The audience the roster and the phone list must agree on.
+    agreementAudienceId = await createAudience('Agreement Adults Male', {
+      operator: 'allOf',
+      clauses: [
+        { attribute: 'ageBand', minYears: 30, maxYears: 40 },
+        { attribute: 'gender', value: 'male' },
+      ],
+    });
+    agreementEventId = await createEvent('AUD-AGREE', agreementDate, '09:00', {
+      name: 'Agreement Gathering',
+      audienceId: agreementAudienceId,
+    });
+  });
+
+  it('shows a registered visitor only the audiences that name the visitor status', async () => {
+    const { text } = await activitiesOn(visitorPhone, '10.50.1.1', visibilityDate);
+    expect(text).toContain('Newcomers Welcome');
+    expect(text).not.toContain('Everybody Service');
+    expect(text).not.toContain('Youth Night');
+    expect(text).not.toContain('Elders Study');
+  });
+
+  it('shows a youth the Everyone and age-band events only', async () => {
+    const { text } = await activitiesOn(youthPhone, '10.50.1.2', visibilityDate);
+    expect(text).toContain('Everybody Service');
+    expect(text).toContain('Youth Night');
+    expect(text).not.toContain('Newcomers Welcome');
+    expect(text).not.toContain('Elders Study');
+  });
+
+  it('shows a presbyter the Presbyters audience and hides it from others', async () => {
+    const presbyter = await activitiesOn(presbyterReaderPhone, '10.50.1.3', visibilityDate);
+    expect(presbyter.text).toContain('Everybody Service');
+    expect(presbyter.text).toContain('Elders Study');
+
+    const visitor = await activitiesOn(visitorPhone, '10.50.1.4', visibilityDate);
+    expect(visitor.text).not.toContain('Elders Study');
+  });
+
+  it('shows an anonymous caller the everyone audience and nothing else', async () => {
+    const { text } = await activitiesOn(anonymousReaderPhone, '10.50.1.5', visibilityDate, '3');
+    expect(text).toContain('Everybody Service');
+    expect(text).not.toContain('Newcomers Welcome');
+    expect(text).not.toContain('Youth Night');
+    expect(text).not.toContain('Elders Study');
+  });
+
+  it('ranks the four legacy shapes ministry, both, presbyters, general', async () => {
+    const { sessionId, text } = await activitiesOn(presbyterReaderPhone, '10.50.1.6', tierDate);
+    const lines = text.split('\n');
+    expect(lines[1]).toContain('Tier Ministry');
+    expect(lines[2]).toContain('Tier Ministry Presbyters');
+    expect(lines[3]).toContain('Tier Presbyters');
+
+    // The general event sorts last on tier, whatever its start time. '0' opens
+    // the week list, and a second '0' pages it.
+    const week = await frame(sessionId, presbyterReaderPhone, '0', 5, '10.50.1.6');
+    expect(week.body.state).toBe('activities.week');
+    const nextPage = await frame(sessionId, presbyterReaderPhone, '0', 6, '10.50.1.6');
+    expect(nextPage.body.text).toContain('Tier General');
+  });
+
+  it('makes the roster and the phone list agree for one member, date and audience', async () => {
+    const roster = await request(harness.app)
+      .get(`/v1/events/${agreementEventId}/attendance`)
+      .query({ date: agreementDate })
+      .set(readHeaders);
+    expect(roster.status).toBe(200);
+    expect(roster.body.expected).toBe(1);
+
+    const matching = await activitiesOn(matchPhone, '10.50.1.7', agreementDate);
+    expect(matching.text).toContain('Agreement Gathering');
+
+    const notMatching = await activitiesOn(otherPhone, '10.50.1.8', agreementDate);
+    expect(notMatching.text).not.toContain('Agreement Gathering');
+    expect(agreementAudienceId).toBeTruthy();
   });
 });

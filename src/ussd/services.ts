@@ -1,6 +1,11 @@
 import type { Db, Row } from '../db/sql.js';
 import { ValidationError } from '../errors/domain-errors.js';
 import type { PhoneCipher } from '../domain/phone-cipher.js';
+import { legacyProjection } from '../domain/audiences.js';
+import { memberMatchesAudience } from '../domain/audience-evaluator.js';
+import { audienceMember } from '../repos/audience-members.js';
+import type { AudienceRule } from '../schemas/audiences.js';
+import { parseAudienceRule } from '../repos/row-values.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventRepository } from '../repos/events.js';
@@ -141,13 +146,29 @@ interface ActivityRow extends Row {
   session_date: string | Date;
   session_start: string | null;
   tracks_members: boolean;
+  audience_rule: unknown;
+  everyone_audience: boolean;
+}
+
+/** The priority tier a session sorts by, derived from the legacy projection (A-7). */
+function activityTier(rule: AudienceRule, memberCodes: ReadonlySet<string>): number {
+  const projection = legacyProjection(rule);
+  if (projection.ministryCode && memberCodes.has(projection.ministryCode.toLowerCase())) {
+    return 0;
+  }
+  return projection.presbyterOnly ? 1 : 2;
 }
 
 /**
  * The applicable sessions in [from, to], ordered date -> priority tier ->
- * start time -> event number. A general event is tier 2, a presbyter-only
- * event tier 1, and an event tied to one of the caller's active ministries
- * tier 0. Anonymous callers see general events only.
+ * start time -> event number. Visibility is the one audience predicate: a
+ * member sees a session when they match the event's audience at that
+ * occurrence's date (A-3, A-4). The tier is not a visibility question - it
+ * orders a ministry event first, then a presbyter event, then a general one, and
+ * is read from the rule's legacy projection so both surfaces agree.
+ *
+ * An unauthenticated caller sees the seeded `Everyone` audience and nothing
+ * else, without evaluating any rule (A-4).
  */
 async function activitiesBetween(
   db: Db,
@@ -158,54 +179,57 @@ async function activitiesBetween(
   enrichHeadcount = true,
 ): Promise<UssdActivity[]> {
   const memberId = await memberIdOf(db, viewer.memberNo);
+  const member = memberId ? await audienceMember(db, memberId, to) : null;
+  const memberCodes = new Set((member?.ministryCodes ?? []).map((code) => code.toLowerCase()));
   const rows = await db.query<ActivityRow>(
     `select e.id, e.name, e.event_no,
             o.date as session_date,
             coalesce(o.start_time, e.start_time, '') as session_start,
             e.tracks_members,
-            case
-              when e.ministry_id is not null and exists (
-                select 1
-                  from member_ministries mm
-                  join ministries mi on mi.id = mm.ministry_id
-                 where mm.member_id = $1::uuid
-                   and mm.ministry_id = e.ministry_id
-                   and mm.assigned_on <= o.date
-                   and mi.active
-              ) then 0
-              when e.presbyter_only then 1
-              else 2
-            end as priority_tier
+            a.rule as audience_rule,
+            (a.system_key = 'everyone') as everyone_audience
        from events e
+       join audiences a on a.id = e.audience_id
        join event_occurrences o on o.event_id = e.id
       where e.status = 'active'
         and o.status <> 'cancelled'
         and o.date between $2::date and $3::date
-        and (not e.presbyter_only or $4::boolean)
-        and (
-          e.ministry_id is null
-          or (
-            $1::uuid is not null
-            and exists (
-              select 1
-                from member_ministries mm
-                join ministries mi on mi.id = mm.ministry_id
-               where mm.member_id = $1::uuid
-                 and mm.ministry_id = e.ministry_id
-                 and mm.assigned_on <= o.date
-                 and mi.active
-            )
-          )
-        )
-      order by o.date,
-               priority_tier,
-               coalesce(o.start_time, e.start_time, ''),
-               e.event_no nulls last,
-               e.id`,
-    [memberId, from, to, viewer.isPresbyter],
+        and ($1::uuid is not null or a.system_key = 'everyone')`,
+    [memberId, from, to],
   );
 
-  const items: UssdActivity[] = rows.map((row) => ({
+  const anonymous = memberId === null;
+  const visible = rows
+    .filter((row) => {
+      // An unauthenticated caller sees the seeded `Everyone` audience and
+      // nothing else, without evaluating any rule (A-4). A caller whose record
+      // exists but is outside the register at these dates sees nothing.
+      if (anonymous) return row.everyone_audience === true;
+      if (!member) return false;
+      return memberMatchesAudience(
+        parseAudienceRule(row.audience_rule),
+        member,
+        dateOf(row.session_date)!,
+      );
+    })
+    .map((row) => ({
+      row,
+      tier: activityTier(parseAudienceRule(row.audience_rule), memberCodes),
+      date: dateOf(row.session_date)!,
+    }));
+
+  // The SQL cannot rank by the tier because the tier is derived from the rule,
+  // so the ordering the screen reads is applied here, once.
+  visible.sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.tier - b.tier ||
+      (a.row.session_start ?? '').localeCompare(b.row.session_start ?? '') ||
+      compareEventNo(a.row.event_no, b.row.event_no) ||
+      a.row.id.localeCompare(b.row.id),
+  );
+
+  const items: UssdActivity[] = visible.map(({ row }) => ({
     id: row.id,
     name: row.name,
     sessionDate: dateOf(row.session_date)!,
@@ -223,6 +247,14 @@ async function activitiesBetween(
     }
   }
   return items;
+}
+
+/** Event numbers sort as text, with the unminted ones last. */
+function compareEventNo(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a.localeCompare(b);
 }
 
 async function requireMemberId(db: Db, memberNo: string): Promise<string> {

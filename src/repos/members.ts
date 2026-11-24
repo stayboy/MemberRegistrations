@@ -23,6 +23,11 @@ import {
 } from '../domain/contacts.js';
 import { seriesStart, todayIn } from '../domain/series.js';
 import type { PhotoContentType } from '../domain/photos.js';
+import { legacyProjection } from '../domain/audiences.js';
+import { memberMatchesAudience, type AudienceMember } from '../domain/audience-evaluator.js';
+import type { AudienceRule } from '../schemas/audiences.js';
+import { audienceMember } from './audience-members.js';
+import { parseAudienceRule } from './row-values.js';
 import { sessionIsClosed } from './captures.js';
 import type { Db, DbClient, OrmClient, Row } from '../db/sql.js';
 import {
@@ -208,6 +213,33 @@ interface ScopedSession {
   sessionDate: string;
   startTime: string | null;
   attended: boolean;
+}
+
+/**
+ * How many candidate rows one scoped-session read asks the database for. The
+ * scope is the predicate, which needs each row's rule and date, so the page
+ * cannot be taken in SQL; it is taken here, one bounded batch at a time.
+ */
+const SCOPED_SESSION_PAGE = 100;
+
+interface ScopedSessionRow extends Row {
+  event_id: string;
+  name: string;
+  session_date: string | Date;
+  start_time: string | null;
+  audience_rule: unknown;
+  attended: boolean;
+}
+
+/** One recurring event's evaluated window, decided before the member's read. */
+interface SeriesAttendanceWindow {
+  id: string;
+  name: string;
+  rule: AudienceRule;
+  windowStart: string;
+  windowEnd: string;
+  endsOn: string | null;
+  today: string;
 }
 
 export interface MemberSummary {
@@ -948,8 +980,17 @@ export class MemberRepository {
   /**
    * One scoped-session read shared by the window and the profile. A session is
    * in scope when it is held (on or before the event's today), not cancelled,
-   * member-trackable, and either general or in one of the member's active
-   * ministries; join and ministry-assignment floors drop sessions entirely.
+   * member-trackable, and the member matches that event's audience at the
+   * session's date - the same predicate the roster uses (A-3, A-4). The
+   * register's own join rule is the only floor: the ministry `assigned_on` floor
+   * and the general/ministry scope are gone.
+   *
+   * The scope cannot be a SQL predicate, so the rows are read in bounded pages
+   * and the page is taken after the filter. Two things keep the scan finite:
+   * the register's join floor becomes a per-occurrence date pre-filter (a session
+   * before the member joined can never match), and each query asks for at most
+   * {@link SCOPED_SESSION_PAGE} candidates, stopping as soon as `limit` scoped
+   * sessions are found.
    */
   private async scopedSessions(
     memberId: string,
@@ -957,59 +998,74 @@ export class MemberRepository {
     to: string | null,
     limit: number | null,
   ): Promise<ScopedSession[]> {
-    const rows = await this.db.query<{
-      event_id: string;
-      name: string;
-      session_date: string | Date;
-      start_time: string | null;
-      attended: boolean;
-    }>(
-      `select e.id as event_id,
+    const sql = `select e.id as event_id,
               e.name,
               o.date as session_date,
               e.start_time,
+              au.rule as audience_rule,
               exists (
                 select 1 from attendance a
                  where a.occurrence_id = o.id
-                   and a.member_id = m.id
+                   and a.member_id = $1
               ) as attended
-         from members m
-         join events e on true
+         from events e
+         join audiences au on au.id = e.audience_id
          join event_occurrences o on o.event_id = e.id
-        where m.id = $1
-          and e.status = 'active'
+         join members m
+           on m.id = $1
+          and (m.joined_on is null or m.joined_on <= o.date)
+        where e.status = 'active'
           and coalesce(e.tracks_members, true)
-          and (not e.presbyter_only or m.is_presbyter)
           and o.status <> 'cancelled'
           and o.date <= (now() at time zone e.timezone)::date
           and ($2::date is null or o.date >= $2::date)
           and ($3::date is null or o.date <= $3::date)
-          and (m.joined_on is null or m.joined_on <= o.date)
-          and (
-            e.ministry_id is null
-            or exists (
-              select 1 from member_ministries mm
-              join ministries mi on mi.id = mm.ministry_id
-               where mm.member_id = m.id
-                 and mm.ministry_id = e.ministry_id
-                 and mm.assigned_on <= o.date
-                 and mi.active
-            )
-          )
         order by o.date desc,
                  coalesce(e.start_time, '') desc,
                  e.id desc
-        ${limit === null ? '' : 'limit $4'}`,
-      limit === null ? [memberId, from, to] : [memberId, from, to, limit],
-    );
+        limit $4::int offset $5::int`;
 
-    return rows.map((row) => ({
-      eventId: row.event_id,
-      name: row.name,
-      sessionDate: isoDate(row.session_date)!,
-      startTime: row.start_time,
-      attended: row.attended,
-    }));
+    const scoped: ScopedSession[] = [];
+    // The register is read once, as of the newest held session; only its
+    // in-register check is date-dependent, and every candidate is on or after
+    // the join date, so one read serves the whole scan.
+    let register: AudienceMember | null = null;
+    let offset = 0;
+
+    for (;;) {
+      const rows = await this.db.query<ScopedSessionRow>(sql, [
+        memberId,
+        from,
+        to,
+        SCOPED_SESSION_PAGE,
+        offset,
+      ]);
+      if (rows.length === 0) return scoped;
+
+      if (!register) {
+        register = await audienceMember(this.db, memberId, isoDate(rows[0]!.session_date)!);
+        if (!register) return [];
+      }
+      const member = register;
+
+      for (const row of rows) {
+        const sessionDate = isoDate(row.session_date)!;
+        if (!memberMatchesAudience(parseAudienceRule(row.audience_rule), member, sessionDate)) {
+          continue;
+        }
+        scoped.push({
+          eventId: row.event_id,
+          name: row.name,
+          sessionDate,
+          startTime: row.start_time,
+          attended: row.attended,
+        });
+        if (limit !== null && scoped.length >= limit) return scoped;
+      }
+
+      if (rows.length < SCOPED_SESSION_PAGE) return scoped;
+      offset += rows.length;
+    }
   }
 
   async create(input: CreateMemberInput, actor: string): Promise<MemberDetail> {
@@ -2561,15 +2617,20 @@ export class MemberRepository {
   }
 
   private async attendanceFor(row: MemberRow): Promise<AttendanceSeriesDto[]> {
+    const joinedOn = isoDate(row.joined_on) ?? isoDate(row.created_at)!;
     const series = await this.db.query<{
       id: string;
       name: string;
       timezone: string;
-      ministry: string | null;
+      audience_rule: unknown;
     }>(
-      `select e.id, e.name, e.timezone, mi.name as ministry
+      // A-4 evaluates every occurrence against the member's register, so an
+      // event whose whole life ended before the member joined cannot qualify.
+      // That is a pre-filter only - it cannot drop a qualifying event - and the
+      // rule itself stays in the predicate.
+      `select e.id, e.name, e.timezone, a.rule as audience_rule
        from events e
-       left join ministries mi on mi.id = e.ministry_id
+       join audiences a on a.id = e.audience_id
        where e.archived_at is null
          and e.status = 'active'
          and exists (
@@ -2577,18 +2638,28 @@ export class MemberRepository {
          )
          and (
            exists (
-              select 1 from attendance a
-              join event_occurrences o on o.id = a.occurrence_id
-              where o.event_id = e.id and a.member_id = $1
-            )
-           or exists (
-             select 1 from member_ministries mm
-             where mm.member_id = $1 and mm.ministry_id = e.ministry_id
+             select 1 from event_recurrence_versions rv
+              where rv.event_id = e.id
+                and (rv.ends_on is null or rv.ends_on >= $1::date)
            )
+           or (
+             select max(o.date) from event_occurrences o where o.event_id = e.id
+           ) >= $1::date
          )
        order by e.name`,
-      [row.id],
+      [joinedOn],
     );
+
+    // The label a projected ministry code renders as, read once for the page.
+    const ministryNames = new Map<string, string>();
+    if (series.length > 0) {
+      const ministries = await this.db.query<{ code: string; name: string }>(
+        'select code, name from ministries',
+      );
+      for (const ministry of ministries) {
+        ministryNames.set(ministry.code.toLowerCase(), ministry.name);
+      }
+    }
 
     const attended = await this.db.query<{
       id: string;
@@ -2632,7 +2703,10 @@ export class MemberRepository {
       group.set(key, list);
     }
 
-    const result: AttendanceSeriesDto[] = [];
+    // Decide each candidate's window first: the register is a single read, as
+    // of the latest date any window will be evaluated (A-4 asks the predicate
+    // per occurrence, but the member is the same throughout).
+    const windows: SeriesAttendanceWindow[] = [];
     for (const item of series) {
       const calendar = await loadCalendar(this.db, item.id);
       const start = seriesStart(calendar.schedules);
@@ -2640,26 +2714,68 @@ export class MemberRepository {
 
       const endsOn = calendar.schedules[calendar.schedules.length - 1]?.endsOn ?? null;
       const today = todayIn(item.timezone);
-      const joinedOn = isoDate(row.joined_on) ?? isoDate(row.created_at);
-      const windowStart = joinedOn && joinedOn > start ? joinedOn : start;
+      const windowStart = joinedOn > start ? joinedOn : start;
       const windowEnd = endsOn && endsOn < today ? endsOn : today;
       if (windowStart > windowEnd) continue;
 
-      const occurrences = await resolveSeriesOccurrences(this.db, item.id, windowStart, windowEnd);
-      const entries = (bySeries.get(item.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+      windows.push({
+        id: item.id,
+        name: item.name,
+        rule: parseAudienceRule(item.audience_rule),
+        windowStart,
+        windowEnd,
+        endsOn,
+        today,
+      });
+    }
+
+    // One register read, many predicates; a member outside the register at the
+    // latest window end is outside every window, because the predicate's own
+    // join floor drops each earlier date.
+    const register =
+      windows.length > 0
+        ? await audienceMember(
+            this.db,
+            row.id,
+            windows.reduce(
+              (latest, window) => (window.windowEnd > latest ? window.windowEnd : latest),
+              windows[0]!.windowEnd,
+            ),
+          )
+        : null;
+
+    const result: AttendanceSeriesDto[] = [];
+    for (const window of windows) {
+      if (!register) break;
+
+      const occurrences = await resolveSeriesOccurrences(
+        this.db,
+        window.id,
+        window.windowStart,
+        window.windowEnd,
+      );
+      if (!occurrences.some((date) => memberMatchesAudience(window.rule, register, date))) {
+        continue;
+      }
+
+      const projection = legacyProjection(window.rule);
+      const ministry = projection.ministryCode
+        ? (ministryNames.get(projection.ministryCode.toLowerCase()) ?? null)
+        : null;
+      const entries = (bySeries.get(window.id) ?? []).sort((a, b) => a.date.localeCompare(b.date));
       const counts = summariseAttendance({
         occurrences,
         attendedDates: entries
           .map((entry) => entry.date)
-          .filter((date) => date >= windowStart && date <= windowEnd),
-        endsOn,
-        today,
+          .filter((date) => date >= window.windowStart && date <= window.windowEnd),
+        endsOn: window.endsOn,
+        today: window.today,
       });
 
       result.push({
-        seriesId: item.id,
-        seriesName: item.name,
-        ministry: item.ministry,
+        seriesId: window.id,
+        seriesName: window.name,
+        ministry,
         ...counts,
         entries,
       });
