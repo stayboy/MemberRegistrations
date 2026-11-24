@@ -235,15 +235,14 @@ describe('GET /v1/events?view=parent', () => {
       FIRST_HELD,
       SECOND_HELD,
     ]);
-    // Deferral tripwire: "Audience-derived `expected` on the parent read" in
-    // documents/backlog.md. The legacy projection counts every evaluated
-    // member (2); the event's audience is allOf(ministry CHOIR), and this
-    // fixture has no CHOIR members, so the downstream audience-evaluation
-    // round flips this assertion to 0.
+    // The event's audience is allOf(ministry CHOIR). The legacy projection
+    // counted every evaluated member (2) because presbyter_only is false and
+    // it cannot express a ministry clause; neither PR-1 nor PR-2 holds a CHOIR
+    // assignment, so the audience counts nobody at either occurrence date.
     expect(event.occurrences[0]).toMatchObject({
       status: 'held',
       present: 2,
-      expected: 2,
+      expected: 0,
       importedRows: 1,
       source: 'mixed',
       capture: { asOf: `${FIRST_HELD}T10:42:00.000Z`, ended: false },
@@ -251,14 +250,14 @@ describe('GET /v1/events?view=parent', () => {
     expect(event.occurrences[1]).toMatchObject({
       status: 'held',
       present: 0,
-      expected: 2,
+      expected: 0,
       capture: { asOf: `${SECOND_HELD}T09:10:00.000Z`, ended: true },
     });
     expect(event.summary).toMatchObject({
       nextOccurrence: TODAY,
       attendance: {
-        memberSessions: { held: 2, expected: 4, present: 2, rate: 0.5 },
-        lastHeld: { date: SECOND_HELD, expected: 2, present: 0 },
+        memberSessions: { held: 2, expected: 0, present: 2, rate: null },
+        lastHeld: { date: SECOND_HELD, expected: 0, present: 0 },
         cancelled: 0,
         upcoming: 0,
       },

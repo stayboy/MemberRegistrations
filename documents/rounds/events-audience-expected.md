@@ -63,7 +63,7 @@ Acceptance criteria:
 | --------------------- | --------------------- | ---------- |
 | Fast gate (round doc) | `npm run verify:fast` | pass — 4/4 |
 
-gate-run 2026-11-24T03:40:19.198Z profile=fast steps=4/4 lines=4 bytes=892
+gate-run 2026-11-24T03:57:16.569Z profile=full steps=7/7 lines=7 bytes=965
 
 ## Review
 
@@ -93,9 +93,28 @@ n/a - no drawing changes.
 
 ## Acceptance
 
-| #   | Criterion | Met | Evidence |
-| --- | --------- | --- | -------- |
+| #   | Criterion                                                                                                                                                | Met                                | Evidence                                                                                                                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The evaluator answers a rule and a date with a count, with a test per clause kind and per operator                                                       | yes                                | `tests/db/audience-evaluator.test.ts`: ministry, age band, gender, presbyter, membership status, and `allOf`/`anyOf`/`noneOf`, on both drivers                                                              |
+| 2   | The roster's `expected` equals the evaluator's answer, and differs from the legacy projection where the rule is not an `allOf` of ministry and presbyter | yes                                | the same file: audience `2` against the legacy read's `7` for an `anyOf` audience                                                                                                                           |
+| 3   | `tracksMembers = false` yields `0` everywhere `expected` is served                                                                                       | yes                                | occurrence, window summary and attendance summary each assert `0`                                                                                                                                           |
+| 4   | The CHOIR pin asserts `0`, with the fixture that makes it so                                                                                             | yes                                | `tests/api/event-parent-read.test.ts`: `expected` `2 → 0`, `memberSessions.expected` `4 → 0`, `rate` `0.5 → null`, `present` stays `2`                                                                      |
+| 5   | No migration, no wire change, no public route deleted, no UI change                                                                                      | yes, with one recorded side effect | no migration, no route deleted, no UI file; the legacy `/v1/series/{id}/summary` now reports audience-derived `expected` because it shares the window summary — same shape, different value, recorded below |
 
 ## Deviations
 
-None yet.
+- **The SQL moved out of the domain.** The first cut put the register query in `src/domain/audience-evaluator.ts`, which
+  `AGENTS.md` §12 forbids in as many words. The review refused it; the query now lives in `src/repos/audience-members.ts`
+  and the evaluator is a pure predicate over rows it is handed.
+- **The legacy series summary moves too.** `GET /v1/series/{id}/summary` shares `parentWindowSummary`, so its
+  `expected` and `lastHeld.expected` now come from the audience rather than the presbyter projection. No shape
+  changed, the route is still served, and the round records it here rather than letting it read as an accident.
+  The legacy event list without `view=parent` and the member-facing visibility paths keep the legacy pair until
+  the drop round.
+- **A-3's register wording was reconciled with the predicate.** It said a null `joined_on` is simply "in the
+  register"; the code — and the roster before it — falls back to the member record's creation date, so a member
+  created after the occurrence is excluded from it. The spec now says that, and this round doc carries the note
+  because that spec has no change-log section.
+- **The evaluator's two helpers were duplicated** (`parseAudienceRule` in two repositories, the text-array parser in
+  two places); they now live in `src/repos/row-values.ts`, with a guard that treats a stored rule which no longer
+  validates as corrupt data (500) rather than a bad request (422).

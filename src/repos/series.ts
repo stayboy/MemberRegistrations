@@ -1,10 +1,13 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { assertDate } from '../domain/contacts.js';
+import { evaluateAudienceDates } from '../domain/audience-evaluator.js';
 import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
 import type { SeriesSummary } from '../schemas/reference.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
 import { sqlState } from '../errors/sqlstate.js';
+import { audienceMembers } from './audience-members.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
+import { parseAudienceRule, parseTextArray } from './row-values.js';
 
 const NEXT_OCCURRENCE_DAYS = 90;
 
@@ -69,10 +72,9 @@ type SummaryAttendanceRow = Row & {
   upcoming: number | string;
   headcount_held: number | string;
   member_held: number | string;
-  expected: number | string;
+  held_dates: unknown;
   present: number | string;
   last_held_date: string | Date | null;
-  last_held_expected: number | string;
   last_held_present: number | string;
 };
 
@@ -128,21 +130,11 @@ attendance_counts as (
    group by a.occurrence_id
 ),
 held_member as (
-  select c.event_id, c.occurrence_id, c.session_date, c.presbyter_only,
+  select c.event_id, c.occurrence_id, c.session_date,
          coalesce(ac.present, 0) as present
     from classified c
     left join attendance_counts ac on ac.occurrence_id = c.occurrence_id
    where c.bucket = 'held' and c.tracks_members
-),
-expected_by_session as (
-  select h.event_id, h.session_date,
-         (select count(*)
-            from members m
-           where coalesce(m.joined_on, m.created_at::date) <= h.session_date
-             and m.archived_at is null
-             and m.purged_at is null
-             and (not h.presbyter_only or m.is_presbyter))::int as expected
-    from held_member h
 ),
 last_held as (
   select max(session_date) as session_date from held_member
@@ -153,13 +145,12 @@ select
   (select count(*) from classified where bucket = 'held' and not tracks_members)::int
     as headcount_held,
   (select count(*) from held_member)::int as member_held,
-  coalesce((select sum(expected) from expected_by_session), 0)::int as expected,
+  coalesce((
+    select array_agg(to_char(session_date, 'YYYY-MM-DD') order by session_date)
+      from held_member
+  ), '{}'::text[]) as held_dates,
   coalesce((select sum(present) from held_member), 0)::int as present,
   (select session_date from last_held) as last_held_date,
-  coalesce((
-    select sum(e.expected) from expected_by_session e, last_held l
-     where e.session_date = l.session_date
-  ), 0)::int as last_held_expected,
   coalesce((
     select sum(h.present) from held_member h, last_held l
      where h.session_date = l.session_date
@@ -311,7 +302,23 @@ export async function parentWindowSummary(
     nextOccurrence = next ? isoDate(next.date) : null;
   }
 
-  const expected = Number(attendance?.expected ?? 0);
+  const [scope] = await db.query<{ tracks_members: boolean; rule: unknown }>(
+    `select e.tracks_members, a.rule
+       from events e
+       join audiences a on a.id = e.audience_id
+      where e.id = $1`,
+    [event.id],
+  );
+  const heldDates = parseTextArray(attendance?.held_dates);
+  const expectedByDate =
+    scope?.tracks_members && heldDates.length > 0
+      ? evaluateAudienceDates(
+          parseAudienceRule(scope.rule),
+          await audienceMembers(db, heldDates[heldDates.length - 1]),
+          heldDates,
+        )
+      : new Map<string, number>();
+  const expected = heldDates.reduce((total, date) => total + (expectedByDate.get(date) ?? 0), 0);
   const present = Number(attendance?.present ?? 0);
   const lastHeldDate = attendance?.last_held_date ? isoDate(attendance.last_held_date) : null;
 
@@ -321,7 +328,7 @@ export async function parentWindowSummary(
     nextOccurrence,
     attendance: {
       memberSessions: {
-        held: Number(attendance?.member_held ?? 0),
+        held: heldDates.length,
         expected,
         present,
         rate: expected > 0 ? present / expected : null,
@@ -329,7 +336,7 @@ export async function parentWindowSummary(
       lastHeld: lastHeldDate
         ? {
             date: lastHeldDate,
-            expected: Number(attendance?.last_held_expected ?? 0),
+            expected: expectedByDate.get(lastHeldDate) ?? 0,
             present: Number(attendance?.last_held_present ?? 0),
           }
         : null,
