@@ -348,7 +348,9 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
   change — not a data entry.
 - **The `definition` is optional, and the rule is the authority** (owner, 2026-11-24). It is **the note that explains the period** - one free-text textarea, the only documentation field in the dialog -
   kept for comprehension and shown when present; a blank one is accepted, because the
-  `rule_kind` and its parameters are what the resolver evaluates and what the preview renders. The list shows the
+  `rule_kind` and its parameters are what the resolver evaluates and what the preview renders. **Field explanations live in
+  tooltips**, not inline prose (owner, 2026-11-24): each control that needs one carries an info affordance beside its
+  label, and the dialog keeps a short vertical rhythm rather than a column of sentences. The list shows the
   definition under the name when there is one, and the rule in words always, so a period is legible either way.
 - **Archive, never delete.** `active = false` removes it from the create form; `GET /v1/events/periods` serves active
   rows by default and `includeArchived=true` for the admin list. A stored `period_id` on an event is never validated
