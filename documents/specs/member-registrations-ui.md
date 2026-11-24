@@ -761,7 +761,12 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   two writes do not agree on the occurrence row.
 - FR-42f: The recurrence MUST be authored through a closed vocabulary, never a raw `rrule`: **daily** (with an
   interval of 1-7, so "every other day" is `INTERVAL=2`), **weekly**, **fortnightly** and **monthly on the day** taken
-  from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules.
+  from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules — and a **named
+  period** mode (owner, 2026-11-24): pick the period, then either **one cycle** (a month, resolved once) or **monthly**
+  (one date per cycle), and where the period is a week, an optional **day inside it**, so "Miracle Sunday" is Communion
+  Week + Sunday + monthly. The period mode never mixes with the cadence vocabulary: choosing a period replaces the
+  cadence controls, and the form submits the period (never an rrule), which is why a period event has no schedule
+  version.
   One mapping module MUST produce and parse the API's `rrule` string, and its round trip MUST be tested, so a schedule
   version read from the API renders as the label that authored it. A recurrence outside that vocabulary is rendered
   read-only from the API's stored string rather than guessed at.
