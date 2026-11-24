@@ -116,10 +116,9 @@ test('the retired attendance route lands on the activity with its date', async (
   await expect(page.getByRole('heading', { level: 1, name: 'Sunday Service' })).toBeVisible();
 });
 
-// Parked, not weakened: the panel's opening from the parameter fails under a parallel run and
-// the backlog row ("The import panel's deep-link opening is unverified end to end") says it is
-// parked rather than retried. The matching logic is covered in the DOM lane.
-test.fixme('the retired attendance route opens the panel for its date', async ({ page }) => {
+// Reopened with the panel's mount fix: the surface no longer mounts already open with nothing
+// focusable, so tabster keeps it in the accessibility tree under a parallel run.
+test('the retired attendance route opens the panel for its date', async ({ page }) => {
   await open(page, '/imports/attendance?event=event-1&date=2026-01-04');
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: 15_000 });

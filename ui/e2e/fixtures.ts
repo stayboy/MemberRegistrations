@@ -751,8 +751,13 @@ export const EVENTS: readonly EventItem[] = [
  */
 const ACTION_STATE_EVENT_IDS: readonly string[] = ['event-live', 'event-ended'];
 
+/** The calendar date the action-state pair is dated on: today in UTC, the zone both fixtures pin. */
+function actionStateDate(): string {
+  return dateInZone(new Date(), 'UTC');
+}
+
 function actionStateEvents(): readonly EventItem[] {
-  const today = dateInZone(new Date(), 'UTC');
+  const today = actionStateDate();
   return [
     {
       id: 'event-live',
@@ -1671,6 +1676,49 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
   };
 }
 
+/**
+ * The live/ended pair's own parent read: one occurrence dated today, whose capture is the fixture's own
+ * (`event-ended` is already closed) or the close a test's panel just recorded. It is built here rather
+ * than seeded in `PARENT_SEEDS`, because the date is today's and the close is per test.
+ */
+function actionStateParent(
+  eventId: string,
+  closedAt: string | null,
+  from: string,
+  to: string,
+): EventParentItem | null {
+  const event = actionStateEvents().find((candidate) => candidate.id === eventId);
+  const session = event?.sessions[0];
+  if (!event || !session) return null;
+
+  const seed: ParentSeed = {
+    id: event.id,
+    event,
+    status: 'active',
+    audience: EVERYONE_AUDIENCE,
+    startDate: session.date,
+    endDate: session.date,
+    recurrence: null,
+    occurrences: [
+      occurrence(event.id, {
+        date: session.date,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        status: session.status,
+        present: session.present,
+        expected: session.expected,
+        importedRows: session.importedRows,
+        source: session.source,
+        capture: closedAt ? { asOf: closedAt, ended: true } : session.capture,
+      }),
+    ],
+    offerings: [],
+    summaryOfferings: EMPTY_SUMMARY.offerings,
+    nextOccurrence: null,
+  };
+  return parentOf(seed, from, to);
+}
+
 /** A created parent's occurrences, as the create body's date rows write them. */
 function occurrencesFromBody(
   input: unknown,
@@ -2257,6 +2305,12 @@ function buildRoutes(
   let headcountSeq = HEADCOUNTS.length;
 
   /**
+   * The close a test just recorded, per event id: the action-state pair's parent read has to show the
+   * `ended` capture or the row and the panel would keep offering a capture the API now refuses.
+   */
+  const closedCaptures = new Map<string, string>();
+
+  /**
    * FR-78's write actions mutate per-test state: a value added, edited, linked or
    * unlinked must show up in the next detail read, or the invalidate-and-refetch
    * the dialog relies on would prove nothing.
@@ -2826,6 +2880,18 @@ function buildRoutes(
         // FR-4/FR-6a: the detail reads the parent body; the USSD screens still
         // read the legacy `EventItem` without the flag.
         if (call.search.get('view') === 'parent') {
+          // The capture-state pair is dated today and closes per test, so its parent is built from the
+          // fixture rather than looked up in `PARENT_SEEDS`.
+          if (actionStatesEnabled() && ACTION_STATE_EVENT_IDS.includes(eventId ?? '')) {
+            const parent = actionStateParent(
+              eventId!,
+              closedCaptures.get(eventId!) ?? null,
+              call.search.get('from') ?? '',
+              call.search.get('to') ?? '',
+            );
+            if (!parent) return problem(404, `Event ${eventId} was not found`);
+            return reply(parent, 200, { ETag: '"e2e-event-parent"' });
+          }
           const parent = parentForId(
             eventId!,
             call.search.get('from') ?? '',
@@ -3181,6 +3247,12 @@ function buildRoutes(
           body,
           rows,
         };
+        // FR-6b: an end-only capture closes the session, so the next parent read reports `ended` and the
+        // row and the panel stop offering a capture. The reply's own instant is the capture's `asOf`.
+        if (commit.kind === 'attendance' && body.ended === true) {
+          const eventId = optionalText(body.eventId);
+          if (eventId) closedCaptures.set(eventId, FIXED_INSTANT);
+        }
         const override = importReplyFor(commit);
         if (override) return override;
 

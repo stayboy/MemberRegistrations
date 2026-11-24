@@ -796,7 +796,7 @@ events and imports queries. A **standalone** occurrence offers the same entry an
 recurring one; only a `tracksMembers = false` event refuses, with `422 headcount_only`. There is no
 standalone attendance import page. (FR-8)
 
-### AC-7a: **Given** a live occurrence, **When** an import is captured, **Then** the page shows "Live" with the capture time and one **End session** action, the session stays open, and another capture may replace it; **Given** a past open occurrence, **Then** the page reads "Past session" with the **End session** action and the occurrence stays open; **Given** an import captured outside the live window with no close, **Then** it is accepted as an open capture and does not close the occurrence; **Given** the administrator presses **End session**, **Then** the page shows "End of session" with the action disabled and a further capture is refused; **Given** a not-yet-started open occurrence, **Then** the page reads "Not started" with the **End session** action; **Given** a `tracksMembers = false` occurrence, **Then** the page offers no **End session** action and the occurrence stays open; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled occurrence, **Then** the page offers no capture. (FR-6f)
+### AC-7a: **Given** a live occurrence, **When** an import is captured, **Then** the page shows "Live" with the capture time and one **End of session** action, the session stays open, and another capture may replace it; **Given** the administrator presses **End of session**, **Then** the dialog states that the session ends and further captures will be refused, and on confirmation the page shows "End of session" with the action disabled and a further capture refused; **Given** a past open or a not-yet-started occurrence, **Then** the page reads "Past session" or "Not started" **without** the action, which is offered only while live, and the occurrence stays open; **Given** an import captured outside the live window with no close, **Then** it is accepted as an open capture and does not close the occurrence; **Given** a `tracksMembers = false` occurrence, **Then** the page offers no **End of session** action and the occurrence stays open; **Given** no capture yet, **Then** the state shows without a time; **Given** a cancelled occurrence, **Then** the page offers no capture. (FR-6f)
 
 ### AC-8: **Given** an event attendance report, **When** it loads, **Then** one aggregate request returns present/expected and optional member rows; no per-member requests are made. (FR-10, FR-11)
 
@@ -1504,6 +1504,11 @@ recurrence. S-Q3, S-Q4, S-Q6, S-Q7 and S-Q8 stand.
   spec.
 
 ## Change log
+
+- 2026-11-23: **AC-7a is corrected to what ships** (owner: "all as recommended", capture round): the **End of
+  session** action is offered **only while live** — past and not-yet-started occurrences read their state without
+  it, as the 2026-11-03/04 note and `format/capture.ts` always said — and the action now confirms through a dialog
+  that names the consequence. The label follows the shipped UI.
 
 - 2026-11-23: **the attendance tile's caption names the roster** (owner: "all as recommended", UI read round): the
   caption becomes "{present} present · Roster {expected} on {date}" rather than "{present} of {expected} on {date}",

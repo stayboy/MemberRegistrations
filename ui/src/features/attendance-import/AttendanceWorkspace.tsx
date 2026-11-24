@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { EventListItem, EventSessionSummary } from '../../api/events';
 import type { AttendanceImportRow, ImportBatch, ImportFormat } from '../../api/imports';
+import { EndOfSessionConfirm } from '../../components/EndOfSessionConfirm';
 import { ImportPanel } from '../../components/ImportPanel';
 import { captureState, captureStateLabel, endActionState } from '../../format/capture';
 import { parseAttendanceFile } from '../../format/import-file';
@@ -200,6 +201,11 @@ export interface AttendanceWorkspaceProps {
   /** The end-only capture: one shared close per event and session. */
   readonly endSession: (occurrence: OccurrenceRef) => Promise<ImportBatch>;
   /**
+   * The end-only close's own success path. It is separate from `onCommitted` because a close is not an
+   * import: the panel that hosts this workspace stays open on it, showing the session it just ended.
+   */
+  readonly onEnded: (batch: ImportBatch) => void;
+  /**
    * The occurrence this workspace is for. When set, the picker, the date window and the URL state have
    * no caller: the session was chosen by whatever opened the workspace (owner, 2026-11-15).
    */
@@ -230,12 +236,14 @@ export function AttendanceWorkspace({
   commitRows,
   onCommitted,
   endSession,
+  onEnded,
   fixedOccurrence = null,
 }: AttendanceWorkspaceProps) {
   const styles = useStyles();
   const { formatDate, formatTime } = useDateTimeFormat();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ending, setEnding] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
 
   // Seed once. A later `events` refetch cannot unmount the panel because the
@@ -302,9 +310,17 @@ export function AttendanceWorkspace({
         eventId: occurrence.eventId,
         sessionDate: occurrence.date,
       });
-      onCommitted(batch);
+      // A fixed occurrence is a snapshot and this workspace is never handed a fresh event list, so the
+      // batch it just read back is the only record of the close: it becomes the capture, and the state
+      // matrix turns the label to "End of session" and the action to disabled.
+      setOccurrence((current) =>
+        current ? { ...current, capture: { asOf: batch.createdAt, ended: true } } : current,
+      );
+      setConfirmEnd(false);
+      onEnded(batch);
     } catch (error) {
       setEndError(errorMessage(error));
+      setConfirmEnd(false);
     } finally {
       setEnding(false);
     }
@@ -345,7 +361,7 @@ export function AttendanceWorkspace({
             <div className={styles.actions}>
               {endAction !== 'hidden' ? (
                 <Button
-                  onClick={() => void endOfSession()}
+                  onClick={() => setConfirmEnd(true)}
                   disabled={endAction === 'disabled' || ending}
                 >
                   End of session
@@ -510,6 +526,13 @@ export function AttendanceWorkspace({
       <Text size={200} className={styles.muted}>
         An import writes attendance only; it never creates events, sessions or members.
       </Text>
+
+      <EndOfSessionConfirm
+        open={confirmEnd}
+        busy={ending}
+        onConfirm={() => void endOfSession()}
+        onCancel={() => setConfirmEnd(false)}
+      />
     </>
   );
 }

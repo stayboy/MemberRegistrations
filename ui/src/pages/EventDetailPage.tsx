@@ -297,6 +297,17 @@ export function EventDetailPage() {
     setSearchParams(next, { replace: true });
   }
 
+  /**
+   * FR-8/AC-7: a successful batch invalidates the events, series and imports queries, and the member
+   * reads whose attendance lines it changed - the same set the retired page invalidated. A close
+   * shares it, because an end-only batch moves the occurrence row's capture state too.
+   */
+  function invalidateAfterCapture(): void {
+    for (const root of ['events', 'series', 'imports', 'member', 'members']) {
+      void queryClient.invalidateQueries({ queryKey: [root, baseUrl] });
+    }
+  }
+
   return (
     <PageFrame
       sectionId="events"
@@ -862,25 +873,28 @@ export function EventDetailPage() {
 
       <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />
 
-      {panelOccurrence ? (
-        <SessionImportPanel
-          open
-          occurrence={panelOccurrence}
-          onClose={() => {
-            setImportFor(null);
-            clearImportParam();
-          }}
-          onImported={() => {
-            setImportFor(null);
-            // FR-8/AC-7: a successful batch invalidates the events, series and imports queries, and the
-            // member reads whose attendance lines it changed - the same set the retired page invalidated.
-            for (const root of ['events', 'series', 'imports', 'member', 'members']) {
-              void queryClient.invalidateQueries({ queryKey: [root, baseUrl] });
-            }
-            clearImportParam();
-          }}
-        />
-      ) : null}
+      {/*
+        Mounted from the first render and closed until an occurrence is named: a Fluent surface that
+        mounts already open, with nothing focusable yet, loses its accessibility tree (the panel's own
+        comment has the trace). Closing it is the same act as Escape: the parameter is cleared.
+      */}
+      <SessionImportPanel
+        open={panelOccurrence !== null}
+        occurrence={panelOccurrence}
+        onClose={() => {
+          setImportFor(null);
+          clearImportParam();
+        }}
+        onImported={() => {
+          setImportFor(null);
+          invalidateAfterCapture();
+          clearImportParam();
+        }}
+        onSessionEnded={() => {
+          // The panel stays open on the close, so the parameter still describes what is on screen.
+          invalidateAfterCapture();
+        }}
+      />
 
       {cancelTarget ? (
         <CancelOccurrenceDialog

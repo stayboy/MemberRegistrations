@@ -55,7 +55,7 @@ downstream round. No migration or code lands in the spec round.
   session. have admin alternative explicit action to end it... this feature should not be enforced").
   The automatic end on an outside-the-window capture is removed: an import outside the live window is
   still an open capture. The close is the operator's explicit end-only capture (`rows: []` with
-  `ended: true`, labelled **End session**), offered on any open occurrence, and it is optional — nothing
+  `ended: true`, labelled **End of session**), offered on any open occurrence, and it is optional — nothing
   enforces it and an occurrence may stay open indefinitely. After the explicit close, any capture or
   per-member write still answers `409 session_closed`. FR-6b, the import paragraph, the Headcounts
   paragraph, AC-32 and AC-33a say so; this supersedes the automatic end in the 2026-11-11 capture model.
