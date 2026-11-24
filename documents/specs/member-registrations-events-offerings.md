@@ -16,8 +16,10 @@ amendment (2026-11-22)** and the same day's **audience and session-offering amen
 the owner's approval is recorded in `documents/rounds/event-parent.md`, and the migration and the wire
 are its named hard gates. Events V2 and offerings V3; implementation is gated by tickets 07–11, 20–24 and
 the MVP capture round. The Strategic Conference is the reference event. The audience and the person kinds
-are specified in `member-registrations-event-audience.md`; the per-session attachment is specified in
-`member-registrations-session-offerings.md`, a **separate round after the event-parent migration**.
+are specified in `member-registrations-event-audience.md`. **An offering is defined at the parent event and
+collected against a session** (owner, 2026-11-24); the per-session attachment that
+`member-registrations-session-offerings.md` specified is **withdrawn**, and that document is kept only as the
+record of what was considered.
 
 |         |                                                                                |
 | ------- | ------------------------------------------------------------------------------ |
@@ -161,9 +163,9 @@ rule becomes an HTTP rejection.
   `204`; a detach with no active attachment is `404`. A re-attach after a detach is a new attachment
   row, and exceptions belong to that row, so they do not carry over.
 - **Effective expiry.** The effective expiry of an attachment is its own `availableUntil`, else the
-  offering's `terms.availableUntil`, else the event's end (its last occurrence date). **Today** the last
-  fallback is the event end; the **session-offerings round** resolves the same chain per session with the
-  occurrence's date as that last fallback, which is the target wording everywhere else in this file. An
+  offering's `terms.availableUntil`, else the event's end (its last occurrence date). That is the chain, not a
+  transitional one: the per-session resolution the session-offerings round would have introduced is withdrawn
+  (2026-11-24), because a session carries the collection, not its own attachment. An
   attachment-level `availableUntil` MUST be on or after that event end (`422 validation_error`
   otherwise). The `expired` flag is true when today (UTC) is after the effective date and tells the UI
   and USSD not to offer the offering. A contribution whose `sessionDate` falls after the effective date
@@ -570,9 +572,9 @@ session_closed`. The close is optional and nothing enforces it: an occurrence ma
   refusal left is `422 headcount_only` for a `tracksMembers = false` event. After a successful batch the
   events and imports queries MUST be invalidated (AC-7). There is no standalone attendance import page
   (owner, 2026-11-15).
-- FR-9: An event MUST show its offerings per session (two or more), each session's list showing that
-  session's active session offerings with a skipped mark
-  (`member-registrations-session-offerings.md`). This data MUST come from the event aggregate or the
+- FR-9: An event MUST show the offerings attached to it (two or more), and each occurrence MUST show what was
+  collected against it. The per-session offering list with a skipped mark, which the withdrawn session-offerings
+  spec would have introduced, is **not** part of the screen. This data MUST come from the event aggregate or the
   offerings API; the UI MUST NOT aggregate contributions client-side from partial pages.
 - FR-10: The event attendance report MUST show present/expected per occurrence date and, when the API
   supports it, the member rows for that date with `import`/`manual` source. If the report endpoint is
@@ -602,9 +604,8 @@ session_closed`. The close is optional and nothing enforces it: an occurrence ma
   administrator supplies with a reason; if neither exists it MUST be rejected with `422
 officer_required`. An administrator MAY assign at creation or reassign later with a reason.
 - FR-19: An offering's display name MAY be omitted; it then falls back to `${event.name} · ${kind}`.
-  Special offerings MAY carry a custom name. A session offering's effective expiry is its own
-  `availableUntil`, else the offering's terms `availableUntil`, else the occurrence's date
-  (`member-registrations-session-offerings.md`); expiry blocks new gifts but MUST NOT block honoring a
+  Special offerings MAY carry a custom name. An offering's effective expiry is its own `availableUntil`, else its terms `availableUntil`, else the event's
+  end; expiry blocks new gifts but MUST NOT block honoring a
   pending pledge.
 - FR-41: The USSD menu MUST show the current/next active event and at most five offerings plus a
   “More” option, so the member is not asked to page through the full catalogue. First-time visitors
@@ -1539,7 +1540,8 @@ recurrence. S-Q3, S-Q4, S-Q6, S-Q7 and S-Q8 stand.
   its set on its recurrence, and the money rows and the summary reconcile per session
   (`member-registrations-session-offerings.md`, a **separate round after the event-parent migration**).
   FR-8, FR-9, FR-22, FR-23, FR-42 and FR-43, the Solution, the event DTO, the API-contract note, the data
-  models and AC-2, AC-3, AC-7, AC-8a and AC-12 say so. The standalone attendance import is **settled the
+  models and AC-2, AC-3, AC-7, AC-8a and AC-12 say so. **Superseded 2026-11-24:** the per-session attachment
+  was withdrawn by the owner; an offering is defined at the parent event and collected against a session.** The standalone attendance import is **settled the
   same day**: a standalone occurrence imports like a recurring one, the audience is the expected rather
   than a gate, and `422 series_required` retires. The migration and the wire
   remain named hard gates; no code lands in this round.

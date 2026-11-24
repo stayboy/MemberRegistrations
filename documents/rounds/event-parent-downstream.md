@@ -59,16 +59,29 @@ Goal: the parent read is the default, the legacy pair is gone, and `/v1/series/*
 - Retire the dual write of the legacy projection (nothing reads it once the columns are gone).
 - Update every fixture and test that asserts the legacy shape.
 
+- **Rollback.** The two columns are derived projections (A-7), so the story is a **restore, not a
+  down-migration**: re-add `ministry_id` and `presbyter_only` with a migration that re-derives them from
+  `audience_id` for every event whose audience is an `allOf` of ministry and presbyter clauses, and leave them null
+  otherwise; the two indexes drop with the same migration. `/v1/series/*` returns with the code revert. Deploying
+  the old code without that migration is not a rollback — the old serialisers read columns that would not exist.
+- **The `audiences` name index is included on its own merit**, not because the column drop needs it: the write round
+  enforced that uniqueness in the repository only, and a concurrent pair of creates can still slip past it. It lands
+  here because this is the round that touches the schema. The recurring `(lower(name), audience_id)` index is the
+  same story and is what the drop makes safe to add.
+- **`seriesId` on the members attendance aggregate** is the last legacy alias: it retires here and becomes
+  `eventId`, because the round deletes `/v1/series/*` and leaving one alias behind would be a lie about the
+  transition being over.
+
 Out of scope: the UI (no change — the flag keeps it working), the additive wires, the mock rebuild, and any
 per-occurrence attachment.
 
 Acceptance criteria:
 
-1. The migration drops both columns and adds both indexes, with its rollback story stated in the round doc.
-2. `/v1/events` and `/v1/events/:id` return the parent shape by default; `view=parent` still resolves.
-3. `/v1/series/*` is gone, and no UI call reaches it.
+1. The migration drops both columns and adds both indexes; its rollback story is stated in this doc, and a test proves the legacy pair is gone from the schema and the read model.
+2. `/v1/events` and `/v1/events/:id` return the parent shape with no `view`, with `view=parent`, and answer `422 validation_error` for any other `view` value.
+3. `/v1/series/*` is gone, and a grep proves no `ui/src/` source and no test references it.
 4. No reader of `ministry_id`/`presbyter_only` remains.
-5. `npm run smoke` passes; the full gate passes; the UI lane is unchanged because no UI file moved.
+5. `npm run smoke` passes and the full gate passes; `git diff --name-only` shows no `ui/src/` file.
 
 ## Verification
 
@@ -84,17 +97,19 @@ Seat: consistent - worker `ollama-cloud/deepseek-v4.1-flash:1017`; reviewer `oll
 
 ## Git writes
 
-| Brief | Actor                 | Verb   | Variant                        | Reason                                                                             |
-| ----- | --------------------- | ------ | ------------------------------ | ---------------------------------------------------------------------------------- |
-| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-downstream` at `main` with this doc and the spec amendments |
-| 2     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | The doc and the three amended specs                                                |
-| 3     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | The migration, the flip and the deletions                                          |
-| 4     | `git-executor rung 2` | push   | `ollama-cloud/mimo-v2.6-flash` | Branch only                                                                        |
-| 5     | `git-executor rung 2` | pr     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                                                  |
-| 6     | `git-executor rung 2` | merge  | `ollama-cloud/mimo-v2.6-flash` | The PR, after the checks                                                           |
-| 7     | `parent`              | sync   | -                              | Main is held by the `ussd-budget` worktree                                         |
+| Brief | Actor                 | Verb   | Variant                        | Reason                                                                                     |
+| ----- | --------------------- | ------ | ------------------------------ | ------------------------------------------------------------------------------------------ |
+| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | Cut `feat/event-parent-downstream` at `main`; carries this doc and the spec amendments     |
+| 2     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | The doc and the three amended specs (`511844b`)                                            |
+| 3     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | The review's fixes across the three specs and this doc, plus `seats.json` and `backlog.md` |
+| 4     | `git-executor rung 2` | commit | `ollama-cloud/mimo-v2.6-flash` | The migration, the flip and the deletions                                                  |
+| 5     | `git-executor rung 2` | push   | `ollama-cloud/mimo-v2.6-flash` | Branch only                                                                                |
+| 6     | `git-executor rung 2` | pr     | `ollama-cloud/mimo-v2.6-flash` | PR against `main`                                                                          |
+| 7     | `git-executor rung 2` | merge  | `ollama-cloud/mimo-v2.6-flash` | The PR, after the checks                                                                   |
+| 8     | `parent`              | sync   | -                              | Main is held by the `ussd-budget` worktree                                                 |
 
-`git-seat-budget: 8` = `1 branch + 2 commits + 1 push + 1 pr + 1 merge + 1 sync`, one brief held.
+`git-seat-budget: 8` = `1 branch + 3 commits + 1 push + 1 pr + 1 merge + 1 sync`; the third commit carries the
+review's fixes and the two bookkeeping files, so no brief is held in reserve.
 
 ## Mock sign-off
 
