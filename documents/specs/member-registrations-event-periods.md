@@ -394,6 +394,12 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
 - **Removing a period never touches an event** — there is no foreign key from events to periods, since the event holds
   dates and a snapshot.
 
+**Each row can start an event from its period** (owner, 2026-11-24): a **Create event** row action opens the event
+create form with that period preselected (`#/events/new?period=<id>`) and its cycle defaulted to the next one, so an
+officer who is looking at a period can add the event it describes without re-finding the period in the form. The action
+is offered on an **active** period only - an archived one cannot start an event - and it does not prefill anything else:
+name, audience and times stay the officer's, because a period says when, not what.
+
 **The events list gains the matching filter** (owner, 2026-11-24): `#/events?period=<id>` shows the events created
 from that period, in the list's existing shape, with the period shown as a removable filter chip so the officer can see
 why the list is short and clear it. The count on the landing page and the filter's result must agree - both read the
