@@ -145,12 +145,19 @@ Four changes to the event surface, and none to the money, attendance or import p
 
 ### Schedules
 
-- **The vocabulary is closed:** weekly with a weekday set (any of `MO`-`SU`), an interval of 1-4, an end date;
-  monthly on a day-of-month; monthly positional (`BYSETPOS=1|-1` with exactly one weekday); and explicit extra dates
-  carried as `recurrence.exceptions[{ kind: 'extra' }]` - the existing contract, not a new field.
-- **`WKST=SU` is emitted on every interval-bearing rule and accepted on read**, because RFC 5545 counts `INTERVAL`
-  weeks from `WKST` (default Monday) while the church week is Sunday-to-Saturday. Stored rules without `WKST` keep
-  their Monday meaning and are never rewritten; a stored rule the vocabulary cannot express still renders read-only.
+- **The vocabulary is closed:** daily with an interval of 1-7 (one date every day at 1, so every other day is
+  `INTERVAL=2`, which labels "Every 2 days"); weekly with a weekday set (any of `MO`-`SU`), an interval of 1-4, an
+  end date; monthly on a day-of-month; monthly positional (`BYSETPOS=1|-1` with exactly one weekday); and explicit
+  extra dates carried as `recurrence.exceptions[{ kind: 'extra' }]` - the existing contract, not a new field. **Daily
+  is authored, not refused** (owner, 2026-11-24): the vocabulary refused it for one round and the form could not
+  express a daily meeting, while the list already rendered "Every 3 days" for a stored rule. A daily rule carries
+  `INTERVAL`, which is optional and defaults to 1, and **admits no other key** - `BYDAY`, `BYMONTHDAY` and `BYSETPOS`
+  are refused on it. The builder offers it as a fourth cadence with a number
+  field beside it.
+- **`WKST=SU` is emitted on every interval-bearing weekly rule and accepted on read**, because RFC 5545 counts
+  `INTERVAL` weeks from `WKST` (default Monday) while the church week is Sunday-to-Saturday; a daily rule carries no
+  `WKST`, where it would be meaningless. Stored rules without `WKST` keep their Monday meaning and are never rewritten;
+  a stored rule the vocabulary cannot express still renders read-only.
 - `effectiveFrom` need not fall on a chosen weekday: the first occurrence is the first matching date on or after it,
   and the preview shows it. A monthly day-of-month of 31 skips short months.
 - **One builder, both call sites.** `EventFormPage` and `AddScheduleVersionDialog` share one builder component;
@@ -227,6 +234,8 @@ Four changes to the event surface, and none to the money, attendance or import p
     warning first.
 16. The USSD anonymous screen answers an event only when its whole set is `Everyone`; an authenticated caller gets the
     lowest tier among the projecting audiences.
+17. A daily rule with `INTERVAL=3` resolves every third day from its start date, the list labels it "Every 3 days", and
+    a daily rule with `INTERVAL=1` labels "Daily"; both are authorable in the builder.
 
 ## Testing Decisions
 
@@ -254,6 +263,9 @@ missing one as blocking:
 - `member-registrations-api.md` - FR-32's "one saved **audience**" wording becomes a set, and the event uniqueness
   key `(lower(name), audienceId)` is restated as the unordered set, in the same table that documents the
   create/patch body.
+- **The committed contract's own vocabulary description** - `src/schemas/events.ts`'s `recurrenceRuleInputSchema`
+  description (rendered into `openapi.json`) enumerated WEEKLY/MONTHLY only and bounded `INTERVAL` to 1-4;
+  **this change amends it** to name daily with its optional 1-7 interval, so the contract and this spec agree.
 
 ## Out of Scope
 
@@ -285,6 +297,13 @@ missing one as blocking:
   gap rule (a field the design needs after the freeze is a spec amendment plus a contract change). The round carries
   four PRs and its contract froze before any design existed, so that re-order is recorded as debt on the round. No
   behaviour changes.
+- **Changelog 2026-11-24 (post-approval, owner ruling - behaviour):** **daily is authored, not refused.** The closed
+  vocabulary shipped without daily in PR #234 and refused `FREQ=DAILY` on writes, while the list already rendered
+  "Every 3 days" for a stored rule and the form could express no daily meeting. Daily is now in the vocabulary with an
+  `INTERVAL` of 1-7 (so "every other day" is `INTERVAL=2`), a fourth cadence in the builder with a number field, and
+  label branches for "Daily" / "Every N days"; `member-registrations-ui.md` FR-42f and AC-63 are amended to match, and
+  AC 17 here pins the behaviour. A stored daily rule no longer has to be read-only, and the test fixtures that used it
+  stay valid. This is a behavioural amendment to an approved spec, so it carries its own review.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;

@@ -6833,7 +6833,7 @@
                       "type": "string",
                       "minLength": 6,
                       "maxLength": 200,
-                      "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
+                      "description": "The RRULE body: DAILY with an optional INTERVAL 1-7 and no other key, WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
                     },
                     "endsOn": {
                       "anyOf": [
@@ -7553,7 +7553,7 @@
                       "type": "string",
                       "minLength": 6,
                       "maxLength": 200,
-                      "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
+                      "description": "The RRULE body: DAILY with an optional INTERVAL 1-7 and no other key, WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
                     },
                     "endsOn": {
                       "anyOf": [
@@ -7829,7 +7829,7 @@
             "type": "string",
             "minLength": 6,
             "maxLength": 200,
-            "description": "The RRULE body: WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
+            "description": "The RRULE body: DAILY with an optional INTERVAL 1-7 and no other key, WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
           },
           "endsOn": {
             "anyOf": [

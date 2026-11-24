@@ -91,28 +91,63 @@ function parseBody(normalized: string): Map<string, string> {
   return parts;
 }
 
+const FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const;
+type Frequency = (typeof FREQUENCIES)[number];
+
+function isFrequency(value: string | undefined): value is Frequency {
+  return value !== undefined && (FREQUENCIES as readonly string[]).includes(value);
+}
+
+/**
+ * `INTERVAL` is bounded per frequency: daily runs 1-7 (every other day is
+ * `INTERVAL=2`), weekly and monthly stay 1-4.
+ */
+const INTERVAL_MAX: Readonly<Record<Frequency, number>> = { DAILY: 7, WEEKLY: 4, MONTHLY: 4 };
+
+function assertInterval(freq: Frequency, interval: string): void {
+  const max = INTERVAL_MAX[freq];
+  if (!/^[1-9]$/.test(interval) || Number(interval) > max) {
+    throw new ValidationError(
+      max === 7
+        ? 'rrule: a daily INTERVAL must be 1-7; every other day is INTERVAL=2'
+        : 'rrule: INTERVAL must be 1, 2, 3 or 4',
+    );
+  }
+}
+
 /**
  * The authored schedule vocabulary is closed (member-registrations-event-periods.md,
- * "Schedules"): a weekly rule with a weekday set and an interval of 1-4, a
- * monthly rule on a day-of-month, or a monthly positional rule
- * (`BYSETPOS=±1` with exactly one weekday). Anything else - `FREQ=DAILY`,
- * `COUNT`, `BYMONTH`, positional weekly days, a second `BYSETPOS` - is refused
- * on a **write**; a stored rule outside it still expands and reads (a read
- * never calls this function), which is why the scheduler keeps working on
- * legacy rows.
+ * "Schedules"): a daily rule with an optional interval of 1-7 and no other key,
+ * a weekly rule with a weekday set and an interval of 1-4, a monthly rule on a
+ * day-of-month, or a monthly positional rule (`BYSETPOS=±1` with exactly one
+ * weekday). Anything else - `FREQ=YEARLY`, `COUNT`, `BYMONTH`, positional
+ * weekly days, a second `BYSETPOS` - is refused on a **write**; a stored rule
+ * outside it still expands and reads (a read never calls this function), which
+ * is why the scheduler keeps working on legacy rows.
  */
 function assertVocabulary(normalized: string): Map<string, string> {
   const parts = parseBody(normalized);
   const freq = parts.get('FREQ');
-  if (freq !== 'WEEKLY' && freq !== 'MONTHLY') {
+  if (!isFrequency(freq)) {
     throw new ValidationError(
-      `rrule: FREQ must be WEEKLY or MONTHLY; the schedule vocabulary has no other cadence`,
+      `rrule: FREQ must be ${FREQUENCIES.join(', ')}; the schedule vocabulary has no other cadence`,
     );
   }
 
   const interval = parts.get('INTERVAL');
-  if (interval !== undefined && !/^[1-4]$/.test(interval)) {
-    throw new ValidationError('rrule: INTERVAL must be 1, 2, 3 or 4');
+  if (interval !== undefined) assertInterval(freq, interval);
+
+  // A daily rule carries FREQ and INTERVAL only; the weekday, day-of-month and
+  // positional keys belong to the weekly and monthly rules, and WKST to weekly.
+  if (freq === 'DAILY') {
+    for (const key of ['BYDAY', 'BYMONTHDAY', 'BYSETPOS', 'WKST']) {
+      if (parts.has(key)) {
+        throw new ValidationError(
+          `rrule: a daily rule carries FREQ and INTERVAL only; ${key} is refused on it`,
+        );
+      }
+    }
+    return parts;
   }
 
   const weekStart = parts.get('WKST');
@@ -200,8 +235,10 @@ function withWeekStart(parts: Map<string, string>, normalized: string): string {
  * Accepts an RRULE body only (`FREQ=WEEKLY;BYDAY=SU`), inside the closed
  * authored vocabulary, and normalises it to upper case. `COUNT` and `UNTIL` are
  * rejected: the series end date is the `endsOn` column, and two sources of
- * truth for "when does this stop" is one too many. A weekly rule with an
- * interval gains `WKST=SU`; an accepted `WKST` round-trips unchanged.
+ * truth for "when does this stop" is one too many. A daily rule's `INTERVAL` is
+ * optional and its absence means every day, so it is not written in. A weekly
+ * rule with an interval gains `WKST=SU`; an accepted `WKST` round-trips
+ * unchanged.
  */
 export function validateRrule(body: string): string {
   const normalized = body.trim().toUpperCase();
