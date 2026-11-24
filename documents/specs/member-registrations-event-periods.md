@@ -346,8 +346,8 @@ guarantee is replaced by a data check. The **rule kinds stay a closed set** (`we
   hold a script or an arbitrary date list, because a rule only the database understands cannot be previewed, and the
   preview is what the officer trusts. A shape the resolver does not have is a new `rule_kind` in code with its own
   change — not a data entry.
-- **The `definition` is optional, and the rule is the authority** (owner, 2026-11-24). It is a free-text description
-  of what the period means, kept for comprehension and shown when present; a blank one is accepted, because the
+- **The `definition` is optional, and the rule is the authority** (owner, 2026-11-24). It is **the note that explains the period** - one free-text textarea, the only documentation field in the dialog -
+  kept for comprehension and shown when present; a blank one is accepted, because the
   `rule_kind` and its parameters are what the resolver evaluates and what the preview renders. The list shows the
   definition under the name when there is one, and the rule in words always, so a period is legible either way.
 - **Archive, never delete.** `active = false` removes it from the create form; `GET /v1/events/periods` serves active
