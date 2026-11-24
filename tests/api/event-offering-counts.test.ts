@@ -56,7 +56,6 @@ async function createEvent(eventNo: string, dates: string[]): Promise<string> {
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo,
       name: `Offering count ${eventNo}`,
       timezone: 'UTC',
       startTime: '09:00',

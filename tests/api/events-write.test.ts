@@ -147,7 +147,6 @@ describe('POST /v1/events', () => {
 
   it('creates a recurring parent and generates the first window atomically', async () => {
     const response = await createEvent({
-      eventNo: 'EVT-2027-900',
       name: 'Epiphany Evenings',
       timezone: 'UTC',
       venueType: 'auditorium',
@@ -168,7 +167,7 @@ describe('POST /v1/events', () => {
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.eventNo).toBe('EVT-2027-900');
+    expect(response.body.eventNo).toMatch(/^EVT-2027-\d{3}$/);
     expect(response.body.status).toBe('draft');
     expect(response.body.recurrence).toEqual({
       schedules: [
@@ -204,7 +203,7 @@ describe('POST /v1/events', () => {
 
   it('refuses both occurrences and a recurrence', async () => {
     const response = await createEvent({
-      ...standaloneBody({ eventNo: 'BOTH-SHAPES' }),
+      ...standaloneBody({ name: 'Both Shapes Refusal' }),
       recurrence: {
         schedules: [{ effectiveFrom: '2026-12-06', rrule: 'FREQ=WEEKLY;BYDAY=SU' }],
       },
@@ -215,7 +214,7 @@ describe('POST /v1/events', () => {
     expect(response.body.detail).toContain('recurrence');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from events where event_no = 'BOTH-SHAPES'`,
+      `select count(*)::int as count from events where name = 'Both Shapes Refusal'`,
     );
     expect(Number(row!.count)).toBe(0);
   });
@@ -239,24 +238,69 @@ describe('POST /v1/events', () => {
     }
   });
 
-  it('refuses a duplicate eventNo with the field named', async () => {
-    const first = await createEvent(standaloneBody({ eventNo: 'DUP-ONE' }));
-    expect(first.status).toBe(201);
-
-    const second = await createEvent(standaloneBody({ eventNo: 'DUP-ONE' }));
-    expect(second.status).toBe(409);
-    expect(second.body.code).toBe('conflict');
-    expect(second.body.detail).toContain('eventNo');
-
-    const [row] = await harness.db.query<{ count: number | string }>(
-      `select count(*)::int as count from events where event_no = 'DUP-ONE'`,
+  it('refuses eventNo by name and writes nothing', async () => {
+    const [before] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from events',
     );
-    expect(Number(row!.count)).toBe(1);
+
+    const response = await createEvent(standaloneBody({ eventNo: 'CLIENT-INVENTED' }));
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('eventNo');
+
+    const [after] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from events',
+    );
+    expect(Number(after!.count)).toBe(Number(before!.count));
+  });
+
+  it('still accepts audienceId alone as a one-element audience set', async () => {
+    const response = await createEvent(standaloneBody({ audienceId: choirId }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.audienceId).toBe(choirId);
+  });
+
+  it('refuses an audienceId that disagrees with the first audienceIds element, naming both', async () => {
+    const response = await createEvent(
+      standaloneBody({ audienceId: choirId, audienceIds: [presbytersId] }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('audienceId');
+    expect(response.body.detail).toContain('audienceIds');
+  });
+
+  it('accepts audienceIds whose first element matches the audienceId alias', async () => {
+    const response = await createEvent(
+      standaloneBody({ audienceId: everyoneId, audienceIds: [everyoneId] }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.body.audienceId).toBe(everyoneId);
+  });
+
+  it('refuses a duplicate audienceIds entry', async () => {
+    const response = await createEvent(standaloneBody({ audienceIds: [everyoneId, everyoneId] }));
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('audienceIds');
+  });
+
+  it('refuses an empty audienceIds set', async () => {
+    const response = await createEvent(standaloneBody({ audienceIds: [] }));
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('audienceIds');
   });
 
   it('derives the legacy projection where the audience is expressible as the pair', async () => {
     const ministry = await createEvent(
-      standaloneBody({ name: 'Choir Rehearsal', eventNo: 'LEGACY-CHOIR', audienceId: choirId }),
+      standaloneBody({ name: 'Choir Rehearsal', audienceId: choirId }),
     );
     expect(ministry.status).toBe(201);
     expect(ministry.body.ministry).toMatchObject({ code: 'CHOIR' });
@@ -265,7 +309,6 @@ describe('POST /v1/events', () => {
     const presbyters = await createEvent(
       standaloneBody({
         name: 'Elders Meeting',
-        eventNo: 'LEGACY-PRESBYTERS',
         audienceId: presbytersId,
       }),
     );
@@ -306,7 +349,6 @@ describe('POST /v1/events', () => {
     const created = await createEvent(
       standaloneBody({
         name: 'Young Adults Night',
-        eventNo: 'LEGACY-AGE',
         audienceId: audience.body.id,
       }),
     );
@@ -324,7 +366,7 @@ describe('POST /v1/events', () => {
 
 describe('PATCH /v1/events/{eventId}', () => {
   it('moves draft to active and refuses the backwards transition', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'PATCH-STATUS' }));
+    const created = await createEvent(standaloneBody({ name: 'Patch Status' }));
     expect(created.status).toBe(201);
     const id = created.body.id as string;
     const draftEtag = created.headers.etag as string;
@@ -337,7 +379,7 @@ describe('PATCH /v1/events/{eventId}', () => {
     expect(activated.status).toBe(200);
     expect(activated.body).toMatchObject({
       id,
-      eventNo: 'PATCH-STATUS',
+      eventNo: created.body.eventNo,
       name: 'Harvest Thanksgiving 2026',
       status: 'active',
     });
@@ -368,8 +410,25 @@ describe('PATCH /v1/events/{eventId}', () => {
     }
   });
 
+  it('refuses eventNo on PATCH by name', async () => {
+    const created = await createEvent(standaloneBody({ name: 'Patch Number Refusal' }));
+
+    const response = await patchEvent(
+      created.body.id,
+      { eventNo: 'EVT-2026-999' },
+      created.headers.etag as string,
+    );
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('eventNo');
+
+    const read = await parentRead(created.body.id, '2026-11-01', '2026-12-31');
+    expect(read.body.eventNo).toBe(created.body.eventNo);
+  });
+
   it('reprojects the legacy pair when the audience changes', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'PATCH-AUDIENCE' }));
+    const created = await createEvent(standaloneBody({ name: 'Patch Audience' }));
 
     const presbyters = await patchEvent(
       created.body.id,
@@ -399,7 +458,7 @@ describe('PATCH /v1/events/{eventId}', () => {
   });
 
   it('refuses archiving through PATCH and archives through the archive route', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'PATCH-ARCHIVE' }));
+    const created = await createEvent(standaloneBody({ name: 'Patch Archive' }));
     const id = created.body.id as string;
 
     const draftArchive = await patchEvent(
@@ -443,7 +502,7 @@ describe('PATCH /v1/events/{eventId}', () => {
 
 describe('POST /v1/events/{eventId}/archive', () => {
   it('archives an active parent once and keeps its history readable', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'ARCHIVE-ONE' }));
+    const created = await createEvent(standaloneBody({ name: 'Archive One' }));
     const active = await patchEvent(
       created.body.id,
       { status: 'active' },
@@ -480,7 +539,7 @@ describe('POST /v1/events/{eventId}/archive', () => {
 
 describe('POST /v1/events/{eventId}/occurrences/{date}/cancel', () => {
   it('refuses a cancel on a draft parent without touching the occurrence', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'CANCEL-DRAFT' }));
+    const created = await createEvent(standaloneBody({ name: 'Cancel Draft' }));
     expect(created.body.status).toBe('draft');
 
     const refused = await request(app)
@@ -498,7 +557,7 @@ describe('POST /v1/events/{eventId}/occurrences/{date}/cancel', () => {
   });
 
   it('cancels an occurrence with its reason and refuses a repeat or an unknown date', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'CANCEL-ONE' }));
+    const created = await createEvent(standaloneBody({ name: 'Cancel One' }));
     const active = await patchEvent(
       created.body.id,
       { status: 'active' },
@@ -541,7 +600,7 @@ describe('POST /v1/events/{eventId}/occurrences/{date}/cancel', () => {
   });
 
   it('refuses an empty cancellation reason with reason_required', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'CANCEL-EMPTY' }));
+    const created = await createEvent(standaloneBody({ name: 'Cancel Empty' }));
     const response = await request(app)
       .post(`/v1/events/${created.body.id}/occurrences/2026-11-27/cancel`)
       .set(writeHeaders)
@@ -558,7 +617,6 @@ describe('recurrence writes', () => {
 
   beforeAll(async () => {
     const created = await createEvent({
-      eventNo: 'REC-WRITE',
       name: 'Recurrence Write Event',
       timezone: 'UTC',
       venueType: 'auditorium',
@@ -572,7 +630,7 @@ describe('recurrence writes', () => {
   });
 
   it('refuses a schedule version and an exception on a manually dated parent', async () => {
-    const created = await createEvent(standaloneBody({ eventNo: 'REC-STANDALONE' }));
+    const created = await createEvent(standaloneBody({ name: 'Recurrence Standalone' }));
     expect(created.status).toBe(201);
     expect(created.body.recurrence).toBeNull();
 
@@ -674,5 +732,35 @@ describe('recurrence writes', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('validation_error');
     expect(response.body.detail).toContain('note');
+  });
+});
+
+describe('the served OpenAPI contract', () => {
+  it('advertises the event entries this round adds', async () => {
+    const response = await request(app).get('/openapi.json');
+    expect(response.status).toBe(200);
+
+    const paths = response.body.paths as Record<string, unknown>;
+    for (const path of ['/v1/events/periods', '/v1/events/preview']) {
+      expect(paths[path]).toBeDefined();
+    }
+
+    const audiences = paths['/v1/audiences'] as {
+      get: { parameters: Array<{ name: string }> };
+    };
+    expect(audiences.get.parameters.map((parameter) => parameter.name)).toContain('countAt');
+
+    const schemas = response.body.components.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; required?: string[] }
+    >;
+    expect(schemas.CreateEvent!.properties!.audienceIds).toBeDefined();
+    expect(schemas.CreateEvent!.properties!.eventNo).toBeDefined();
+    expect(schemas.UpdateEvent!.properties!.audienceIds).toBeDefined();
+    expect(schemas.EventParent!.properties!.audiences).toBeDefined();
+    expect(schemas.EventParent!.required).toContain('audiences');
+    expect(schemas.EventParent!.required).toContain('audienceIds');
+    expect(schemas.EventPreview).toBeDefined();
+    expect(schemas.EventPeriodList).toBeDefined();
   });
 });

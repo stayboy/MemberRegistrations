@@ -81,6 +81,10 @@ import {
   eventOccurrenceSchema,
   eventParentListSchema,
   eventParentSchema,
+  eventPeriodListSchema,
+  eventPeriodSchema,
+  eventPreviewInputSchema,
+  eventPreviewSchema,
   eventRecurrenceSchema,
   eventSchema,
   eventWindowSummarySchema,
@@ -257,6 +261,7 @@ const audienceExample = {
     clauses: [{ attribute: 'ministry', ministryCode: 'CHOIR' }],
   },
   summary: 'Choir - all of ministry CHOIR',
+  memberCount: 42,
   createdAt: '2026-11-22T09:00:00.000Z',
   createdBy: 'migration',
   updatedAt: '2026-11-22T09:00:00.000Z',
@@ -274,6 +279,8 @@ const parentEventExample = {
   id: '0f7c4f4e-6d7a-4e56-9a7c-5b8d8d2f4a11',
   eventNo: 'EVT-2026-014',
   name: 'Sunday Celebration',
+  audienceIds: [audienceExample.id],
+  audiences: [audienceSummaryExample],
   audienceId: audienceExample.id,
   audience: audienceSummaryExample,
   ministry: { code: 'CHOIR', name: 'Choir' },
@@ -352,6 +359,7 @@ const everyoneAudienceExample = {
     clauses: [{ attribute: 'membershipStatus', value: 'active' }],
   },
   summary: 'Everyone - all of membership status active',
+  memberCount: 480,
   createdAt: '2026-11-22T09:00:00.000Z',
   createdBy: 'migration',
   updatedAt: '2026-11-22T09:00:00.000Z',
@@ -370,6 +378,8 @@ const createdEventParentExample = {
   id: '6a9d4c1e-2b7f-4c8a-9d0e-1f2a3b4c5d6e',
   eventNo: 'EVT-2026-023',
   name: 'Harvest Thanksgiving',
+  audienceIds: [everyoneAudienceExample.id],
+  audiences: [everyoneAudienceSummaryExample],
   audienceId: everyoneAudienceExample.id,
   audience: everyoneAudienceSummaryExample,
   ministry: null,
@@ -526,6 +536,7 @@ const youngAdultsAudienceExample = {
     clauses: [{ attribute: 'ageBand', minYears: 18, maxYears: 35 }],
   },
   summary: 'Young Adults - all of age 18-35',
+  memberCount: 36,
   createdAt: '2026-11-23T10:15:00.000Z',
   createdBy: 'officer_ada',
   updatedAt: '2026-11-23T10:15:00.000Z',
@@ -541,6 +552,46 @@ const editedYoungAdultsAudienceExample = {
   },
   summary: 'Young Adults 18-40 - all of age 18-40',
   updatedAt: '2026-11-23T11:40:00.000Z',
+};
+
+const eventPeriodExample = {
+  id: 'communion-week',
+  name: 'Communion Week',
+  definition:
+    'The Sunday-to-Saturday week whose last day is the Saturday before the first Sunday of the cycle month.',
+};
+
+const eventPeriodListExample = {
+  items: [
+    eventPeriodExample,
+    {
+      id: 'gospel-week',
+      name: 'Gospel Week',
+      definition:
+        'Communion Week shifted back seven days; it ends on the Saturday eight days before the cycle month begins.',
+    },
+    {
+      id: 'home-cells',
+      name: 'Home Cells',
+      definition: 'The Monday of Communion Week.',
+    },
+  ],
+};
+
+/** A period preview: the resolved dates and both counts, nothing persisted. */
+const eventPeriodPreviewExample = {
+  occurrences: [
+    { date: '2026-12-28', expected: 402 },
+    { date: '2026-12-29', expected: 118 },
+    { date: '2026-12-30', expected: 96 },
+    { date: '2026-12-31', expected: 88 },
+    { date: '2027-01-01', expected: 54 },
+    { date: '2027-01-02', expected: 76 },
+  ],
+  audienceCounts: [
+    { id: everyoneAudienceExample.id, count: 480 },
+    { id: youngAdultsAudienceExample.id, count: 36 },
+  ],
 };
 
 const legacyEventExample = {
@@ -700,6 +751,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventWindowSummary: toSchema(eventWindowSummarySchema, 'output'),
         EventParent: toSchema(eventParentSchema, 'output'),
         EventParentList: toSchema(eventParentListSchema, 'output'),
+        EventPeriod: toSchema(eventPeriodSchema, 'output'),
+        EventPeriodList: toSchema(eventPeriodListSchema, 'output'),
+        EventPreviewInput: toSchema(eventPreviewInputSchema, 'input'),
+        EventPreview: toSchema(eventPreviewSchema, 'output'),
         AudienceSummary: toSchema(audienceSummarySchema, 'output'),
         AudienceRule: toSchema(audienceRuleSchema, 'output'),
         Audience: toSchema(audienceSchema, 'output'),
@@ -1928,23 +1983,31 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'List audiences',
           description:
-            'System and custom reference data. Active audiences only by default; includeArchived=true also returns archived custom audiences.',
+            'System and custom reference data. Active audiences only by default; includeArchived=true also returns archived custom audiences. `countAt=YYYY-MM-DD` evaluates each audience at that UTC date and adds `memberCount` to every item; without it the field is absent. The counts are each audience on its own and do not sum to an event’s roster, which is the intersection.',
           parameters: [
             {
               name: 'includeArchived',
               in: 'query',
               schema: { type: 'string', enum: ['true', 'false'] },
             },
+            {
+              name: 'countAt',
+              in: 'query',
+              description:
+                'The UTC date the per-audience `memberCount` is evaluated at; omit to leave it out.',
+              schema: { type: 'string', format: 'date' },
+            },
           ],
           responses: {
             200: {
-              description: 'Audiences with their structured rule and server-rendered summary.',
+              description:
+                'Audiences with their structured rule and server-rendered summary, and their member count at `countAt` when it was supplied.',
               content: {
                 'application/json': {
                   schema: ref('AudienceList'),
                   examples: {
                     default: {
-                      summary: 'System and custom audiences',
+                      summary: 'System and custom audiences with a count date',
                       value: { items: [audienceExample] },
                     },
                   },
@@ -2259,7 +2322,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Create the parent, with manual occurrences or one recurrence',
           description:
-            'Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceId` defaults to the seeded Everyone audience, `tracksMembers` to true, `timezone` to UTC, and `eventNo` is optional: the server mints it when it is omitted. The retired `ministry` and `presbyterOnly` fields are not part of the payload. 201 with Location naming the new detail URL.',
+            'Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
@@ -2280,6 +2343,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                 },
               },
             },
+            422: validation,
           },
         },
       },
@@ -2306,6 +2370,62 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           ],
           responses: {
             200: json('Generation counts and the new event ids.', 'EventGeneration'),
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/periods': {
+        get: {
+          summary: 'List the named periods the event form can choose',
+          description:
+            'The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition }`, served from the code catalogue. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.',
+          responses: {
+            200: {
+              description: 'The three periods with their declared definitions.',
+              content: {
+                'application/json': {
+                  schema: ref('EventPeriodList'),
+                  examples: {
+                    catalogue: {
+                      summary: 'The three declared periods',
+                      value: eventPeriodListExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+      },
+
+      '/v1/events/preview': {
+        post: {
+          summary: 'Resolve a recurrence or a named period to dates, without persisting',
+          description:
+            'Resolves `recurrence` or `period { id, cycleMonth }` - exactly one - to the dates the event would be created with, within the create’s 90-day window. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventPreviewInput') } },
+          },
+          responses: {
+            200: {
+              description: 'The resolved dates with their intersection and per-audience counts.',
+              content: {
+                'application/json': {
+                  schema: ref('EventPreview'),
+                  examples: {
+                    period: {
+                      summary: 'Communion Week 2027-01 resolved, with both counts',
+                      value: eventPeriodPreviewExample,
+                    },
+                  },
+                },
+              },
+            },
             401: unauthorized,
             422: validation,
           },
@@ -2406,7 +2526,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         patch: {
           summary: 'Update the parent (partial); a stale If-Match returns 409',
           description:
-            'Updates the parent from its partial fields and is the write the UI uses. It carries no recurrence, no `eventNo` and no occurrence set: the event number is immutable, the recurrence is written through its own routes, and the derived range is never accepted. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.',
+            'Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no recurrence, no occurrence set, and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`), and the recurrence is written through its own routes. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.',
           parameters: [actorHeader, ifMatchHeader],
           requestBody: {
             required: true,

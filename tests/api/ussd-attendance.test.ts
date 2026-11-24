@@ -15,7 +15,6 @@ let pastEventId: string;
 let headcountEventId: string;
 let offeringId: string;
 let nonceSeq = 0;
-let eventSeq = 0;
 
 function shiftDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00Z`);
@@ -83,12 +82,10 @@ async function assignShepherd(officerMemberNo: string, memberNo: string) {
 }
 
 async function createEvent(name: string, date: string, extra: Record<string, unknown> = {}) {
-  eventSeq += 1;
   const response = await request(harness.app)
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `USSD-ATT-${eventSeq}`,
       name,
       startTime: '09:00',
       venueType: 'auditorium',

@@ -72,7 +72,6 @@ async function createEvent(
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `AUD-${String(sequence).padStart(3, '0')}`,
       name,
       startTime: '09:00',
       venueType: 'auditorium',

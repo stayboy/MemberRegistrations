@@ -218,6 +218,29 @@ active` clause (that is what `Everyone` is). There is no "matches everybody" sho
 - System audiences are read-only. `PUT /v1/audiences/{id}` on one answers `409 audience_system`. They
   cannot be archived, and no route deletes an audience.
 
+### A-2a. Composition across an event's audience set
+
+An event carries an **ordered set** of audiences (`event_audiences`, the only authority; `events.audience_id`
+is a write-only revert shim during the transition and is read by nothing new). The first row is the primary,
+which orders the set and mirrors into the shim; it carries no meaning of its own.
+
+- **Composition is intersection.** A member is in the event at a date when they match **every** audience of the
+  set under A-3's one predicate. The roster (`expected`), member-facing visibility, the USSD Activities and
+  offering lists and the attendance summary all evaluate the same fold; there is no second evaluator and no
+  merged rule, because A-1's language is one operator over a flat clause list and two audiences cannot be folded
+  into one list in general.
+- **This is how exclusion is expressed.** "Everyone but youth" is `allOf(membershipStatus active)` intersected
+  with `noneOf(ministry YTH)`: the set composes a positive and a negative audience. No per-clause negation and
+  no new clause type exist, and none is needed.
+- **The visitor gate is per audience, and the fold inherits it.** A-3 excludes registered visitors from any rule
+  that names no `visitor` clause, so a visitor is in the event only when **every** audience of the set names
+  visitors. `Visitors` intersected with any visitor-silent audience is therefore empty by construction; that is
+  correct, and saving such an event is allowed because the emptiness is data, not syntax.
+- **An empty intersection is authorable.** The preview reports 0 for each resolved date and warns; the detail
+  reports 0. No static check is attempted against a custom audience's contents.
+- **Identity:** a recurring event's name uniqueness key is `(lower(name), unordered audience set)`; the parent
+  ETag hashes the ordered audience ids, so an edit to a non-primary audience moves it.
+
 ### A-3. Evaluation: one rule, one predicate
 
 - The rule is evaluated **at a date** (an occurrence's date for the roster and for visibility of that
@@ -261,7 +284,9 @@ active` clause (that is what `Everyone` is). There is no "matches everybody" sho
   hidden `404` on a member-scoped route. There is no `403` and no message that implies an event exists.
 - **An unauthenticated caller sees the `Everyone` audience and nothing else.** A first-time visitor has no record
   and matches no rule, so applying the rule literally would empty the pre-login Activities list; an anonymous read
-  therefore returns the events whose `audienceId` **is** the seeded `Everyone` audience, without evaluating any rule.
+  therefore returns the events whose audience **set is exactly the seeded `Everyone` audience** (one row, the only
+  member of the set), without evaluating any rule. An event with any second audience is not anonymous, even when its
+  primary is `Everyone` - the set is the unit, not the primary row.
   A cancelled occurrence is absent from that list, as it is from every member-facing list. Age-band, `anyOf` and `noneOf` events are therefore
   absent until someone signs in, and a ministry-restricted event is never public - the legacy "general" pair
   derived an age-band event to general, and is not used for this.

@@ -470,7 +470,6 @@ describe('series window summary', () => {
       .post('/v1/events')
       .set(writeHeaders)
       .send({
-        eventNo: 'SUM-EVT-REASON',
         name: 'Reason Event',
         timezone: 'UTC',
         startTime: '09:00',

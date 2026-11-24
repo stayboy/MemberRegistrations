@@ -389,7 +389,6 @@ const emptyStats = {
 };
 
 const conferenceBody = {
-  eventNo: 'SC-2026',
   name: 'Strategic Conference',
   timezone: 'Africa/Lagos',
   startTime: '17:30',
@@ -401,7 +400,6 @@ const conferenceBody = {
 };
 
 const validBody = {
-  eventNo: 'SC-VALID',
   name: 'Validation Event',
   startTime: '18:00',
   venueType: 'auditorium',
@@ -409,6 +407,7 @@ const validBody = {
 };
 
 let conferenceId: string;
+let conferenceNo: string;
 let conferenceEtag: string;
 
 describe('POST /v1/events', () => {
@@ -421,9 +420,10 @@ describe('POST /v1/events', () => {
     expect(response.headers.etag).toMatch(/^"e[0-9a-f]+"$/);
 
     conferenceId = response.body.id as string;
+    conferenceNo = response.body.eventNo as string;
 
     expect(response.body).toMatchObject({
-      eventNo: 'SC-2026',
+      eventNo: conferenceNo,
       name: 'Strategic Conference',
       audienceId: response.body.audience.id,
       ministry: null,
@@ -470,7 +470,7 @@ describe('POST /v1/events', () => {
   });
 
   it('rejects an empty occurrence list', async () => {
-    const response = await createEvent({ ...validBody, eventNo: 'SC-EMPTY', occurrences: [] });
+    const response = await createEvent({ ...validBody, occurrences: [] });
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('validation_error');
@@ -479,7 +479,6 @@ describe('POST /v1/events', () => {
   it('rejects duplicate occurrence dates', async () => {
     const response = await createEvent({
       ...validBody,
-      eventNo: 'SC-DUPLICATE',
       occurrences: [{ date: '2026-12-01' }, { date: '2026-12-01' }],
     });
 
@@ -489,9 +488,12 @@ describe('POST /v1/events', () => {
   });
 
   it('rejects a request carrying both occurrences and a recurrence', async () => {
+    const [before] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from events',
+    );
+
     const response = await createEvent({
       ...validBody,
-      eventNo: 'SC-BOTH',
       recurrence: {
         schedules: [{ effectiveFrom: '2026-12-06', rrule: 'FREQ=WEEKLY;BYDAY=SU' }],
       },
@@ -502,15 +504,18 @@ describe('POST /v1/events', () => {
     expect(response.body.detail).toContain('recurrence');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from events where event_no = 'SC-BOTH'",
+      'select count(*)::int as count from events',
     );
-    expect(Number(row!.count)).toBe(0);
+    expect(Number(row!.count)).toBe(Number(before!.count));
   });
 
   it('rejects an unknown venue type and writes nothing', async () => {
+    const [before] = await harness.db.query<{ count: number | string }>(
+      'select count(*)::int as count from events',
+    );
+
     const response = await createEvent({
       ...validBody,
-      eventNo: 'SC-CHURCH',
       venueType: 'church',
     });
 
@@ -518,9 +523,9 @@ describe('POST /v1/events', () => {
     expect(response.body.code).toBe('validation_error');
 
     const [row] = await harness.db.query<{ count: number | string }>(
-      "select count(*)::int as count from events where event_no = 'SC-CHURCH'",
+      'select count(*)::int as count from events',
     );
-    expect(Number(row!.count)).toBe(0);
+    expect(Number(row!.count)).toBe(Number(before!.count));
   });
 
   it('mints an event number when the body omits it', async () => {
@@ -535,11 +540,12 @@ describe('POST /v1/events', () => {
     expect(response.body.eventNo).toMatch(/^EVT-\d{4}-\d{3}$/);
   });
 
-  it('rejects a duplicate event number with 409', async () => {
+  it('refuses a client-supplied event number by name', async () => {
     const response = await createEvent({ ...validBody, eventNo: 'EL-100' });
 
-    expect(response.status).toBe(409);
-    expect(response.body.code).toBe('conflict');
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('validation_error');
+    expect(response.body.detail).toContain('eventNo');
   });
 
   it('creates a headcount-only event and refuses per-member attendance', async () => {
@@ -548,7 +554,6 @@ describe('POST /v1/events', () => {
     // exercised after the date gate has passed.
     const created = await createEvent({
       ...validBody,
-      eventNo: 'SC-HEADCOUNT',
       name: 'Headcount-only Rally',
       timezone: 'UTC',
       startTime: '00:00',
@@ -582,7 +587,6 @@ describe('POST /v1/events', () => {
   it('keeps tracksMembers when an update omits it and lets an update change it', async () => {
     const created = await createEvent({
       ...validBody,
-      eventNo: 'SC-HEADCOUNT-UPDATE',
       name: 'Headcount-only Update',
       tracksMembers: false,
     });
@@ -617,7 +621,7 @@ describe('GET /v1/events/{eventId}', () => {
     expect(response.headers.etag).toBe(conferenceEtag);
     expect(response.body).toMatchObject({
       id: conferenceId,
-      eventNo: 'SC-2026',
+      eventNo: conferenceNo,
       name: 'Strategic Conference',
       seriesId: null,
       status: 'active',
@@ -661,7 +665,7 @@ describe('PUT /v1/events/{eventId}', () => {
     expect(updated.status).toBe(200);
     expect(updated.body).toMatchObject({
       id: conferenceId,
-      eventNo: 'SC-2026',
+      eventNo: conferenceNo,
       name: 'Strategic Conference 2026',
       venueName: 'Main Auditorium + Zoom',
       description: 'Updated conference',
@@ -903,7 +907,6 @@ describe('POST /v1/events/generate', () => {
       .post('/v1/events')
       .set(writeHeaders)
       .send({
-        eventNo: 'EVT-2026-777',
         name: 'Manual Collision Event',
         timezone: 'UTC',
         startTime: '17:00',
@@ -924,6 +927,6 @@ describe('POST /v1/events/generate', () => {
     const listed = await listEvents({ seriesId, from: '2026-06-07', to: '2026-06-07' });
     expect(listed.body.items).toHaveLength(1);
     expect(listed.body.items[0].eventNo).toMatch(/^EVT-2026-\d{3}$/);
-    expect(listed.body.items[0].eventNo).not.toBe('EVT-2026-777');
+    expect(listed.body.items[0].eventNo).not.toBe(manual.body.eventNo);
   });
 });

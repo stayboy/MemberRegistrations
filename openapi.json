@@ -5352,6 +5352,34 @@
           "name": {
             "type": "string"
           },
+          "audienceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audiences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "system": {
+                  "type": "boolean"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "name", "system", "summary"],
+              "additionalProperties": false
+            }
+          },
           "audienceId": {
             "type": "string"
           },
@@ -5989,6 +6017,8 @@
           "id",
           "eventNo",
           "name",
+          "audienceIds",
+          "audiences",
           "audienceId",
           "audience",
           "ministry",
@@ -6027,6 +6057,34 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "audienceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "audiences": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "system": {
+                        "type": "boolean"
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "name", "system", "summary"],
+                    "additionalProperties": false
+                  }
                 },
                 "audienceId": {
                   "type": "string"
@@ -6665,6 +6723,8 @@
                 "id",
                 "eventNo",
                 "name",
+                "audienceIds",
+                "audiences",
                 "audienceId",
                 "audience",
                 "ministry",
@@ -6690,6 +6750,195 @@
           }
         },
         "required": ["items"],
+        "additionalProperties": false
+      },
+      "EventPeriod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["communion-week", "gospel-week", "home-cells"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "definition"],
+        "additionalProperties": false
+      },
+      "EventPeriodList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": ["communion-week", "gospel-week", "home-cells"]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "definition": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "name", "definition"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "EventPreviewInput": {
+        "type": "object",
+        "properties": {
+          "audienceIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "Ordered audience ids; the first is the primary. Duplicates are refused. Defaults to the seeded Everyone audience."
+          },
+          "audienceId": {
+            "description": "One-element alias for `audienceIds`, kept for one round. When both are sent it must equal the first element.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "recurrence": {
+            "description": "The create form's recurrence, resolved over the create's 90-day window.",
+            "type": "object",
+            "properties": {
+              "schedules": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "effectiveFrom": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "rrule": {
+                      "type": "string",
+                      "minLength": 6,
+                      "maxLength": 200
+                    },
+                    "endsOn": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["effectiveFrom", "rrule"]
+                }
+              },
+              "exceptions": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "date": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["cancelled", "extra"]
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["date", "kind"]
+                }
+              }
+            },
+            "required": ["schedules"]
+          },
+          "period": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": ["communion-week", "gospel-week", "home-cells"]
+              },
+              "cycleMonth": {
+                "type": "string",
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+              }
+            },
+            "required": ["id", "cycleMonth"]
+          }
+        }
+      },
+      "EventPreview": {
+        "type": "object",
+        "properties": {
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string"
+                },
+                "expected": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["date", "expected"],
+              "additionalProperties": false
+            }
+          },
+          "audienceCounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["id", "count"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["occurrences", "audienceCounts"],
         "additionalProperties": false
       },
       "AudienceSummary": {
@@ -6948,6 +7197,11 @@
           "summary": {
             "type": "string"
           },
+          "memberCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "createdAt": {
             "type": "string"
           },
@@ -7110,6 +7364,11 @@
                 "summary": {
                   "type": "string"
                 },
+                "memberCount": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
                 "createdAt": {
                   "type": "string"
                 },
@@ -7170,18 +7429,26 @@
         "type": "object",
         "properties": {
           "eventNo": {
-            "description": "Optional identity. When omitted the server mints `EVT-<year>-<sequence>`; a duplicate is 409.",
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
+            "description": "Refused: the server mints `EVT-<year>-<NNN>`; sending this field is a 422 naming it.",
+            "not": {}
           },
           "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200
           },
+          "audienceIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "Ordered audience ids; the first is the primary. Duplicates are refused. Defaults to the seeded Everyone audience."
+          },
           "audienceId": {
-            "description": "The event applicability; defaults to the seeded Everyone audience when omitted.",
+            "description": "One-element alias for `audienceIds`, kept for one round. When both are sent it must equal the first element.",
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -7340,12 +7607,27 @@
       "UpdateEvent": {
         "type": "object",
         "properties": {
+          "eventNo": {
+            "description": "Refused: the server mints `EVT-<year>-<NNN>`; sending this field is a 422 naming it.",
+            "not": {}
+          },
           "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200
           },
+          "audienceIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "Ordered audience ids; the first is the primary. Duplicates are refused. Defaults to the seeded Everyone audience."
+          },
           "audienceId": {
+            "description": "One-element alias for `audienceIds`, kept for one round. When both are sent it must equal the first element.",
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -16288,7 +16570,7 @@
     "/v1/audiences": {
       "get": {
         "summary": "List audiences",
-        "description": "System and custom reference data. Active audiences only by default; includeArchived=true also returns archived custom audiences.",
+        "description": "System and custom reference data. Active audiences only by default; includeArchived=true also returns archived custom audiences. `countAt=YYYY-MM-DD` evaluates each audience at that UTC date and adds `memberCount` to every item; without it the field is absent. The counts are each audience on its own and do not sum to an event’s roster, which is the intersection.",
         "parameters": [
           {
             "name": "includeArchived",
@@ -16297,11 +16579,20 @@
               "type": "string",
               "enum": ["true", "false"]
             }
+          },
+          {
+            "name": "countAt",
+            "in": "query",
+            "description": "The UTC date the per-audience `memberCount` is evaluated at; omit to leave it out.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Audiences with their structured rule and server-rendered summary.",
+            "description": "Audiences with their structured rule and server-rendered summary, and their member count at `countAt` when it was supplied.",
             "content": {
               "application/json": {
                 "schema": {
@@ -16309,7 +16600,7 @@
                 },
                 "examples": {
                   "default": {
-                    "summary": "System and custom audiences",
+                    "summary": "System and custom audiences with a count date",
                     "value": {
                       "items": [
                         {
@@ -16328,6 +16619,7 @@
                             ]
                           },
                           "summary": "Choir - all of ministry CHOIR",
+                          "memberCount": 42,
                           "createdAt": "2026-11-22T09:00:00.000Z",
                           "createdBy": "migration",
                           "updatedAt": "2026-11-22T09:00:00.000Z",
@@ -16403,6 +16695,7 @@
                         ]
                       },
                       "summary": "Young Adults - all of age 18-35",
+                      "memberCount": 36,
                       "createdAt": "2026-11-23T10:15:00.000Z",
                       "createdBy": "officer_ada",
                       "updatedAt": "2026-11-23T10:15:00.000Z",
@@ -16456,6 +16749,7 @@
                         ]
                       },
                       "summary": "Choir - all of ministry CHOIR",
+                      "memberCount": 42,
                       "createdAt": "2026-11-22T09:00:00.000Z",
                       "createdBy": "migration",
                       "updatedAt": "2026-11-22T09:00:00.000Z",
@@ -16519,6 +16813,7 @@
                         ]
                       },
                       "summary": "Young Adults 18-40 - all of age 18-40",
+                      "memberCount": 36,
                       "createdAt": "2026-11-23T10:15:00.000Z",
                       "createdBy": "officer_ada",
                       "updatedAt": "2026-11-23T11:40:00.000Z",
@@ -16742,6 +17037,15 @@
                       "id": "0f7c4f4e-6d7a-4e56-9a7c-5b8d8d2f4a11",
                       "eventNo": "EVT-2026-014",
                       "name": "Sunday Celebration",
+                      "audienceIds": ["8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10"],
+                      "audiences": [
+                        {
+                          "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
+                          "name": "Choir",
+                          "system": true,
+                          "summary": "Choir - all of ministry CHOIR"
+                        }
+                      ],
                       "audienceId": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
                       "audience": {
                         "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
@@ -17483,6 +17787,15 @@
                           "id": "0f7c4f4e-6d7a-4e56-9a7c-5b8d8d2f4a11",
                           "eventNo": "EVT-2026-014",
                           "name": "Sunday Celebration",
+                          "audienceIds": ["8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10"],
+                          "audiences": [
+                            {
+                              "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
+                              "name": "Choir",
+                              "system": true,
+                              "summary": "Choir - all of ministry CHOIR"
+                            }
+                          ],
                           "audienceId": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
                           "audience": {
                             "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
@@ -17617,7 +17930,7 @@
       },
       "post": {
         "summary": "Create the parent, with manual occurrences or one recurrence",
-        "description": "Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceId` defaults to the seeded Everyone audience, `tracksMembers` to true, `timezone` to UTC, and `eventNo` is optional: the server mints it when it is omitted. The retired `ministry` and `presbyterOnly` fields are not part of the payload. 201 with Location naming the new detail URL.",
+        "description": "Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -17653,6 +17966,15 @@
                       "id": "6a9d4c1e-2b7f-4c8a-9d0e-1f2a3b4c5d6e",
                       "eventNo": "EVT-2026-023",
                       "name": "Harvest Thanksgiving",
+                      "audienceIds": ["f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918"],
+                      "audiences": [
+                        {
+                          "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
+                          "name": "Everyone",
+                          "system": true,
+                          "summary": "Everyone - all of membership status active"
+                        }
+                      ],
                       "audienceId": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
                       "audience": {
                         "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
@@ -17765,6 +18087,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -17808,6 +18140,159 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventGeneration"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events/periods": {
+      "get": {
+        "summary": "List the named periods the event form can choose",
+        "description": "The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition }`, served from the code catalogue. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.",
+        "responses": {
+          "200": {
+            "description": "The three periods with their declared definitions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPeriodList"
+                },
+                "examples": {
+                  "catalogue": {
+                    "summary": "The three declared periods",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "communion-week",
+                          "name": "Communion Week",
+                          "definition": "The Sunday-to-Saturday week whose last day is the Saturday before the first Sunday of the cycle month."
+                        },
+                        {
+                          "id": "gospel-week",
+                          "name": "Gospel Week",
+                          "definition": "Communion Week shifted back seven days; it ends on the Saturday eight days before the cycle month begins."
+                        },
+                        {
+                          "id": "home-cells",
+                          "name": "Home Cells",
+                          "definition": "The Monday of Communion Week."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events/preview": {
+      "post": {
+        "summary": "Resolve a recurrence or a named period to dates, without persisting",
+        "description": "Resolves `recurrence` or `period { id, cycleMonth }` - exactly one - to the dates the event would be created with, within the create’s 90-day window. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.",
+        "parameters": [
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventPreviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The resolved dates with their intersection and per-audience counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPreview"
+                },
+                "examples": {
+                  "period": {
+                    "summary": "Communion Week 2027-01 resolved, with both counts",
+                    "value": {
+                      "occurrences": [
+                        {
+                          "date": "2026-12-28",
+                          "expected": 402
+                        },
+                        {
+                          "date": "2026-12-29",
+                          "expected": 118
+                        },
+                        {
+                          "date": "2026-12-30",
+                          "expected": 96
+                        },
+                        {
+                          "date": "2026-12-31",
+                          "expected": 88
+                        },
+                        {
+                          "date": "2027-01-01",
+                          "expected": 54
+                        },
+                        {
+                          "date": "2027-01-02",
+                          "expected": 76
+                        }
+                      ],
+                      "audienceCounts": [
+                        {
+                          "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
+                          "count": 480
+                        },
+                        {
+                          "id": "2e6c8a4b-7d1f-4a3c-8b5e-9f0a1c2d3e4f",
+                          "count": 36
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
@@ -18162,6 +18647,15 @@
                       "id": "0f7c4f4e-6d7a-4e56-9a7c-5b8d8d2f4a11",
                       "eventNo": "EVT-2026-014",
                       "name": "Sunday Celebration",
+                      "audienceIds": ["8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10"],
+                      "audiences": [
+                        {
+                          "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
+                          "name": "Choir",
+                          "system": true,
+                          "summary": "Choir - all of ministry CHOIR"
+                        }
+                      ],
                       "audienceId": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
                       "audience": {
                         "id": "8b2f0f9d-3e7f-4d33-9f9e-2a2f4c6d8e10",
@@ -18294,7 +18788,7 @@
       },
       "patch": {
         "summary": "Update the parent (partial); a stale If-Match returns 409",
-        "description": "Updates the parent from its partial fields and is the write the UI uses. It carries no recurrence, no `eventNo` and no occurrence set: the event number is immutable, the recurrence is written through its own routes, and the derived range is never accepted. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.",
+        "description": "Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no recurrence, no occurrence set, and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`), and the recurrence is written through its own routes. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -18338,6 +18832,15 @@
                       "id": "6a9d4c1e-2b7f-4c8a-9d0e-1f2a3b4c5d6e",
                       "eventNo": "EVT-2026-023",
                       "name": "Harvest Thanksgiving",
+                      "audienceIds": ["f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918"],
+                      "audiences": [
+                        {
+                          "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
+                          "name": "Everyone",
+                          "system": true,
+                          "summary": "Everyone - all of membership status active"
+                        }
+                      ],
                       "audienceId": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
                       "audience": {
                         "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
@@ -18577,6 +19080,15 @@
                       "id": "6a9d4c1e-2b7f-4c8a-9d0e-1f2a3b4c5d6e",
                       "eventNo": "EVT-2026-023",
                       "name": "Harvest Thanksgiving",
+                      "audienceIds": ["f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918"],
+                      "audiences": [
+                        {
+                          "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
+                          "name": "Everyone",
+                          "system": true,
+                          "summary": "Everyone - all of membership status active"
+                        }
+                      ],
                       "audienceId": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",
                       "audience": {
                         "id": "f4f0c2b0-9c1d-4e2f-8a3b-6d5c4b3a2918",

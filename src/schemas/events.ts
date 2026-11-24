@@ -40,6 +40,17 @@ export const eventGenerateQuerySchema = z.object({
 export type EventGenerateQuery = z.infer<typeof eventGenerateQuerySchema>;
 
 /**
+ * The event number is minted by the server, never accepted on a write. Zod
+ * strips an unknown key, so a caller that sends one would silently lose it -
+ * declare it `never` instead, which refuses it by name at the field path
+ * (`422 validation_error`), the `refuseLegacyProjections` rule at the schema.
+ */
+const eventNoRefusalSchema = z
+  .never({ error: 'eventNo: is minted by the server and is not accepted on the event write' })
+  .optional()
+  .describe('Refused: the server mints `EVT-<year>-<NNN>`; sending this field is a 422 naming it.');
+
+/**
  * A written session inherits the event start/end time when it omits them. The
  * cross-field rules (range, unique dates) need the merged event, so they live
  * in the repository rather than in a Zod refinement.
@@ -55,7 +66,7 @@ export const eventSessionInputSchema = z.object({
 });
 
 export const createEventSchema = z.object({
-  eventNo: z.string().trim().min(1).max(64),
+  eventNo: eventNoRefusalSchema,
   name: z.string().trim().min(1).max(200),
   timezone: z.string().min(1).max(64).optional(),
   startDate: dateStringSchema,
@@ -437,28 +448,146 @@ export const eventRecurrenceInputSchema = z.object({
 });
 
 /**
+ * The three named periods are declared in code (`src/domain/periods.ts`, PR 2)
+ * and read from the catalogue; the ids are the wire vocabulary and are closed.
+ */
+export const EVENT_PERIOD_IDS = ['communion-week', 'gospel-week', 'home-cells'] as const;
+
+export const eventPeriodIdSchema = z.enum(EVENT_PERIOD_IDS);
+
+export const eventPeriodSchema = z.object({
+  id: eventPeriodIdSchema,
+  name: z.string(),
+  /** The declared rule, in words: the form shows it beside the choice. */
+  definition: z.string(),
+});
+
+export const eventPeriodListSchema = z.object({
+  items: z.array(eventPeriodSchema),
+});
+
+/** A period resolves against the month of the Communion Sunday it precedes: `YYYY-MM`. */
+export const eventPeriodPreviewSchema = z.object({
+  id: eventPeriodIdSchema,
+  cycleMonth: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'cycleMonth must be a calendar month (YYYY-MM)'),
+});
+
+/**
+ * The event applicability on a write: an ordered set of saved audiences, the
+ * first being the primary. Composition is intersection - a member matches
+ * every audience - which is also how exclusion is said. `audienceId` stays a
+ * one-element alias for this round so a deployed client keeps working; when
+ * both are sent `audienceIds` wins and the alias must equal its first element.
+ */
+export const eventAudienceIdsSchema = z
+  .array(z.string().uuid())
+  .min(1)
+  .superRefine((ids, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, id] of ids.entries()) {
+      if (seen.has(id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index],
+          message: `${id} appears more than once; the audience set is ordered and unique`,
+        });
+      }
+      seen.add(id);
+    }
+  })
+  .describe(
+    'Ordered audience ids; the first is the primary. Duplicates are refused. Defaults to the seeded Everyone audience.',
+  );
+
+export const eventAudienceAliasSchema = z
+  .string()
+  .uuid()
+  .optional()
+  .describe(
+    'One-element alias for `audienceIds`, kept for one round. When both are sent it must equal the first element.',
+  );
+
+/** The alias rules shared by the create, the preview and the patch writes. */
+function checkAudienceAlias(
+  value: { audienceId?: string; audienceIds?: string[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    value.audienceIds &&
+    value.audienceId !== undefined &&
+    value.audienceId !== value.audienceIds[0]
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['audienceId'],
+      message: `audienceId (${value.audienceId}) must equal the first element of audienceIds (${value.audienceIds[0]}); supply one alias or a matching first element`,
+    });
+  }
+}
+
+/**
+ * `POST /v1/events/preview`: resolve a recurrence or a named period to dates
+ * **without persisting anything**. The expected count and the per-audience
+ * counts are computed for the audience set the form is about to save.
+ */
+export const eventPreviewInputSchema = z
+  .object({
+    audienceIds: eventAudienceIdsSchema.optional(),
+    audienceId: eventAudienceAliasSchema,
+    recurrence: eventRecurrenceInputSchema
+      .optional()
+      .describe("The create form's recurrence, resolved over the create's 90-day window."),
+    period: eventPeriodPreviewSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    checkAudienceAlias(value, ctx);
+    if (!value.recurrence && !value.period) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['period'],
+        message: 'a preview requires a recurrence or a period',
+      });
+    }
+    if (value.recurrence && value.period) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['period'],
+        message: 'supply either a recurrence or a period, not both',
+      });
+    }
+  });
+
+export const eventPreviewOccurrenceSchema = z.object({
+  date: z.string(),
+  /** The intersection count at that date, not a sum of the audiences. */
+  expected: z.number().int(),
+});
+
+export const eventAudienceCountSchema = z.object({
+  id: z.string(),
+  count: z.number().int(),
+});
+
+export const eventPreviewSchema = z.object({
+  occurrences: z.array(eventPreviewOccurrenceSchema),
+  audienceCounts: z.array(eventAudienceCountSchema),
+});
+
+/**
  * `POST /v1/events`: one parent, a draft, with either manual occurrences
  * (standalone) or a first recurrence version (recurring), never both. The
  * range is derived, so `startDate`/`endDate` are not request fields. The
- * retired `ministry`/`presbyterOnly` projections are not in the payload.
+ * retired `ministry`/`presbyterOnly` projections are not in the payload, and
+ * `eventNo` is refused by name because the server mints it.
  */
 export const createEventParentSchema = z
   .object({
-    eventNo: z
-      .string()
-      .trim()
-      .min(1)
-      .max(64)
-      .optional()
-      .describe(
-        'Optional identity. When omitted the server mints `EVT-<year>-<sequence>`; a duplicate is 409.',
-      ),
+    eventNo: eventNoRefusalSchema,
     name: z.string().trim().min(1).max(200),
-    audienceId: z
-      .string()
-      .uuid()
-      .optional()
-      .describe('The event applicability; defaults to the seeded Everyone audience when omitted.'),
+    audienceIds: eventAudienceIdsSchema.optional(),
+    audienceId: eventAudienceAliasSchema,
     timezone: z
       .string()
       .min(1)
@@ -483,6 +612,7 @@ export const createEventParentSchema = z
       ),
   })
   .superRefine((value, ctx) => {
+    checkAudienceAlias(value, ctx);
     if (!value.occurrences && !value.recurrence) {
       ctx.addIssue({
         code: 'custom',
@@ -501,21 +631,27 @@ export const createEventParentSchema = z
 
 /**
  * `PATCH /v1/events/{eventId}`: the same parent fields without the recurrence,
- * all optional. `eventNo` is immutable and `status` moves through the
- * documented transitions; the legacy projections stay refused.
+ * all optional. `eventNo` is immutable and refused by name; the legacy
+ * projections stay refused. `audienceIds` replaces the whole set when present.
  */
-export const updateEventParentSchema = z.object({
-  name: z.string().trim().min(1).max(200).optional(),
-  audienceId: z.string().uuid().optional(),
-  timezone: z.string().min(1).max(64).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  venueType: venueTypeSchema.optional(),
-  venueName: z.string().max(200).nullable().optional(),
-  startTime: timeStringSchema.optional(),
-  endTime: timeStringSchema.nullable().optional(),
-  tracksMembers: z.boolean().optional(),
-  status: eventStatusSchema.optional(),
-});
+export const updateEventParentSchema = z
+  .object({
+    eventNo: eventNoRefusalSchema,
+    name: z.string().trim().min(1).max(200).optional(),
+    audienceIds: eventAudienceIdsSchema.optional(),
+    audienceId: eventAudienceAliasSchema,
+    timezone: z.string().min(1).max(64).optional(),
+    description: z.string().max(2000).nullable().optional(),
+    venueType: venueTypeSchema.optional(),
+    venueName: z.string().max(200).nullable().optional(),
+    startTime: timeStringSchema.optional(),
+    endTime: timeStringSchema.nullable().optional(),
+    tracksMembers: z.boolean().optional(),
+    status: eventStatusSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    checkAudienceAlias(value, ctx);
+  });
 
 /** `POST .../occurrences/{date}/cancel`: the reason is stored as the occurrence's `note`. */
 export const cancelOccurrenceSchema = z.object({
@@ -528,14 +664,24 @@ export type EventRecurrenceInput = z.infer<typeof eventRecurrenceInputSchema>;
 export type RecurrenceScheduleInput = z.infer<typeof recurrenceScheduleInputSchema>;
 export type RecurrenceExceptionInput = z.infer<typeof recurrenceExceptionInputSchema>;
 export type CancelOccurrenceInput = z.infer<typeof cancelOccurrenceSchema>;
+export type EventPeriodId = (typeof EVENT_PERIOD_IDS)[number];
+export type EventPeriod = z.infer<typeof eventPeriodSchema>;
+export type EventPeriodPreview = z.infer<typeof eventPeriodPreviewSchema>;
+export type EventPreviewInput = z.infer<typeof eventPreviewInputSchema>;
+export type EventPreview = z.infer<typeof eventPreviewSchema>;
 
 /** The parent read's window figures: the data behind the four tiles (S-Q2). */
 export const eventWindowSummarySchema = seriesSummarySchema;
 
 export const eventParentSchema = z.object({
   id: z.string(),
+  /** Minted by the server; required on read and immutable on edit. */
   eventNo: z.string(),
   name: z.string(),
+  /** The ordered audience set; the first is the primary. */
+  audienceIds: z.array(z.string()),
+  audiences: z.array(audienceSummarySchema),
+  /** The legacy primary alias, kept for one round beside `audiences[]`. */
   audienceId: z.string(),
   audience: audienceSummarySchema,
   ministry: z.object({ code: z.string(), name: z.string() }).nullable(),

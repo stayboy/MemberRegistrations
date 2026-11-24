@@ -53,15 +53,11 @@ function day(offset: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-let overviewEventNo = 0;
-
 async function createOverviewEvent(date: string, name: string): Promise<string> {
-  overviewEventNo += 1;
   const response = await request(app)
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `OVR-${overviewEventNo}`,
       name,
       startTime: '09:00',
       venueType: 'auditorium',

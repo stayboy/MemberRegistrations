@@ -1293,7 +1293,8 @@ export class EventRepository {
       : currentUtcYear();
 
     const id = await this.db.transaction(async (tx) => {
-      const eventNo = input.eventNo?.trim() || (await mintParentEventNo(tx, year));
+      // The event number is minted here; the wire never supplies one.
+      const eventNo = await mintParentEventNo(tx, year);
       if (schedules.length) await assertRecurringNameFree(tx, name, audience.id, null);
 
       let created: { id: string } | undefined;

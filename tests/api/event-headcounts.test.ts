@@ -34,7 +34,6 @@ async function createEvent(eventNo: string, dates: string[]): Promise<string> {
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo,
       name: `Headcount ${eventNo}`,
       startTime: '09:00',
       venueType: 'auditorium',
