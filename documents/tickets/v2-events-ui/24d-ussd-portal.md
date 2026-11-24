@@ -55,7 +55,8 @@ protocol (https://documenter.getpostman.com/view/7705958/UyrEhaLQ).
 - [ ] (addition) A provider-adapter layer: a declaration
       `{ id, route, authenticator, toFrame, toWire, maxMsgChars, pageSize `{ events, offerings }` }` plus a thin route per provider, all
       over the existing session pipeline (machine, glossary, repos and services untouched). Adding a
-      provider is one adapter + one registration.
+      provider is one adapter + one registry line, plus the config and documentation wiring spec §24d
+      prices (amended 2026-11-24).
 - [ ] (addition) Migration `0016` adds `ussd_sessions.external_id` (`text`, partial unique when
       present); the Nalo adapter stores the gateway `SESSIONID` there and resolves it to the internal
       uuid, so the gateway id is the session identity. The same migration adds `event_session_headcounts`
@@ -137,7 +138,8 @@ callback. The gateway secret never leaves the server.
    gateway secret and `USSD_NALO_USER_ID` never reach the browser.
 7. As a developer, I want `POST /dev/ussd/session` to refuse in production, so that no deployed UI can
    drive USSD.
-8. As a developer, I want to add a third provider as one adapter declaration plus one registration, so
+8. As a developer, I want to add a third provider as one adapter declaration plus one registry line — with
+   only the config and documentation wiring spec §24d prices — so
    that the session machine, glossary, repositories and services are never touched for a new dialect.
 9. As a developer, I want each adapter to declare its own message cap, overridable in configuration, so
    that a provider's published limit is honoured without changing the machine.
@@ -177,8 +179,17 @@ callback. The gateway secret never leaves the server.
 #### Adapter declaration and the seam
 
 - A provider is a declaration, not a code branch. The declaration holds `id`, `route`,
-  `authenticator`, `toFrame`, `toWire`, `maxMsgChars` and the per-list `pageSize`. Adding a provider is one declaration plus one
-  registration; the session machine, glossary, repositories and services are never modified.
+  `authenticator`, `toFrame`, `toWire`, `maxMsgChars` and the per-list `pageSize`. Adding a provider is one
+  declaration plus one registry line; the session machine, glossary, repositories and services are never
+  modified.
+  - Amended 2026-11-24 (spec changelog, same date): the registry line is not the whole change, and the
+    config is **per knob**, not one of each. A configured provider needs its own schema entry and default
+    in `env.ts` (and a production check when the default is unsafe), its `create-app.ts` fields, its
+    `index.ts` reads, its `.env.example` lines — Nalo's adoption added the per-setting items twice and one
+    production check — the route's OpenAPI
+    description, a smoke probe and its tests. `e532812` touched nineteen files, much of them building the
+    declaration contract itself. The checklist item above and AC 8 in the criteria list now say "one
+    registry line" and point at spec §24d for the price.
 - The internal frame is `{ phone, sessionId?, input, seq }`; an absent `sessionId` means a fresh
   session. The internal render is `{ sessionId, text, done, state, options? }`. The adapter is the only
   place that knows a provider's wire shape, and the route handler is factored to expose the pipeline

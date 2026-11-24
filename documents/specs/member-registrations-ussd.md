@@ -1,7 +1,10 @@
 # Spec — USSD attendance, giving and subscriptions
 
-**Status:** Draft 2026-11-05. Owner-approved direction; spec review pending. Ticket 24 expands into
-24a–24d. Supersedes the narrow USSD bullets in `member-registrations-events-offerings.md` (FR-31,
+**Status:** Draft 2026-11-05. Owner-approved direction; a **scoped** review of §24d (the
+provider-adapter layer) was recorded on 2026-11-24 by `mimo-v2.6-pro` against `ad6c028` plus the
+`chore/ussd-adoption-cost` working tree, verdict consistent; the wider spec review is still pending.
+Ticket 24 expands into
+24a-24d. Supersedes the narrow USSD bullets in `member-registrations-events-offerings.md` (FR-31,
 FR-41); the offering, contribution and pledge contracts there still govern the money paths.
 
 ## Problem Statement
@@ -581,7 +584,17 @@ as `POST /ussd/session` (the route handler is factored to expose that pipeline; 
 glossary, repositories and services are untouched) and converts the internal render `{ sessionId, text,
 done, state, options? }` back into the provider's wire DTO. An adapter is a declaration — `{ id, route,
 authenticator, toFrame, toWire, maxMsgChars, pageSize }` — not a branch in the machine. Adding provider C is one
-adapter plus one registration; nothing else changes.
+adapter plus one line in `buildUssdAdapters`; the machine, the glossary, the repositories and the services do not
+change. The wiring around the declaration does, and it is priced **per configuration knob** so "one adapter"
+is not read as "one file": each setting a provider needs adds a schema entry and a default in
+`src/config/env.ts` (plus a production check when the default is unsafe), a field threaded through
+`src/create-app.ts`, a read in `src/index.ts` and a `.env.example` line — Nalo's two settings meant each of
+those twice and one production check — plus the surfaces that describe or probe the routes: the
+per-route OpenAPI descriptions, `scripts/smoke.mjs` and the tests. The Nalo adoption is the measured
+precedent, read with care: `e532812` changed nineteen files, and much of that commit built the
+declaration contract itself (the new `src/ussd/pipeline.ts`, the rewritten route module, the dev gateway
+and the adapter tests), with the adapter and its registry line in one file, `src/ussd/adapters.ts`. What
+provider C repeats is the adapter, the registry line and the wiring priced above.
 
 - `id` — a stable provider identifier (`nalo`, `hmac`).
 - `route` — the mount path the provider's gateway calls.
@@ -604,17 +617,21 @@ simulator offers both in a provider dropdown.
 **Provider table.** Every provider the pipeline can be pointed at, with the one number that decides
 whether a screen fits. `ships` is what the code declares today; `option` is a prospective row — its
 route and config names are the ones adoption would use, and nothing by those names exists yet —
-specified so the next provider is one adapter and one registration, not a redesign.
+specified so the next provider is one adapter and one registry line — plus the config and documentation
+wiring the declaration contract prices — rather than a redesign.
 
 | id       | route                             | auth                                                                 | `maxMsgChars`                                    | `pageSize` | status |
 | -------- | --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ | ---------- | ------ |
-| `hmac`   | `POST /ussd/session`              | HMAC-SHA-256 over `timestamp + nonce + body` (`USSD_GATEWAY_SECRET`) | 182 — the GSM 7-bit USSD payload                 | `{ 3, 5 }` | ships  |
+| `hmac`   | `POST /ussd/session`              | HMAC-SHA-256 over `timestamp + nonce + body` (`USSD_GATEWAY_SECRET`) | 182 — the 7-bit payload cap (see the note below) | `{ 3, 5 }` | ships  |
 | `nalo`   | `POST /ussd/nalo`                 | configured `USERID`, no signature                                    | 120, `USSD_NALO_MAX_MSG_CHARS` (1–182)           | `{ 2, 3 }` | ships  |
 | `hubtel` | when adopted: `POST /ussd/hubtel` | **not settled** — see the option below                               | 182; planned `USSD_HUBTEL_MAX_MSG_CHARS` (1–182) | `{ 3, 5 }` | option |
 
 **Hubtel (option, not adopted).** Hubtel is a candidate aggregator, specified here so the choice is a
-row rather than a rediscovery. This row adds **no route, no config and no migration**: adoption is one
-adapter, one registration and one `.env` entry, exactly as the declaration contract above promises.
+row rather than a rediscovery. This row adds **no route, no migration and no config of its own** to what
+ships today. Adoption is one adapter, one registry line, the config wiring the declaration contract above
+prices (a schema entry and default per setting, its `create-app` fields, its `index` reads, its `.env`
+lines) and the descriptive surfaces (the route's OpenAPI description, a smoke probe, the tests) — none of
+which this row writes.
 
 - **The number is 182, and it is published.** Hubtel's Mobile Messaging Terms define a USSD message as
   a "182-character alphanumeric (including spaces) session-based message" and require that anything
@@ -627,11 +644,27 @@ adapter, one registration and one `.env` entry, exactly as the declaration contr
 - **182 is also the channel baseline.** USSD user data is 160 octets, which is 182 characters under
   GSM 7-bit packing (`(160 × 8) / 7 = 182.8`). That is why the HMAC reference and the machine's
   internal budget already use 182; Hubtel coincides with the reference rather than narrowing it.
-- **7 bit is the assumption.** The same 160 octets hold only 80 characters outside GSM-7, so a screen
-  with a non-GSM glyph fits half as much at the channel, whatever `maxMsgChars` says;
-  `truncateMessage` counts code units and would not notice, so a Hubtel adapter has to keep screens
-  ASCII rather than lean on the cut. The mirrored v1 guide warns the same way: a single `É` in
-  `Message` returns the platform's `UUE` invalid-response error.
+- **7 bit is the assumption, and the shipped screens already leave it.** The same 160 octets hold only
+  80 characters outside GSM-7, so a screen with a non-GSM glyph cannot be carried in 7 bits at all and is
+  either rejected or sent in UCS-2, whatever `maxMsgChars` says; `truncateMessage` counts code units and
+  would not notice. That is not a Hubtel-side rule an adapter can keep on its own: the screens that ship
+  today already contain `·`, which `src/ussd/machine.ts` composes into six strings — the confirm screen's
+  amount-and-total subject, the welfare cover line, the payer line, the activity attendance line (two
+  separators, one rendered line) and the headcount stamp — and `…`, from `truncate()` in
+  `src/ussd/format.ts` and `truncateMessage` in `src/ussd/adapters.ts`. Neither glyph is in the GSM 7-bit
+  alphabet, and neither comes from `src/ussd/glossary.ts`, whose strings are the static half. Staying
+  inside the 7-bit budget is therefore a change to the **shared screen composition** (an
+  ASCII-or-representable rule with a per-screen budget to match). It is recorded in
+  `documents/backlog.md`, and on 2026-11-24 the owner placed the fix as the **next USSD round**; this
+  row promises none of it. That round is wider than composition, because the spec names the marker in
+  places a fix must move with it: the Nalo adapter's "To the wire" bullet (`MSG` "truncated … with `…`
+  when it is longer"), the "A screen that reaches the cut at a declared budget is a defect" paragraph,
+  where `truncateMessage`'s marker is the documented fallback for a deliberately narrowed cap, the
+  display glossary's rule that a long value is "truncated to that width with `…`", which binds
+  `truncate()`, and the Nalo route's OpenAPI description; the compact-subject example under "Fixed order
+  under pressure" prescribes the `·` this bullet indicts. The mirrored v1 guide reports a `UUE`
+  invalid-response for a single `É` in `Message`; `É` is itself a GSM 7-bit character, so that is evidence
+  about the platform's own validation, not about the 7-bit boundary this bullet describes.
 - **No prefix tax.** The wire shape assumed here is `Type`, `Sequence`, `ClientState`, `SessionId`,
   `Message` — taken from Hubtel's .NET SDK README and a third-party Ghanaian developer doc, **not**
   from the mirrored reference, so it is a working assumption to confirm. On that shape Hubtel
@@ -691,7 +724,10 @@ so a session that began on one provider cannot carry a stale budget into another
 declared cap renders to 182, which is the HMAC reference's budget. The channel also supplies its
 declared `pageSize` (`{ 3, 5 }` at 182, `{ 2, 3 }` at Nalo's 120): `pageSize` is an adapter field, **not**
 derived from `budget`, and the machine renders exactly the supplied size. The machine receives both
-numbers as supplied and reads no cap to derive either.
+numbers as supplied and reads no cap to derive either. Fitting `maxMsgChars` is not by itself a
+delivered screen: the shipped screens also carry glyphs outside the GSM 7-bit alphabet (`·`, `…`), and
+a channel that cannot represent them encodes the frame as UCS-2 or rejects it, where 160 octets hold 80
+characters instead of 182 (see the provider table's 7-bit note and `documents/backlog.md`).
 
 **A screen that reaches the cut at a declared budget is a defect.** `truncateMessage` stays: an adapter
 must still fit its `MSG` to the provider's cap, and `USSD_NALO_MAX_MSG_CHARS` lets an operator lower
@@ -999,3 +1035,18 @@ remains a review artifact.
   the action, then the data, dropping whole lines instead of cutting them, and a property test pins
   every reachable state to 182 and 120 with its actions named. The console opens on `nalo` again; HMAC
   stays selectable.
+- 2026-11-24: the 24d **adoption-cost claim is corrected in place.** "One adapter plus one registration;
+  nothing else changes" and "one `.env` entry" understated what the Nalo adoption actually needed, so the
+  declaration contract now prices the config **per knob** (a schema entry, a default, a production check
+  where needed, a `create-app` field, an `index` read, an `.env.example` line — Nalo added two settings,
+  so each of those items twice and one production check) and the descriptive surfaces (OpenAPI
+  descriptions, smoke, tests) a new provider still touches; the Hubtel row repeats that price instead of
+  promising a single file. The reading of `e532812`
+  is stated carefully: nineteen files, much of them the declaration contract's own first build, with the
+  adapter and its registry line in one file. The **7-bit** bullet also gained a finding: the shipped
+  screens already compose `·` and `…`, neither in the GSM 7-bit alphabet, so "Message limits and
+  truncation" now says that fitting `maxMsgChars` does not by itself deliver a screen. The fix is wider
+  than screen composition — it also amends the mandated `…` wire marker and the compact-subject example
+  that prescribes `·` — so the owner placed it as the **next USSD round** (2026-11-24);
+  `documents/backlog.md` carries it, and the resolved Nalo truncation row left the backlog. No behaviour
+  changes with this entry: the code and the `ships` rows already agreed before it.
