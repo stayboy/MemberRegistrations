@@ -150,7 +150,9 @@ gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 ## Open
 
 - **Parked at the signed designs, not at a question.** Three PRs merged (contract, API + migration + resolver,
-  daily vocabulary), the fourth opened and its first commit landed: nine wire-design states, auto-signed and attested.
+  daily vocabulary), the fourth opened and its commits landed: **ten** wire-design states, auto-signed and attested -
+  the nine form states plus `20-event-preview-dialog`, after the owner ruled the resolved-dates table a preview rather
+  than an input (the forms lost 190-372px each and gained a one-line summary and a **Preview dates** control).
 - **The form is the next round's opening move.** It builds against those states: the builder component at both call
   sites, the audience chips, the period control, the preview wiring, the guard's read-only state, its DOM tests, and
   the `Mock coverage:` line R6 wants when `ui/src` changes.
