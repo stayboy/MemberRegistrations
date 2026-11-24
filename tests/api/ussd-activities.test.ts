@@ -362,10 +362,13 @@ describe('Activities audiences', () => {
   const matchPhone = '0853 000 1004';
   const otherPhone = '0854 000 1005';
   const anonymousReaderPhone = '0898 000 1006';
+  const bothAudiencePhone = '0855 000 1007';
+  const anonymousTwoPhone = '0897 000 1008';
 
   let visibilityDate: string;
   let tierDate: string;
   let agreementDate: string;
+  let twoAudienceDate: string;
 
   let agreementAudienceId: string;
   let agreementEventId: string;
@@ -415,6 +418,7 @@ describe('Activities audiences', () => {
     visibilityDate = shiftDate(today, 60);
     tierDate = shiftDate(today, 61);
     agreementDate = shiftDate(today, 62);
+    twoAudienceDate = shiftDate(today, 63);
 
     await createMember('AUD-VISITOR', visitorPhone, {
       gender: 'male',
@@ -430,6 +434,11 @@ describe('Activities audiences', () => {
     });
     await createMember('AUD-MATCH', matchPhone, { gender: 'male', dob: dobYearsAgo(36) });
     await createMember('AUD-OTHER', otherPhone, { gender: 'female', dob: dobYearsAgo(36) });
+    await createMember('AUD-BOTH', bothAudiencePhone, {
+      gender: 'male',
+      dob: dobYearsAgo(50),
+      ministries: ['CHOIR'],
+    });
 
     // One event per audience that matters to visibility.
     await createEvent('AUD-EVERYONE', visibilityDate, '09:00', {
@@ -493,6 +502,17 @@ describe('Activities audiences', () => {
       name: 'Agreement Gathering',
       audienceId: agreementAudienceId,
     });
+
+    // A two-audience event whose primary is Everyone: the set, not the primary
+    // row, is the unit for the anonymous rule (A-4, AC-12/16).
+    await createEvent('AUD-TWO-AUD', twoAudienceDate, '09:00', {
+      name: 'Choir Assembly',
+      audienceIds: [await audienceByKey('everyone'), await audienceByKey('ministry:CHOIR')],
+    });
+    await createEvent('AUD-EVERYONE-CONTROL', twoAudienceDate, '10:00', {
+      name: 'Everyone Control',
+      audienceId: await audienceByKey('everyone'),
+    });
   });
 
   it('shows a registered visitor only the audiences that name the visitor status', async () => {
@@ -526,6 +546,19 @@ describe('Activities audiences', () => {
     expect(text).not.toContain('Newcomers Welcome');
     expect(text).not.toContain('Youth Night');
     expect(text).not.toContain('Elders Study');
+  });
+
+  it('hides a two-audience event whose primary is Everyone from an anonymous caller', async () => {
+    const anonymous = await activitiesOn(anonymousTwoPhone, '10.50.1.7', twoAudienceDate, '3');
+    expect(anonymous.text).toContain('Everyone Control');
+    expect(anonymous.text).not.toContain('Choir Assembly');
+
+    const both = await activitiesOn(bothAudiencePhone, '10.50.1.8', twoAudienceDate);
+    expect(both.text).toContain('Choir Assembly');
+
+    const plain = await activitiesOn(otherPhone, '10.50.1.9', twoAudienceDate);
+    expect(plain.text).toContain('Everyone Control');
+    expect(plain.text).not.toContain('Choir Assembly');
   });
 
   it('ranks the four legacy shapes ministry, both, presbyters, general', async () => {

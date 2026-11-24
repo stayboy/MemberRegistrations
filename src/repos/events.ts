@@ -21,9 +21,10 @@ import {
 } from './offerings.js';
 import { parentWindowSummary } from './series.js';
 import { legacyProjection, renderAudienceSummary } from '../domain/audiences.js';
-import { evaluateAudience, evaluateAudienceDates } from '../domain/audience-evaluator.js';
+import { memberMatchesEventAudiences } from '../domain/event-audiences.js';
 import { audienceMembers } from './audience-members.js';
-import { parseAudienceRule } from './row-values.js';
+import { audienceRules, eventAudiences, replaceEventAudiences } from './event-audiences.js';
+import { parseAudienceRule, parseTextArray } from './row-values.js';
 import type { AudienceRule } from '../schemas/audiences.js';
 import type { SeriesSummary } from '../schemas/reference.js';
 import type {
@@ -81,7 +82,11 @@ export interface EventItem {
   source: EventSource;
   /** False = headcount-only; per-member attendance does not apply. */
   tracksMembers: boolean;
-  /** Presbyter-only events are hidden on member-facing surfaces and roster the presbyters. */
+  /**
+   * The legacy projection of the primary audience, not the composition. A
+   * multi-audience event reads as its primary here - a stated inaccuracy kept
+   * until the downstream round deletes the columns (`event-periods` §5).
+   */
   presbyterOnly: boolean;
   sessions: EventSessionItem[];
   offerings: EventOfferingItem[];
@@ -592,9 +597,9 @@ const STATUS_RANK: Record<EventStatus, number> = { draft: 0, active: 1, archived
 
 interface ParentCoreRow extends Row {
   id: string;
-  event_no: string | null;
+  event_no: string;
   name: string;
-  audience_id: string;
+  audience_ids: unknown;
   timezone: string;
   description: string | null;
   venue_type: string;
@@ -746,45 +751,55 @@ async function assertRecurrenceWritable(db: DbClient, id: string): Promise<void>
 }
 
 /**
- * A recurring event's name and audience are unique among non-archived recurring
- * events. A standalone event is identified by `eventNo` alone, so it is exempt.
+ * A recurring event's name and audience set are unique among non-archived
+ * recurring events. The set is compared unordered: two audiences in a different
+ * order are the same group (A-2a, identity). A standalone event is identified
+ * by `eventNo` alone, so it is exempt.
  */
 async function assertRecurringNameFree(
   db: DbClient,
   name: string,
-  audienceId: string,
+  audienceIds: readonly string[],
   excludeId: string | null,
 ): Promise<void> {
   const [conflict] = await db.query<{ id: string }>(
     `select e.id
        from events e
       where lower(e.name) = lower($1)
-        and e.audience_id = $2
         and e.status <> 'archived'
         and ($3::uuid is null or e.id <> $3::uuid)
         and exists (select 1 from event_recurrence_versions rv where rv.event_id = e.id)
+        and coalesce(
+              (select array_agg(ea.audience_id order by ea.audience_id)
+                 from event_audiences ea where ea.event_id = e.id),
+              '{}'::uuid[]
+            ) = coalesce(
+              (select array_agg(x order by x) from unnest($2::uuid[]) x),
+              '{}'::uuid[]
+            )
       limit 1`,
-    [name, audienceId, excludeId],
+    [name, audienceIds, excludeId],
   );
   if (conflict) {
     throw new ConflictError(
-      'name: a recurring event with this name already exists for that audience',
+      'name: a recurring event with this name already exists for that audience set',
     );
   }
 }
 
 /**
  * Event rows have no version column, so the parent validator is a digest of the
- * mutable content. The audience is the applicability field, so `audience_id`
- * is hashed and the retired `ministry_id`/`presbyter_only` projections are not:
- * they follow the audience, and a reader that compares them to a stale copy
- * would see a change that is not one (A-6).
+ * mutable content. The audience set is the applicability field, so its ordered
+ * ids are hashed - a secondary-audience edit moves the ETag - and the retired
+ * `ministry_id`/`presbyter_only` projections are not: they follow the primary,
+ * and a reader that compares them to a stale copy would see a change that is
+ * not one (A-6).
  */
 function parentEtagFor(row: ParentCoreRow): string {
   const payload = JSON.stringify([
     row.event_no,
     row.name,
-    row.audience_id,
+    parseTextArray(row.audience_ids),
     row.timezone,
     row.description,
     row.venue_type,
@@ -817,6 +832,11 @@ export interface EventParentItem {
   id: string;
   eventNo: string;
   name: string;
+  /** The ordered audience ids; the first is the primary. */
+  audienceIds: string[];
+  /** Each audience with its server-rendered summary, in set order. */
+  audiences: Array<{ id: string; name: string; system: boolean; summary: string }>;
+  /** The legacy primary alias, kept beside `audiences[]` for one round. */
   audienceId: string;
   audience: { id: string; name: string; system: boolean; summary: string };
   ministry: { code: string; name: string } | null;
@@ -853,12 +873,8 @@ export interface EventParentListQuery {
 
 type ParentRow = {
   id: string;
-  event_no: string | null;
+  event_no: string;
   name: string;
-  audience_id: string;
-  audience_name: string;
-  audience_system: boolean;
-  audience_rule: unknown;
   timezone: string;
   description: string | null;
   venue_type: string;
@@ -887,10 +903,6 @@ const PARENT_COLUMNS = `
   e.id,
   e.event_no,
   e.name,
-  e.audience_id,
-  a.name as audience_name,
-  a.system as audience_system,
-  a.rule as audience_rule,
   e.timezone,
   e.description,
   e.venue_type,
@@ -901,11 +913,14 @@ const PARENT_COLUMNS = `
   e.status`;
 
 const PARENT_FROM = `
-  from events e
-  join audiences a on a.id = e.audience_id`;
+  from events e`;
 
-/** The parent ids whose derived range overlaps the window, in the list's order. */
-const PARENT_IDS_SQL = `
+/**
+ * The derived range of every event, shared by the two list queries. A parent's
+ * audience set is read as rows - one per audience - so the page has to be taken
+ * before the join or an event with two audiences would consume two rows.
+ */
+const PARENT_DERIVED = `
 with derived as (
   select e.id,
          coalesce(
@@ -926,25 +941,46 @@ with derived as (
            )
          end as end_date
     from events e
-)
-select d.id, a.rule
+)`;
+
+const PARENT_RANGE_FILTER = `
+  ($1::date is null or d.end_date is null or d.end_date >= $1::date)
+  and ($2::date is null or d.start_date <= $2::date)
+  and ($3::uuid is null or e.id = $3::uuid)
+  and ($4::text is null or e.venue_type = $4::text)`;
+
+/** Every in-window parent with each of its audience rules, in set order. */
+const PARENT_IDS_SQL = `
+${PARENT_DERIVED}
+select d.id, d.start_date, a.rule
   from derived d
   join events e on e.id = d.id
-  join audiences a on a.id = e.audience_id
- where ($1::date is null or d.end_date is null or d.end_date >= $1::date)
-   and ($2::date is null or d.start_date <= $2::date)
-   and ($3::uuid is null or e.id = $3::uuid)
-   and ($4::text is null or e.venue_type = $4::text)
- order by d.start_date, d.id`;
+  join event_audiences ea on ea.event_id = d.id
+  join audiences a on a.id = ea.audience_id
+ where ${PARENT_RANGE_FILTER}
+ order by d.start_date, d.id, ea.sort_order, ea.audience_id`;
 
 /**
  * The unfiltered path takes its page in SQL: the query's order *is* the list's
  * page order, so the database pages it. The `?ministry=` path cannot page here,
- * because each row's rule has to be projected before the page is known; it
+ * because each audience's rule has to be projected before the page is known; it
  * pages after the filter instead.
  */
-const PARENT_PAGE_SQL = `${PARENT_IDS_SQL}
- limit $5::int offset $6::int`;
+const PARENT_PAGE_SQL = `
+${PARENT_DERIVED},
+paged as (
+  select d.id, d.start_date
+    from derived d
+    join events e on e.id = d.id
+   where ${PARENT_RANGE_FILTER}
+   order by d.start_date, d.id
+   limit $5::int offset $6::int
+)
+select p.id, p.start_date, a.rule
+  from paged p
+  join event_audiences ea on ea.event_id = p.id
+  join audiences a on a.id = ea.audience_id
+ order by p.start_date, p.id, ea.sort_order, ea.audience_id`;
 
 /**
  * A `?ministry=` value names a ministry by code or by name. The filter then
@@ -979,8 +1015,8 @@ export class EventRepository {
   /** One row per event parent, with its window occurrences and figures. */
   async listParents(query: EventParentListQuery): Promise<EventParentItem[]> {
     // Without `?ministry=` the page is the query's own order, so the database
-    // takes it. With a ministry the filter reads each row's legacy projection,
-    // which is a pure function of the row, so the page is taken after it.
+    // takes it. With a ministry the filter reads each audience's legacy
+    // projection, so the set is grouped and the page is taken after it.
     const rows = query.ministry
       ? await this.db.query<{ id: string; rule: unknown }>(PARENT_IDS_SQL, [
           query.from,
@@ -997,21 +1033,39 @@ export class EventRepository {
           query.offset,
         ]);
 
-    let candidates = rows;
+    // The rows arrive as (event, audience); keep the list's order while grouping
+    // each event's rules. An event the query's order placed first stays first.
+    const rulesByEvent = new Map<string, AudienceRule[]>();
+    const order: string[] = [];
+    for (const row of rows) {
+      const rules = rulesByEvent.get(row.id);
+      if (rules) {
+        rules.push(parseAudienceRule(row.rule));
+      } else {
+        rulesByEvent.set(row.id, [parseAudienceRule(row.rule)]);
+        order.push(row.id);
+      }
+    }
+
+    let candidates = order;
     if (query.ministry) {
       const codes = await ministryFilterCodes(this.db, query.ministry);
-      candidates = rows
-        .filter((row) => {
-          const projection = legacyProjection(parseAudienceRule(row.rule));
-          return (
-            projection.ministryCode !== null && codes.has(projection.ministryCode.toLowerCase())
-          );
-        })
+      // `?ministry=` selects an event when **any** of its audiences projects to
+      // that ministry, not only the primary one (A-6, AC-14).
+      candidates = order
+        .filter((id) =>
+          rulesByEvent.get(id)!.some((rule) => {
+            const projection = legacyProjection(rule);
+            return (
+              projection.ministryCode !== null && codes.has(projection.ministryCode.toLowerCase())
+            );
+          }),
+        )
         .slice(query.offset, query.offset + query.limit);
     }
 
     const items = await Promise.all(
-      candidates.map((row) => this.getParent(row.id, query.from, query.to)),
+      candidates.map((id) => this.getParent(id, query.from, query.to)),
     );
     return items.filter((item): item is EventParentItem => item !== null);
   }
@@ -1024,10 +1078,19 @@ export class EventRepository {
     );
     if (!row) return null;
 
+    const set = await eventAudiences(this.db, row.id);
+    const primary = set[0];
+    if (!primary) {
+      // The migration refuses to leave an event without a set, so this is a
+      // missed writer rather than data the read can repair.
+      throw new Error(`Event ${row.id} has no audience set`);
+    }
+    const rules = audienceRules(set);
+
     const today = todayIn(row.timezone);
     const range = await this.parentRange(row.id);
     const recurrence = await this.parentRecurrence(row.id, range.isRecurring);
-    const occurrences = await this.parentOccurrences(row, from, to, today);
+    const occurrences = await this.parentOccurrences(row, rules, from, to, today);
     const summary = await parentWindowSummary(
       this.db,
       { id: row.id, timezone: row.timezone },
@@ -1035,26 +1098,30 @@ export class EventRepository {
       to,
     );
     const offeringsByEvent = await eventOfferingsFor(this.db, [row.id], todayUtc());
-    const rule = parseAudienceRule(row.audience_rule);
-    const projection = legacyProjection(rule);
-    // The retired pair is a read-only projection of the audience (A-7): the
-    // ministry label and the presbyter flag are derived from the rule, never
-    // read from the columns that the dual write still maintains.
+    const projection = legacyProjection(primary.rule);
+    // The retired pair is a read-only projection of the primary audience (A-7):
+    // the ministry label and the presbyter flag are derived from its rule, never
+    // read from the columns the dual write still maintains. A multi-audience
+    // event therefore reads as its primary, an over-report until the downstream
+    // round drops those readers.
     const ministry = projection.ministryCode
       ? await ministryByCode(this.db, projection.ministryCode)
       : null;
+    const rendered = set.map((audience) => ({
+      id: audience.id,
+      name: audience.name,
+      system: audience.system,
+      summary: renderAudienceSummary(audience.name, audience.rule),
+    }));
 
     return {
       id: row.id,
-      eventNo: row.event_no ?? '',
+      eventNo: row.event_no,
       name: row.name,
-      audienceId: row.audience_id,
-      audience: {
-        id: row.audience_id,
-        name: row.audience_name,
-        system: row.audience_system,
-        summary: renderAudienceSummary(row.audience_name, rule),
-      },
+      audienceIds: set.map((audience) => audience.id),
+      audiences: rendered,
+      audienceId: primary.id,
+      audience: rendered[0]!,
       ministry,
       presbyterOnly: projection.presbyterOnly,
       timezone: row.timezone,
@@ -1164,6 +1231,7 @@ export class EventRepository {
 
   private async parentOccurrences(
     parent: ParentRow,
+    rules: readonly AudienceRule[],
     from: string,
     to: string,
     today: string,
@@ -1211,19 +1279,21 @@ export class EventRepository {
       [parent.id, from, to],
     );
 
-    // `expected` is the event's audience evaluated at each occurrence date; a
-    // headcount-only event has no per-member roster and reports zero. The rows
-    // arrive ordered by date, so one register read up to the last date serves
-    // every session in the window.
+    // `expected` is the event's audience set composed by intersection and
+    // evaluated at each occurrence date; a headcount-only event has no
+    // per-member roster and reports zero. The rows arrive ordered by date, so
+    // one register read up to the last date serves every session in the window.
     const dates = rows.map((row) => isoDate(row.date));
-    const expectedByDate =
-      parent.tracks_members && dates.length > 0
-        ? evaluateAudienceDates(
-            parseAudienceRule(parent.audience_rule),
-            await audienceMembers(this.db, dates[dates.length - 1]),
-            dates,
-          )
-        : new Map<string, number>();
+    const expectedByDate = new Map<string, number>();
+    if (parent.tracks_members && dates.length > 0) {
+      const register = await audienceMembers(this.db, dates[dates.length - 1]!);
+      for (const date of new Set(dates)) {
+        expectedByDate.set(
+          date,
+          register.filter((member) => memberMatchesEventAudiences(rules, member, date)).length,
+        );
+      }
+    }
 
     return rows.map((row) => {
       const date = isoDate(row.date);
@@ -1268,10 +1338,15 @@ export class EventRepository {
     const timezone = input.timezone ?? 'UTC';
     todayIn(timezone);
 
-    const audience = input.audienceId
-      ? await assertAudienceUsable(this.db, input.audienceId)
-      : await assertAudienceUsable(this.db, await audienceIdFor(this.db, false));
-    const projection = legacyProjection(audience.rule);
+    const requestedAudienceIds = input.audienceIds ?? (input.audienceId ? [input.audienceId] : []);
+    const audiences = requestedAudienceIds.length
+      ? await Promise.all(
+          requestedAudienceIds.map((audienceId) => assertAudienceUsable(this.db, audienceId)),
+        )
+      : [await assertAudienceUsable(this.db, await audienceIdFor(this.db, false))];
+    const primary = audiences[0]!;
+    const audienceIds = audiences.map((audience) => audience.id);
+    const projection = legacyProjection(primary.rule);
     const ministryId = projection.ministryCode
       ? await ministryIdFor(this.db, projection.ministryCode)
       : null;
@@ -1295,7 +1370,7 @@ export class EventRepository {
     const id = await this.db.transaction(async (tx) => {
       // The event number is minted here; the wire never supplies one.
       const eventNo = await mintParentEventNo(tx, year);
-      if (schedules.length) await assertRecurringNameFree(tx, name, audience.id, null);
+      if (schedules.length) await assertRecurringNameFree(tx, name, audienceIds, null);
 
       let created: { id: string } | undefined;
       try {
@@ -1308,7 +1383,7 @@ export class EventRepository {
           [
             eventNo,
             name,
-            audience.id,
+            primary.id,
             ministryId,
             projection.presbyterOnly,
             timezone,
@@ -1328,6 +1403,9 @@ export class EventRepository {
       }
 
       const eventId = created!.id;
+      // The set is written in the same transaction as the row, so
+      // `event_audiences` is the only authority from the first read (A-2a).
+      await replaceEventAudiences(tx, eventId, audienceIds);
       for (const schedule of schedules) {
         try {
           await tx.query(
@@ -1419,12 +1497,25 @@ export class EventRepository {
 
     if (input.timezone !== undefined) todayIn(input.timezone);
     const timezone = input.timezone ?? current.timezone;
-    const audience = await assertAudienceUsable(
-      this.db,
-      input.audienceId ?? current.audience_id,
-      current.audience_id,
+    const currentAudienceIds = parseTextArray(current.audience_ids);
+    const requestedAudienceIds =
+      input.audienceIds ?? (input.audienceId ? [input.audienceId] : undefined);
+    const nextAudienceIds = requestedAudienceIds ?? currentAudienceIds;
+    const audiences = await Promise.all(
+      nextAudienceIds.map((audienceId) =>
+        assertAudienceUsable(
+          this.db,
+          audienceId,
+          currentAudienceIds.includes(audienceId) ? audienceId : undefined,
+        ),
+      ),
     );
-    const projection = legacyProjection(audience.rule);
+    const primary = audiences[0];
+    if (!primary) {
+      throw new ValidationError('audienceIds: an event needs at least one audience');
+    }
+    const audienceIds = audiences.map((audience) => audience.id);
+    const projection = legacyProjection(primary.rule);
     const ministryId = projection.ministryCode
       ? await ministryIdFor(this.db, projection.ministryCode)
       : null;
@@ -1445,45 +1536,52 @@ export class EventRepository {
 
     if (
       nextStatus !== 'archived' &&
-      (input.name !== undefined || input.audienceId !== undefined) &&
+      (input.name !== undefined ||
+        input.audienceIds !== undefined ||
+        input.audienceId !== undefined) &&
       (await hasRecurrence(this.db, id))
     ) {
-      await assertRecurringNameFree(this.db, name, audience.id, id);
+      await assertRecurringNameFree(this.db, name, audienceIds, id);
     }
 
-    await this.db.query(
-      `update events
-          set name = $2,
-              audience_id = $3,
-              ministry_id = $4,
-              presbyter_only = $5,
-              timezone = $6,
-              description = $7,
-              venue_type = $8,
-              venue_name = $9,
-              start_time = $10,
-              end_time = $11,
-              tracks_members = $12,
-              status = $13,
-              archived_at = case when $13 = 'archived' then now() else archived_at end,
-              updated_at = now()
-        where id = $1`,
-      [
-        id,
-        name,
-        audience.id,
-        ministryId,
-        projection.presbyterOnly,
-        timezone,
-        input.description !== undefined ? input.description : current.description,
-        input.venueType ?? asVenueType(current.venue_type),
-        input.venueName !== undefined ? input.venueName : current.venue_name,
-        input.startTime ?? current.start_time,
-        input.endTime !== undefined ? input.endTime : current.end_time,
-        input.tracksMembers ?? current.tracks_members,
-        nextStatus,
-      ],
-    );
+    await this.db.transaction(async (tx) => {
+      await tx.query(
+        `update events
+            set name = $2,
+                audience_id = $3,
+                ministry_id = $4,
+                presbyter_only = $5,
+                timezone = $6,
+                description = $7,
+                venue_type = $8,
+                venue_name = $9,
+                start_time = $10,
+                end_time = $11,
+                tracks_members = $12,
+                status = $13,
+                archived_at = case when $13 = 'archived' then now() else archived_at end,
+                updated_at = now()
+          where id = $1`,
+        [
+          id,
+          name,
+          primary.id,
+          ministryId,
+          projection.presbyterOnly,
+          timezone,
+          input.description !== undefined ? input.description : current.description,
+          input.venueType ?? asVenueType(current.venue_type),
+          input.venueName !== undefined ? input.venueName : current.venue_name,
+          input.startTime ?? current.start_time,
+          input.endTime !== undefined ? input.endTime : current.end_time,
+          input.tracksMembers ?? current.tracks_members,
+          nextStatus,
+        ],
+      );
+      // `PATCH` replaces the whole set, in the same transaction as the row and
+      // the `audience_id` shim that mirrors its primary (A-2a).
+      await replaceEventAudiences(tx, id, audienceIds);
+    });
 
     const window = await this.parentWindow(id);
     return (await this.getParent(id, window.from, window.to))!;
@@ -1652,11 +1750,16 @@ export class EventRepository {
 
   private async loadParentCore(id: string): Promise<ParentCoreRow | null> {
     const [row] = await this.db.query<ParentCoreRow>(
-      `select id, event_no, name, audience_id, timezone,
-              description, venue_type, venue_name, start_time, end_time, tracks_members,
-              status, archived_at
-         from events
-        where id = $1`,
+      `select e.id, e.event_no, e.name, e.timezone,
+              e.description, e.venue_type, e.venue_name, e.start_time, e.end_time,
+              e.tracks_members, e.status, e.archived_at,
+              coalesce(
+                (select array_agg(ea.audience_id order by ea.sort_order, ea.audience_id)
+                   from event_audiences ea where ea.event_id = e.id),
+                '{}'::uuid[]
+              ) as audience_ids
+         from events e
+        where e.id = $1`,
       [id],
     );
     return row ?? null;
@@ -1833,6 +1936,10 @@ export class EventRepository {
         input.description !== undefined ? input.description : current.description,
         input.tracksMembers ?? current.tracks_members,
       ]);
+      // The legacy PUT derives its one-row set from `presbyterOnly`, so it
+      // shrinks a multi-audience event; the round doc records that as accepted
+      // for an unmoved caller (event-periods §Deviations).
+      await replaceEventAudiences(tx, id, [audienceId]);
 
       const existingRows = await tx.query<{ id: string; date: unknown }>(
         'select id, date from event_occurrences where event_id = $1',
@@ -1883,12 +1990,10 @@ export class EventRepository {
     const [event] = await this.db.query<{
       id: string;
       tracks_members: boolean;
-      audience_rule: unknown;
       occurrence_id: string | null;
     }>(
-      `select e.id, e.tracks_members, a.rule as audience_rule, o.id as occurrence_id
+      `select e.id, e.tracks_members, o.id as occurrence_id
          from events e
-         join audiences a on a.id = e.audience_id
          left join event_occurrences o on o.event_id = e.id and o.date = $2
         where e.id = $1`,
       [eventId, sessionDate],
@@ -1917,14 +2022,14 @@ export class EventRepository {
       [event.occurrence_id],
     );
 
-    // The roster is the audience at this occurrence's date. A headcount-only
-    // event keeps its audience for visibility but has no per-member roster.
+    // The roster is the audience set composed by intersection at this
+    // occurrence's date. A headcount-only event keeps its audience for
+    // visibility but has no per-member roster.
+    const rules = audienceRules(await eventAudiences(this.db, eventId));
     const expected = event.tracks_members
-      ? evaluateAudience(
-          parseAudienceRule(event.audience_rule),
-          await audienceMembers(this.db, sessionDate),
-          sessionDate,
-        )
+      ? (await audienceMembers(this.db, sessionDate)).filter((member) =>
+          memberMatchesEventAudiences(rules, member, sessionDate),
+        ).length
       : 0;
 
     return {
@@ -2025,6 +2130,9 @@ export class EventRepository {
         [memberNo],
       );
       if (!member) throw new NotFoundError(`Member ${memberNo} was not found`);
+      // Stated inaccuracy (event-periods): the manual-attendance write gate is
+      // undefined for a multi-audience event and stays primary-derived until the
+      // downstream round drops the column; attendance is not reworked this round.
       if (event.presbyter_only && !member.is_presbyter) {
         throw new ValidationError('A presbyter-only session accepts only presbyters');
       }

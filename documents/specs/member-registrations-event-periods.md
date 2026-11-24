@@ -266,10 +266,17 @@ missing one as blocking:
 ## Further Notes
 
 - **Order it lands in, and why:** contract (schemas, `openapi.json` snapshot, examples) -> API, migration and the
-  readers -> UI and mocks. `documents/agents/parallel-ui-api.md`'s frozen-contract seam makes this binding, and the
-  UI track builds against generated mocks only after the contract merges.
+  readers -> **the look**: `10-event-create` and its edit state drawn as `target` states and signed by the owner ->
+  the UI built against the signed states -> capture and the 1:1 comparison that closes the mock row. The look is
+  agreed **before** the UI code (owner, 2026-11-24; `documents/agents/parallel-ui-api.md` now says so): the
+  frozen-contract seam lets a UI track read against generated API mocks, but it never licenses building a screen whose
+  states are unsigned.
 - **Gates:** the migration (`event_audiences`, `event_no NOT NULL`) and the wire contract both park until the owner
   names this round and the gate in one instruction (AGENTS.md §17).
+- **Changelog 2026-11-24 (post-approval, owner ruling):** the landing order changed - the **wire design** is signed
+  before the UI code instead of the states being re-cut from the build. "Mock" in this decision means the UI wire
+  design, not an API handler mock. Recorded in `documents/agents/parallel-ui-api.md`, which now separates the two
+  meanings; the round carries four PRs rather than three. No behaviour changes.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;

@@ -2,10 +2,10 @@ import type { Db, Row } from '../db/sql.js';
 import { ValidationError } from '../errors/domain-errors.js';
 import type { PhoneCipher } from '../domain/phone-cipher.js';
 import { legacyProjection } from '../domain/audiences.js';
-import { memberMatchesAudience } from '../domain/audience-evaluator.js';
+import { memberMatchesEventAudiences } from '../domain/event-audiences.js';
 import { audienceMember } from '../repos/audience-members.js';
+import { audienceRules, eventAudiencesFor } from '../repos/event-audiences.js';
 import type { AudienceRule } from '../schemas/audiences.js';
-import { parseAudienceRule } from '../repos/row-values.js';
 import type { AttendanceCodeRepository } from '../repos/attendance-codes.js';
 import type { ClockingRepository } from '../repos/clocking.js';
 import type { EventRepository } from '../repos/events.js';
@@ -146,12 +146,10 @@ interface ActivityRow extends Row {
   session_date: string | Date;
   session_start: string | null;
   tracks_members: boolean;
-  audience_rule: unknown;
-  everyone_audience: boolean;
 }
 
-/** The priority tier a session sorts by, derived from the legacy projection (A-7). */
-function activityTier(rule: AudienceRule, memberCodes: ReadonlySet<string>): number {
+/** One audience's priority tier, derived from its legacy projection (A-7). */
+function audienceTier(rule: AudienceRule, memberCodes: ReadonlySet<string>): number {
   const projection = legacyProjection(rule);
   if (projection.ministryCode && memberCodes.has(projection.ministryCode.toLowerCase())) {
     return 0;
@@ -160,15 +158,29 @@ function activityTier(rule: AudienceRule, memberCodes: ReadonlySet<string>): num
 }
 
 /**
+ * The event's tier is the lowest rank across its audience set on the existing
+ * ladder - ministry match, then presbyter, then `everyone`. An audience that
+ * projects no ministry contributes the rank its rule implies (presbyter for a
+ * presbyter clause, otherwise `everyone`), and `Everyone` is not a neutral
+ * element: it adds active status and excludes registered visitors.
+ */
+function activityTier(rules: readonly AudienceRule[], memberCodes: ReadonlySet<string>): number {
+  return rules.reduce((tier, rule) => Math.min(tier, audienceTier(rule, memberCodes)), 2);
+}
+
+/**
  * The applicable sessions in [from, to], ordered date -> priority tier ->
- * start time -> event number. Visibility is the one audience predicate: a
- * member sees a session when they match the event's audience at that
- * occurrence's date (A-3, A-4). The tier is not a visibility question - it
- * orders a ministry event first, then a presbyter event, then a general one, and
- * is read from the rule's legacy projection so both surfaces agree.
+ * start time -> event number. Visibility is the one audience predicate composed
+ * across the event's whole audience set: a member sees a session when they
+ * match **every** audience at that occurrence's date (A-2a, A-3, A-4). The tier
+ * is not a visibility question - it orders a ministry event first, then a
+ * presbyter event, then a general one, and is read from the rules' legacy
+ * projections so both surfaces agree.
  *
- * An unauthenticated caller sees the seeded `Everyone` audience and nothing
- * else, without evaluating any rule (A-4).
+ * An unauthenticated caller sees an event only when its audience set is exactly
+ * the seeded `Everyone` audience - one row, that row - without evaluating any
+ * rule. An event with any second audience is not anonymous, even when its
+ * primary is `Everyone` (A-4).
  */
 async function activitiesBetween(
   db: Db,
@@ -185,36 +197,39 @@ async function activitiesBetween(
     `select e.id, e.name, e.event_no,
             o.date as session_date,
             coalesce(o.start_time, e.start_time, '') as session_start,
-            e.tracks_members,
-            a.rule as audience_rule,
-            (a.system_key = 'everyone') as everyone_audience
+            e.tracks_members
        from events e
-       join audiences a on a.id = e.audience_id
        join event_occurrences o on o.event_id = e.id
       where e.status = 'active'
         and o.status <> 'cancelled'
-        and o.date between $2::date and $3::date
-        and ($1::uuid is not null or a.system_key = 'everyone')`,
-    [memberId, from, to],
+        and o.date between $1::date and $2::date`,
+    [from, to],
+  );
+
+  const audiencesByEvent = await eventAudiencesFor(
+    db,
+    rows.map((row) => row.id),
   );
 
   const anonymous = memberId === null;
   const visible = rows
     .filter((row) => {
+      const audiences = audiencesByEvent.get(row.id) ?? [];
       // An unauthenticated caller sees the seeded `Everyone` audience and
-      // nothing else, without evaluating any rule (A-4). A caller whose record
-      // exists but is outside the register at these dates sees nothing.
-      if (anonymous) return row.everyone_audience === true;
+      // nothing else, without evaluating any rule: the set is the unit, not the
+      // primary row. A caller whose record exists but is outside the register
+      // at these dates sees nothing.
+      if (anonymous) return audiences.length === 1 && audiences[0]!.systemKey === 'everyone';
       if (!member) return false;
-      return memberMatchesAudience(
-        parseAudienceRule(row.audience_rule),
+      return memberMatchesEventAudiences(
+        audienceRules(audiences),
         member,
         dateOf(row.session_date)!,
       );
     })
     .map((row) => ({
       row,
-      tier: activityTier(parseAudienceRule(row.audience_rule), memberCodes),
+      tier: activityTier(audienceRules(audiencesByEvent.get(row.id) ?? []), memberCodes),
       date: dateOf(row.session_date)!,
     }));
 

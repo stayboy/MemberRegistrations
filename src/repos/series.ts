@@ -1,13 +1,14 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors/domain-errors.js';
 import { assertDate } from '../domain/contacts.js';
-import { evaluateAudienceDates } from '../domain/audience-evaluator.js';
+import { memberMatchesEventAudiences } from '../domain/event-audiences.js';
 import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
 import type { SeriesSummary } from '../schemas/reference.js';
 import type { Db, DbClient, Row } from '../db/sql.js';
 import { sqlState } from '../errors/sqlstate.js';
 import { audienceMembers } from './audience-members.js';
+import { audienceRules, eventAudiences, replaceEventAudiences } from './event-audiences.js';
 import { resolveSeriesOccurrences } from './occurrences.js';
-import { parseAudienceRule, parseTextArray } from './row-values.js';
+import { parseTextArray } from './row-values.js';
 
 const NEXT_OCCURRENCE_DAYS = 90;
 
@@ -302,22 +303,22 @@ export async function parentWindowSummary(
     nextOccurrence = next ? isoDate(next.date) : null;
   }
 
-  const [scope] = await db.query<{ tracks_members: boolean; rule: unknown }>(
-    `select e.tracks_members, a.rule
-       from events e
-       join audiences a on a.id = e.audience_id
-      where e.id = $1`,
+  const [scope] = await db.query<{ tracks_members: boolean }>(
+    `select tracks_members from events where id = $1`,
     [event.id],
   );
+  const rules = audienceRules(await eventAudiences(db, event.id));
   const heldDates = parseTextArray(attendance?.held_dates);
-  const expectedByDate =
-    scope?.tracks_members && heldDates.length > 0
-      ? evaluateAudienceDates(
-          parseAudienceRule(scope.rule),
-          await audienceMembers(db, heldDates[heldDates.length - 1]),
-          heldDates,
-        )
-      : new Map<string, number>();
+  const expectedByDate = new Map<string, number>();
+  if (scope?.tracks_members && heldDates.length > 0) {
+    const register = await audienceMembers(db, heldDates[heldDates.length - 1]!);
+    for (const date of new Set(heldDates)) {
+      expectedByDate.set(
+        date,
+        register.filter((member) => memberMatchesEventAudiences(rules, member, date)).length,
+      );
+    }
+  }
   const expected = heldDates.reduce((total, date) => total + (expectedByDate.get(date) ?? 0), 0);
   const present = Number(attendance?.present ?? 0);
   const lastHeldDate = attendance?.last_held_date ? isoDate(attendance.last_held_date) : null;
@@ -451,6 +452,9 @@ export class SeriesRepository {
            ) values ($1,$2,$3,$4,$5)`,
           [event!.id, effectiveFrom, rrule, endsOn, actor],
         );
+        // Series stay single-audience: the set is one row, written in the same
+        // transaction as the parent (A-2a).
+        await replaceEventAudiences(tx, event!.id, [audienceId]);
         return event!.id;
       });
 
@@ -491,8 +495,10 @@ export class SeriesRepository {
       presbyterOnly = input.presbyterOnly;
       changed = true;
     }
+    let nextAudienceId: string | null = null;
     if (changed) {
       const audienceId = await resolveAudience(this.db, ministryCode, presbyterOnly, actor);
+      nextAudienceId = audienceId;
       const ministryId = await resolveMinistry(this.db, ministryCode);
       push('audience_id', audienceId);
       push('ministry_id', ministryId);
@@ -536,10 +542,15 @@ export class SeriesRepository {
     if (!changed) throw new ValidationError('No fields to update');
 
     try {
-      await this.db.query(
-        `update events set ${sets.join(', ')}, updated_at = now() where id = $1`,
-        params,
-      );
+      await this.db.transaction(async (tx) => {
+        await tx.query(
+          `update events set ${sets.join(', ')}, updated_at = now() where id = $1`,
+          params,
+        );
+        // A series is single-audience, so a ministry or presbyter edit replaces
+        // its one-row set in the same transaction as the parent (A-2a).
+        if (nextAudienceId) await replaceEventAudiences(tx, id, [nextAudienceId]);
+      });
     } catch (error) {
       if (sqlState(error) === '23505') {
         throw new ConflictError('A series with this name already exists for that audience');
@@ -635,6 +646,10 @@ export class SeriesRepository {
       ministry_code: string | null;
       ministry_name: string | null;
     }>(
+      // Stated inaccuracy (event-periods): the legacy series pair is still read
+      // from the primary's projection columns, so a multi-audience event reads
+      // as its primary here until the downstream round drops them. Series stay
+      // single-audience, so for a series the primary is the whole set.
       `select e.id, e.name, e.presbyter_only, e.timezone, e.description, e.archived_at,
               m.code as ministry_code, m.name as ministry_name
          from events e

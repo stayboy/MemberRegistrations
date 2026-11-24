@@ -1,4 +1,5 @@
-import type { Db } from '../../src/db/sql.js';
+import type { Db, DbClient } from '../../src/db/sql.js';
+import { replaceEventAudiences } from '../../src/repos/event-audiences.js';
 
 export interface SeedSession {
   date: string;
@@ -12,6 +13,7 @@ export interface SeedSession {
 export interface SeedEventInput {
   /** Reuse an existing parent (for example the id a series route returned). */
   eventId?: string;
+  /** Omitted or null mints one through the same per-year counter the server uses. */
   eventNo?: string | null;
   name: string;
   timezone?: string;
@@ -41,8 +43,26 @@ export interface SeededEvent {
   occurrenceIds: Record<string, string>;
 }
 
+/** The year the mint counts in: the earliest occurrence, not the deploy year. */
+async function mintEventNo(db: DbClient, date: string): Promise<string> {
+  const year = Number(date.slice(0, 4));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const [counter] = await db.query<{ last_value: number | string }>(
+      `insert into event_no_counters (year, last_value)
+       values ($1::int, 1)
+       on conflict (year) do update set last_value = event_no_counters.last_value + 1
+       returning last_value`,
+      [year],
+    );
+    const eventNo = `EVT-${year}-${String(Number(counter!.last_value)).padStart(3, '0')}`;
+    const [taken] = await db.query('select 1 from events where event_no = $1', [eventNo]);
+    if (!taken) return eventNo;
+  }
+  throw new Error(`Could not mint a unique event number for ${date}`);
+}
+
 async function audienceFor(
-  db: Db,
+  db: DbClient,
   ministryCode: string | null,
   presbyterOnly: boolean,
 ): Promise<string> {
@@ -96,138 +116,146 @@ async function audienceFor(
 }
 
 /**
- * Seed one event parent and its occurrences directly. It mirrors what the
- * repository writes, so a fixture stays a fixture: the route under test still
- * runs its own path.
+ * Seed one event parent, its audience set and its occurrences directly. It
+ * mirrors what the repository writes, so a fixture stays a fixture: the route
+ * under test still runs its own path. The whole seed is one transaction, and
+ * `event_audiences` is written here too, because the migration refuses an event
+ * without a set.
  */
 export async function seedEvent(db: Db, input: SeedEventInput): Promise<SeededEvent> {
-  const ministryCode = input.ministryCode ?? null;
-  const presbyterOnly = input.presbyterOnly ?? false;
-  const [ministry] = ministryCode
-    ? await db.query<{ id: string }>('select id from ministries where lower(code) = lower($1)', [
-        ministryCode,
-      ])
-    : [];
-  const audienceId = await audienceFor(db, ministryCode, presbyterOnly);
-  const archived = input.status === 'archived';
-  const draft = input.status === 'draft';
-  const parentStatus = draft ? 'draft' : archived ? 'archived' : 'active';
+  return db.transaction(async (tx) => {
+    const ministryCode = input.ministryCode ?? null;
+    const presbyterOnly = input.presbyterOnly ?? false;
+    const [ministry] = ministryCode
+      ? await tx.query<{ id: string }>('select id from ministries where lower(code) = lower($1)', [
+          ministryCode,
+        ])
+      : [];
+    const audienceId = await audienceFor(tx, ministryCode, presbyterOnly);
+    const archived = input.status === 'archived';
+    const draft = input.status === 'draft';
+    const parentStatus = draft ? 'draft' : archived ? 'archived' : 'active';
+    const firstSession = [...input.sessions].map((session) => session.date).sort()[0];
 
-  const [event] = input.eventId
-    ? await db.query<{ id: string }>(
-        `update events
-            set event_no = coalesce($2, event_no),
-                name = $3,
-                audience_id = $4,
-                ministry_id = $5,
-                presbyter_only = $6,
-                timezone = $7,
-                description = $8,
-                venue_type = $9,
-                venue_name = $10,
-                start_time = $11,
-                end_time = $12,
-                tracks_members = $13,
-                status = $14,
-                archived_at = $15
-          where id = $1
-          returning id`,
-        [
-          input.eventId,
-          input.eventNo ?? null,
-          input.name,
-          audienceId,
-          ministry?.id ?? null,
-          presbyterOnly,
-          input.timezone ?? 'UTC',
-          input.description ?? null,
-          input.venueType ?? 'auditorium',
-          input.venueName ?? null,
-          input.startTime ?? null,
-          input.endTime ?? null,
-          input.tracksMembers ?? true,
-          parentStatus,
-          archived ? new Date().toISOString() : null,
-        ],
-      )
-    : await db.query<{ id: string }>(
-        `insert into events (
-           event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
-           venue_type, venue_name, start_time, end_time, tracks_members, status, archived_at
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    const [event] = input.eventId
+      ? await tx.query<{ id: string }>(
+          `update events
+              set event_no = coalesce($2, event_no),
+                  name = $3,
+                  audience_id = $4,
+                  ministry_id = $5,
+                  presbyter_only = $6,
+                  timezone = $7,
+                  description = $8,
+                  venue_type = $9,
+                  venue_name = $10,
+                  start_time = $11,
+                  end_time = $12,
+                  tracks_members = $13,
+                  status = $14,
+                  archived_at = $15
+            where id = $1
+            returning id`,
+          [
+            input.eventId,
+            input.eventNo ?? null,
+            input.name,
+            audienceId,
+            ministry?.id ?? null,
+            presbyterOnly,
+            input.timezone ?? 'UTC',
+            input.description ?? null,
+            input.venueType ?? 'auditorium',
+            input.venueName ?? null,
+            input.startTime ?? null,
+            input.endTime ?? null,
+            input.tracksMembers ?? true,
+            parentStatus,
+            archived ? new Date().toISOString() : null,
+          ],
+        )
+      : await tx.query<{ id: string }>(
+          `insert into events (
+             event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
+             venue_type, venue_name, start_time, end_time, tracks_members, status, archived_at
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           returning id`,
+          [
+            input.eventNo ?? (await mintEventNo(tx, firstSession ?? input.startDate)),
+            input.name,
+            audienceId,
+            ministry?.id ?? null,
+            presbyterOnly,
+            input.timezone ?? 'UTC',
+            input.description ?? null,
+            input.venueType ?? 'auditorium',
+            input.venueName ?? null,
+            input.startTime ?? null,
+            input.endTime ?? null,
+            input.tracksMembers ?? true,
+            parentStatus,
+            archived ? new Date().toISOString() : null,
+          ],
+        );
+    const eventId = event!.id;
+
+    // The same obligation the route writers carry: the set is the only
+    // authority for who the event is for.
+    await replaceEventAudiences(tx, eventId, [audienceId]);
+
+    const occurrenceIds: Record<string, string> = {};
+    for (const session of input.sessions) {
+      const status = draft
+        ? 'scheduled'
+        : input.status === 'cancelled'
+          ? 'cancelled'
+          : (session.status ?? 'scheduled');
+      const [occurrence] = await tx.query<{ id: string }>(
+        `insert into event_occurrences (
+           event_id, date, start_time, end_time, status, note, venue_type
+         ) values ($1,$2,$3,$4,$5,$6,$7)
+         on conflict (event_id, date) do update
+           set start_time = excluded.start_time,
+               end_time = excluded.end_time,
+               status = excluded.status,
+               note = excluded.note,
+               venue_type = excluded.venue_type
          returning id`,
         [
-          input.eventNo ?? null,
-          input.name,
-          audienceId,
-          ministry?.id ?? null,
-          presbyterOnly,
-          input.timezone ?? 'UTC',
-          input.description ?? null,
-          input.venueType ?? 'auditorium',
-          input.venueName ?? null,
-          input.startTime ?? null,
-          input.endTime ?? null,
-          input.tracksMembers ?? true,
-          parentStatus,
-          archived ? new Date().toISOString() : null,
+          eventId,
+          session.date,
+          session.startTime ?? input.startTime ?? null,
+          session.endTime ?? input.endTime ?? null,
+          status,
+          session.note ?? null,
+          session.venueType ?? null,
         ],
       );
-  const eventId = event!.id;
+      occurrenceIds[session.date] = occurrence!.id;
+    }
 
-  const occurrenceIds: Record<string, string> = {};
-  for (const session of input.sessions) {
-    const status = draft
-      ? 'scheduled'
-      : input.status === 'cancelled'
-        ? 'cancelled'
-        : (session.status ?? 'scheduled');
-    const [occurrence] = await db.query<{ id: string }>(
-      `insert into event_occurrences (
-         event_id, date, start_time, end_time, status, note, venue_type
-       ) values ($1,$2,$3,$4,$5,$6,$7)
-       on conflict (event_id, date) do update
-         set start_time = excluded.start_time,
-             end_time = excluded.end_time,
-             status = excluded.status,
-             note = excluded.note,
-             venue_type = excluded.venue_type
-       returning id`,
-      [
-        eventId,
-        session.date,
-        session.startTime ?? input.startTime ?? null,
-        session.endTime ?? input.endTime ?? null,
-        status,
-        session.note ?? null,
-        session.venueType ?? null,
-      ],
-    );
-    occurrenceIds[session.date] = occurrence!.id;
-  }
+    if (input.series) {
+      const dates = input.sessions.map((session) => session.date).sort();
+      const first = dates[0] ?? input.startDate;
+      const last = dates[dates.length - 1] ?? input.endDate;
+      await tx.query(
+        `insert into event_recurrence_versions (
+           event_id, effective_from, rrule, ends_on, created_by
+         ) values ($1,$2,'FREQ=DAILY',$3,'seed')
+         on conflict (event_id, effective_from) do nothing`,
+        [eventId, first, last],
+      );
+    }
 
-  if (input.series) {
-    const dates = input.sessions.map((session) => session.date).sort();
-    const first = dates[0] ?? input.startDate;
-    const last = dates[dates.length - 1] ?? input.endDate;
-    await db.query(
-      `insert into event_recurrence_versions (
-         event_id, effective_from, rrule, ends_on, created_by
-       ) values ($1,$2,'FREQ=DAILY',$3,'seed')
-       on conflict (event_id, effective_from) do nothing`,
-      [eventId, first, last],
-    );
-  }
-
-  return { eventId, occurrenceIds };
+    return { eventId, occurrenceIds };
+  });
 }
 
 /** The occurrence id for an event and date; a fixture helper, not a write path. */
 export async function occurrenceId(db: Db, eventId: string, date: string): Promise<string> {
-  const [row] = await db.query<{ id: string }>(
-    'select id from event_occurrences where event_id = $1 and date = $2',
-    [eventId, date],
-  );
+  const [row] = await db.query<{
+    id: string;
+  }>('select id from event_occurrences where event_id = $1 and date = $2', [eventId, date]);
   if (!row) throw new Error(`Event ${eventId} has no occurrence on ${date}`);
   return row.id;
 }

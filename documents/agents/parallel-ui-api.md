@@ -102,6 +102,15 @@ does not exist.
   endpoint passes with the mock removed. A single 200 in a unit test is not delivery.
 - **The focus moves after implementation.** When the backend dispatch completes, the next dispatch is the conformance
   pass, not the next feature. It reports the endpoints conformant, the drift found, and the mocks still in play.
+- **The wire design precedes the UI track, and "mock" means two unrelated things.** The word has been used for both and
+  once was confused: an **API mock** is a handler or fixture generated from the frozen contract and needs no visual
+  sign-off at all, while a **wire design** (the mockup) is the drawn state of a screen, recorded under `mockups/` with
+  a catalogue entry. The contract-first seam licenses the UI track to start _reading_ against generated API mocks; it
+  does **not** license the screen. **A surface's wire design is agreed and signed before any UI code for that surface
+  is written** (owner, 2026-11-24): its states are drawn as `target`, signed by the owner, and only then built; the
+  build is captured afterwards and compared 1:1 against the signed state, which is the state the round cites under
+  `check-round`'s R6. A round that builds a screen whose states are unsigned is out of order even when its contract is
+  frozen, and a round that re-cuts a signed state from the build without the comparison voids the signature.
 - **The pipeline order survives.** Inside a parallel build the read surface is contracted and implemented first, the
   read screens follow, then the write surface, its screens, then capture and the import panel. Parallelism shortens
   the waits; it does not reorder the risk.
