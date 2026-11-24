@@ -2,7 +2,7 @@
 
 |                        |                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                |
+| Status                 | PARKED                                                                                              |
 | Tier                   | 2                                                                                                   |
 | Mode                   | `unattended (auto-accept recommendations)` - owner pre-authorisation of the gates                   |
 | Base                   | `c4b2fad`                                                                                           |
@@ -95,6 +95,30 @@ gate-run 2026-11-24T05:26:52.018Z profile=fast steps=4/4 lines=4 bytes=891
 
 Seat: consistent - worker `ollama-cloud/deepseek-v4.1-flash:1017`; reviewer `ollama-cloud/deepseek-v4-pro:0813`.
 
+**Pass 1 (commit `511844b`) - REWORK.** The amendment changed the transition paragraph and left a dozen sentences
+elsewhere describing per-occurrence attachment as the plan. Fixed in `0d6bb33`: FR-10/FR-11, the parent-scope
+bullet, the `view` contract, the contribution and pledge sessions, `?ministry=`, the error list, two data-model
+rows, the offerings spec's status/expiry/FR-9/FR-19, the withdrawn spec's round order, and superseded notes on the
+2026-11-22 changelog entries.
+
+**Pass 2 (commit `0d6bb33`) - REWORK.** Judgements 3-6 met; judgement 1 (withdrawal completeness) still fails.
+The surviving normative text, which must be rewritten rather than annotated:
+
+- `member-registrations-api.md` - the session-expiry sentence; the "event-level rows are the contract until the
+  session-offerings round" block; the `event_offerings`, `offering_exceptions`, `session_offerings` and
+  `session_offering_events` model rows; the three "the session-offerings round replaces/adds/converts" notes; and
+  OS-14.
+- `member-registrations-events-offerings.md` - FR-43, FR-22, FR-23, FR-24 (two sentences), AC-12, AC-32, the
+  one-row-per-session-offering line, the "attachment routes move in a separate round" block, five model rows
+  including `event_session_offering_counts`, and the 2026-11-22 changelog entry.
+
+**Why it is parked rather than patched again:** the reviewer's bound is one more fix and one confirmation. The
+surviving list is ~25 sentences needing per-sentence judgement, and a mechanical annotation pass attempted here
+produced markers mid-sentence and on already-corrected text; it was reverted and the two specs restored from
+`0d6bb33`. **Resume by rewriting the normative text** (FRs, ACs, the schema rows and the migration outline) and
+annotating only what is historical - the changelog entries and the withdrawn spec's own narrative. A table
+definition marked "withdrawn" still reads as a table definition.
+
 ## Git writes
 
 | Brief | Actor                 | Verb   | Variant                        | Reason                                                                                     |
@@ -126,6 +150,9 @@ n/a - no drawing changes.
 
 ## Deviations
 
+- **The branch is deliberately unpushed at two commits** (`511844b`, `0d6bb33`). A PR carrying spec text refused twice
+  invites a review of the wrong thing, and the protected-doc rule hashes exact bytes, so it goes up once the text
+  passes.
 - **The round opens from a fresh session** on the owner's answer 4. Everything it needs is in this doc, the three
   amended specs and `git log`: the evaluator (`c4b2fad`), the withdrawn session-offerings spec, and the amended
   transition paragraph in the API spec.
