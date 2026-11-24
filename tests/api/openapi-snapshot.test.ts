@@ -16,6 +16,8 @@ describe('OpenAPI contract snapshot', () => {
     for (const path of [
       '/v1/events',
       '/v1/events/{eventId}',
+      '/v1/events/periods',
+      '/v1/events/preview',
       '/v1/series/{id}',
       '/v1/audiences',
       '/v1/audiences/{id}',

@@ -2,9 +2,9 @@
 
 |                        |                                                                                                      |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN - spec APPROVED 2026-11-24; gates ungranted; no code yet                                        |
+| Status                 | OPEN - spec APPROVED, both gates GRANTED 2026-11-24; unattended from here                            |
 | Tier                   | 2 (wire contract + migration, by inspection: `event_audiences`, event number)                        |
-| Mode                   | `attended`                                                                                           |
+| Mode                   | `unattended (auto-accept recommendations)`                                                           |
 | Base                   | `b11adae`                                                                                            |
 | Review rounds          | 1 (behavioural: four passes, contradicted x3 then consistent)                                        |
 | Gate runs in parent    | 0                                                                                                    |
@@ -16,20 +16,45 @@
 
 ## Grill
 
-Two `grill-flash` rounds (seat: `cline-pass/deepseek-v4.1-flash-1017`), both relayed and answered.
+Two `grill-flash` rounds (seat: `cline-pass/deepseek-v4.1-flash-1017`), both relayed and answered; the answers are
+written into the spec, not only here.
 
-Round 1 (Q1-Q16) settled: audiences compose by **intersection** (the owner overruled the seat's union); `audienceIds`
-on write with a one-round `audienceId` alias; the primary package for the shim; `countAt` on the audiences read; all
-eight audience readers move; one schedule builder at both call sites; the closed schedule vocabulary with extra dates
-as exceptions; `WKST=SU`; three periods in code; `POST /v1/events/preview`; resolve once at save, standalone, no
-provenance; the event number refused by name on both writes; `event_no NOT NULL` with no backfill; one round of three
-serial PRs.
-
-Round 2 (Q1-Q7) settled what those answers forced: `event_audiences` is the sole authority and `events.audience_id`
-is a write-only revert shim read by nothing new; the intersection fold with an authorable empty result; the form's
-headline count is the intersection per date with per-chip audience counts; `GET /v1/events/periods` plus a backlog row
-for the authoring screen; the resolver takes a `YYYY-MM` cycle and no clock; the mint year is the earliest
-occurrence's UTC year; the budget is 15.
+1. **Composition of several audiences.** Recommendation: union. Cost: parts that do not sum, and an intended
+   intersection costs a second control. **The owner overruled it: intersection.**
+2. **The written audience set.** Recommendation: `audienceIds` with a one-round `audienceId` alias and an explicit
+   guard. Cost: two spellings in the contract for a round, plus the guard and its `422`. Settled as recommended.
+3. **The primary audience's legacy role.** Recommendation: `events.audience_id` mirrors the primary for one round so a
+   revert needs no data migration. Cost: unmoved readers see the primary, which under union under-reports and under
+   intersection over-reports. Settled as recommended, then narrowed in round 2 to "read by nothing new".
+4. **Where the per-audience number comes from.** Recommendation: `countAt` on the audiences read plus the preview
+   endpoint's counts. Cost: a new query parameter, and the number is "at a date", so the caption must say so.
+5. **Which readers move.** Recommendation: all eight readers of `audience_id` move in this round. Cost: the round
+   reaches USSD, both member reads and the series summary, and each surface needs its own test.
+6. **The schedule builder.** Recommendation: one builder component at both call sites, the three cadences kept as
+   presets. Cost: FR-42f, AC-63 and the dialog's DOM tests change.
+7. **The vocabulary's extent.** Recommendation: the closed set - weekday set, interval 1-4, end date, monthly
+   day-of-month, monthly positional ±1, extra dates as exceptions. Cost: anything else stays read-only.
+8. **The fortnight anchor.** Recommendation: emit `WKST=SU`. Cost: one more key in the round-trip tests; stored
+   strings are never rewritten, so no data migration.
+9. **The period definitions.** Recommendation: Communion Week, Gospel Week and Home Cells as the draft quotes them,
+   with Home Cells one date. **The owner added: periods are created in another round and only selectable at create.**
+   Cost: the authoring screen is deferred, with a backlog row.
+10. **Where the period rules live.** Recommendation: code, one pure resolver, a stated fourth-period trigger. Cost: a
+    corrected definition is a deploy.
+11. **The period anchor and timezone.** Recommendation: a `YYYY-MM` cycle, no clock. **The owner: follow the repo date
+    rules - UTC calendar dates server-side, formatted for display, never shifted.** Cost: none structural.
+12. **Preview.** Recommendation: one `POST /v1/events/preview`, so the UI never expands an rrule and the resolver has
+    one implementation. Cost: a second wire entry in the round.
+13. **Storage of a resolved period.** Recommendation: dates only, standalone, no provenance. Cost: "every Communion
+    Week event" is unanswerable.
+14. **The event number.** Recommendation: server-minted, refused by name on both writes. **The owner: `eventNo` is
+    required, and with no events in the register yet the auto-generated number is the answer.** Cost: FR-42a/b/g,
+    AC-56 and AC-64 lose their number clauses, and an unrecorded script now fails loudly.
+15. **Sole authority and the writers.** Recommendation: `event_audiences` is the only authority, and every writer
+    writes it in the same transaction. Cost: four writers named, and a migration that asserts before it constrains,
+    so a missed one fails the deploy rather than shipping a zero-roster event.
+16. **The round's shape and budget.** Recommendation: one round of three serial PRs. Cost: 3 branch + N commits + 3
+    push + 3 pr + 3 merge = 12 + N, so the budget is 15, above the default of 12.
 
 The owner's Q1 correction in round 2 opened one further question (Q8): whether "everyone but youth" needed new rule
 syntax. The owner then answered it better than the seat's recommendation: **no exclusion clause type** - intersection
@@ -77,7 +102,9 @@ Acceptance criteria are the amended spec's AC 1-16; they were written with the t
 
 The change adds a migration (`event_audiences`) and changes the event wire contract (create no longer
 accepts `eventNo`; reads gain `audiences[]`). AGENTS.md §17 requires the owner to name **this round and that
-gate** in the same instruction before either lands. Neither is requested yet.
+gate** in the same instruction before either lands. **GRANTED 2026-11-24**: the owner's sentence was
+"unattended for round `event-periods`, and the migration and wire contract are approved". The round therefore runs
+unattended from here and both gates are open for it.
 
 ## Review
 
@@ -91,15 +118,19 @@ because this commit carries no code.
 | Gate                  | Command                    | Result |
 | --------------------- | -------------------------- | ------ |
 | pre-commit (this doc) | `npm run verify:precommit` | pass   |
+| PR 1 contract         | `npm run verify:fast`      | pass   |
 
-gate-run 2026-11-24T16:19:37.474Z profile=precommit steps=4/4 lines=4 bytes=535
+gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 
 ## Git writes
 
-| Brief | Actor                 | Verb   | Variant                        | Reason                                                                                                                |
-| ----- | --------------------- | ------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | refused on a dirty tree: the brief carried no `files:`, so the branch exception could not name the spec; drew nothing |
-| 2     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | retry with `files:` naming the round doc and the approved spec, and the parent's `HEAD^{tree}` (`a85f2d5`)            |
+| Brief | Actor                 | Verb   | Variant                        | Reason                                                                                                                                                                                                           |
+| ----- | --------------------- | ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | refused on a dirty tree: the brief carried no `files:`, so the branch exception could not name the spec; drew nothing                                                                                            |
+| 2     | `git-executor rung 2` | branch | `ollama-cloud/mimo-v2.6-flash` | retry with `files:` naming the round doc and the approved spec, and the parent's `HEAD^{tree}` (`a85f2d5`) - then refused `shell-permission-denied` on its own verification probes, so the parent cut the branch |
+| 3     | `parent`              | branch | -                              | seat unavailable (rung 1 free-usage limit, rung 2 shell-permission-denied); cut `feat/event-periods` from `b11adae`                                                                                              |
+| 4     | `parent`              | commit | -                              | seat unavailable; opening commit `ac7dfc9` - the approved spec and this round doc                                                                                                                                |
+| 5     | `parent`              | commit | -                              | seat unavailable; PR 1 - the contract, its tests, `openapi.json`, the two sibling specs and this table                                                                                                           |
 
 ## Open
 

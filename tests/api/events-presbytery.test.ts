@@ -47,7 +47,6 @@ async function createEvent(
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo,
       name: `Presbytery ${eventNo}`,
       startTime: '09:00',
       venueType: 'auditorium',

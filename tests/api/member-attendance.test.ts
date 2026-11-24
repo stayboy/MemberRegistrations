@@ -6,7 +6,6 @@ import { reachableContacts } from '../helpers/member-fixtures.js';
 
 let harness: TestApp;
 let app: TestApp['app'];
-let eventNo = 0;
 const summaryEvent = new Map<number, string>();
 const profileEvent = new Map<number, string>();
 let ministryEventId: string;
@@ -44,12 +43,10 @@ async function createEvent(
   name: string,
   extra: Record<string, unknown> = {},
 ): Promise<string> {
-  eventNo += 1;
   const response = await request(app)
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `ATT-${eventNo}`,
       name,
       startTime: '09:00',
       venueType: 'auditorium',

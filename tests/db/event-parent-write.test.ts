@@ -73,7 +73,6 @@ describe('event-parent writes on PGlite', () => {
   it('creates a recurring parent and generates the seeded window with its exceptions', async () => {
     const parent = await events.createParent(
       {
-        eventNo: 'REPO-RECURRING',
         name: 'Repo Recurring',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -106,7 +105,6 @@ describe('event-parent writes on PGlite', () => {
   it('moves status forward, refuses PATCH archiving, a stale ETag and archives once', async () => {
     const parent = await events.createParent(
       {
-        eventNo: 'REPO-STATUS',
         name: 'Repo Status',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -145,7 +143,6 @@ describe('event-parent writes on PGlite', () => {
   it('cancels one occurrence with its reason, then refuses a repeat and an unknown date', async () => {
     const parent = await events.createParent(
       {
-        eventNo: 'REPO-CANCEL',
         name: 'Repo Cancel',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -182,7 +179,6 @@ describe('event-parent writes on PGlite', () => {
   it('refuses recurrence writes on a manually dated parent', async () => {
     const parent = await events.createParent(
       {
-        eventNo: 'REPO-REC-STANDALONE',
         name: 'Repo Standalone Recurrence',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -219,7 +215,6 @@ describe('event-parent writes on PGlite', () => {
   it('appends recurrence versions and upserts/removes exceptions', async () => {
     const parent = await events.createParent(
       {
-        eventNo: 'REPO-REC-WRITE',
         name: 'Repo Recurrence Write',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -308,7 +303,6 @@ describe.skipIf(!testDatabaseUrl)('event-parent writes on the pooled pg driver',
     const events = new EventRepository(pooled);
     const parent = await events.createParent(
       {
-        eventNo: 'PG-WRITE-1',
         name: 'Pooled Parent Write',
         timezone: 'UTC',
         venueType: 'auditorium',
@@ -318,7 +312,7 @@ describe.skipIf(!testDatabaseUrl)('event-parent writes on the pooled pg driver',
       },
       'seed',
     );
-    expect(parent).toMatchObject({ eventNo: 'PG-WRITE-1', status: 'draft' });
+    expect(parent).toMatchObject({ status: 'draft' });
     expect(parent.occurrences).toHaveLength(1);
 
     const audiences = new AudienceRepository(pooled);

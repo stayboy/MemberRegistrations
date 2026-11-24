@@ -470,13 +470,17 @@ deployed to Vercel as a single function.
 - FR-31a: The `q` parameter of `GET /v1/members` MUST match only member number and name parts (first,
   last, other names, alias, maiden name), case-insensitively; it MUST NOT match owned or linked
   contact values. Contact-value lookup is the separate `contact` filter.
-- FR-32: An event's applicability MUST be one saved **audience** referenced by `audienceId`, whose rule
+- FR-32: An event's applicability MUST be an ordered **set** of saved audiences referenced by
+  `audienceIds` (at least one, `audienceId` accepted as a one-element alias for one round), each whose rule
   is one `allOf`/`anyOf`/`noneOf` over a closed set of member attributes (ministry membership,
-  presbyter, age band, gender, membership status). The roster (`expected`), member-facing visibility,
-  the USSD Activities and offering lists and the attendance summary MUST all evaluate that one rule, and
-  the server MUST be its only evaluator. `GET`/`POST /v1/audiences`, `GET`/`PUT /v1/audiences/{id}` own
-  the reference data; system audiences are seeded and read-only; there is no delete. The rule, the seeds
-  and the evaluation are specified in `member-registrations-event-audience.md`.
+  presbyter, age band, gender, membership status). Composition is **intersection**: a member matches the
+  event when they match every audience of the set, which is also how exclusion is expressed (`allOf
+[active]` intersected with `noneOf [Youth]`). The roster (`expected`), member-facing visibility,
+  the USSD Activities and offering lists and the attendance summary MUST all evaluate that one rule per
+  audience and combine, and the server MUST be its only evaluator. `GET`/`POST /v1/audiences`,
+  `GET`/`PUT /v1/audiences/{id}` own the reference data; system audiences are seeded and read-only; there
+  is no delete. The rule, the seeds and the evaluation are specified in
+  `member-registrations-event-audience.md`.
 - FR-33: Age MUST be evaluated at the occurrence date. Ministry membership, presbyter status and
   membership status MUST read the current register, with no history: a change today changes what past
   dates report, and that limit MUST be documented on the surfaces that show a roster.
@@ -699,7 +703,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 
 ### Event (parent)
 
-`{ id, eventNo, name, audienceId, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
+`{ id, eventNo, name, audienceIds, audiences[], audienceId, audience, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
 
 An **event is the parent** of its recurrence and its dates. It owns its identity, when and where it
 happens, how it is tracked, and either a recurrence that generates its dates or the dates recorded on
@@ -709,18 +713,28 @@ has no recurrence; a **recurring** event owns one recurrence and the occurrences
 - `eventNo` is the event's identity: unique, never reused, and the value a person, a report or an export
   names. The wire addresses the event by `eventId`. An occurrence has no number of its own. The
   per-instance `eventNo` of the V2 model is kept as a read-only `legacyEventNo` on the occurrence during
-  the transition; no client writes it.
-- `audienceId` is the event's **applicability**: one saved audience (a named group with an
-  `allOf`/`anyOf`/`noneOf` rule over ministry, presbyter, age band, gender and membership status). It
-  decides the roster (`expected`), member-facing visibility, the USSD Activities and offering lists and
-  the attendance summary, all through one predicate. It is required on create and defaults to the seeded
-  `Everyone` audience when omitted. The audience is specified in
+  the transition; no client writes it. **It is minted by the server on create and is never accepted on the
+  wire**: `POST` and `PATCH` refuse it by name (`422 validation_error`), because silently stripping it
+  let a caller believe a number had changed. The mint year is the earliest occurrence's UTC year for a
+  standalone event and the first schedule's year for a recurring one.
+- `audienceIds` is the event's **applicability**: an ordered set of saved audiences (each a named group
+  with an `allOf`/`anyOf`/`noneOf` rule over ministry, presbyter, age band, gender and membership status),
+  at least one, defaulting to the seeded `Everyone`. A member is in the event when they match **every**
+  audience of the set - composition is intersection, and it is also how exclusion is said (`allOf [active]`
+  intersected with `noneOf [Youth]`). A registered visitor is in the event only when every audience names
+  visitors (A-3's per-rule gate). The set decides the roster (`expected`), member-facing visibility, the
+  USSD Activities and offering lists and the attendance summary, all through one predicate applied per
+  audience and combined. The rule language and the composition are specified in
   `member-registrations-event-audience.md`.
+  - **One-round alias:** `audienceId`, a single uuid, is accepted on write as a one-element alias of
+    `audienceIds`. If both are sent, `audienceIds` wins and `audienceId` must equal its first element,
+    else `422` naming both. The read carries `audiences[]` (each with its rendered `summary`) plus the
+    legacy `audienceId` and `audience` for the primary (first) audience.
 - `ministry` and `presbyterOnly` are **read-only legacy projections** during the transition: the
   migration maps each event's old pair onto a seeded or combination audience and writes the columns from
   that audience. They are no longer accepted on create or update, and a client that sends one is `422
 validation_error` with the field named. A recurring event's name and audience are unique among
-  non-archived recurring events (`(lower(name), audienceId)`); a standalone event is identified by
+  non-archived recurring events (`(lower(name), unordered audience set)`); a standalone event is identified by
   `eventNo` alone, so its name is not unique.
 - `description` carries free text such as the service time.
 - `timezone` is an optional IANA override used only to decide what "today" means for that event. It
@@ -1403,14 +1417,14 @@ number is erased on the decision, and a purge erases the member's confirmation r
 
 ### Reference data
 
-| Method       | Path                    | Result                                                                      |
-| ------------ | ----------------------- | --------------------------------------------------------------------------- |
-| `GET`/`POST` | `/v1/ministries`        | List / create (`code`, `name`, …)                                           |
-| `GET`/`PUT`  | `/v1/ministries/{code}` | Read / rename (code immutable)                                              |
-| `DELETE`     | `/v1/ministries/{code}` | Deactivate, or `409` while referenced                                       |
-| `GET`        | `/v1/presbyter-titles`  | Active titles: `code`, `label`, `genderRestriction`, `active`               |
-| `GET`/`POST` | `/v1/audiences`         | List (system and custom; `includeArchived`) or create a custom audience     |
-| `GET`/`PUT`  | `/v1/audiences/{id}`    | Read an audience with its rule, or edit a custom one; `409 audience_system` |
+| Method       | Path                    | Result                                                                                                           |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `GET`/`POST` | `/v1/ministries`        | List / create (`code`, `name`, …)                                                                                |
+| `GET`/`PUT`  | `/v1/ministries/{code}` | Read / rename (code immutable)                                                                                   |
+| `DELETE`     | `/v1/ministries/{code}` | Deactivate, or `409` while referenced                                                                            |
+| `GET`        | `/v1/presbyter-titles`  | Active titles: `code`, `label`, `genderRestriction`, `active`                                                    |
+| `GET`/`POST` | `/v1/audiences`         | List (system and custom; `includeArchived`; `countAt=YYYY-MM-DD` adds `memberCount`) or create a custom audience |
+| `GET`/`PUT`  | `/v1/audiences/{id}`    | Read an audience with its rule, or edit a custom one; `409 audience_system`                                      |
 
 The audience rule, its seeds and its evaluation are specified in
 `member-registrations-event-audience.md`. Audiences are reference data: no route deletes one, and an
@@ -1424,22 +1438,24 @@ is the plain alias. There is no series list, series create or series schedule ro
 
 ### Events
 
-| Method   | Path                                                | Result                                                                                             |
-| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `GET`    | `/v1/events?from&to&ministry&venueType`             | Parents with their occurrences in the window and attendance/offering summaries                     |
-| `POST`   | `/v1/events`                                        | Create the parent, an optional recurrence and, without one, manual occurrences; `201` + `Location` |
-| `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                 |
-| `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); stale `If-Match` → `409`                                              |
-| `PUT`    | `/v1/events/{eventId}`                              | The legacy per-instance update during the transition; it retires when the UI moves                 |
-| `POST`   | `/v1/events/{eventId}/archive`                      | Archive the parent; history stays readable                                                         |
-| `POST`   | `/v1/events/{eventId}/occurrences/{date}/cancel`    | Cancel one occurrence with a reason; history stays readable                                        |
-| `POST`   | `/v1/events/{eventId}/recurrence/versions`          | Add a schedule version                                                                             |
-| `POST`   | `/v1/events/{eventId}/recurrence/exceptions`        | Cancel or add a date                                                                               |
-| `DELETE` | `/v1/events/{eventId}/recurrence/exceptions/{date}` | Remove the exception directives for one date                                                       |
-| `GET`    | `/v1/events/{eventId}/attendance?date=`             | Present/expected and member rows for one occurrence                                                |
-| `POST`   | `/v1/events/{eventId}/attendance`                   | Manual row `{ memberNo, date }`; `422` when not an occurrence                                      |
-| `DELETE` | `/v1/events/{eventId}/attendance/{id}`              | Remove a row; writes a suppression when the row was imported                                       |
-| `POST`   | `/v1/events/generate?from&to`                       | Refresh: generate the missing occurrences of each recurrence                                       |
+| Method   | Path                                                | Result                                                                                                                                                 |
+| -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/v1/events?from&to&ministry&venueType`             | Parents with their occurrences in the window and attendance/offering summaries                                                                         |
+| `POST`   | `/v1/events`                                        | Create the parent, an optional recurrence and, without one, manual occurrences; `201` + `Location`                                                     |
+| `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                                                                     |
+| `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); stale `If-Match` → `409`                                                                                                  |
+| `PUT`    | `/v1/events/{eventId}`                              | The legacy per-instance update during the transition; it retires when the UI moves                                                                     |
+| `POST`   | `/v1/events/{eventId}/archive`                      | Archive the parent; history stays readable                                                                                                             |
+| `POST`   | `/v1/events/{eventId}/occurrences/{date}/cancel`    | Cancel one occurrence with a reason; history stays readable                                                                                            |
+| `POST`   | `/v1/events/{eventId}/recurrence/versions`          | Add a schedule version                                                                                                                                 |
+| `POST`   | `/v1/events/{eventId}/recurrence/exceptions`        | Cancel or add a date                                                                                                                                   |
+| `DELETE` | `/v1/events/{eventId}/recurrence/exceptions/{date}` | Remove the exception directives for one date                                                                                                           |
+| `GET`    | `/v1/events/{eventId}/attendance?date=`             | Present/expected and member rows for one occurrence                                                                                                    |
+| `POST`   | `/v1/events/{eventId}/attendance`                   | Manual row `{ memberNo, date }`; `422` when not an occurrence                                                                                          |
+| `DELETE` | `/v1/events/{eventId}/attendance/{id}`              | Remove a row; writes a suppression when the row was imported                                                                                           |
+| `POST`   | `/v1/events/generate?from&to`                       | Refresh: generate the missing occurrences of each recurrence                                                                                           |
+| `POST`   | `/v1/events/preview`                                | Resolve a `recurrence` or a `period { id, cycleMonth }` to dates; **no persistence**, `{ occurrences[{date, expected}], audienceCounts[{id, count}] }` |
+| `GET`    | `/v1/events/periods`                                | The three named periods as `{ id, name, definition }`, from the code catalogue                                                                         |
 
 The event-wide cancel becomes an **occurrence cancel** and the **parent archive**: there is no route that
 cancels a whole event by rewriting the parent. `POST /v1/events` with a recurrence generates its first

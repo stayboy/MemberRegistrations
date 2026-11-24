@@ -27,7 +27,6 @@ async function createEvent(dates: string[]): Promise<string> {
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `CODE-${eventNo}`,
       name: `Code event ${eventNo}`,
       // UTC so a session dated today is today in the event timezone.
       timezone: 'UTC',

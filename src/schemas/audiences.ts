@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateStringSchema } from './common.js';
 
 /**
  * An audience rule: exactly one operator over a flat clause list (A-1). The
@@ -92,6 +93,12 @@ export const audienceSchema = z.object({
   active: z.boolean(),
   rule: audienceRuleSchema,
   summary: z.string(),
+  /**
+   * The audience's own member count at `countAt`; present only when the list
+   * query supplied `countAt`. The event form's headline is the intersection
+   * count, not this one.
+   */
+  memberCount: z.number().int().optional(),
   createdAt: z.string(),
   createdBy: z.string().nullable(),
   updatedAt: z.string(),
@@ -107,6 +114,9 @@ export const audienceListQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  countAt: dateStringSchema
+    .optional()
+    .describe("The UTC date each audience's `memberCount` is evaluated at."),
 });
 
 export type AudienceOperator = (typeof AUDIENCE_OPERATORS)[number];

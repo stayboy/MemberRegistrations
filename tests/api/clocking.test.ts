@@ -70,7 +70,6 @@ beforeAll(async () => {
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: 'CLK-EVENT',
       name: 'Clocking event',
       startTime: '09:00',
       venueType: 'auditorium',

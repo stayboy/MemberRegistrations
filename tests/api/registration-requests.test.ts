@@ -48,7 +48,6 @@ async function createEvent(dates: string[]): Promise<string> {
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo: `REG-${eventNo}`,
       name: `Registration event ${eventNo}`,
       startTime: '09:00',
       venueType: 'auditorium',
@@ -523,7 +522,6 @@ describe.skipIf(!testDatabaseUrl)('registration requests on the pooled pg driver
       .post('/v1/events')
       .set(writeHeaders)
       .send({
-        eventNo: 'REG-PG-1',
         name: 'Pooled registration event',
         startTime: '09:00',
         venueType: 'auditorium',

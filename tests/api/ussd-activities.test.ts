@@ -79,7 +79,6 @@ async function createEvent(
     .post('/v1/events')
     .set(writeHeaders)
     .send({
-      eventNo,
       name: eventNo,
       startTime,
       venueType: 'auditorium',
