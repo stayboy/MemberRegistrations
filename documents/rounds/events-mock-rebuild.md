@@ -39,12 +39,12 @@
 
 ## Plan
 
-Goal: the three unsigned states become drawable and signed, with no production change.
+Goal: the unsigned states become drawable, with signatures at the milestone close; no production change.
 
 - Rebuild `02-event-detail` on the shared shell: the four summary tiles, the occurrence table with its row verbs, the
   recurrence panel, and the archived read-only state.
 - Draw the audience picker and its inline create dialog as a state with a catalogue entry.
-- Re-sign `10-event-create` on its existing image (`auto-signed`, basis recorded).
+- Leave `10-event-create` at `target` on its verified image; it was never owner-signed, so nothing is voided and nothing is claimed.
 - Update `ui/e2e/baseline/README.md` where the drawing references change.
 
 Out of scope: `ui/src/`, `src/**`, any migration, the downstream round (parked), and the retired series states (a
@@ -54,8 +54,8 @@ Acceptance criteria:
 
 1. `02-event-detail` is drawn from a live HTML source and matches the shipped detail on the tiles, the row verbs and the
    archived state.
-2. The picker dialog has a drawing and a catalogue entry that resolves.
-3. `10-event-create` is `auto-signed` with a basis that names the verified match and the void owner signature.
+2. The picker dialog has a drawing whose catalogue `state` block resolves (path, sha256 and source); an `entry` claiming it renders lands with the signature, because an entry is a claim of rendering evidence and these drawings are unsigned.
+3. `10-event-create` is verified against the shipped header and stays `target`: it was never owner-signed, so nothing was voided.
 4. No `ui/src/` file changes; `git diff --name-only` shows only mock-claim, baseline and documentation paths.
 
 ## Verification
@@ -87,23 +87,29 @@ Seat: consistent - worker `ollama-cloud/deepseek-v4.1-flash:1017`; reviewer `oll
 
 ## Mock sign-off
 
-| Surface         | Mock                                       | Capture                            | Signer       | Date       | Verdict                                                                            |
-| --------------- | ------------------------------------------ | ---------------------------------- | ------------ | ---------- | ---------------------------------------------------------------------------------- |
-| Event detail    | `mockups/v2-events/02-event-detail.png`    | `ui/e2e/baseline/event-detail.png` | `unattended` | 2026-11-24 | auto-signed - rebuilt on the shared shell; the owner signs at the milestone close  |
-| New event form  | `mockups/v2-events/10-event-create.png`    | `ui/e2e/baseline/events-new.png`   | `unattended` | 2026-11-24 | auto-signed - re-signed on the verified image; the 2026-11-22 signature stays void |
-| Audience dialog | `mockups/v2-events/12-audience-dialog.png` | `ui/e2e/baseline/events-new.png`   | `unattended` | 2026-11-24 | auto-signed - new state for the picker's inline create                             |
+| Surface                | Mock                                             | Capture                            | Signer | Date       | Verdict                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------ | ---------------------------------- | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event detail           | `mockups/v2-events/02-event-detail.png`          | `ui/e2e/baseline/event-detail.png` | `-`    | 2026-11-24 | target - rebuilt on the shared shell; the owner signs at the milestone close                                                                                                                                                                                                                                              |
+| Event detail, draft    | `mockups/v2-events/13-event-detail-draft.png`    | `ui/e2e/baseline/event-detail.png` | `-`    | 2026-11-24 | target - the Activate-first, Archive-disabled, Cancel-with-reason branch                                                                                                                                                                                                                                                  |
+| Event detail, archived | `mockups/v2-events/14-event-detail-archived.png` | `ui/e2e/baseline/event-detail.png` | `-`    | 2026-11-24 | target - the page verbs are absent and there is no Restore, the read-only notice shows, and the row controls are **disabled by their session's state rather than removed** - AC-62 says "every write verb is absent", which is broader than the build, so the drawing follows the build and the wording gap is backlogged |
+| Audience dialog        | `mockups/v2-events/12-audience-dialog.png`       | `ui/e2e/baseline/events-new.png`   | `-`    | 2026-11-24 | target - new state for the picker's inline create, with the create-real error                                                                                                                                                                                                                                             |
+| New event form         | `mockups/v2-events/10-event-create.png`          | `ui/e2e/baseline/events-new.png`   | `-`    | 2026-11-24 | target - verified against the shipped header, not redrawn                                                                                                                                                                                                                                                                 |
 
 ## Mock parity
 
 No probe runs: the rebuild produces the drawings that make a probe possible. Parity is claimed for no state until the
 owner's milestone look.
 
-Mock coverage: claimed 12 · e2e-only 1 · deferred 1 · prose 0
+Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
 
 ## Acceptance
 
-| #   | Criterion | Met | Evidence |
-| --- | --------- | --- | -------- |
+| #   | Criterion                                                                                                                            | Met | Evidence                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ | --- | -------------------------------------------------------------------------------------------------- |
+| 1   | `02-event-detail` is drawn from a live HTML source and matches the shipped detail on the tiles, the row verbs and the archived state | yes | `02`, `13` and `14` from one builder; the 1:1 against the legacy capture recorded in the round doc |
+| 2   | The picker dialog has a drawing whose catalogue state block resolves                                                                 | yes | `12-audience-dialog`, state block with path, sha256 and source                                     |
+| 3   | `10-event-create` stays `target` on the verified image                                                                               | yes | header re-checked against `EventFormPage.tsx`; the image is untouched                              |
+| 4   | No `ui/src/` file changes                                                                                                            | yes | `git status` names only `documents/`                                                               |
 
 ## Deviations
 
