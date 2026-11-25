@@ -119,17 +119,11 @@
     "10-event-create": {
       "mock": {
         "path": "mockups/v2-events/10-event-create.png",
-        "sha256": "62cce6b18bd30b89da572437099e1054d3034f54a1fc8c283d2545f50c0a12bb",
+        "sha256": "406ad491d819c41ecf2955797234b4eb4bc859a37c3d9423f3eb373b3c4a1f74",
         "source": "mockups/v2-events/10-event-create.html"
       },
-      "baseline": "events-new.png",
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "62cce6b18bd30b89da572437099e1054d3034f54a1fc8c283d2545f50c0a12bb",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form: audience set with per-audience counts, the four-cadence builder, the period choice, resolved dates with the intersection count"
-      }
+      "baseline": null,
+      "coverage": "target"
     },
     "02-event-detail": {
       "mock": {
@@ -227,32 +221,20 @@
     "10-event-create-daily": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-daily.png",
-        "sha256": "8d075b3c462f38d768297eda64680a8792b4b1bd3bf699f79cf7b4a52932582f",
+        "sha256": "ab6945dddaf813ae38c55ec677ddebff4123df46c72a60ff92cf321178904ad1",
         "source": "mockups/v2-events/10-event-create-daily.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "8d075b3c462f38d768297eda64680a8792b4b1bd3bf699f79cf7b4a52932582f",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a daily cadence and its 1-7 interval"
-      }
+      "coverage": "target"
     },
     "10-event-create-monthly": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-monthly.png",
-        "sha256": "e9ad83ddafbeae2d203fdc2cadbcfb71bdadf84ef30659d1cf143f1a5cf1f2e6",
+        "sha256": "6f90292fe8dda018024eb7143ba15c9e1f276e8cdb4049b7e597df737b230333",
         "source": "mockups/v2-events/10-event-create-monthly.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "e9ad83ddafbeae2d203fdc2cadbcfb71bdadf84ef30659d1cf143f1a5cf1f2e6",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a monthly cadence and its day-of-month / positional choice"
-      }
+      "coverage": "target"
     },
     "10-event-create-period": {
       "mock": {
@@ -272,31 +254,20 @@
     "10-event-create-no-match": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-no-match.png",
-        "sha256": "39a1de04452d8622aecbd9f8d5b2d61ddf46970e3d30af3226b885427fa59dde",
+        "sha256": "6639a994d3663bbef58c5e38ce06a8a76c112c3a198c428683aa3318d0d33dea",
         "source": "mockups/v2-events/10-event-create-no-match.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "39a1de04452d8622aecbd9f8d5b2d61ddf46970e3d30af3226b885427fa59dde",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form when the audience intersection is empty, and the warning that says so"
-      }
+      "coverage": "target"
     },
     "16-event-edit": {
       "mock": {
         "path": "mockups/v2-events/16-event-edit.png",
-        "sha256": "71ee1d0b49f49326941636c8c46b732d0a1c2cda8f66ca5fb68a46eff074c145",
+        "sha256": "8ec3f954443bb186cfa2f35034711cc02a16352b4dba15d15d1ed6cd03a103f5",
         "source": "mockups/v2-events/16-event-edit.html"
       },
-      "baseline": "event-edit.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "71ee1d0b49f49326941636c8c46b732d0a1c2cda8f66ca5fb68a46eff074c145"
-      }
+      "baseline": null,
+      "coverage": "target"
     },
     "17-event-edit-locked": {
       "mock": {
@@ -345,17 +316,11 @@
     "20-event-preview-dialog": {
       "mock": {
         "path": "mockups/v2-events/20-event-preview-dialog.png",
-        "sha256": "43f160d37e94418a5a3cd022fc93ed8489c12bf64680d844f93064f561b1cb4c",
+        "sha256": "f366424aa4c63a7f49c8fd5a3559ee974ffe55599864479ea348f19694e460f6",
         "source": "mockups/v2-events/20-event-preview-dialog.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "43f160d37e94418a5a3cd022fc93ed8489c12bf64680d844f93064f561b1cb4c",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with the resolved-dates dialog open: the date and members table the form no longer carries inline"
-      }
+      "coverage": "target"
     },
     "21-event-create-period-recurring": {
       "mock": {
