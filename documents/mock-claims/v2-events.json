@@ -254,8 +254,13 @@
         "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
-      "baseline": null,
-      "coverage": "target"
+      "baseline": "events-new-period.png",
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5"
+      }
     },
     "10-event-create-no-match": {
       "mock": {
@@ -344,11 +349,16 @@
     "21-event-create-period-recurring": {
       "mock": {
         "path": "mockups/v2-events/21-event-create-period-recurring.png",
-        "sha256": "8cde908da018a1df80dc140f882b4dccc503a8279eeb036424ff003ef06a164d",
+        "sha256": "702e883cdda75a450e57fe13a79b2095d446bc0c2c0c2eec31a0de1866b1cb88",
         "source": "mockups/v2-events/21-event-create-period-recurring.html"
       },
-      "baseline": null,
-      "coverage": "target"
+      "baseline": "events-new-period-monthly.png",
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "702e883cdda75a450e57fe13a79b2095d446bc0c2c0c2eec31a0de1866b1cb88"
+      }
     },
     "22-event-detail-period": {
       "mock": {
@@ -511,6 +521,17 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-66",
         "quote": "no Repeats switch is present on the edit surface"
+      }
+    },
+    {
+      "id": "EVP-PERIOD",
+      "as": "an events officer",
+      "iWant": "to schedule by a named period, once or monthly, and see the dates it resolves",
+      "soThat": "I can set a Communion Week service without inventing an rrule",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "the resolved dates appear only as a one-line summary plus a **Preview dates** control"
       }
     }
   ],
@@ -874,6 +895,74 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-66",
         "quote": "no Repeats switch is present on the edit surface"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVP-PREVIEW-ONE",
+      "story": "EVP-PERIOD",
+      "state": "10-event-create-period",
+      "claim": "A one-line resolved-dates summary and a Preview dates control close the schedule area.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "the resolved dates appear only as a one-line summary plus a **Preview dates** control"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVP-NO-INLINE-TABLE-ONE",
+      "story": "EVP-PERIOD",
+      "state": "10-event-create-period",
+      "claim": "An inline table of resolved dates on the form.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "no inline table lengthens the form"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVP-PREVIEW-MONTHLY",
+      "story": "EVP-PERIOD",
+      "state": "21-event-create-period-recurring",
+      "claim": "A one-line resolved-dates summary and a Preview dates control close the schedule area.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "the resolved dates appear only as a one-line summary plus a **Preview dates** control"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVP-NO-INLINE-TABLE-MONTHLY",
+      "story": "EVP-PERIOD",
+      "state": "21-event-create-period-recurring",
+      "claim": "An inline table of resolved dates on the form.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "no inline table lengthens the form"
       },
       "control": "spec"
     }

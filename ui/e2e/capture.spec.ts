@@ -72,6 +72,19 @@ async function capture(page: Page, name: string): Promise<void> {
   });
 }
 
+/**
+ * The create form's period arm: Repeats on (the builder renders only then), the
+ * named period chosen, and the resolved-dates summary settled. The fixture's
+ * preview resolves no occurrences, so its empty line is the settled summary.
+ */
+async function chooseNamedPeriod(page: Page, name: string): Promise<void> {
+  await page.getByRole('switch', { name: 'Repeats' }).click();
+  await page.getByRole('combobox', { name: 'Named period' }).click();
+  await page.getByRole('option', { name }).click();
+  await expect(page.getByLabel(/^Cycle month/)).toBeVisible();
+  await expect(page.getByText('No dates resolve in the next 90 days')).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
   await seedSession(page);
 });
@@ -185,6 +198,27 @@ test('events new', async ({ page }) => {
   await openScreen(page, '/events/new', { width: 1440, height: 1123 });
   await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
   await capture(page, 'events-new');
+});
+
+test('events new period', async ({ page }) => {
+  await openScreen(page, '/events/new', { width: 1440, height: 1123 });
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+  await chooseNamedPeriod(page, 'Communion Week');
+  await capture(page, 'events-new-period');
+});
+
+test('events new period monthly', async ({ page }) => {
+  await openScreen(page, '/events/new', { width: 1440, height: 1123 });
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+  await chooseNamedPeriod(page, 'Communion Week');
+  // The monthly arm: one date per cycle, so the day inside the period replaces
+  // the cycle month (the second drawing in the pair).
+  await page.getByRole('radio', { name: 'Monthly' }).click();
+  await page.getByRole('combobox', { name: 'Day inside the period' }).click();
+  await page.getByRole('option', { name: 'Sunday' }).click();
+  await expect(page.getByLabel(/^Cycle month/)).toHaveCount(0);
+  await expect(page.getByText('No dates resolve in the next 90 days')).toBeVisible();
+  await capture(page, 'events-new-period-monthly');
 });
 
 test('event edit', async ({ page }) => {

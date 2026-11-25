@@ -749,7 +749,18 @@ describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
 
     // The period replaces the cadence controls.
     expect(screen.queryByRole('combobox', { name: 'Repeats' })).toBeNull();
-    expect(screen.getByRole('radio', { name: /One cycle/ })).toBeChecked();
+    // One inline frequency row: a named group of exactly two named options.
+    const frequency = screen.getByRole('radiogroup', { name: 'Frequency' });
+    expect(within(frequency).getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByRole('radio', { name: 'One cycle' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Monthly' })).not.toBeChecked();
+    // The explanation lives on the info glyph, not under each radio.
+    await user.hover(screen.getByLabelText('What the frequency means'));
+    const tooltip = await screen.findByRole('tooltip');
+    await waitFor(() => expect(tooltip).toBeVisible());
+    expect(tooltip).toHaveTextContent(/One cycle resolves the period once, for a single month\./);
+    // The period row holds the one period select and the arm's own field beside it.
+    expect(screen.getAllByRole('combobox', { name: 'Named period' })).toHaveLength(1);
     // The cycle defaults to the start date's month when it is still ahead.
     expect(screen.getByLabelText(/^Cycle month/)).toHaveValue('2027-03');
 
@@ -773,7 +784,18 @@ describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
     await user.click(screen.getByRole('switch', { name: 'Repeats' }));
     await setStartDate('2027-03-04');
     await choosePeriod('Communion Week');
-    await user.click(screen.getByRole('radio', { name: /Monthly/ }));
+    await user.click(screen.getByRole('radio', { name: 'Monthly' }));
+    // Monthly swaps the arm's own field: the cycle month leaves, the day arrives.
+    expect(screen.queryByLabelText(/^Cycle month/)).toBeNull();
+    // The day's copy rides its own info glyph: no hint line under the select,
+    // and the sentence appears when its trigger is hovered.
+    expect(screen.queryByText(/Leave blank for the whole period/)).not.toBeVisible();
+    await user.hover(screen.getByLabelText('What the day inside the period means'));
+    const dayTooltip = await screen.findByRole('tooltip');
+    await waitFor(() => expect(dayTooltip).toBeVisible());
+    expect(dayTooltip).toHaveTextContent(
+      'Leave blank for the whole period; pick a weekday for one date per cycle.',
+    );
     await user.click(screen.getByRole('combobox', { name: 'Day inside the period' }));
     await user.click(await screen.findByRole('option', { name: 'Sunday' }));
 
@@ -798,9 +820,11 @@ describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
     await user.click(screen.getByRole('switch', { name: 'Repeats' }));
     await setStartDate('2027-03-04');
     await choosePeriod('Home Cells');
-    await user.click(screen.getByRole('radio', { name: /Monthly/ }));
+    await user.click(screen.getByRole('radio', { name: 'Monthly' }));
 
-    // `dates: "date"` means one date, so there is no day control to offer.
+    // `dates: "date"` means one date, so there is no day control to offer, and
+    // the one-line hint takes the field's place in the row.
+    expect(screen.queryByLabelText(/^Cycle month/)).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Day inside the period' })).toBeNull();
     expect(screen.getByText(/resolves to a single date/)).toBeVisible();
 
@@ -1082,8 +1106,11 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     renderEdit('event-period');
 
     await screen.findByRole('heading', { level: 1, name: 'Edit event' });
-    // The frequency is the stored rule's, not a choice on edit.
-    expect(screen.queryByRole('radio', { name: /One cycle/ })).toBeNull();
+    // The frequency is the stored rule's, not a choice on edit: the same inline
+    // row, with the value where the radios would be.
+    expect(screen.queryByRole('radiogroup', { name: 'Frequency' })).toBeNull();
+    expect(screen.getByText('Monthly — one date per cycle, generated')).toBeVisible();
+    expect(screen.getByLabelText('What the frequency means')).toBeInTheDocument();
     const day = screen.getByRole('combobox', { name: 'Day inside the period' });
     expect(day).toHaveTextContent('Sunday');
 
