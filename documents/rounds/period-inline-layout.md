@@ -2,7 +2,7 @@
 
 |                        |                                                                            |
 | ---------------------- | -------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                       |
+| Status                 | CLOSED                                                                     |
 | Tier                   | 1                                                                          |
 | Mode                   | `attended` (the owner directed the layout and signed both drawings)        |
 | Base                   | `c88c5c9`                                                                  |
@@ -66,8 +66,13 @@ Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
 
 ## Acceptance
 
-| Criterion | Met | Evidence | Verdict |
-| --------- | --- | -------- | ------- |
+| Criterion                                                                                                             | Met | Evidence                                                                                                     | Verdict  |
+| --------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------ | -------- |
+| `10-event-create-period` matches the drawing: named period + cycle month on one row, the frequency row inline beneath | yes | `ui/src/pages/EventFormPage.dom.test.tsx` (period arm), `ui/e2e/baseline/events-new-period.png`              | ACCEPTED |
+| `21-…-recurring` matches: same row with the day field, explanation in a tooltip, no hint line                         | yes | the monthly DOM case, `ui/e2e/baseline/events-new-period-monthly.png`                                        | ACCEPTED |
+| One `Named period` select exists on the form                                                                          | yes | the DOM test counts one combobox; `NamedPeriodField` is shared by both arms                                  | ACCEPTED |
+| Both arms have a build capture, and `events-new.png` shows the current form                                           | yes | the two new baselines and the replaced `events-new.png`                                                      | ACCEPTED |
+| Gates pass; a locked or read-only period keeps the inline stored value with no radiogroup                             | yes | `verify:fast` 4/4, `ui:test` 567, `test:dom` 258, `ui:e2e` 93; the read-only edit test asserts no radiogroup | ACCEPTED |
 
 ## Deviations
 
