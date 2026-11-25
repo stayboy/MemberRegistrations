@@ -14,6 +14,7 @@ import {
 import { type EventPeriodItem } from '../api/events';
 import {
   defaultCycleMonth,
+  periodShapeOf,
   type EventFormErrors,
   type EventScheduleForm,
   type PeriodFrequency,
@@ -109,6 +110,12 @@ export interface ScheduleBuilderProps {
   readonly periodsError?: boolean;
   /** The locked edit state renders the same controls inert (AC 19). */
   readonly readOnly?: boolean;
+  /**
+   * The edit route's fixed arm (FR-42b, FR-42h): the event's type is chosen at
+   * create, so the builder authors only that arm and never offers the other.
+   * Unset on the create, where both arms are the officer's choice.
+   */
+  readonly fixedArm?: 'rule' | 'period';
 }
 
 /**
@@ -137,10 +144,12 @@ export function ScheduleBuilder({
   periodsLoading = false,
   periodsError = false,
   readOnly = false,
+  fixedArm,
 }: ScheduleBuilderProps) {
   const styles = useStyles();
 
   const selectedPeriod = periods.find((period) => period.id === value.periodId);
+  const dates = periodShapeOf(value, selectedPeriod?.dates);
 
   function choosePeriod(periodId: string): void {
     if (periodId.length === 0) {
@@ -169,29 +178,31 @@ export function ScheduleBuilder({
   return (
     <div className={styles.stack}>
       <div className={styles.grid}>
-        <Field
-          label="Named period"
-          hint="A named period replaces the cadence. The API resolves its dates, not this form."
-          validationMessage={errors.period}
-          validationState={errors.period ? 'error' : 'none'}
-        >
-          <Dropdown
-            aria-label="Named period"
-            value={periodName}
-            selectedOptions={[value.periodId]}
-            disabled={readOnly || periodsLoading}
-            onOptionSelect={(_, data) => choosePeriod(data.optionValue ?? '')}
+        {fixedArm === undefined ? (
+          <Field
+            label="Named period"
+            hint="A named period replaces the cadence. The API resolves its dates, not this form."
+            validationMessage={errors.period}
+            validationState={errors.period ? 'error' : 'none'}
           >
-            <Option value="" text="None">
-              None — repeat by rule
-            </Option>
-            {periods.map((period) => (
-              <Option key={period.id} value={period.id} text={period.name}>
-                {period.name}
+            <Dropdown
+              aria-label="Named period"
+              value={periodName}
+              selectedOptions={[value.periodId]}
+              disabled={readOnly || periodsLoading}
+              onOptionSelect={(_, data) => choosePeriod(data.optionValue ?? '')}
+            >
+              <Option value="" text="None">
+                None — repeat by rule
               </Option>
-            ))}
-          </Dropdown>
-        </Field>
+              {periods.map((period) => (
+                <Option key={period.id} value={period.id} text={period.name}>
+                  {period.name}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        ) : null}
 
         {value.mode === 'rule' ? (
           <>
@@ -256,6 +267,8 @@ export function ScheduleBuilder({
           value={value}
           onChange={onChange}
           period={selectedPeriod}
+          dates={dates}
+          frequencyLocked={fixedArm === 'period'}
           errors={errors}
           readOnly={readOnly}
         />
@@ -271,33 +284,49 @@ function PeriodControls({
   value,
   onChange,
   period,
+  dates,
+  frequencyLocked,
   errors,
   readOnly,
 }: {
   readonly value: EventScheduleForm;
   readonly onChange: (patch: Partial<EventScheduleForm>) => void;
   readonly period: EventPeriodItem | undefined;
+  /** The form's own `periodDates`: set when a period is picked, or seeded on edit. */
+  readonly dates: 'week' | 'date' | null;
+  /** The edit route's stored period rule: the frequency cannot change (FR-42h). */
+  readonly frequencyLocked: boolean;
   readonly errors: EventFormErrors;
   readonly readOnly: boolean;
 }) {
   const styles = useStyles();
+  const frequency = frequencyLocked ? 'monthly' : value.periodFrequency;
 
   return (
     <div className={styles.stack}>
       <div className={styles.two}>
-        <Field label="Frequency" required>
-          <RadioGroup
-            aria-label="Frequency"
-            value={value.periodFrequency}
-            disabled={readOnly}
-            onChange={(_, data) => onChange({ periodFrequency: data.value as PeriodFrequency })}
-          >
-            <Radio value="one-cycle" label="One cycle — a single month, resolved once" />
-            <Radio value="monthly" label="Monthly — one date per cycle, generated" />
-          </RadioGroup>
-        </Field>
+        {frequencyLocked ? (
+          <div>
+            <Text size={200} className={styles.hint}>
+              Frequency
+            </Text>
+            <Text>Monthly — one date per cycle, generated</Text>
+          </div>
+        ) : (
+          <Field label="Frequency" required>
+            <RadioGroup
+              aria-label="Frequency"
+              value={value.periodFrequency}
+              disabled={readOnly}
+              onChange={(_, data) => onChange({ periodFrequency: data.value as PeriodFrequency })}
+            >
+              <Radio value="one-cycle" label="One cycle — a single month, resolved once" />
+              <Radio value="monthly" label="Monthly — one date per cycle, generated" />
+            </RadioGroup>
+          </Field>
+        )}
 
-        {value.periodFrequency === 'one-cycle' ? (
+        {frequency === 'one-cycle' ? (
           <Field
             label="Cycle month"
             required
@@ -312,7 +341,7 @@ function PeriodControls({
               onChange={(_, data) => onChange({ cycleMonth: data.value })}
             />
           </Field>
-        ) : value.periodDates === 'date' ? (
+        ) : dates === 'date' ? (
           // A single-date period resolves to one date, so there is no day inside
           // it to choose: the control is absent, not disabled (FR-42f).
           <Text size={200} className={styles.hint}>
@@ -355,7 +384,7 @@ function PeriodControls({
       ) : null}
 
       <Text size={200} className={styles.hint}>
-        {value.periodFrequency === 'one-cycle'
+        {frequency === 'one-cycle'
           ? 'One cycle resolves once, on the server, into that month’s dates; the event stores the period it came from and its name as it was written.'
           : 'Monthly stores the period rule on the event and generates one date per cycle over the same 90-day window a recurrence uses; no rrule is involved.'}
       </Text>

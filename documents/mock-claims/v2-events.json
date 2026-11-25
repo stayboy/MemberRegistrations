@@ -290,7 +290,7 @@
         "sha256": "71ee1d0b49f49326941636c8c46b732d0a1c2cda8f66ca5fb68a46eff074c145",
         "source": "mockups/v2-events/16-event-edit.html"
       },
-      "baseline": null,
+      "baseline": "event-edit.png",
       "coverage": "auto-signed",
       "signed": {
         "by": "unattended",
@@ -302,17 +302,11 @@
     "17-event-edit-locked": {
       "mock": {
         "path": "mockups/v2-events/17-event-edit-locked.png",
-        "sha256": "06c54befc8c876a0ae1b0dc280ddbd99d31dd0fa1255642dc70a954a3c6508fa",
+        "sha256": "32d65ad838d3edab61e481cac087e866f537a4c126ff3ea56ec7c5386a946cad",
         "source": "mockups/v2-events/17-event-edit-locked.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "06c54befc8c876a0ae1b0dc280ddbd99d31dd0fa1255642dc70a954a3c6508fa",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event once history exists: the cause named, the builder inert, the schedule outside the save"
-      }
+      "coverage": "target"
     },
     "18-event-create-standalone": {
       "mock": {
@@ -526,6 +520,17 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-56",
         "quote": "the request carries the FR-42a fields"
+      }
+    },
+    {
+      "id": "EVE-EDIT",
+      "as": "an events officer",
+      "iWant": "to change a recurring event’s rule while nothing has happened to its dates, and to see why I cannot once something has",
+      "soThat": "I can fix a schedule without rewriting history",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-66",
+        "quote": "no Repeats switch is present on the edit surface"
       }
     }
   ],
@@ -855,6 +860,40 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-61",
         "quote": "never presents the headcount as the sum of the attendance rows"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVE-GUARD-SURFACE",
+      "story": "EVE-EDIT",
+      "state": "16-event-edit",
+      "claim": "With the guard open the schedule is editable and the resolved dates appear as a one-line summary with a Preview dates control at the foot of the schedule area.",
+      "expect": "PRESENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "the resolved dates appear only as a one-line summary plus a **Preview dates** control"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVE-NO-REPEATS",
+      "story": "EVE-EDIT",
+      "state": "16-event-edit",
+      "claim": "A Repeats switch on the edit form.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-66"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-66",
+        "quote": "no Repeats switch is present on the edit surface"
       },
       "control": "spec"
     }

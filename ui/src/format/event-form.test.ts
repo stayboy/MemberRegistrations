@@ -3,19 +3,23 @@ import type { EventParentItem } from '../api/events';
 import {
   EVENT_VENUE_OPTIONS,
   audienceIdsOf,
+  canEditSchedule,
   createEmptyEventForm,
   createEmptySchedule,
   defaultCycleMonth,
   fromEventParent,
   latestSchedule,
   occurrenceErrorKey,
+  periodShapeOf,
   toCreateEventPayload,
   toPeriodInput,
   toPreviewInput,
   toScheduleRrule,
+  toScheduleWrite,
   toUpdateEventPayload,
   validateEventForm,
   type EventFormValues,
+  type EventScheduleForm,
 } from './event-form';
 
 const VALID: EventFormValues = {
@@ -72,6 +76,7 @@ const PARENT: EventParentItem = {
   endTime: '11:00',
   tracksMembers: true,
   status: 'active',
+  schedule: { locked: false, reasons: [] },
   recurrence: {
     schedules: [
       { effectiveFrom: '2025-01-05', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
@@ -858,5 +863,158 @@ describe('latestSchedule', () => {
   it('picks the version in force, not the first listed', () => {
     expect(latestSchedule(PARENT)?.effectiveFrom).toBe('2026-01-04');
     expect(latestSchedule({ recurrence: null })).toBeNull();
+  });
+});
+
+describe('periodShapeOf', () => {
+  it('prefers the catalogue row and falls back to the form value', () => {
+    expect(periodShapeOf({ periodDates: null }, 'date')).toBe('date');
+    expect(periodShapeOf({ periodDates: 'week' }, null)).toBe('week');
+    expect(periodShapeOf({ periodDates: null }, undefined)).toBeNull();
+  });
+});
+
+describe('canEditSchedule', () => {
+  it('opens only for a recurring event with an open guard and a writable rule', () => {
+    expect(canEditSchedule(PARENT)).toBe(true);
+
+    expect(
+      canEditSchedule({
+        ...PARENT,
+        schedule: { locked: true, reasons: [{ code: 'offering_attached', date: null }] },
+      }),
+    ).toBe(false);
+
+    // A rule outside the closed vocabulary stays read-only, as it already renders.
+    expect(
+      canEditSchedule({
+        ...PARENT,
+        recurrence: {
+          schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=YEARLY', endsOn: null }],
+          exceptions: [],
+        },
+      }),
+    ).toBe(false);
+
+    // A standalone event has no rule to rewrite.
+    expect(canEditSchedule({ ...PARENT, recurrence: null })).toBe(false);
+
+    // A monthly period rule is writable; a one-cycle period stores no rule.
+    expect(
+      canEditSchedule({
+        ...PARENT,
+        recurrence: null,
+        period: {
+          id: 'communion-week',
+          name: 'Communion Week',
+          cycle: null,
+          frequency: 'monthly',
+          day: 'SUN',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      canEditSchedule({
+        ...PARENT,
+        recurrence: null,
+        period: {
+          id: 'communion-week',
+          name: 'Communion Week',
+          cycle: '2026-12',
+          frequency: null,
+          day: null,
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('toScheduleWrite (FR-42h)', () => {
+  it('sends nothing when the authored rule equals the stored one', () => {
+    expect(toScheduleWrite(fromEventParent(PARENT, '2026-11-22'), PARENT)).toBeNull();
+  });
+
+  it('sends the changed rule as one recurrence arm, with endsOn when it changed', () => {
+    const seeded = fromEventParent(PARENT, '2026-11-22');
+    const schedule: EventScheduleForm = { ...seeded.schedule, cadence: 'daily', interval: '1' };
+
+    expect(toScheduleWrite({ ...seeded, schedule }, PARENT)).toEqual({
+      recurrence: { rrule: 'FREQ=DAILY' },
+    });
+    expect(toScheduleWrite({ ...seeded, schedule, endsOn: '2026-12-31' }, PARENT)).toEqual({
+      recurrence: { rrule: 'FREQ=DAILY', endsOn: '2026-12-31' },
+    });
+  });
+
+  it('compares a period rule by frequency and day, in the period vocabulary', () => {
+    const periodParent: EventParentItem = {
+      ...PARENT,
+      recurrence: null,
+      period: {
+        id: 'communion-week',
+        name: 'Communion Week',
+        cycle: null,
+        frequency: 'monthly',
+        day: 'SUN',
+      },
+    };
+    const seeded = fromEventParent(periodParent, '2026-11-22');
+
+    expect(toScheduleWrite(seeded, periodParent)).toBeNull();
+    expect(
+      toScheduleWrite(
+        { ...seeded, schedule: { ...seeded.schedule, periodDay: 'MON' } },
+        periodParent,
+      ),
+    ).toEqual({ period: { frequency: 'monthly', day: 'MON' } });
+  });
+
+  it('never writes a one-cycle period: the contract has no cycle arm', () => {
+    const oneCycle: EventParentItem = {
+      ...PARENT,
+      recurrence: null,
+      period: {
+        id: 'communion-week',
+        name: 'Communion Week',
+        cycle: '2026-12',
+        frequency: null,
+        day: null,
+      },
+    };
+    const seeded = fromEventParent(oneCycle, '2026-11-22');
+
+    expect(
+      toScheduleWrite(
+        { ...seeded, schedule: { ...seeded.schedule, cycleMonth: '2027-01' } },
+        oneCycle,
+      ),
+    ).toBeNull();
+  });
+
+  it('drops a day for a single-date period because the catalogue shape says date', () => {
+    // The edit seed cannot carry the catalogue row: `fromEventParent` leaves
+    // `periodDates` null. The call site passes the catalogue's shape, and a Home
+    // Cells event takes no day, so a stored day (legacy or malformed) must not
+    // ride the write. This fails if the `periodDates === 'date'` branch dies.
+    const homeCells: EventParentItem = {
+      ...PARENT,
+      recurrence: null,
+      period: {
+        id: 'home-cells',
+        name: 'Home Cells',
+        cycle: null,
+        frequency: 'monthly',
+        day: 'MON',
+      },
+    };
+    const seeded = fromEventParent(homeCells, '2026-11-22');
+
+    expect(seeded.schedule.periodDates).toBeNull();
+    expect(toScheduleWrite(seeded, homeCells, 'date')).toEqual({
+      period: { frequency: 'monthly' },
+    });
+    // Without the catalogue shape the stored day compares as unchanged: the day
+    // control is hidden for the same reason, and the two agree.
+    expect(toScheduleWrite(seeded, homeCells)).toBeNull();
   });
 });

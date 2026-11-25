@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "0d0a25e3844c27dea13d9ba8ddbf54062f8aabfc1ebff4bf4291e0abd07a4699",
+      "sha256": "51f906609c4fad831770c569c0110395fd83237132cc17181776069eef5b04c9",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: 10-event-create is paired with the build's existing capture - baseline null becomes events-new.png - because the create form commits against that design and R6 needs a paired state the coverage probe can score; ui/e2e/baseline/events-new.png was captured from #/events/new on 2026-11-24 by capture.spec.ts:187 and the baseline README maps it to this state, so the catalogue recorded a null beside an existing capture. why: the pairing lets mock-claims.mjs score the state (it pairs only on a non-null baseline) and touches no signature, no mock hash and no coverage class. rejected: naming a create variant that has no capture, writing the coverage line without a paired state, and pairing the design with a capture of a different surface.",
+      "reason": "changes: round event-edit-guard re-attests the catalogue after three edits - (1) 17-event-edit-locked is re-cut (history v6) to the built locked state, because the previous drawing showed the builder controls inert while FR-42h/AC-66 say a locked schedule offers none, and its auto-signature is voided to target as section 17 requires; (2) 16-event-edit is paired with the re-captured ui/e2e/baseline/event-edit.png, since the coverage tool pairs only on a non-null baseline and R6 needs the line; (3) the edit states had no claim atoms at all, so story EVE-EDIT and two spec-required controls were added (EVE-GUARD-SURFACE PRESENT anchored to AC-63a; EVE-NO-REPEATS ABSENT anchored to AC-66). why: without the atoms the surface could not be scored, and without the re-cut the drawing contradicted the text the build implements. rejected: signing 17 as drawn (a false drawing), leaving 16 unpaired (no R6 line), and scoring only surfaces this round did not touch.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - the reviewer checked the surface route (/events/new), the capture spec and the baseline README, confirmed the entry's other fields are unchanged, that the pairing enables the probe without weakening a guard, and that baseline is the field the tool reads.",
-      "at": "2026-11-25T06:51:41Z"
+      "attestation": "Seat: consistent on both passes - the 17 re-cut judged correct for a refreshed auto-signed state with the signature block removed; then the delta judged the pairing honest (capture route, fixture and case align) and the two claims faithful to AC-63a and AC-66, with no guard weakened. Two observations recorded without action: an ABSENT claim is backstopped by the baseline diff rather than its text, and 16 stays auto-signed pending the section 17 second look.",
+      "at": "2026-11-25T10:19:44Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

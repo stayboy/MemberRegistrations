@@ -82,6 +82,7 @@ const PARENT: EventParentItem = {
   endTime: '20:30',
   tracksMembers: true,
   status: 'active',
+  schedule: { locked: false, reasons: [] },
   recurrence: {
     schedules: [{ effectiveFrom: '2026-10-13', rrule: 'FREQ=DAILY', endsOn: '2026-10-15' }],
     exceptions: [{ date: '2026-10-14', kind: 'cancelled', note: 'Venue flooded' }],

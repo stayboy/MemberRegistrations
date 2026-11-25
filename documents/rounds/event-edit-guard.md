@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                                                                                         |
+| Status                 | CLOSED                                                                                                                                                                       |
 | Tier                   | 2                                                                                                                                                                            |
 | Mode                   | `unattended (auto-accept recommendations)`                                                                                                                                   |
 | Base                   | `748f6d2`                                                                                                                                                                    |
@@ -85,6 +85,14 @@ covering a headcount; the period arm's comparison; the header's stale gate sente
 `Seat: consistent`, with two notes applied: AC-66 now states the **recurring** precondition, and the response's `period`
 is explained as carrying no `cycle`.
 
+**Tier 2 code review** (`0813`, Standards + Spec): `Seat: consistent` with one **P2** and one user-visible nit. The P2:
+`toScheduleWrite` keyed its single-date special case off an edit-seed field that is always null, so the branch was dead
+and worked only because a single-date period's stored `day` happens to be null - fixed by deriving the shape from the
+catalogue, the same projection the builder uses, with a test that fails if the dead branch returns. The nit: the edit
+branch's preview did not feed the page-level counts, so an audience chip could disagree with the summary beside it -
+wired to the same state the create route uses. The remaining nits (a bare `Text` where `Label` is preferred, and the
+locked read-out stating the rule three times) are recorded and left, not silently dropped.
+
 Seat: consistent
 
 ## Plan
@@ -114,12 +122,16 @@ Acceptance criteria (numbered):
 
 ## Verification
 
-| Gate                           | Command               | Result                |
-| ------------------------------ | --------------------- | --------------------- |
-| docs (round doc + three specs) | `npm run verify:fast` | pass 4/4              |
-| PR 1 contract                  | `npm run verify:fast` | pass 4/4 (1223 tests) |
-| PR 2 API                       | `npm run verify:fast` | pass 4/4 (1245 tests) |
-| PR 2 API                       | `npm run smoke`       | PASS, 84 checks       |
+| Gate                           | Command                        | Result                                                                                         |
+| ------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| docs (round doc + three specs) | `npm run verify:fast`          | pass 4/4                                                                                       |
+| PR 1 contract                  | `npm run verify:fast`          | pass 4/4 (1223 tests)                                                                          |
+| PR 2 API                       | `npm run verify:fast`          | pass 4/4 (1245 tests)                                                                          |
+| PR 2 API                       | `npm run smoke`                | PASS, 84 checks                                                                                |
+| PR 3 UI                        | `npm run verify:fast`          | pass 4/4 (1245 tests)                                                                          |
+| PR 3 UI                        | `npm run ui:test`              | 567 passed                                                                                     |
+| PR 3 UI                        | `npm --prefix ui run test:dom` | 258 passed                                                                                     |
+| PR 3 UI (merged)               | `npm run ui:e2e`               | 93 passed (re-run 1 of 2: one retired-route test failed on a cold server, 93/93 on the re-run) |
 
 gate-run 2026-11-25T09:26:21.783Z profile=fast steps=4/4 lines=4 bytes=718
 
@@ -130,8 +142,21 @@ gate-run 2026-11-25T09:26:21.783Z profile=fast steps=4/4 lines=4 bytes=718
 
 ## Mock sign-off
 
-| Surface | Mock | Capture | sha256 | Signer | Date | Verdict |
-| ------- | ---- | ------- | ------ | ------ | ---- | ------- |
+| Surface                | Mock                                  | Capture                          | sha256     | Signer       | Date       | Verdict     |
+| ---------------------- | ------------------------------------- | -------------------------------- | ---------- | ------------ | ---------- | ----------- |
+| event edit, guard open | `mockups/v2-events/16-event-edit.png` | `ui/e2e/baseline/event-edit.png` | `71ee1d0b` | owner (owed) | 2026-11-25 | auto-signed |
+
+Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
+
+The pair is the round's surface, and the build stands under both drawings: `16` was unchanged by the re-cut (the
+recorder reported it identical) once the edit route regained FR-42b's summary and Preview, and its baseline was
+re-captured (`event-edit.png`, 67 KB -> 84 KB). `17` was **wrong** - it drew the builder's controls inert, while
+FR-42h/AC-66 say a locked schedule offers no control at all - so it was re-cut to the built state (notice with the cause,
+stored rule line, "Dates on the rule in force" with no Preview) and its auto-signature voided to `target`, as §17
+requires. The two edit claims (`EVE-GUARD-SURFACE` PRESENT, `EVE-NO-REPEATS` ABSENT) were added so the state can be
+scored at all. The line still runs with `--allow-short`: the **selection** carries one `spec-required` + `ABSENT`
+control, below the tool's floor of three - reaching the floor would mean scoring the create and headcount states, which
+this round did not touch.
 
 ## Mock parity
 
@@ -140,8 +165,14 @@ gate-run 2026-11-25T09:26:21.783Z profile=fast steps=4/4 lines=4 bytes=718
 
 ## Acceptance
 
-| Criterion | Met | Evidence | Verdict |
-| --------- | --- | -------- | ------- |
+| Criterion                                                                                 | Met | Evidence                                                                                                                                      | Verdict  |
+| ----------------------------------------------------------------------------------------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Each guard cause locks the read and refuses the write with its code                       | yes | `tests/api/event-schedule-write.test.ts` - every cause, on the read and on the 409                                                            | ACCEPTED |
+| An unchanged rule writes nothing; a changed one writes once                               | yes | DOM tests: "sends no schedule write when the rule is unchanged", and one `PUT` for a changed rule                                             | ACCEPTED |
+| No occurrence on or before today is deleted or moved, and a future cancelled row survives | yes | API test: the rewrite keeps the cancelled row and its note; the window is read before the delete                                              | ACCEPTED |
+| A period rule edits frequency/day and 409s once the guard closes                          | yes | API and DOM tests, including Home Cells taking no day                                                                                         | ACCEPTED |
+| `PATCH` refuses `recurrence` and `period` by name                                         | yes | `tests/unit/event-schemas.test.ts`; the contract merged in #237                                                                               | ACCEPTED |
+| The UI never offers an edit the write would refuse                                        | yes | `canEditSchedule` reads `schedule.locked`, computed by the same function the write calls; the code review confirmed no second source of truth | ACCEPTED |
 
 ## Deviations
 

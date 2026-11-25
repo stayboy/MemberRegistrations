@@ -25,16 +25,18 @@ import { AddRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { isUnauthorized } from '../api/errors';
+import { ApiError, isUnauthorized } from '../api/errors';
 import {
   createEventParent,
   getEventParent,
   listEventPeriods,
   updateEventParent,
+  writeEventSchedule,
   type CreateEventParentPayload,
   type EventParentItem,
   type EventPeriodItem,
   type EventPreview,
+  type EventScheduleWriteInput,
   type PeriodDay,
   type UpdateEventParentInput,
 } from '../api/events';
@@ -45,13 +47,16 @@ import { ScheduleBuilder } from '../components/ScheduleBuilder';
 import { SchedulePreview } from '../components/SchedulePreview';
 import {
   EVENT_VENUE_OPTIONS,
+  canEditSchedule,
   createEmptyEventForm,
   fromEventParent,
   latestSchedule,
   occurrenceErrorKey,
+  periodShapeOf,
   toCreateEventPayload,
   toPreviewInput,
   toScheduleRrule,
+  toScheduleWrite,
   toUpdateEventPayload,
   validateEventForm,
   type EventFormErrors,
@@ -63,7 +68,9 @@ import {
 import { utcToday } from '../format/member-form';
 import { PERIOD_DAY_LABELS } from '../format/period';
 import { cadenceLabel, fromRrule, weekdayOf } from '../format/rrule';
+import { lockReasonsFromProblem, scheduleLockSentence } from '../format/schedule-lock';
 import { scheduleLabel } from '../format/series';
+import { writeFailure, type WriteFailure } from '../format/write-errors';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
 
@@ -270,7 +277,8 @@ export function EventFormPage() {
 
   const [values, setValues] = useState<EventFormValues>(() => createEmptyEventForm());
   const [errors, setErrors] = useState<EventFormErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formFailure, setFormFailure] = useState<WriteFailure | null>(null);
+  const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [preview, setPreview] = useState<EventPreview | undefined>(undefined);
@@ -317,13 +325,22 @@ export function EventFormPage() {
     mutationFn: (payload: UpdateEventParentInput) =>
       updateEventParent(baseUrl, token, id ?? '', payload),
   });
+  // FR-42h: the rule write is its own verb, and it is only dispatched when the
+  // authored rule differs from the stored one (`toScheduleWrite`).
+  const scheduleMutation = useMutation({
+    mutationFn: (input: EventScheduleWriteInput) =>
+      writeEventSchedule(baseUrl, token, id ?? '', input),
+  });
   const activateMutation = useMutation({
     mutationFn: (eventId: string) =>
       updateEventParent(baseUrl, token, eventId, { status: 'active' }),
   });
 
   const isSaving =
-    createMutation.isPending || updateMutation.isPending || activateMutation.isPending;
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    scheduleMutation.isPending ||
+    activateMutation.isPending;
 
   function invalidateEvents(): void {
     void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
@@ -357,7 +374,7 @@ export function EventFormPage() {
   ): void {
     setValues((current) => ({ ...current, [key]: value }));
     clearError(key as EventFormField);
-    setFormError(null);
+    setFormFailure(null);
   }
 
   /**
@@ -382,7 +399,7 @@ export function EventFormPage() {
       };
     });
     clearError('effectiveFrom');
-    setFormError(null);
+    setFormFailure(null);
   }
 
   /** The builder is one control group, so its keys clear together. */
@@ -404,7 +421,7 @@ export function EventFormPage() {
       }
       return next;
     });
-    setFormError(null);
+    setFormFailure(null);
   }
 
   function setOccurrence(index: number, key: keyof OccurrenceFormValues, value: string): void {
@@ -444,25 +461,79 @@ export function EventFormPage() {
     }
     // AC 8/FR-42g: a create 409 is a mint collision. The form has no number
     // field to bind it to, so it is the form's banner; an update's conflict is a
-    // banner too.
-    setFormError(errorMessage(error));
+    // banner too, titled by its problem+json code.
+    setFormFailure(writeFailure(error, 'The event was not saved'));
+  }
+
+  /**
+   * FR-42g/FR-42h: a `409 recurrence_locked` is the edit form's banner carrying
+   * the API's own reasons, and a `422` is the same banner under its fallback
+   * title. The identity `PATCH` may already have succeeded, so the banner says
+   * the rule was not saved rather than claiming the whole event was lost.
+   */
+  function onScheduleError(error: unknown): void {
+    if (isUnauthorized(error)) {
+      void signOut();
+      return;
+    }
+    const failure = writeFailure(error, 'The schedule was not saved');
+    const reasons = lockReasonsFromProblem(error instanceof ApiError ? error.problem : null);
+    const causes = scheduleLockSentence(reasons, formatDate);
+    setFormFailure({
+      title: failure.title,
+      message: causes ? `${failure.message} ${causes}` : failure.message,
+    });
   }
 
   function submit(mode: CommitMode): void {
     if (isSaving) return;
 
-    const nextErrors = validateEventForm(values);
+    const nextErrors = validateEventForm(
+      values,
+      isEdit ? { schedule: parent ? canEditSchedule(parent) : false } : {},
+    );
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    setFormError(null);
+    setFormFailure(null);
+    setScheduleNotice(null);
     setActivationError(null);
 
     if (mode === 'update') {
+      // FR-42h: the rule is sent only when it changed, and only when the write
+      // is offered at all. An identity-only save on a locked or unchanged
+      // schedule is a bare `PATCH`. The period's shape comes from the catalogue
+      // (the parent read carries no `dates`) through the same helper the builder
+      // uses, so a single-date period never sends a day.
+      const catalogueRow = periodsQuery.data?.find(
+        (period) => period.id === values.schedule.periodId,
+      );
+      const scheduleInput = parent
+        ? toScheduleWrite(values, parent, periodShapeOf(values.schedule, catalogueRow?.dates))
+        : null;
+
       updateMutation.mutate(toUpdateEventPayload(values), {
         onSuccess: (updated) => {
           invalidateEvents();
-          navigate(`/events/${encodeURIComponent(updated.id)}`);
+          if (!scheduleInput) {
+            navigate(`/events/${encodeURIComponent(updated.id)}`);
+            return;
+          }
+          scheduleMutation.mutate(scheduleInput, {
+            onSuccess: (result) => {
+              invalidateEvents();
+              if (!result.generated) {
+                // The rule is saved; the API could not produce the window. Say
+                // so once, without failing the save or writing it twice.
+                setScheduleNotice(
+                  'The schedule was saved. The API could not produce dates over the event’s current window yet; generate the calendar again to see the new dates.',
+                );
+                return;
+              }
+              navigate(`/events/${encodeURIComponent(updated.id)}`);
+            },
+            onError: onScheduleError,
+          });
         },
         onError: onRequestError,
       });
@@ -473,7 +544,7 @@ export function EventFormPage() {
     try {
       payload = toCreateEventPayload(values);
     } catch (error) {
-      setFormError(errorMessage(error));
+      setFormFailure({ title: 'The event was not saved', message: errorMessage(error) });
       return;
     }
 
@@ -614,8 +685,9 @@ export function EventFormPage() {
     formatDate,
   });
 
-  // The chips count at the first resolved date; the edit form has no preview,
-  // so it reads the parent's stored start date instead.
+  // The chips count at the first resolved date of the authored rule, exactly as
+  // the resolved-dates summary beside them does; an edit falls back to the stored
+  // start date until the preview settles.
   const countAt = values.repeats
     ? (firstResolvedDate ?? (isEdit ? parent?.startDate : undefined))
     : firstRowDate(values.occurrences);
@@ -627,9 +699,31 @@ export function EventFormPage() {
     formatDate,
   });
 
+  // FR-42h: an event is recurring by an rrule or by a period; the edit route
+  // offers the builder only when the read reports the guard open and the stored
+  // schedule is one the write can express.
+  const recurring = Boolean(parent?.recurrence ?? parent?.period);
+  const scheduleEditable = parent ? canEditSchedule(parent) : false;
+  const scheduleLocked = parent?.schedule.locked === true;
+  const lockSentence = scheduleLockSentence(parent?.schedule.reasons ?? [], formatDate);
+
+  /**
+   * The stored rule in one line, for the surface that cannot edit it: the same
+   * facts the resolved-dates block would carry, taken from the read rather than a
+   * preview fetch. A period event names its provenance; an rrule event names the
+   * rule and its window.
+   */
+  const storedScheduleLine = parentPeriod
+    ? periodLine(parentPeriod.name, parentPeriod.frequency, parentPeriod.day, parentPeriod.cycle)
+    : schedule
+      ? `${storedRule ?? schedule.rrule} · from ${formatDate(schedule.effectiveFrom)}${
+          schedule.endsOn ? ` to ${formatDate(schedule.endsOn)}` : ', with no end date'
+        }.`
+      : null;
+
   const title = isEdit ? 'Edit event' : 'New event';
   const description = isEdit
-    ? 'Update the identity and when/where fields. Dates and schedule versions are managed from the event detail.'
+    ? 'Update the identity and when/where fields, and the rule while its dates have no history.'
     : 'The event identity, its schedule or named period, and its venue. The API mints the event number, derives the range and generates the first window.';
 
   return (
@@ -690,11 +784,22 @@ export function EventFormPage() {
           }}
           noValidate
         >
-          {formError ? (
+          {formFailure ? (
             <MessageBar intent="error">
               <MessageBarBody>
-                <MessageBarTitle>The event was not saved</MessageBarTitle>
-                {formError}
+                <MessageBarTitle>{formFailure.title}</MessageBarTitle>
+                {formFailure.message}
+              </MessageBarBody>
+            </MessageBar>
+          ) : null}
+
+          {scheduleNotice ? (
+            <MessageBar intent="warning">
+              <MessageBarBody>
+                <MessageBarTitle>
+                  The schedule was saved; its dates were not generated
+                </MessageBarTitle>
+                {scheduleNotice}
               </MessageBarBody>
             </MessageBar>
           ) : null}
@@ -773,7 +878,9 @@ export function EventFormPage() {
                   </div>
                   <Text size={200} className={styles.helper}>
                     {isEdit
-                      ? 'Dates and schedule versions are added from the event detail; an update carries neither.'
+                      ? recurring
+                        ? 'This event repeats. Its type was chosen when it was created and is not part of an edit.'
+                        : 'This event does not repeat. Its dates are managed from the event detail.'
                       : values.repeats
                         ? 'The API generates the first window from this rule, or resolves the period’s dates. The weekday or day comes from the start date in When and where.'
                         : 'One row per date, and nothing else. Each date is unique; the API derives the event’s range from them.'}
@@ -781,38 +888,103 @@ export function EventFormPage() {
                 </div>
 
                 {isEdit ? (
-                  <div className={styles.readOnlyRows}>
-                    <div className={styles.readOnlyRow}>
-                      <Text className={styles.label}>Repeats</Text>
-                      <Text>
-                        {parentPeriod
-                          ? parentPeriod.name
-                          : parent?.recurrence
-                            ? storedCadence
-                              ? cadenceLabel(storedCadence)
-                              : "A schedule outside the form's vocabulary"
-                            : 'Standalone event'}
-                      </Text>
-                    </div>
-                    {schedule ? (
-                      <>
-                        <div className={styles.readOnlyRow}>
-                          <Text className={styles.label}>Schedule</Text>
-                          <Text>{storedRule ?? schedule.rrule}</Text>
-                        </div>
-                        <div className={styles.readOnlyRow}>
-                          <Text className={styles.label}>From</Text>
-                          <Text>{formatDate(schedule.effectiveFrom)}</Text>
-                        </div>
-                        <div className={styles.readOnlyRow}>
-                          <Text className={styles.label}>Ends on</Text>
-                          <Text>
-                            {schedule.endsOn ? formatDate(schedule.endsOn) : 'No end date'}
-                          </Text>
-                        </div>
-                      </>
+                  <>
+                    {scheduleLocked ? (
+                      <MessageBar intent="warning">
+                        <MessageBarBody>
+                          <MessageBarTitle>The schedule cannot change</MessageBarTitle>
+                          {lockSentence ? `${lockSentence} ` : ''}The name, description, audience
+                          and times still save; a schedule write here is refused{' '}
+                          <strong>409 recurrence_locked</strong>.
+                        </MessageBarBody>
+                      </MessageBar>
                     ) : null}
-                  </div>
+
+                    {scheduleEditable ? (
+                      <>
+                        <ScheduleBuilder
+                          value={values.schedule}
+                          onChange={patchSchedule}
+                          effectiveFrom={values.effectiveFrom}
+                          endsOn={values.endsOn}
+                          onEndsOnChange={(endsOn) => setField('endsOn', endsOn)}
+                          errors={errors}
+                          periods={periods}
+                          periodsLoading={periodsQuery.isPending}
+                          periodsError={periodsQuery.isError}
+                          fixedArm={parentPeriod ? 'period' : 'rule'}
+                        />
+                        <Text size={200} className={styles.helper}>
+                          {parentPeriod
+                            ? 'Saving a changed period replaces the dates it generated and regenerates the calendar to match.'
+                            : `Saving a changed rule replaces the dates from ${
+                                schedule ? formatDate(schedule.effectiveFrom) : 'its start date'
+                              } and regenerates the calendar to match.`}{' '}
+                          Nothing dated today or earlier is touched; an unchanged schedule sends no
+                          write.
+                        </Text>
+                        <SchedulePreview
+                          input={previewInput}
+                          context={scheduleContext}
+                          onPreview={setPreview}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div className={styles.readOnlyRows}>
+                          <div className={styles.readOnlyRow}>
+                            <Text className={styles.label}>Repeats</Text>
+                            <Text>
+                              {parentPeriod
+                                ? parentPeriod.name
+                                : parent?.recurrence
+                                  ? storedCadence
+                                    ? cadenceLabel(storedCadence)
+                                    : "A schedule outside the form's vocabulary"
+                                  : 'Standalone event'}
+                            </Text>
+                          </div>
+                          {schedule ? (
+                            <>
+                              <div className={styles.readOnlyRow}>
+                                <Text className={styles.label}>Schedule</Text>
+                                <Text>{storedRule ?? schedule.rrule}</Text>
+                              </div>
+                              <div className={styles.readOnlyRow}>
+                                <Text className={styles.label}>From</Text>
+                                <Text>{formatDate(schedule.effectiveFrom)}</Text>
+                              </div>
+                              <div className={styles.readOnlyRow}>
+                                <Text className={styles.label}>Ends on</Text>
+                                <Text>
+                                  {schedule.endsOn ? formatDate(schedule.endsOn) : 'No end date'}
+                                </Text>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                        {!scheduleLocked && parentPeriod && parentPeriod.frequency === null ? (
+                          <Text size={200} className={styles.helper}>
+                            This period resolved once and stores no rule, so there is no cycle to
+                            rewrite here.
+                          </Text>
+                        ) : null}
+                        {!scheduleLocked && parent?.recurrence && !storedRuleInVocabulary ? (
+                          <Text size={200} className={styles.helper}>
+                            The stored rule sits outside the form’s vocabulary, so it is shown from
+                            its stored string rather than edited.
+                          </Text>
+                        ) : null}
+                        {storedScheduleLine ? (
+                          // No Preview control here: the officer cannot change this rule, so
+                          // there is no authored rule to resolve (FR-42b, FR-42h).
+                          <Text size={200} className={styles.helper}>
+                            {storedScheduleLine}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </>
                 ) : values.repeats ? (
                   <>
                     <ScheduleBuilder
@@ -1161,10 +1333,12 @@ function railStartOf({
   readonly formatDate: (value: string | null | undefined) => string;
 }): { readonly editable: boolean; readonly value: string; readonly hint: string } {
   if (isEdit) {
+    // The rail keeps the event's **stored** first date: an authored rule's
+    // preview drives the chips and the summary, never this derived fact.
     return {
       editable: false,
       value: parent ? formatDate(parent.startDate) : '—',
-      hint: 'The event’s first date, derived by the API.',
+      hint: 'The event’s stored first date, derived by the API.',
     };
   }
 

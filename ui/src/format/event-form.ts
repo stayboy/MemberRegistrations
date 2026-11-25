@@ -5,6 +5,7 @@ import type {
   EventParentItem,
   EventPreviewInput,
   EventRecurrenceSchedule,
+  EventScheduleWriteInput,
   EventVenueType,
   PeriodDay,
   UpdateEventParentInput,
@@ -18,6 +19,7 @@ import {
   weekdayOf,
   type MonthPosition,
   type MonthlyMode,
+  type ParsedSchedule,
   type RecurrenceCadence,
   type WeekdayCode,
 } from './rrule';
@@ -74,9 +76,9 @@ export interface EventScheduleForm {
   readonly periodId: string;
   /**
    * The catalogue's `dates` projection: a `date` period (Home Cells) returns one
-   * date, so it takes no day inside it and the control is hidden. Null until the
-   * operator picks a period (or on an edit, where the parent read does not carry
-   * the catalogue row).
+   * date, so it takes no day inside it and the control is hidden. Set when the
+   * operator picks a period; an edit seeds it from the fetched catalogue, since
+   * the parent read carries the provenance but not the catalogue row.
    */
   readonly periodDates: 'week' | 'date' | null;
   readonly periodFrequency: PeriodFrequency;
@@ -299,7 +301,18 @@ function validateSchedule(values: EventFormValues, errors: EventFormErrors): voi
  * (FR-42b). With Repeats on the date rows are replaced by the builder, so only
  * its fields are validated (FR-42f).
  */
-export function validateEventForm(values: EventFormValues): EventFormErrors {
+export interface ValidateEventFormOptions {
+  /**
+   * The edit route validates the rule only when it can send one (FR-42h): a
+   * locked or read-only schedule must not block saving the identity.
+   */
+  readonly schedule?: boolean;
+}
+
+export function validateEventForm(
+  values: EventFormValues,
+  options: ValidateEventFormOptions = {},
+): EventFormErrors {
   const errors: EventFormErrors = {};
 
   const name = values.name.trim();
@@ -340,7 +353,7 @@ export function validateEventForm(values: EventFormValues): EventFormErrors {
   }
 
   if (values.repeats) {
-    validateSchedule(values, errors);
+    if (options.schedule !== false) validateSchedule(values, errors);
     return errors;
   }
 
@@ -463,7 +476,8 @@ export function fromEventParent(
         periodFrequency: period.frequency === 'monthly' ? 'monthly' : 'one-cycle',
         cycleMonth: period.cycle ?? base.cycleMonth,
         // The provenance's `day` is already the period vocabulary; the catalogue
-        // row (and so `periodDates`) is not carried by the parent read.
+        // row (and so `periodDates`) is not carried by the parent read - the edit
+        // route seeds it from the fetched catalogue once that arrives.
         periodDay: period.day ?? '',
       }
     : parsed
@@ -518,6 +532,98 @@ export function toScheduleRrule(schedule: EventScheduleForm, effectiveFrom: stri
     position: schedule.position,
     positionWeekday: schedule.positionWeekday,
   });
+}
+
+/**
+ * Whether the edit route may offer the builder (FR-42h, AC-66). The event must
+ * be recurring, its read must report the guard open, and its stored schedule
+ * must be one the write can express: an rrule inside the closed vocabulary, or a
+ * monthly period rule. A one-cycle period resolved once and stores no rule - the
+ * API's period arm requires a stored `frequency` - and a rule outside the
+ * vocabulary stays read-only, as it already renders.
+ */
+export function canEditSchedule(parent: EventParentItem): boolean {
+  if (parent.schedule.locked) return false;
+  if (parent.period) return parent.period.frequency === 'monthly';
+  const stored = latestSchedule(parent);
+  return stored !== null && parseSchedule(stored.rrule) !== null;
+}
+
+function sameParsedRule(left: ParsedSchedule, right: ParsedSchedule): boolean {
+  return (
+    left.cadence === right.cadence &&
+    left.interval === right.interval &&
+    left.weekdays.join(',') === right.weekdays.join(',') &&
+    left.monthlyMode === right.monthlyMode &&
+    left.dayOfMonth === right.dayOfMonth &&
+    left.position === right.position &&
+    left.positionWeekday === right.positionWeekday
+  );
+}
+
+/**
+ * The period's shape for the builder and the schedule writer (FR-42f/FR-42h):
+ * the catalogue row wins when the page has it, and the form's own value is the
+ * fallback (the create sets it when a period is picked; the parent read carries
+ * no catalogue row, so the edit route must pass the catalogue's `dates`). One
+ * function, so a single-date period hides the day control **and** never sends a
+ * day - the two can never disagree.
+ */
+export function periodShapeOf(
+  schedule: Pick<EventScheduleForm, 'periodDates'>,
+  catalogueDates: 'week' | 'date' | null | undefined,
+): 'week' | 'date' | null {
+  return catalogueDates ?? schedule.periodDates;
+}
+
+/**
+ * FR-42h: the rule is sent **only when the authored one differs from the stored
+ * one**, compared through the mapping that authored it (never the raw string, so
+ * a stored rule with its keys in another order is still the same rule). A period
+ * event compares `frequency`/`day`; a one-cycle period has no edit arm in the
+ * contract and therefore never produces a write. `periodDates` is the resolved
+ * period shape (see {@link periodShapeOf}); the caller passes the catalogue's
+ * when it has it. Null means "nothing to send".
+ */
+export function toScheduleWrite(
+  values: EventFormValues,
+  parent: EventParentItem,
+  periodDates: EventScheduleForm['periodDates'] = values.schedule.periodDates,
+): EventScheduleWriteInput | null {
+  if (!canEditSchedule(parent)) return null;
+
+  if (parent.period) {
+    // A one-cycle period stores no frequency, and the write's period arm requires
+    // one: the cycle it resolved in is fixed. `canEditSchedule` refuses it first.
+    if (parent.period.cycle !== null) return null;
+
+    const day = periodDates === 'date' ? '' : values.schedule.periodDay;
+    const nextDay: PeriodDay | null = day === '' ? null : day;
+    const unchanged = parent.period.frequency === 'monthly' && parent.period.day === nextDay;
+    if (unchanged) return null;
+
+    return { period: { frequency: 'monthly', ...(nextDay ? { day: nextDay } : {}) } };
+  }
+
+  const stored = latestSchedule(parent);
+  if (!stored) return null;
+
+  const rrule = toScheduleRrule(values.schedule, values.effectiveFrom);
+  if (!rrule) return null;
+
+  const authored = parseSchedule(rrule);
+  const current = parseSchedule(stored.rrule);
+  const endsOn = values.endsOn.trim() || null;
+  if (
+    authored &&
+    current &&
+    sameParsedRule(authored, current) &&
+    (stored.endsOn ?? null) === endsOn
+  ) {
+    return null;
+  }
+
+  return { recurrence: { rrule, ...(endsOn ? { endsOn } : {}) } };
 }
 
 /**

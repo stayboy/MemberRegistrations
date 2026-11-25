@@ -11,6 +11,7 @@ import {
   getEventAttendance,
   listEvents,
   updateEventParent,
+  writeEventSchedule,
   type EventAttendance,
   type EventItem,
   type EventParentItem,
@@ -107,6 +108,7 @@ const PARENT: EventParentItem = {
   endTime: '19:30',
   tracksMembers: true,
   status: 'draft',
+  schedule: { locked: false, reasons: [] },
   recurrence: null,
   occurrences: [],
   offerings: [],
@@ -367,6 +369,64 @@ describe('updateEventParent', () => {
     await updateEventParent(BASE, TOKEN, 'event-parent-1', { status: 'active' });
 
     expect(JSON.parse(String(requestOptions(0).body))).toEqual({ status: 'active' });
+  });
+});
+
+describe('writeEventSchedule', () => {
+  it('PUTs one recurrence arm to the schedule path and returns the after-write body', async () => {
+    const result = {
+      recurrence: {
+        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY', endsOn: null }],
+        exceptions: [],
+      },
+      period: null,
+      occurrences: [],
+      generated: true,
+    };
+    fetchMock.mockResolvedValue(jsonResponse(result));
+
+    const written = await writeEventSchedule(BASE, TOKEN, 'event/parent 1', {
+      recurrence: { rrule: 'FREQ=DAILY', endsOn: '2026-12-31' },
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${BASE}/gateway/v1/events/event%2Fparent%201/schedule`,
+    );
+    expect(requestOptions(0).method).toBe('PUT');
+    expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      recurrence: { rrule: 'FREQ=DAILY', endsOn: '2026-12-31' },
+    });
+    expect(written).toEqual(result);
+  });
+
+  it('PUTs the period arm with the period day vocabulary', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        recurrence: null,
+        period: { id: 'communion-week', name: 'Communion Week', frequency: 'monthly', day: 'MON' },
+        occurrences: [],
+        generated: false,
+      }),
+    );
+
+    const written = await writeEventSchedule(BASE, TOKEN, 'event-1', {
+      period: { frequency: 'monthly', day: 'MON' },
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE}/gateway/v1/events/event-1/schedule`);
+    expect(JSON.parse(String(requestOptions(0).body))).toEqual({
+      period: { frequency: 'monthly', day: 'MON' },
+    });
+    expect(written.generated).toBe(false);
+  });
+
+  it('rejects an empty response body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null));
+
+    await expect(
+      writeEventSchedule(BASE, TOKEN, 'event-1', { recurrence: { rrule: 'FREQ=DAILY' } }),
+    ).rejects.toMatchObject({ status: 500, message: 'The schedule response was empty.' });
   });
 });
 
