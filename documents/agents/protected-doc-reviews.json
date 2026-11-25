@@ -56,14 +56,14 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "caec8f1472ac45680917cc09ed4971f63830f36d1abe5c862be3b268b608d69a",
+      "sha256": "41a07cc12ced45cba60fa840b1c7413618e73000ce752bc6e49c3f0281d94cc7",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: one note under the Mock sign-off template - the Mock cell names mockups/<set>/<file>, which is the stable part of the record, while a signature request additionally names the absolute folder on the owner’s machine, which does not belong in the durable record because worktrees are ephemeral and the folder is git-ignored. why: it closes the P2 from the review of the AGENTS.md section 14 bullet in the same change - the rule bound the request, and the record that outlives it carries the set-relative path. rejected: writing an absolute path into round docs (it ages with the worktree) and leaving the division implicit.",
+      "reason": "changes: the round-doc template gains a Parity section - a per-state table (State, mock.sha256, Capture, Capture hash, Mechanism, Verdict) - with never compared as a legal verdict, scoped as a finding that names what was not compared and leaves the state open rather than a resting state, and a note that the table verdict is the comparison while the Mock sign-off verdict is the signature. why: the parity grill found 21 signed states with 6 captures paired, 10 with none and 11 with no claims, so a signature had come to mean approved rather than compared. rejected: a Capture hash column verified against the catalogue (it records a baseline path, not a digest, so the round records the hash), an ambiguous single Catalogue hash column (it now names mock.sha256 and distinguishes signed.sha256), and restating R6 capture rule as policy prose in this file.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - the set-relative path is the right thing to record, the note contradicts neither the template above it nor section 14, and it sits where every round doc reads its shape from.",
-      "at": "2026-11-25T11:27:09Z"
+      "attestation": "Seat: consistent - the table asks for fields a round can fill, the section does not contradict the sign-off template or the claim guard, and never compared is better than borrowing matches. Its four sharpenings are applied: the hash column names mock.sha256, the capture hash is marked as round-recorded, Mechanism is defined as - for an uncompared row, and the guard-policy sentence was trimmed so the file keeps its shape.",
+      "at": "2026-11-25T22:16:35Z"
     },
     {
       "path": ".github/merge-policy.md",
