@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "b36be6258437925d15438e007a7890499a61f39bcf1a5b8ff26e80dc79be2d40",
+      "sha256": "e8d7d91da2661e760dd50eb99d731c441d61c57537e90aca044b231a9ba7206f",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner signed two states after round event-edit-guard - 16-event-edit (71ee1d0b) and 17-event-edit-locked (32d65ad8) - each flipping coverage to signed with signed.by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256; 16 loses its auto-signed basis, 17 had none. why: the round built both surfaces and the owner was shown the two drawings before signing; 16 was unchanged by the round and 17 was re-cut to the built locked state. rejected: signing the remaining auto-signed create states and the two period-detail designs on the same word (the agent does not infer a signature the owner was not shown), and leaving 17 at target after the owner signed it.",
+      "reason": "changes: six states re-cut to the build order and label - 10-event-create v10, -daily v7, -monthly v8, -no-match v7, 16-event-edit v10 and 20-event-preview-dialog v2 - because the drawings put the Named period switch after Repeats while the build renders it first, with None as the neutral label where the build says None - repeat by rule. All six are now target with their new mock hashes, and their signed/basis blocks are gone. why: a refresh voids a signature through target (section 17), including the owner signature on 16 given an hour earlier, which only the owner can restore; 10 and 16 also lose their baseline pairings because a target may not carry one. rejected: keeping the old order (the drawing would teach the wrong position), changing the build to the drawing (the build is merged and the text is silent on order), and silently re-pointing 16 while leaving its signature in place.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - shape correct for both entries (coverage signed, by owner, at, sha256 equal to the mock hash), the stale auto-signed basis removed cleanly, 17 signable with a null baseline (no rule binds signed to one), and no other entry touched. The seat also recorded that nothing validates a signed block: the sha256 equality is a convention, not a gate - backlogging that guard is the follow-up, not a defect of this change.",
-      "at": "2026-11-25T11:14:58Z"
+      "attestation": "Seat: consistent - the six-way drop to target is the correct refresh semantics, including the owner-signed 16; un-pairing 10 and 16 is forced by the target/baseline guard and loses nothing while the states are unscored; and all six drawings now render Named period before Repeats with the build label. The seat noted one consequence without action: the 2026-11-24 basis text is gone from the five, so the 1:1 provenance now lives in the round doc until they are re-signed.",
+      "at": "2026-11-25T11:48:36Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
