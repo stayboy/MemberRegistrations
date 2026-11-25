@@ -109,19 +109,19 @@ const PERIODS: EventPeriodItem[] = [
     name: 'Communion Week',
     definition:
       'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
-    kind: 'week',
+    dates: 'week',
   },
   {
     id: 'gospel-week',
     name: 'Gospel Week',
     definition: 'The last week of the month before, when ministries hold their meetings.',
-    kind: 'week',
+    dates: 'week',
   },
   {
     id: 'home-cells',
     name: 'Home Cells',
     definition: 'The Monday of week 1 of the cycle month - the Monday of Communion Week.',
-    kind: 'date',
+    dates: 'date',
   },
 ];
 
@@ -707,24 +707,40 @@ describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
     await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
 
+    // The period day is the API's three-letter vocabulary, never the rrule's `SU`.
     expect(lastCreatePayload().period).toEqual({
       id: 'communion-week',
       frequency: 'monthly',
-      day: 'SU',
+      day: 'SUN',
       effectiveFrom: '2027-03-04',
     });
   });
 
-  it('offers no day control for a single-date period', async () => {
+  it('hides the day control for a single-date period and submits it with no day', async () => {
     const user = userEvent.setup();
     renderCreate();
     await waitForDefaultAudience();
 
+    await user.type(screen.getByLabelText(/^Name/), 'Home cells meeting');
     await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
     await choosePeriod('Home Cells');
     await user.click(screen.getByRole('radio', { name: /Monthly/ }));
 
-    expect(screen.getByRole('combobox', { name: 'Day inside the period' })).toBeDisabled();
+    // `dates: "date"` means one date, so there is no day control to offer.
+    expect(screen.queryByRole('combobox', { name: 'Day inside the period' })).toBeNull();
+    expect(screen.getByText(/resolves to a single date/)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    const period = lastCreatePayload().period;
+    expect(period).toEqual({
+      id: 'home-cells',
+      frequency: 'monthly',
+      effectiveFrom: '2027-03-04',
+    });
+    expect(period).not.toHaveProperty('day');
   });
 });
 

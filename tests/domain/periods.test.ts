@@ -357,8 +357,9 @@ describe('named periods', () => {
       definition:
         'The Monday of week 1 of the cycle month - the Monday of Communion Week, one date.',
     });
-    // The wire shape is the three contract fields; the rule stays server-side.
-    expect(Object.keys(EVENT_PERIODS[0]!).sort()).toEqual(['definition', 'id', 'name']);
+    // The wire shape is the contract fields; the rule stays server-side while
+    // `dates` is its `kind`, projected so the form can hide the day control.
+    expect(Object.keys(EVENT_PERIODS[0]!).sort()).toEqual(['dates', 'definition', 'id', 'name']);
   });
 
   it('declares each period as an ordinal position on a Monday-start calendar', () => {

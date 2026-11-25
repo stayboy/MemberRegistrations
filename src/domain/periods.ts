@@ -1,4 +1,5 @@
-import { EVENT_PERIOD_IDS, type EventPeriodId } from '../schemas/events.js';
+import { EVENT_PERIOD_IDS, type EventPeriodId, type PeriodDay } from '../schemas/events.js';
+import { shiftDate } from './series.js';
 
 /**
  * The three named periods (member-registrations-event-periods.md, "Named
@@ -129,8 +130,15 @@ const CATALOGUE: Record<EventPeriodId, NamedPeriod> = {
 export const PERIOD_CATALOGUE: readonly NamedPeriod[] = EVENT_PERIOD_IDS.map((id) => CATALOGUE[id]);
 
 /** The catalogue as the contract carries it, served by `GET /v1/events/periods`. */
-export const EVENT_PERIODS: readonly Pick<NamedPeriod, 'id' | 'name' | 'definition'>[] =
-  PERIOD_CATALOGUE.map(({ id, name, definition }) => ({ id, name, definition }));
+export const EVENT_PERIODS: readonly (Pick<NamedPeriod, 'id' | 'name' | 'definition'> & {
+  /** The resolver's `kind`, projected onto the wire - never hand-written. */
+  dates: PeriodRule['kind'];
+})[] = PERIOD_CATALOGUE.map(({ id, name, definition, rule }) => ({
+  id,
+  name,
+  definition,
+  dates: rule.kind,
+}));
 
 export function periodById(id: EventPeriodId): NamedPeriod {
   return CATALOGUE[id];
@@ -232,4 +240,102 @@ export function resolveRule(rule: PeriodRule, cycle: string): string[] {
  */
 export function resolve(period: EventPeriodId, cycle: string): string[] {
   return resolveRule(CATALOGUE[period].rule, cycle);
+}
+
+/** The three-letter period day as `Date#getUTCDay` counts it. */
+const PERIOD_DAY_WEEKDAY: Record<PeriodDay, Weekday> = {
+  SUN: 0,
+  MON: 1,
+  TUE: 2,
+  WED: 3,
+  THU: 4,
+  FRI: 5,
+  SAT: 6,
+};
+
+/** The create's forward window: 90 days inclusive, the same span a recurrence uses. */
+export const PERIOD_WINDOW_DAYS = 90;
+
+export interface PeriodWindow {
+  /** Inclusive start; a matching date before it is skipped, never emitted. */
+  from: string;
+  /** Inclusive end. */
+  to: string;
+}
+
+function utcToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function weekdayOf(date: string): Weekday {
+  return new Date(`${date}T00:00:00.000Z`).getUTCDay() as Weekday;
+}
+
+/** A cycle month moved by whole months, across a year boundary. */
+function shiftCycle(cycle: string, months: number): string {
+  const { year, month } = parseCycle(cycle);
+  const index = year * 12 + (month - 1) + months;
+  return `${String(Math.floor(index / 12)).padStart(4, '0')}-${String((index % 12) + 1).padStart(2, '0')}`;
+}
+
+/**
+ * A monthly period resolved over an explicit window, in ascending order.
+ * Pure: no clock, no timezone. Each cycle that lands in `[from, to]` contributes
+ * the named weekday inside its period, or the whole period when `day` is
+ * absent; every date before `from` is skipped - a cycle whose date has passed is
+ * never emitted. A single-date period takes no `day`.
+ *
+ * A cycle can resolve outside its own month (Communion Week of `2027-01` begins
+ * on 28 December; Gospel Week resolves in the month before), so the walk starts
+ * at the window's first month and runs one month past its last, then filters by
+ * date.
+ */
+export function generateMonthlyPeriodInWindow(
+  period: EventPeriodId,
+  options: PeriodWindow & { day?: PeriodDay },
+): string[] {
+  const { day, from, to } = options;
+  const rule = CATALOGUE[period].rule;
+  if (day !== undefined && rule.kind === 'date') {
+    throw new RangeError(`${period} resolves to a single date and takes no day`);
+  }
+  if (from > to) return [];
+
+  const lastCycle = shiftCycle(to.slice(0, 7), 1);
+  const dates: string[] = [];
+  for (let cycle = from.slice(0, 7); cycle <= lastCycle; cycle = shiftCycle(cycle, 1)) {
+    const resolved = resolveRule(rule, cycle);
+    if (day === undefined) {
+      for (const date of resolved) {
+        if (date >= from && date <= to) dates.push(date);
+      }
+      continue;
+    }
+    const target = PERIOD_DAY_WEEKDAY[day];
+    const match = resolved.find((date) => weekdayOf(date) === target);
+    if (match !== undefined && match >= from && match <= to) dates.push(match);
+  }
+  return [...new Set(dates)].sort();
+}
+
+/** The create and preview window: 90 days from the anchor, inclusive. */
+export function periodCreateWindow(effectiveFrom: string): PeriodWindow {
+  return { from: effectiveFrom, to: shiftDate(effectiveFrom, PERIOD_WINDOW_DAYS - 1) };
+}
+
+/**
+ * The monthly period generator the create and the preview share: one date per
+ * cycle (or the whole period when `day` is absent) inside the create's 90-day
+ * window, with the first matching date **on or after** `effectiveFrom`. The
+ * anchor is input-only, defaults to today (UTC), and is never stored.
+ */
+export function generateMonthlyPeriod(
+  period: EventPeriodId,
+  options: { day?: PeriodDay; effectiveFrom?: string } = {},
+): string[] {
+  const effectiveFrom = options.effectiveFrom ?? utcToday();
+  return generateMonthlyPeriodInWindow(period, {
+    day: options.day,
+    ...periodCreateWindow(effectiveFrom),
+  });
 }

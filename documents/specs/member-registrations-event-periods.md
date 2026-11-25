@@ -315,8 +315,10 @@ stops describing its rule is renamed with it.
     **`day` is one of `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`** - three-letter upper-case codes, deliberately
     not the rrule's two-letter `MO`-`SU`, so a stored period day can never be read as a fragment of an rrule
     (owner, 2026-11-25). **The UI's period control therefore owns its own seven labels** and does not reuse the schedule
-    builder's `WeekdayCode`/`WEEKDAY_LABELS` (`MO`-`SU`); the only mapping between the two vocabularies is `MON`↔`MO` …
-    `SUN`↔`SU`, and it lives in the form's adapter, nowhere else (review, 2026-11-25).
+    builder's `WeekdayCode`/`WEEKDAY_LABELS` (`MO`-`SU`). **No value crosses between the two vocabularies** - the period
+    control reads and writes `MON`-`SUN`, the rule control `MO`-`SU` - so there is no mapping to keep in step; if a later
+    surface ever needs a translation, it belongs in that surface's adapter and never in a shared helper
+    (owner, 2026-11-25; review, 2026-11-25).
     **The window rule is the recurrence arm's** (owner, 2026-11-25, on review): the first generated date is the first
     matching date **on or after** `effectiveFrom`, so an anchor that lands mid-cycle starts at the next cycle's date -
     a cycle whose date has passed is skipped, never emitted and then rewritten, and `effectiveFrom` never touches an

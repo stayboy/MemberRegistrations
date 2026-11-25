@@ -141,6 +141,14 @@ export interface EventRecurrence {
   readonly exceptions: readonly EventRecurrenceException[];
 }
 
+/**
+ * The period `day` vocabulary: three-letter, upper case. It is **deliberately
+ * not** the rrule's two-letter `MO`-`SU`, so a stored period day can never be
+ * read as a fragment of an rrule (owner, 2026-11-25); mirrors `PERIOD_DAYS` in
+ * `src/schemas/events.ts`. The labels live in `format/period.ts`.
+ */
+export type PeriodDay = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+
 /** Mirrors `eventPeriodSchema`: the catalogue row `GET /v1/events/periods` serves. */
 export interface EventPeriodItem {
   readonly id: string;
@@ -148,12 +156,13 @@ export interface EventPeriodItem {
   /** The declared rule, in the parish's words; the form shows it beside the choice. */
   readonly definition: string;
   /**
-   * The resolver's shape, when the catalogue carries it. A `date` period (Home
-   * Cells) returns one date, so it takes no day inside it. The contract does not
-   * serve this today; absent means "a week", and the server refuses a day on a
-   * single-date period if one is sent.
+   * The wire projection of the resolver's shape, served by the catalogue: a
+   * `week` period returns seven dates and may take a `day`; a `date` period
+   * (Home Cells) returns one date and refuses it. Required, because the form
+   * hides the day control for a `date` period rather than offer one the server
+   * would reject.
    */
-  readonly kind?: 'week' | 'date';
+  readonly dates: 'week' | 'date';
 }
 
 /** The period an event was created from (`null` when it was not). */
@@ -165,21 +174,24 @@ export interface EventPeriodProvenance {
   readonly cycle: string | null;
   /** `monthly` for a period recurrence; null for a one-off. */
   readonly frequency: 'monthly' | null;
-  /** A weekday inside each cycle's period (`MO`-`SU`); null for the whole period. */
-  readonly day: string | null;
+  /** A weekday inside each cycle's period (`MON`-`SUN`); null for a whole week or a single date. */
+  readonly day: PeriodDay | null;
 }
 
 /**
- * The create's period arm. One cycle resolves once, on the server, into that
- * month's dates; `frequency: 'monthly'` stores a period rule that generates one
- * date per cycle. `effectiveFrom` anchors the 90-day window and is input-only.
+ * The create's period arm, exactly as the contract reads it: `{ id, cycleMonth }`
+ * resolves one cycle once, on the server, into that month's dates;
+ * `{ id, frequency: 'monthly', day?, effectiveFrom? }` stores a period rule that
+ * generates one date per cycle. `day` is the period's own `MON`-`SUN` vocabulary
+ * and is refused for a single-date period; `effectiveFrom` anchors the 90-day
+ * window and is input-only.
  */
 export type CreateEventPeriodInput =
   | { readonly id: string; readonly cycleMonth: string }
   | {
       readonly id: string;
       readonly frequency: 'monthly';
-      readonly day?: string;
+      readonly day?: PeriodDay;
       readonly effectiveFrom?: string;
     };
 

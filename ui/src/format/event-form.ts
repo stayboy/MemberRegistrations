@@ -6,6 +6,7 @@ import type {
   EventPreviewInput,
   EventRecurrenceSchedule,
   EventVenueType,
+  PeriodDay,
   UpdateEventParentInput,
 } from '../api/events';
 import { VENUE_LABELS } from './events';
@@ -72,15 +73,20 @@ export interface EventScheduleForm {
   readonly positionWeekday: WeekdayCode;
   readonly periodId: string;
   /**
-   * The catalogue's resolver shape, when it tells us: a `date` period takes no
-   * day inside it. Null when the contract does not say.
+   * The catalogue's `dates` projection: a `date` period (Home Cells) returns one
+   * date, so it takes no day inside it and the control is hidden. Null until the
+   * operator picks a period (or on an edit, where the parent read does not carry
+   * the catalogue row).
    */
-  readonly periodKind: 'week' | 'date' | null;
+  readonly periodDates: 'week' | 'date' | null;
   readonly periodFrequency: PeriodFrequency;
   /** `YYYY-MM` for a one-cycle period. */
   readonly cycleMonth: string;
-  /** A weekday inside each cycle's period; empty schedules the whole period. */
-  readonly periodDay: '' | WeekdayCode;
+  /**
+   * A weekday inside each cycle's period, in the period's own `MON`-`SUN`
+   * vocabulary, never the rrule's `MO`-`SU`; empty schedules the whole period.
+   */
+  readonly periodDay: '' | PeriodDay;
 }
 
 export interface EventFormValues {
@@ -238,7 +244,7 @@ function validateSchedule(values: EventFormValues, errors: EventFormErrors): voi
       errors.effectiveFrom = 'The start date must be a real date in YYYY-MM-DD form.';
     }
 
-    if (schedule.periodKind === 'date' && schedule.periodDay !== '') {
+    if (schedule.periodDates === 'date' && schedule.periodDay !== '') {
       errors.periodDay = 'This period is a single date, so it takes no day inside it.';
     }
     return;
@@ -381,7 +387,7 @@ export function createEmptySchedule(today: string = utcToday()): EventScheduleFo
     position: 'first',
     positionWeekday: 'SA',
     periodId: '',
-    periodKind: null,
+    periodDates: null,
     periodFrequency: 'one-cycle',
     cycleMonth: defaultCycleMonth(today, today),
     periodDay: '',
@@ -456,7 +462,9 @@ export function fromEventParent(
         periodId: period.id,
         periodFrequency: period.frequency === 'monthly' ? 'monthly' : 'one-cycle',
         cycleMonth: period.cycle ?? base.cycleMonth,
-        periodDay: (period.day as WeekdayCode | null) ?? '',
+        // The provenance's `day` is already the period vocabulary; the catalogue
+        // row (and so `periodDates`) is not carried by the parent read.
+        periodDay: period.day ?? '',
       }
     : parsed
       ? {
@@ -512,7 +520,13 @@ export function toScheduleRrule(schedule: EventScheduleForm, effectiveFrom: stri
   });
 }
 
-/** The period arm's wire body: one cycle, or a monthly period recurrence. */
+/**
+ * The period arm's wire body (FR-42f): exactly `{ id, cycleMonth }` for one
+ * cycle, or `{ id, frequency: 'monthly', day?, effectiveFrom? }` for a monthly
+ * period recurrence. `day` is in the period vocabulary (`MON`-`SUN`) and is never
+ * sent for a `date` period - the control is hidden there and the server refuses
+ * it - so a stale value cannot ride a period it does not belong to.
+ */
 export function toPeriodInput(
   schedule: EventScheduleForm,
   effectiveFrom: string,
@@ -523,10 +537,11 @@ export function toPeriodInput(
   }
 
   const anchor = effectiveFrom.trim();
+  const day = schedule.periodDates === 'date' ? '' : schedule.periodDay;
   return {
     id,
     frequency: 'monthly',
-    ...(schedule.periodDay ? { day: schedule.periodDay } : {}),
+    ...(day ? { day } : {}),
     ...(anchor.length > 0 ? { effectiveFrom: anchor } : {}),
   };
 }

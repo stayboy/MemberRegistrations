@@ -2163,4 +2163,55 @@ drop index if exists events_event_no;
 create unique index if not exists events_event_no on events (event_no);
 `,
   },
+  {
+    version: '0029_event_period',
+    sql: `
+-- The provenance of a period-created event (member-registrations-event-periods.md,
+-- "Named periods"). A one-off period stores its cycle; a monthly rule stores its
+-- frequency and optional day instead. All five columns are nullable, and the
+-- checks keep the two shapes coherent rather than trusting every writer.
+alter table events
+  add column if not exists period_id text,
+  add column if not exists period_cycle text,
+  add column if not exists period_name text,
+  add column if not exists period_frequency text,
+  add column if not exists period_day text;
+
+-- The id and the name snapshot arrive together: an id without a name cannot
+-- render, and a name without an id cannot answer "every Communion Week event".
+alter table events drop constraint if exists events_period_identity_check;
+alter table events add constraint events_period_identity_check
+  check ((period_id is null) = (period_name is null));
+
+-- A stored day is the three-letter schedule vocabulary, never an rrule fragment.
+alter table events drop constraint if exists events_period_day_check;
+alter table events add constraint events_period_day_check
+  check (period_day is null or period_day in ('MON','TUE','WED','THU','FRI','SAT','SUN'));
+
+-- A closed enum that starts with monthly; a new cadence is a new value.
+alter table events drop constraint if exists events_period_frequency_check;
+alter table events add constraint events_period_frequency_check
+  check (period_frequency is null or period_frequency = 'monthly');
+
+-- One-off and recurring are exclusive: a cycle or a frequency, never both.
+alter table events drop constraint if exists events_period_shape_check;
+alter table events add constraint events_period_shape_check
+  check (not (period_cycle is not null and period_frequency is not null));
+
+-- A day is only meaningful inside a recurring rule; Home Cells takes none.
+alter table events drop constraint if exists events_period_day_frequency_check;
+alter table events add constraint events_period_day_frequency_check
+  check (period_day is null or period_frequency is not null);
+
+-- A rule field without a period id is not attributable to any period.
+alter table events drop constraint if exists events_period_rule_identity_check;
+alter table events add constraint events_period_rule_identity_check
+  check (
+    (period_cycle is null or period_id is not null)
+    and (period_frequency is null or period_id is not null)
+  );
+
+create index if not exists events_period_id on events (period_id);
+`,
+  },
 ];

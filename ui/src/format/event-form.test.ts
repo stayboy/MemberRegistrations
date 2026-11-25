@@ -336,8 +336,8 @@ describe('validateEventForm', () => {
         schedule: {
           ...period.schedule,
           periodFrequency: 'monthly',
-          periodKind: 'date',
-          periodDay: 'MO',
+          periodDates: 'date',
+          periodDay: 'MON',
         },
       }).periodDay,
     ).toBe('This period is a single date, so it takes no day inside it.');
@@ -550,14 +550,15 @@ describe('toCreateEventPayload', () => {
         mode: 'period',
         periodId: 'communion-week',
         periodFrequency: 'monthly',
-        periodDay: 'SU',
+        periodDates: 'week',
+        periodDay: 'SUN',
       },
     });
     expect(monthly).toMatchObject({
       period: {
         id: 'communion-week',
         frequency: 'monthly',
-        day: 'SU',
+        day: 'SUN',
         effectiveFrom: '2026-01-15',
       },
     });
@@ -565,10 +566,63 @@ describe('toCreateEventPayload', () => {
     expect(monthly).not.toHaveProperty('occurrences');
   });
 
+  it('never sends a day for a single-date period, even when a stale one lingers', () => {
+    const payload = toCreateEventPayload({
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: {
+        ...VALID.schedule,
+        mode: 'period',
+        periodId: 'home-cells',
+        periodFrequency: 'monthly',
+        periodDates: 'date',
+        periodDay: 'MON',
+      },
+    });
+
+    expect(payload.period).toEqual({
+      id: 'home-cells',
+      frequency: 'monthly',
+      effectiveFrom: '2026-01-15',
+    });
+    expect(payload.period).not.toHaveProperty('day');
+  });
+
   it('never sends both a recurrence and date rows', () => {
     const payload = toCreateEventPayload({ ...VALID, repeats: true });
     expect(payload).toHaveProperty('recurrence');
     expect(payload).not.toHaveProperty('occurrences');
+  });
+
+  it('keeps the rrule’s MO-SU and the period’s MON-SUN apart in one form', () => {
+    const base = { ...VALID, repeats: true, occurrences: [] };
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          cadence: 'weekly',
+          weekdays: ['MO', 'SU'],
+          interval: '1',
+        },
+      }).recurrence,
+    ).toEqual({ schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;BYDAY=MO,SU' }] });
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          mode: 'period',
+          periodId: 'communion-week',
+          periodFrequency: 'monthly',
+          periodDates: 'week',
+          periodDay: 'SUN',
+        },
+      }).period,
+    ).toMatchObject({ day: 'SUN' });
   });
 });
 
@@ -592,6 +646,33 @@ describe('toPeriodInput', () => {
       frequency: 'monthly',
       effectiveFrom: '2026-11-24',
     });
+  });
+
+  it('drops the day on a single-date period and keeps it in the period vocabulary', () => {
+    const schedule = {
+      ...createEmptySchedule('2026-11-24'),
+      mode: 'period' as const,
+      periodId: 'home-cells',
+    };
+    expect(
+      toPeriodInput(
+        { ...schedule, periodFrequency: 'monthly', periodDates: 'date', periodDay: 'MON' },
+        '2026-11-24',
+      ),
+    ).toEqual({ id: 'home-cells', frequency: 'monthly', effectiveFrom: '2026-11-24' });
+
+    expect(
+      toPeriodInput(
+        {
+          ...schedule,
+          periodId: 'communion-week',
+          periodFrequency: 'monthly',
+          periodDates: 'week',
+          periodDay: 'SUN',
+        },
+        '2026-11-24',
+      ),
+    ).toMatchObject({ day: 'SUN' });
   });
 });
 
@@ -632,7 +713,8 @@ describe('toPreviewInput', () => {
           mode: 'period',
           periodId: 'communion-week',
           periodFrequency: 'monthly',
-          periodDay: 'SU',
+          periodDates: 'week',
+          periodDay: 'SUN',
         },
       }),
     ).toEqual({
@@ -640,7 +722,7 @@ describe('toPreviewInput', () => {
       period: {
         id: 'communion-week',
         frequency: 'monthly',
-        day: 'SU',
+        day: 'SUN',
         effectiveFrom: '2026-01-15',
       },
     });
@@ -737,7 +819,7 @@ describe('fromEventParent', () => {
           name: 'Communion Week',
           cycle: null,
           frequency: 'monthly',
-          day: 'SU',
+          day: 'SUN',
         },
       },
       '2026-11-22',
@@ -747,7 +829,7 @@ describe('fromEventParent', () => {
     expect(values.schedule.mode).toBe('period');
     expect(values.schedule.periodId).toBe('communion-week');
     expect(values.schedule.periodFrequency).toBe('monthly');
-    expect(values.schedule.periodDay).toBe('SU');
+    expect(values.schedule.periodDay).toBe('SUN');
   });
 
   it('leaves the builder at its default for a rule outside the vocabulary', () => {

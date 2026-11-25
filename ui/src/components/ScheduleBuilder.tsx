@@ -18,6 +18,7 @@ import {
   type EventScheduleForm,
   type PeriodFrequency,
 } from '../format/event-form';
+import { PERIOD_DAY_LABELS, PERIOD_DAYS, isPeriodDay } from '../format/period';
 import {
   CADENCE_OPTIONS,
   MONTH_POSITIONS,
@@ -115,9 +116,12 @@ export interface ScheduleBuilderProps {
  * and the detail dialog's when that surface adopts it. It authors the closed
  * vocabulary — daily, weekly (a weekday set), fortnightly, monthly on the day or
  * positionally — and the **named-period mode**, which replaces the cadence
- * controls because a period event submits a period, never an rrule. It never
- * accepts a raw rule and never resolves a date: the preview endpoint is the only
- * resolver (AC-63a).
+ * controls because a period event submits a period, never an rrule. The period
+ * arm reads the catalogue's `dates` projection to hide the day control for a
+ * single-date period, and it carries its own seven labels (`MON`-`SUN`, from
+ * `format/period`) rather than the rrule's `MO`-`SU` set, so no day value ever
+ * crosses between the two vocabularies. It never accepts a raw rule and never
+ * resolves a date: the preview endpoint is the only resolver (AC-63a).
  *
  * Presentational by design: the call site owns the catalogue read, because the
  * form's cycle line and the dialog both name the selected period too.
@@ -140,19 +144,21 @@ export function ScheduleBuilder({
 
   function choosePeriod(periodId: string): void {
     if (periodId.length === 0) {
-      onChange({ mode: 'rule', periodId: '', periodKind: null, periodDay: '' });
+      onChange({ mode: 'rule', periodId: '', periodDates: null, periodDay: '' });
       return;
     }
 
     const period: EventPeriodItem | undefined = periods.find((item) => item.id === periodId);
-    const kind = period?.kind ?? null;
+    // The catalogue's `dates` is the contract's own projection of the resolver's
+    // shape, so the form never re-derives whether a period takes a day.
+    const dates = period?.dates ?? null;
     onChange({
       mode: 'period',
       periodId,
-      periodKind: kind,
+      periodDates: dates,
       cycleMonth: defaultCycleMonth(effectiveFrom),
       // A single-date period takes no day (Home Cells); a week starts blank.
-      periodDay: kind === 'date' ? '' : value.periodDay,
+      periodDay: dates === 'date' ? '' : value.periodDay,
     });
   }
 
@@ -306,28 +312,35 @@ function PeriodControls({
               onChange={(_, data) => onChange({ cycleMonth: data.value })}
             />
           </Field>
+        ) : value.periodDates === 'date' ? (
+          // A single-date period resolves to one date, so there is no day inside
+          // it to choose: the control is absent, not disabled (FR-42f).
+          <Text size={200} className={styles.hint}>
+            {period?.name ?? 'This period'} resolves to a single date, so there is no day inside it
+            to choose.
+          </Text>
         ) : (
           <Field
             label="Day inside the period (optional)"
-            hint="Leave it blank to schedule the whole period. A single-date period takes no day."
+            hint="Leave it blank to schedule the whole period, all seven dates."
             validationState={errors.periodDay ? 'error' : 'none'}
             validationMessage={errors.periodDay}
           >
             <Dropdown
               aria-label="Day inside the period"
-              value={value.periodDay ? WEEKDAY_LABELS[value.periodDay] : 'Whole period'}
+              value={value.periodDay ? PERIOD_DAY_LABELS[value.periodDay] : 'Whole period'}
               selectedOptions={[value.periodDay]}
-              disabled={readOnly || period?.kind === 'date'}
+              disabled={readOnly}
               onOptionSelect={(_, data) =>
-                onChange({ periodDay: (data.optionValue ?? '') as '' | WeekdayCode })
+                onChange({ periodDay: isPeriodDay(data.optionValue) ? data.optionValue : '' })
               }
             >
               <Option value="" text="Whole period">
                 Whole period
               </Option>
-              {WEEKDAYS.map((day) => (
-                <Option key={day} value={day} text={WEEKDAY_LABELS[day]}>
-                  {WEEKDAY_LABELS[day]}
+              {PERIOD_DAYS.map((day) => (
+                <Option key={day} value={day} text={PERIOD_DAY_LABELS[day]}>
+                  {PERIOD_DAY_LABELS[day]}
                 </Option>
               ))}
             </Dropdown>

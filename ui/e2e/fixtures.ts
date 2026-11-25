@@ -2668,6 +2668,8 @@ function buildRoutes(
     {
       // The create form's read-only catalogue, registered before `/:id`
       // (member-registrations-event-periods.md, "Two read-only contract entries").
+      // `dates` is the contract's projection of the resolver's shape, and the form
+      // uses it to hide the day control for a single-date period.
       method: 'GET',
       pattern: /^\/gateway\/v1\/events\/periods$/,
       handle: () =>
@@ -2678,21 +2680,21 @@ function buildRoutes(
               name: 'Communion Week',
               definition:
                 'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
-              kind: 'week',
+              dates: 'week',
             },
             {
               id: 'gospel-week',
               name: 'Gospel Week',
               definition:
                 'The last week of the month before, when ministries hold their meetings: the week before Communion Week.',
-              kind: 'week',
+              dates: 'week',
             },
             {
               id: 'home-cells',
               name: 'Home Cells',
               definition:
                 'The Monday of week 1 of the cycle month — the Monday of Communion Week, one date.',
-              kind: 'date',
+              dates: 'date',
             },
           ],
         }),

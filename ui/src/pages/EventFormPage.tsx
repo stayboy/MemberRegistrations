@@ -35,6 +35,7 @@ import {
   type EventParentItem,
   type EventPeriodItem,
   type EventPreview,
+  type PeriodDay,
   type UpdateEventParentInput,
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
@@ -60,7 +61,8 @@ import {
   type OccurrenceFormValues,
 } from '../format/event-form';
 import { utcToday } from '../format/member-form';
-import { WEEKDAY_LABELS, cadenceLabel, fromRrule, weekdayOf } from '../format/rrule';
+import { PERIOD_DAY_LABELS } from '../format/period';
+import { cadenceLabel, fromRrule, weekdayOf } from '../format/rrule';
 import { scheduleLabel } from '../format/series';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
@@ -1132,10 +1134,11 @@ function buildCycleLine({
 function periodLine(
   name: string,
   frequency: 'monthly' | null,
-  day: string | null,
+  day: PeriodDay | null,
   cycle: string | null,
 ): string {
-  const dayLabel = day ? `${WEEKDAY_LABELS[day as keyof typeof WEEKDAY_LABELS] ?? day}s` : null;
+  // The period's own day vocabulary, never the rrule labels (FR-42f).
+  const dayLabel = day ? `${PERIOD_DAY_LABELS[day]}s` : null;
   if (frequency === 'monthly') {
     return `${name} · ${dayLabel ?? 'whole period'} · monthly.`;
   }
@@ -1209,7 +1212,7 @@ function describeSchedule({
   if (values.schedule.mode === 'period') {
     const frequency =
       values.schedule.periodFrequency === 'monthly'
-        ? `${values.schedule.periodDay ? WEEKDAY_LABELS[values.schedule.periodDay] : 'whole period'}, monthly`
+        ? `${values.schedule.periodDay ? PERIOD_DAY_LABELS[values.schedule.periodDay] : 'whole period'}, monthly`
         : `one cycle, ${values.schedule.cycleMonth}`;
     return `${selectedPeriod?.name ?? 'Named period'} · ${frequency}`;
   }

@@ -778,8 +778,9 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   Week + Sunday + monthly. The period mode never mixes with the cadence vocabulary: choosing a period replaces the
   cadence controls, and the form submits the period (never an rrule), which is why a period event has no schedule
   version. The period control MUST carry **its own seven day labels** rather than the schedule builder's `MO`-`SU`
-  constants: the API's period `day` is `MON`-`SUN` (owner, 2026-11-25), and the only mapping between the two
-  vocabularies belongs in the form's adapter, so a period day can never be read as an rrule fragment. Where the
+  constants: the API's period `day` is `MON`-`SUN` (owner, 2026-11-25), and **no value crosses** between the two
+  vocabularies, so there is no mapping to keep in step - a translation a later surface needs belongs in that surface's
+  adapter, never in a shared helper, so a period day can never be read as an rrule fragment. Where the
   catalogue serves `dates: "date"` (Home Cells), the day control MUST be hidden - a single-date period offers no day
   rather than a control the server would refuse.
   One mapping module MUST produce and parse the API's `rrule` string, and its round trip MUST be tested, so a schedule

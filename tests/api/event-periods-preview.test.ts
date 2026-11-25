@@ -84,18 +84,21 @@ describe('GET /v1/events/periods', () => {
         name: 'Communion Week',
         definition:
           'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+        dates: 'week',
       },
       {
         id: 'gospel-week',
         name: 'Gospel Week',
         definition:
           'The last week of the month before, when ministries hold their meetings: the week before Communion Week.',
+        dates: 'week',
       },
       {
         id: 'home-cells',
         name: 'Home Cells',
         definition:
           'The Monday of week 1 of the cycle month - the Monday of Communion Week, one date.',
+        dates: 'date',
       },
     ]);
   });

@@ -148,18 +148,24 @@ because this commit carries no code.
 
 ## Verification
 
-| Gate                  | Command                                              | Result               |
-| --------------------- | ---------------------------------------------------- | -------------------- |
-| pre-commit (this doc) | `npm run verify:precommit`                           | pass                 |
-| PR 1 contract         | `npm run verify:fast`                                | pass                 |
-| PR 2 API + migration  | `npm run verify:fast`                                | pass                 |
-| PR 2 smoke            | `npm run smoke`                                      | pass                 |
-| PR 5 UI (create)      | `npm run verify:fast`                                | pass (re-run 1 of 2) |
-| PR 5 UI (create)      | `npm run ui:test`                                    | 546 passed           |
-| PR 5 UI (create)      | `npm --prefix ui run test:dom`                       | 249 passed           |
-| mock restore          | `node scripts/mock/shell-check.mjs v2-events`        | pass (26/26 mocks)   |
-| mock claims           | `npx vitest run tests/meta/mock-claims.test.ts`      | pass (77)            |
-| `26` re-cut           | `node mockups/v2-events/capture-events-filtered.mjs` | v4 `fb006334`        |
+| Gate                  | Command                                              | Result                                                                                                                                                                                                                                                                                                                            |
+| --------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pre-commit (this doc) | `npm run verify:precommit`                           | pass                                                                                                                                                                                                                                                                                                                              |
+| PR 1 contract         | `npm run verify:fast`                                | pass                                                                                                                                                                                                                                                                                                                              |
+| PR 2 API + migration  | `npm run verify:fast`                                | pass                                                                                                                                                                                                                                                                                                                              |
+| PR 2 smoke            | `npm run smoke`                                      | pass                                                                                                                                                                                                                                                                                                                              |
+| PR 5 UI (create)      | `npm run verify:fast`                                | pass (re-run 1 of 2)                                                                                                                                                                                                                                                                                                              |
+| PR 5 UI (create)      | `npm run ui:test`                                    | 546 passed                                                                                                                                                                                                                                                                                                                        |
+| PR 5 UI (create)      | `npm --prefix ui run test:dom`                       | 249 passed                                                                                                                                                                                                                                                                                                                        |
+| PR 6 API (period)     | `npm run verify:fast`                                | pass (1209 tests)                                                                                                                                                                                                                                                                                                                 |
+| PR 6 API (period)     | `npm run smoke`                                      | pass (84 checks)                                                                                                                                                                                                                                                                                                                  |
+| PR 7 UI (period)      | `npm run verify:fast`                                | pass (1209 tests)                                                                                                                                                                                                                                                                                                                 |
+| PR 7 UI (period)      | `npm run ui:test`                                    | 552 passed                                                                                                                                                                                                                                                                                                                        |
+| PR 7 UI (period)      | `npm --prefix ui run test:dom`                       | 249 passed                                                                                                                                                                                                                                                                                                                        |
+| full gate             | `npm run verify`                                     | 5/7 steps: skill, check-round, format, lint, typecheck PASS; the test step needs `TEST_DATABASE_URL` and the pooled `beforeAll` hooks exceeded vitest's 10 s default on this machine's scratch pg (5.4 s standalone), so the suite ran as `vitest run --hookTimeout=120000` - **91 files, 1243 tests** - and `npm run build` PASS |
+| mock restore          | `node scripts/mock/shell-check.mjs v2-events`        | pass (26/26 mocks)                                                                                                                                                                                                                                                                                                                |
+| mock claims           | `npx vitest run tests/meta/mock-claims.test.ts`      | pass (77)                                                                                                                                                                                                                                                                                                                         |
+| `26` re-cut           | `node mockups/v2-events/capture-events-filtered.mjs` | v4 `fb006334`                                                                                                                                                                                                                                                                                                                     |
 
 gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 
@@ -234,4 +240,21 @@ work ends.
   "no `Open` verb" ruling, but the signed `01` draws it (`EVA-ROW-MENU` PRESENT) and §1 says the artefact and
   the spec must agree. **Open question for the owner:** which non-navigation verbs an event row's menu holds,
   now that `Open` is gone - no state sources an item, so the menu is drawn closed exactly as `01` leaves it.
+- **The period API half landed (2026-11-25).** `0029_event_period` adds the five provenance columns with six coherence
+  checks and an index; create resolves a period inside the event transaction and materialises ordinary occurrences with
+  the parent's times; the read carries `period`; `?period=` filters; `generate` walks rrule and monthly-period events
+  through one window, idempotently; the preview takes either arm; the catalogue serves `dates`. Three things the spec
+  left implicit were resolved and are recorded here rather than only in code: **cycles are walked from the window's
+  first month through one month past its last** and then filtered by date, because a cycle can resolve outside its own
+  month (Communion Week of `2027-01` starts 28 December; Gospel Week resolves in the month before); a **whole-week arm
+  is trimmed at both edges** - the anchor and the window end - so a passed date is never emitted; and the **`day`
+  refusal lives in the repository**, because the domain imports the schema's period ids, so the schema cannot import the
+  domain back to ask a period's shape. `?period=` filters both the parent and the legacy list, since they share
+  `eventListQuerySchema`.
+- **The UI now speaks the period's own day vocabulary (2026-11-25).** `format/period.ts` owns `MON`-`SUN` and its
+  labels, the catalogue's `dates` decides whether the day control is drawn at all, `toPeriodInput` refuses to send a
+  `day` for a single-date period, and no value crosses into the rrule builder's `MO`-`SU`. **The build corrected the
+  spec**: the text had asserted a `MON`↔`MO` mapping "in the form's adapter", but no conversion is needed, so both
+  specs now say no value crosses and any future translation belongs to the surface that needs it - the reviewer
+  confirmed the change strengthens the rule rather than loosening it.
 - The original draft still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.

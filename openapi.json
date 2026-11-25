@@ -5457,6 +5457,52 @@
             "type": "string",
             "enum": ["draft", "active", "archived"]
           },
+          "period": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "cycle": {
+                    "type": ["string", "null"]
+                  },
+                  "frequency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["monthly"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "day": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["id", "name", "cycle", "frequency", "day"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recurrence": {
             "anyOf": [
               {
@@ -6033,6 +6079,7 @@
           "endTime",
           "tracksMembers",
           "status",
+          "period",
           "recurrence",
           "occurrences",
           "offerings",
@@ -6162,6 +6209,52 @@
                 "status": {
                   "type": "string",
                   "enum": ["draft", "active", "archived"]
+                },
+                "period": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": ["communion-week", "gospel-week", "home-cells"]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "cycle": {
+                          "type": ["string", "null"]
+                        },
+                        "frequency": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["monthly"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "day": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["id", "name", "cycle", "frequency", "day"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "recurrence": {
                   "anyOf": [
@@ -6739,6 +6832,7 @@
                 "endTime",
                 "tracksMembers",
                 "status",
+                "period",
                 "recurrence",
                 "occurrences",
                 "offerings",
@@ -6764,9 +6858,13 @@
           },
           "definition": {
             "type": "string"
+          },
+          "dates": {
+            "type": "string",
+            "enum": ["week", "date"]
           }
         },
-        "required": ["id", "name", "definition"],
+        "required": ["id", "name", "definition", "dates"],
         "additionalProperties": false
       },
       "EventPeriodList": {
@@ -6786,9 +6884,13 @@
                 },
                 "definition": {
                   "type": "string"
+                },
+                "dates": {
+                  "type": "string",
+                  "enum": ["week", "date"]
                 }
               },
-              "required": ["id", "name", "definition"],
+              "required": ["id", "name", "definition", "dates"],
               "additionalProperties": false
             }
           }
@@ -6884,18 +6986,49 @@
             "required": ["schedules"]
           },
           "period": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "enum": ["communion-week", "gospel-week", "home-cells"]
+            "description": "The create period in either shape: `{ id, cycleMonth }` or `{ id, frequency: \"monthly\", day?, effectiveFrom? }`.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "cycleMonth": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                  }
+                },
+                "required": ["id", "cycleMonth"],
+                "additionalProperties": false
               },
-              "cycleMonth": {
-                "type": "string",
-                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": ["monthly"]
+                  },
+                  "day": {
+                    "description": "A weekday inside the period; refused for a single-date period.",
+                    "type": "string",
+                    "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                  },
+                  "effectiveFrom": {
+                    "description": "Anchors the first 90-day window; input-only, never stored.",
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "required": ["id", "frequency"],
+                "additionalProperties": false
               }
-            },
-            "required": ["id", "cycleMonth"]
+            ]
           }
         }
       },
@@ -7506,7 +7639,7 @@
             "type": "boolean"
           },
           "occurrences": {
-            "description": "A standalone event's dates; mutually exclusive with `recurrence`.",
+            "description": "A standalone event's dates; mutually exclusive with `recurrence` or `period`.",
             "minItems": 1,
             "type": "array",
             "items": {
@@ -7536,7 +7669,7 @@
             }
           },
           "recurrence": {
-            "description": "A recurring event's first schedule version; mutually exclusive with `occurrences`.",
+            "description": "A recurring event's first schedule version; mutually exclusive with `occurrences` or `period`.",
             "type": "object",
             "properties": {
               "schedules": {
@@ -7602,6 +7735,51 @@
               }
             },
             "required": ["schedules"]
+          },
+          "period": {
+            "description": "A named period the server resolves: `{ id, cycleMonth }` for one cycle, `{ id, frequency: \"monthly\", day?, effectiveFrom? }` for a monthly rule.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "cycleMonth": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                  }
+                },
+                "required": ["id", "cycleMonth"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": ["monthly"]
+                  },
+                  "day": {
+                    "description": "A weekday inside the period; refused for a single-date period.",
+                    "type": "string",
+                    "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                  },
+                  "effectiveFrom": {
+                    "description": "Anchors the first 90-day window; input-only, never stored.",
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "required": ["id", "frequency"],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": ["name", "venueType", "startTime"]
@@ -17071,6 +17249,7 @@
                       "endTime": "11:00",
                       "tracksMembers": true,
                       "status": "active",
+                      "period": null,
                       "recurrence": {
                         "schedules": [
                           {
@@ -17643,7 +17822,7 @@
     },
     "/v1/events": {
       "get": {
-        "summary": "List events in a date window, standalone and series-generated",
+        "summary": "List events in a date window, standalone, series-generated or period-generated",
         "parameters": [
           {
             "name": "view",
@@ -17691,6 +17870,15 @@
             "schema": {
               "type": "string",
               "enum": ["auditorium", "virtual", "hybrid"]
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "description": "Only events created from this named period.",
+            "schema": {
+              "type": "string",
+              "enum": ["communion-week", "gospel-week", "home-cells"]
             }
           },
           {
@@ -17821,6 +18009,7 @@
                           "endTime": "11:00",
                           "tracksMembers": true,
                           "status": "active",
+                          "period": null,
                           "recurrence": {
                             "schedules": [
                               {
@@ -17932,8 +18121,8 @@
         }
       },
       "post": {
-        "summary": "Create the parent, with manual occurrences or one recurrence",
-        "description": "Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.",
+        "summary": "Create the parent, with manual occurrences, one recurrence or one period",
+        "description": "Creates the parent as a draft. Supply exactly one of manual `occurrences` (standalone), one `recurrence` (recurring) or a `period` - `{ id, cycleMonth }` for one cycle or `{ id, frequency: \"monthly\", day?, effectiveFrom? }` for a monthly rule the server resolves - never more than one; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. A period resolves to ordinary occurrences in the same transaction and records its provenance (`period { id, name, cycle?, frequency?, day? }`); `effectiveFrom` anchors the 90-day window and is never stored, and a day on a single-date period is refused by name. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -17997,6 +18186,7 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "draft",
+                      "period": null,
                       "recurrence": null,
                       "occurrences": [
                         {
@@ -18106,8 +18296,8 @@
     },
     "/v1/events/generate": {
       "post": {
-        "summary": "Generate events from resolved series occurrences",
-        "description": "Idempotent: an event already present for a series date is skipped and never overwritten. Cancelled and extra exceptions are honoured.",
+        "summary": "Generate missing occurrences for series and period events",
+        "description": "Idempotent: an event already present for a series or period date is skipped and never overwritten, so a past date is never moved. Walks both kinds over the same `from..to` window - an rrule version, or a monthly period rule that keeps its parent’s times. Cancelled and extra exceptions are honoured for a series.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -18173,7 +18363,7 @@
     "/v1/events/periods": {
       "get": {
         "summary": "List the named periods the event form can choose",
-        "description": "The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition }`, served from the code catalogue. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.",
+        "description": "The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition, dates }`, served from the code catalogue. `dates` is the resolver’s `kind` projected onto the wire: `week` resolves to seven dates and may take a `day`; `date` resolves to one date and refuses it. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.",
         "responses": {
           "200": {
             "description": "The three periods with their declared definitions.",
@@ -18190,17 +18380,20 @@
                         {
                           "id": "communion-week",
                           "name": "Communion Week",
-                          "definition": "The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday."
+                          "definition": "The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.",
+                          "dates": "week"
                         },
                         {
                           "id": "gospel-week",
                           "name": "Gospel Week",
-                          "definition": "The last week of the month before, when ministries hold their meetings: the week before Communion Week."
+                          "definition": "The last week of the month before, when ministries hold their meetings: the week before Communion Week.",
+                          "dates": "week"
                         },
                         {
                           "id": "home-cells",
                           "name": "Home Cells",
-                          "definition": "The Monday of week 1 of the cycle month - the Monday of Communion Week, one date."
+                          "definition": "The Monday of week 1 of the cycle month - the Monday of Communion Week, one date.",
+                          "dates": "date"
                         }
                       ]
                     }
@@ -18225,7 +18418,7 @@
     "/v1/events/preview": {
       "post": {
         "summary": "Resolve a recurrence or a named period to dates, without persisting",
-        "description": "Resolves `recurrence` or `period { id, cycleMonth }` - exactly one - to the dates the event would be created with, within the create’s 90-day window. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.",
+        "description": "Resolves `recurrence` or a `period` - exactly one - to the dates the event would be created with. A period takes either create shape: `{ id, cycleMonth }` resolves one cycle once, and `{ id, frequency: \"monthly\", day?, effectiveFrom? }` walks the create’s 90-day window from `effectiveFrom` (default today, UTC), skipping dates that have passed. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -18685,6 +18878,7 @@
                       "endTime": "11:00",
                       "tracksMembers": true,
                       "status": "active",
+                      "period": null,
                       "recurrence": {
                         "schedules": [
                           {
@@ -18867,6 +19061,7 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "active",
+                      "period": null,
                       "recurrence": null,
                       "occurrences": [
                         {
@@ -19115,6 +19310,7 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "archived",
+                      "period": null,
                       "recurrence": null,
                       "occurrences": [
                         {
