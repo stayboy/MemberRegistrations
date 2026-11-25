@@ -16,6 +16,7 @@ describe('OpenAPI contract snapshot', () => {
     for (const path of [
       '/v1/events',
       '/v1/events/{eventId}',
+      '/v1/events/{eventId}/schedule',
       '/v1/events/periods',
       '/v1/events/preview',
       '/v1/series/{id}',
@@ -29,5 +30,23 @@ describe('OpenAPI contract snapshot', () => {
       get: { responses: Record<string, { content?: Record<string, { examples?: unknown }> }> };
     };
     expect(events.get.responses['200']!.content!['application/json']!.examples).toBeTruthy();
+
+    const schedule = paths['/v1/events/{eventId}/schedule'] as {
+      put: {
+        requestBody: { content: Record<string, { schema?: unknown }> };
+        responses: Record<string, { content?: Record<string, { schema?: unknown }> }>;
+      };
+    };
+    expect(schedule.put.requestBody.content['application/json']!.schema).toEqual({
+      $ref: '#/components/schemas/EventScheduleWrite',
+    });
+    expect(schedule.put.responses['200']!.content!['application/json']!.schema).toEqual({
+      $ref: '#/components/schemas/EventScheduleWriteResult',
+    });
+    const components = document.components as {
+      schemas: Record<string, { anyOf?: unknown[]; required?: string[] }>;
+    };
+    expect(components.schemas.EventScheduleWrite!.anyOf).toHaveLength(2);
+    expect(components.schemas.EventParent!.required).toContain('schedule');
   });
 });

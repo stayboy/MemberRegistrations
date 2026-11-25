@@ -114,9 +114,10 @@ Acceptance criteria (numbered):
 
 ## Verification
 
-| Gate                           | Command               | Result   |
-| ------------------------------ | --------------------- | -------- |
-| docs (round doc + three specs) | `npm run verify:fast` | pass 4/4 |
+| Gate                           | Command               | Result                |
+| ------------------------------ | --------------------- | --------------------- |
+| docs (round doc + three specs) | `npm run verify:fast` | pass 4/4              |
+| PR 1 contract                  | `npm run verify:fast` | pass 4/4 (1223 tests) |
 
 gate-run 2026-11-25T08:50:28.400Z profile=fast steps=4/4 lines=4 bytes=718
 

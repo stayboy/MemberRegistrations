@@ -5081,6 +5081,292 @@
         "required": ["schedules", "exceptions"],
         "additionalProperties": false
       },
+      "EventScheduleGuard": {
+        "type": "object",
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "occurrence_started",
+                    "offering_attached",
+                    "offering_counted",
+                    "attendance_recorded",
+                    "import_suppressed"
+                  ]
+                },
+                "date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["code", "date"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["locked", "reasons"],
+        "additionalProperties": false,
+        "description": "Computed by the same function the write guard calls; read-only on the wire. `reasons` is empty when `locked` is false."
+      },
+      "EventScheduleWrite": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "recurrence": {
+                "type": "object",
+                "properties": {
+                  "rrule": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 200,
+                    "description": "The RRULE body: DAILY with an optional INTERVAL 1-7 and no other key, WEEKLY with BYDAY and INTERVAL 1-4, MONTHLY with BYMONTHDAY, or MONTHLY positional with BYSETPOS=±1 and exactly one BYDAY. A weekly rule carrying INTERVAL is stored with WKST=SU."
+                  },
+                  "endsOn": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["rrule"]
+              }
+            },
+            "required": ["recurrence"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "period": {
+                "type": "object",
+                "properties": {
+                  "frequency": {
+                    "type": "string",
+                    "enum": ["monthly"]
+                  },
+                  "day": {
+                    "description": "A weekday inside each cycle, MON-SUN (never the rrule MO-SU); refused for a single-date period.",
+                    "type": "string",
+                    "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                  }
+                },
+                "required": ["frequency"]
+              }
+            },
+            "required": ["period"],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Exactly one arm: `{ recurrence: { rrule, endsOn? } }` for a recurring event, or `{ period: { frequency, day? } }` for a period event. The arm that does not match the event type is refused 422, and so is a body carrying both arms or neither."
+      },
+      "EventScheduleWriteResult": {
+        "type": "object",
+        "properties": {
+          "recurrence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schedules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "effectiveFrom": {
+                          "type": "string"
+                        },
+                        "rrule": {
+                          "type": "string"
+                        },
+                        "endsOn": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["effectiveFrom", "rrule", "endsOn"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "exceptions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["cancelled", "extra"]
+                        },
+                        "note": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["date", "kind", "note"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["schedules", "exceptions"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": ["communion-week", "gospel-week", "home-cells"]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": ["monthly"]
+                  },
+                  "day": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["id", "name", "frequency", "day"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "startTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": ["string", "null"]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["scheduled", "held", "cancelled"]
+                },
+                "venueType": {
+                  "type": "string",
+                  "enum": ["auditorium", "virtual", "hybrid"]
+                },
+                "capture": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "asOf": {
+                          "type": "string"
+                        },
+                        "ended": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["asOf", "ended"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "type": ["string", "null"]
+                },
+                "present": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "expected": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "importedRows": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["import", "manual", "mixed", "none"]
+                },
+                "legacyEventNo": {
+                  "type": ["string", "null"]
+                }
+              },
+              "required": [
+                "id",
+                "date",
+                "startTime",
+                "endTime",
+                "status",
+                "capture",
+                "note",
+                "present",
+                "expected",
+                "importedRows",
+                "source",
+                "legacyEventNo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "generated": {
+            "type": "boolean"
+          }
+        },
+        "required": ["recurrence", "period", "occurrences", "generated"],
+        "additionalProperties": false
+      },
       "EventOccurrence": {
         "type": "object",
         "properties": {
@@ -5456,6 +5742,48 @@
           "status": {
             "type": "string",
             "enum": ["draft", "active", "archived"]
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "occurrence_started",
+                        "offering_attached",
+                        "offering_counted",
+                        "attendance_recorded",
+                        "import_suppressed"
+                      ]
+                    },
+                    "date": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["code", "date"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["locked", "reasons"],
+            "additionalProperties": false,
+            "description": "Computed by the same function the write guard calls; read-only on the wire. `reasons` is empty when `locked` is false."
           },
           "period": {
             "anyOf": [
@@ -6079,6 +6407,7 @@
           "endTime",
           "tracksMembers",
           "status",
+          "schedule",
           "period",
           "recurrence",
           "occurrences",
@@ -6209,6 +6538,48 @@
                 "status": {
                   "type": "string",
                   "enum": ["draft", "active", "archived"]
+                },
+                "schedule": {
+                  "type": "object",
+                  "properties": {
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "occurrence_started",
+                              "offering_attached",
+                              "offering_counted",
+                              "attendance_recorded",
+                              "import_suppressed"
+                            ]
+                          },
+                          "date": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["code", "date"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["locked", "reasons"],
+                  "additionalProperties": false,
+                  "description": "Computed by the same function the write guard calls; read-only on the wire. `reasons` is empty when `locked` is false."
                 },
                 "period": {
                   "anyOf": [
@@ -6832,6 +7203,7 @@
                 "endTime",
                 "tracksMembers",
                 "status",
+                "schedule",
                 "period",
                 "recurrence",
                 "occurrences",
@@ -7864,6 +8236,14 @@
           "status": {
             "type": "string",
             "enum": ["draft", "active", "archived"]
+          },
+          "recurrence": {
+            "description": "Refused: the schedule is written by `PUT .../schedule`; sending this field is a 422 naming it.",
+            "not": {}
+          },
+          "period": {
+            "description": "Refused: the schedule is written by `PUT .../schedule`; sending this field is a 422 naming it.",
+            "not": {}
           }
         }
       },
@@ -17249,6 +17629,15 @@
                       "endTime": "11:00",
                       "tracksMembers": true,
                       "status": "active",
+                      "schedule": {
+                        "locked": true,
+                        "reasons": [
+                          {
+                            "code": "occurrence_started",
+                            "date": "2026-11-01"
+                          }
+                        ]
+                      },
                       "period": null,
                       "recurrence": {
                         "schedules": [
@@ -18009,6 +18398,15 @@
                           "endTime": "11:00",
                           "tracksMembers": true,
                           "status": "active",
+                          "schedule": {
+                            "locked": true,
+                            "reasons": [
+                              {
+                                "code": "occurrence_started",
+                                "date": "2026-11-01"
+                              }
+                            ]
+                          },
                           "period": null,
                           "recurrence": {
                             "schedules": [
@@ -18186,6 +18584,10 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "draft",
+                      "schedule": {
+                        "locked": false,
+                        "reasons": []
+                      },
                       "period": null,
                       "recurrence": null,
                       "occurrences": [
@@ -18878,6 +19280,15 @@
                       "endTime": "11:00",
                       "tracksMembers": true,
                       "status": "active",
+                      "schedule": {
+                        "locked": true,
+                        "reasons": [
+                          {
+                            "code": "occurrence_started",
+                            "date": "2026-11-01"
+                          }
+                        ]
+                      },
                       "period": null,
                       "recurrence": {
                         "schedules": [
@@ -18989,7 +19400,7 @@
       },
       "patch": {
         "summary": "Update the parent (partial); a stale If-Match returns 409",
-        "description": "Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no recurrence, no occurrence set, and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`), and the recurrence is written through its own routes. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.",
+        "description": "Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no occurrence set and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`); `recurrence` and `period` are refused by name too (`422`), because the schedule is written by `PUT /v1/events/{eventId}/schedule` and a stripped key would be a lost edit. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -19061,6 +19472,10 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "active",
+                      "schedule": {
+                        "locked": false,
+                        "reasons": []
+                      },
                       "period": null,
                       "recurrence": null,
                       "occurrences": [
@@ -19310,6 +19725,10 @@
                       "endTime": "19:30",
                       "tracksMembers": true,
                       "status": "archived",
+                      "schedule": {
+                        "locked": false,
+                        "reasons": []
+                      },
                       "period": null,
                       "recurrence": null,
                       "occurrences": [
@@ -19401,6 +19820,196 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/events/{eventId}/schedule": {
+      "parameters": [
+        {
+          "name": "eventId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "summary": "Replace an event’s rule under the edit guard",
+        "description": "The edit form’s save. The body takes exactly one arm - `{ recurrence: { rrule, endsOn? } }` for a recurring event, or `{ period: { frequency, day? } }` for a period event - and the arm must match the event’s type, which is fixed at create (`422` otherwise). `day` is `MON`-`SUN`, never the rrule’s `MO`-`SU`. The guard is enforced server-side: the parent read’s `schedule.locked` is computed by the same function this write calls, and a write while it is closed answers `409 recurrence_locked`. `effectiveFrom` is derived from the version in force, never sent. The write replaces the version in force with the same `effectiveFrom` (or the stored period fields) in one transaction, deletes only future `scheduled` rows - a future `cancelled` row survives, and exceptions re-apply on regeneration - then regenerates the event’s current window; it never extends the horizon, and `generated: false` says the window could not be produced. The answer carries the rule and provenance stored after the write, not an echo of the request.",
+        "parameters": [
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventScheduleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The rule in force after the write, its period provenance, and the regenerated window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventScheduleWriteResult"
+                },
+                "examples": {
+                  "recurrence": {
+                    "summary": "A recurring event’s rule rewritten to a fortnightly Sunday",
+                    "value": {
+                      "recurrence": {
+                        "schedules": [
+                          {
+                            "effectiveFrom": "2026-01-04",
+                            "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU",
+                            "endsOn": null
+                          }
+                        ],
+                        "exceptions": [
+                          {
+                            "date": "2026-12-27",
+                            "kind": "cancelled",
+                            "note": "Christmas break"
+                          }
+                        ]
+                      },
+                      "period": null,
+                      "occurrences": [
+                        {
+                          "id": "5d6e7f80-91a2-4b3c-8d4e-5f60718293a4",
+                          "date": "2026-11-15",
+                          "startTime": "09:00",
+                          "endTime": "11:00",
+                          "status": "scheduled",
+                          "venueType": "auditorium",
+                          "capture": null,
+                          "note": null,
+                          "present": 0,
+                          "expected": 150,
+                          "importedRows": 0,
+                          "source": "none",
+                          "legacyEventNo": null
+                        },
+                        {
+                          "id": "6e7f8091-a2b3-4c4d-9e5f-60718293a4b5",
+                          "date": "2026-11-29",
+                          "startTime": "09:00",
+                          "endTime": "11:00",
+                          "status": "scheduled",
+                          "venueType": "auditorium",
+                          "capture": null,
+                          "note": null,
+                          "present": 0,
+                          "expected": 150,
+                          "importedRows": 0,
+                          "source": "none",
+                          "legacyEventNo": null
+                        }
+                      ],
+                      "generated": true
+                    }
+                  },
+                  "period": {
+                    "summary": "A period event’s rule rewritten to monthly Sundays",
+                    "value": {
+                      "recurrence": null,
+                      "period": {
+                        "id": "communion-week",
+                        "name": "Communion Week",
+                        "frequency": "monthly",
+                        "day": "SUN"
+                      },
+                      "occurrences": [
+                        {
+                          "id": "5d6e7f80-91a2-4b3c-8d4e-5f60718293a4",
+                          "date": "2026-11-29",
+                          "startTime": "09:00",
+                          "endTime": "11:00",
+                          "status": "scheduled",
+                          "venueType": "auditorium",
+                          "capture": null,
+                          "note": null,
+                          "present": 0,
+                          "expected": 150,
+                          "importedRows": 0,
+                          "source": "none",
+                          "legacyEventNo": null
+                        },
+                        {
+                          "id": "7f8091a2-b3c4-4d5e-8f60-718293a4b5c6",
+                          "date": "2026-12-27",
+                          "startTime": "09:00",
+                          "endTime": "11:00",
+                          "status": "scheduled",
+                          "venueType": "auditorium",
+                          "capture": null,
+                          "note": null,
+                          "present": 0,
+                          "expected": 150,
+                          "importedRows": 0,
+                          "source": "none",
+                          "legacyEventNo": null
+                        }
+                      ],
+                      "generated": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The edit guard is closed (`recurrence_locked`): an occurrence has started, or offering, attendance or import history exists.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

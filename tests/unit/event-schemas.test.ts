@@ -4,6 +4,8 @@ import {
   eventParentSchema,
   eventPreviewInputSchema,
   eventPreviewSchema,
+  eventScheduleWriteResultSchema,
+  eventScheduleWriteSchema,
   updateEventParentSchema,
 } from '../../src/schemas/events.js';
 import { audienceListQuerySchema } from '../../src/schemas/audiences.js';
@@ -45,6 +47,7 @@ const parentRead = {
   endTime: null,
   tracksMembers: true,
   status: 'draft',
+  schedule: { locked: false, reasons: [] },
   period: null,
   recurrence: null,
   occurrences: [],
@@ -82,6 +85,24 @@ const parentRead = {
 
 function issuePaths(result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }) {
   return (result.error?.issues ?? []).map((issue) => issue.path.join('.'));
+}
+
+type IssueLike = {
+  code: string;
+  path: PropertyKey[];
+  keys?: string[];
+  errors?: IssueLike[][];
+};
+
+/** A union arm reports its own issues nested; flatten them to field paths. */
+function refusalPaths(result: { success: boolean; error?: { issues: unknown } }): string[] {
+  const walk = (issues: IssueLike[]): string[] =>
+    issues.flatMap((issue) => {
+      if (issue.code === 'invalid_union' && issue.errors) return issue.errors.flatMap(walk);
+      if (issue.code === 'unrecognized_keys' && issue.keys) return issue.keys;
+      return [issue.path.join('.')];
+    });
+  return walk((result.error?.issues ?? []) as IssueLike[]);
 }
 
 describe('event write contract', () => {
@@ -155,6 +176,115 @@ describe('event write contract', () => {
     expect(result.success).toBe(false);
     expect(issuePaths(result)).toContain('audienceId');
   });
+
+  it('refuses a recurrence on patch by name rather than stripping it', () => {
+    const result = updateEventParentSchema.safeParse({
+      recurrence: { schedules: [{ effectiveFrom: '2027-01-03', rrule: 'FREQ=WEEKLY;BYDAY=SU' }] },
+    });
+
+    expect(result.success).toBe(false);
+    expect(issuePaths(result)).toContain('recurrence');
+  });
+
+  it('refuses a period on patch by name rather than stripping it', () => {
+    const result = updateEventParentSchema.safeParse({
+      period: { id: 'home-cells', cycleMonth: '2027-01' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(issuePaths(result)).toContain('period');
+  });
+
+  it('still accepts a parent-only patch', () => {
+    const result = updateEventParentSchema.safeParse({
+      name: 'Sunday Celebration',
+      status: 'active',
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('event schedule write contract', () => {
+  it('accepts the recurrence arm alone', () => {
+    const result = eventScheduleWriteSchema.safeParse({
+      recurrence: { rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: '2027-12-26' },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts the period arm with the MON-SUN vocabulary', () => {
+    const result = eventScheduleWriteSchema.safeParse({
+      period: { frequency: 'monthly', day: 'SUN' },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ period: { frequency: 'monthly', day: 'SUN' } });
+  });
+
+  it('refuses both arms at once, naming each one', () => {
+    const result = eventScheduleWriteSchema.safeParse({
+      recurrence: { rrule: 'FREQ=WEEKLY;BYDAY=SU' },
+      period: { frequency: 'monthly' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(refusalPaths(result)).toEqual(expect.arrayContaining(['recurrence', 'period']));
+  });
+
+  it('refuses a body carrying neither arm', () => {
+    const result = eventScheduleWriteSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+    expect(refusalPaths(result)).toEqual(expect.arrayContaining(['recurrence', 'period']));
+  });
+
+  it('refuses the rrule weekday vocabulary in the period arm', () => {
+    const result = eventScheduleWriteSchema.safeParse({
+      period: { frequency: 'monthly', day: 'MO' },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('refuses an rrule that carries its own end', () => {
+    const result = eventScheduleWriteSchema.safeParse({
+      recurrence: { rrule: 'FREQ=WEEKLY;BYDAY=SU;UNTIL=20271226T000000Z' },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts the documented response shape with an ungenerated window', () => {
+    const result = eventScheduleWriteResultSchema.safeParse({
+      recurrence: null,
+      period: { id: 'communion-week', name: 'Communion Week', frequency: 'monthly', day: 'SUN' },
+      occurrences: [],
+      generated: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.generated).toBe(false);
+  });
+
+  it('answers an after-write period without a cycle', () => {
+    const result = eventScheduleWriteResultSchema.safeParse({
+      recurrence: null,
+      period: {
+        id: 'communion-week',
+        name: 'Communion Week',
+        frequency: 'monthly',
+        day: null,
+        cycle: '2026-12',
+      },
+      occurrences: [],
+      generated: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.period).not.toHaveProperty('cycle');
+  });
 });
 
 describe('event parent read contract', () => {
@@ -183,6 +313,44 @@ describe('event parent read contract', () => {
 
     expect(result.success).toBe(false);
     expect(issuePaths(result)).toContain('audiences');
+  });
+});
+
+describe('event parent read guard', () => {
+  it('round-trips the open guard on the parent read', () => {
+    const result = eventParentSchema.safeParse(parentRead);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.schedule).toEqual({ locked: false, reasons: [] });
+  });
+
+  it('round-trips a closed guard with a dated cause and a bare attachment', () => {
+    const result = eventParentSchema.safeParse({
+      ...parentRead,
+      schedule: {
+        locked: true,
+        reasons: [
+          { code: 'offering_attached', date: null },
+          { code: 'occurrence_started', date: '2026-11-01' },
+          { code: 'attendance_recorded', date: '2026-11-01' },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.schedule.locked).toBe(true);
+    expect(result.data?.schedule.reasons).toHaveLength(3);
+    expect(result.data?.schedule.reasons[0]?.date).toBeNull();
+  });
+
+  it('refuses a cause outside the closed set', () => {
+    const result = eventParentSchema.safeParse({
+      ...parentRead,
+      schedule: { locked: true, reasons: [{ code: 'audience_changed', date: null }] },
+    });
+
+    expect(result.success).toBe(false);
+    expect(issuePaths(result)).toContain('schedule.reasons.0.code');
   });
 });
 

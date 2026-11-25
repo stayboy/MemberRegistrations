@@ -86,6 +86,9 @@ import {
   eventPreviewInputSchema,
   eventPreviewSchema,
   eventRecurrenceSchema,
+  eventScheduleGuardSchema,
+  eventScheduleWriteResultSchema,
+  eventScheduleWriteSchema,
   eventSchema,
   eventWindowSummarySchema,
   HEADCOUNT_READ_MODES,
@@ -296,6 +299,10 @@ const parentEventExample = {
   endTime: '11:00',
   tracksMembers: true,
   status: 'active',
+  schedule: {
+    locked: true,
+    reasons: [{ code: 'occurrence_started', date: '2026-11-01' }],
+  },
   period: null,
   recurrence: {
     schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
@@ -396,6 +403,7 @@ const createdEventParentExample = {
   endTime: '19:30',
   tracksMembers: true,
   status: 'draft',
+  schedule: { locked: false, reasons: [] },
   period: null,
   recurrence: null,
   occurrences: [
@@ -577,6 +585,62 @@ const eventPeriodPreviewExample = {
   ],
 };
 
+/** One regenerated occurrence, shared by the two rule-rewrite examples. */
+const scheduleWriteOccurrenceExample = {
+  id: '5d6e7f80-91a2-4b3c-8d4e-5f60718293a4',
+  date: '2026-11-15',
+  startTime: '09:00',
+  endTime: '11:00',
+  status: 'scheduled',
+  venueType: 'auditorium',
+  capture: null,
+  note: null,
+  present: 0,
+  expected: 150,
+  importedRows: 0,
+  source: 'none',
+  legacyEventNo: null,
+};
+
+/** A recurrence rewrite: the stored rule, no period, and the regenerated window. */
+const eventScheduleWriteExample = {
+  recurrence: {
+    schedules: [
+      {
+        effectiveFrom: '2026-01-04',
+        rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU;WKST=SU',
+        endsOn: null,
+      },
+    ],
+    exceptions: [{ date: '2026-12-27', kind: 'cancelled', note: 'Christmas break' }],
+  },
+  period: null,
+  occurrences: [
+    scheduleWriteOccurrenceExample,
+    {
+      ...scheduleWriteOccurrenceExample,
+      id: '6e7f8091-a2b3-4c4d-9e5f-60718293a4b5',
+      date: '2026-11-29',
+    },
+  ],
+  generated: true,
+};
+
+/** A period rewrite: the stored provenance (no `cycle`) and the regenerated window. */
+const eventSchedulePeriodWriteExample = {
+  recurrence: null,
+  period: { id: 'communion-week', name: 'Communion Week', frequency: 'monthly', day: 'SUN' },
+  occurrences: [
+    { ...scheduleWriteOccurrenceExample, date: '2026-11-29' },
+    {
+      ...scheduleWriteOccurrenceExample,
+      id: '7f8091a2-b3c4-4d5e-8f60-718293a4b5c6',
+      date: '2026-12-27',
+    },
+  ],
+  generated: true,
+};
+
 const legacyEventExample = {
   id: '9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   eventNo: 'EVT-2026-101',
@@ -730,6 +794,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         Event: toSchema(eventSchema, 'output'),
         EventList: toSchema(eventListSchema, 'output'),
         EventRecurrence: toSchema(eventRecurrenceSchema, 'output'),
+        EventScheduleGuard: toSchema(eventScheduleGuardSchema, 'output'),
+        EventScheduleWrite: toSchema(eventScheduleWriteSchema, 'input'),
+        EventScheduleWriteResult: toSchema(eventScheduleWriteResultSchema, 'output'),
         EventOccurrence: toSchema(eventOccurrenceSchema, 'output'),
         EventWindowSummary: toSchema(eventWindowSummarySchema, 'output'),
         EventParent: toSchema(eventParentSchema, 'output'),
@@ -2518,7 +2585,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         patch: {
           summary: 'Update the parent (partial); a stale If-Match returns 409',
           description:
-            'Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no recurrence, no occurrence set, and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`), and the recurrence is written through its own routes. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.',
+            'Updates the parent from its partial fields and is the write the UI uses. `audienceIds` replaces the whole audience set when present (`audienceId` is its one-element alias and must match the first element when both are sent). It carries no occurrence set and no `eventNo` - the event number is minted and immutable, so sending one is refused by name (`422`); `recurrence` and `period` are refused by name too (`422`), because the schedule is written by `PUT /v1/events/{eventId}/schedule` and a stripped key would be a lost edit. A stale If-Match is refused, and the retired `ministry` and `presbyterOnly` fields are not part of the payload.',
           parameters: [actorHeader, ifMatchHeader],
           requestBody: {
             required: true,
@@ -2583,6 +2650,47 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                 },
               },
             },
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/schedule': {
+        parameters: [idParam('eventId')],
+        put: {
+          summary: 'Replace an event’s rule under the edit guard',
+          description:
+            'The edit form’s save. The body takes exactly one arm - `{ recurrence: { rrule, endsOn? } }` for a recurring event, or `{ period: { frequency, day? } }` for a period event - and the arm must match the event’s type, which is fixed at create (`422` otherwise). `day` is `MON`-`SUN`, never the rrule’s `MO`-`SU`. The guard is enforced server-side: the parent read’s `schedule.locked` is computed by the same function this write calls, and a write while it is closed answers `409 recurrence_locked`. `effectiveFrom` is derived from the version in force, never sent. The write replaces the version in force with the same `effectiveFrom` (or the stored period fields) in one transaction, deletes only future `scheduled` rows - a future `cancelled` row survives, and exceptions re-apply on regeneration - then regenerates the event’s current window; it never extends the horizon, and `generated: false` says the window could not be produced. The answer carries the rule and provenance stored after the write, not an echo of the request.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('EventScheduleWrite') } },
+          },
+          responses: {
+            200: {
+              description:
+                'The rule in force after the write, its period provenance, and the regenerated window.',
+              content: {
+                'application/json': {
+                  schema: ref('EventScheduleWriteResult'),
+                  examples: {
+                    recurrence: {
+                      summary: 'A recurring event’s rule rewritten to a fortnightly Sunday',
+                      value: eventScheduleWriteExample,
+                    },
+                    period: {
+                      summary: 'A period event’s rule rewritten to monthly Sundays',
+                      value: eventSchedulePeriodWriteExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The edit guard is closed (`recurrence_locked`): an occurrence has started, or offering, attendance or import history exists.',
+            ),
+            422: validation,
           },
         },
       },
