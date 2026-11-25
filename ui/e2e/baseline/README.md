@@ -12,42 +12,43 @@ stubbed gateway from `ui/e2e/fixtures.ts`, `deviceScaleFactor: 1`, the locale pi
 timezone to `UTC`, reduced motion, animations disabled and the caret hidden. It is a separate
 Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never writes images.
 
-| File                                | Screen                                               | Viewport    | Mock reference                                   |
-| ----------------------------------- | ---------------------------------------------------- | ----------- | ------------------------------------------------ |
-| `shell-light.png`                   | Shell, expanded sidebar, fluent light                | 1440 × 900  | `v2-shell/01-shell-expanded-light.png`           |
-| `shell-dark.png`                    | Shell, expanded sidebar, fluent dark                 | 1440 × 900  | `v2-shell/03-shell-expanded-dark.png`            |
-| `shell-collapsed.png`               | Shell, collapsed icon rail, light                    | 1440 × 900  | `v2-shell/02-shell-collapsed-light.png`          |
-| `shell-mobile.png`                  | Shell, 390 px sections menu, collapsed rail          | 390 × 844   | `v2-shell/06-mobile.png`                         |
-| `shell-meadow.png`                  | Shell, Meadow accent, light                          | 1440 × 900  | `v2-shell/05-meadow-accent.png`                  |
-| `members-list.png`                  | Members list, compact rows                           | 1440 × 900  | `v2-shell/10-members-refined.png`                |
-| `member-detail.png`                 | Member detail, Welfare & Services tab                | 1440 × 900  | `v2-shell/12-subscriptions.png`                  |
-| `member-add.png`                    | Add member, step 1 of the step flow                  | 1440 × 1123 | `v2-shell/21-add-person-contact.png`             |
-| `events-list.png`                   | Events list, venue and attendance columns            | 1440 × 900  | `v2-events/01-events-list.png`                   |
-| `events-new.png`                    | New event form, identity, audience, per-date rows    | 1440 × 1123 | `v2-events/10-event-create.png`                  |
-| `events-new-period.png`             | The same form, named period, one cycle               | 1440 × 1123 | `v2-events/10-event-create-period.png`           |
-| `events-new-period-monthly.png`     | The same form, period recurrence, monthly on Sunday  | 1440 × 1123 | `v2-events/21-event-create-period-recurring.png` |
-| `event-edit.png`                    | The same form in edit mode, read-only fields         | 1440 × 1123 | none (no edit-state drawing)                     |
-| `event-detail.png`                  | Event detail, sessions table                         | 1440 × 900  | `v2-events/02-event-detail.png`                  |
-| `event-headcount-dialog.png`        | Event detail, the headcount capture dialog           | 1440 x 900  | `v2-events/06-record-headcount-dialog.png`       |
-| `event-import-panel.png`            | Event detail, the attendance import panel            | 1440 x 900  | `v2-events/07-import-attendance-panel.png`       |
-| `event-attendance-dialog.png`       | Attendance dialog for the first session              | 1440 × 900  | `v2-events/06-attendance-rows.png`               |
-| `series-detail.png`                 | Event detail for the recurring parent                | 1440 × 1000 | `v2-events/03-activity-detail-series.png`        |
-| `series-new.png`                    | Orphaned: the series form retired — no capture case. | 1440 × 900  | `v2-events/11-series-create.png`                 |
-| `shepherding-officers.png`          | Shepherding officers, coverage and officer table     | 1440 × 900  | `v2-shell/07-shepherding-officers.png`           |
-| `shepherding-roster.png`            | Shepherding roster for the fixture officer           | 1440 × 900  | `v2-shell/08-shepherding-roster.png`             |
-| `shepherding-report.png`            | Church report and status distribution                | 1440 × 900  | `v2-shell/09-shepherding-report.png`             |
-| `contacts-dialog.png`               | Contacts dialog for the first fixture member         | 1440 × 900  | `v2-shell/16-contacts.png`                       |
-| `contacts-editable.png`             | Editable contacts dialog on the member record        | 1440 × 900  | `v2-shell/18-contacts-editable.png`              |
-| `imports-members.png`               | Member database import, format and drop zone         | 1440 × 1150 | `v2-imports/01-members-import.png`               |
-| `imports-batches.png`               | Batch lookup, empty tab history                      | 1440 × 900  | none (no mock)                                   |
-| `settings.png`                      | Settings, appearance / date-time / session           | 1440 × 1150 | `v2-settings/01-date-time-settings.png`          |
-| `member-detail-overview.png`        | Member overview, four cards and fixed panels         | 1440 × 900  | `v2-shell/19-member-overview-collapsed.png`      |
-| `member-detail-overview-empty.png`  | Member overview with no history or subscriptions     | 1440 × 900  | `v2-shell/19-member-overview-empty.png`          |
-| `member-detail-overview-narrow.png` | Member overview in one column                        | 860 × 900   | `v2-shell/19-member-overview-narrow.png`         |
-| `member-detail-verified.png`        | Verified record header and badge, three proofs       | 1440 × 900  | `v2-shell/23-member-verification-badge.png`      |
-| `acceptance.png`                    | Public acceptance page, the entry form               | 1440 × 900  | `v2-shell/24-member-acceptance.png`              |
+| File                                | Screen                                                                 | Viewport    | Mock reference                                   |
+| ----------------------------------- | ---------------------------------------------------------------------- | ----------- | ------------------------------------------------ |
+| `shell-light.png`                   | Shell, expanded sidebar, fluent light                                  | 1440 × 900  | `v2-shell/01-shell-expanded-light.png`           |
+| `shell-dark.png`                    | Shell, expanded sidebar, fluent dark                                   | 1440 × 900  | `v2-shell/03-shell-expanded-dark.png`            |
+| `shell-collapsed.png`               | Shell, collapsed icon rail, light                                      | 1440 × 900  | `v2-shell/02-shell-collapsed-light.png`          |
+| `shell-mobile.png`                  | Shell, 390 px sections menu, collapsed rail                            | 390 × 844   | `v2-shell/06-mobile.png`                         |
+| `shell-meadow.png`                  | Shell, Meadow accent, light                                            | 1440 × 900  | `v2-shell/05-meadow-accent.png`                  |
+| `members-list.png`                  | Members list, compact rows                                             | 1440 × 900  | `v2-shell/10-members-refined.png`                |
+| `member-detail.png`                 | Member detail, Welfare & Services tab                                  | 1440 × 900  | `v2-shell/12-subscriptions.png`                  |
+| `member-add.png`                    | Add member, step 1 of the step flow                                    | 1440 × 1123 | `v2-shell/21-add-person-contact.png`             |
+| `events-list.png`                   | Events list, venue and attendance columns                              | 1440 × 900  | `v2-events/01-events-list.png`                   |
+| `events-new.png`                    | New event form, identity, audience, per-date rows                      | 1440 × 1123 | `v2-events/10-event-create.png`                  |
+| `events-new-period.png`             | The same form, named period, one cycle                                 | 1440 × 1123 | `v2-events/10-event-create-period.png`           |
+| `events-new-period-monthly.png`     | The same form, period recurrence, monthly on Sunday                    | 1440 × 1123 | `v2-events/21-event-create-period-recurring.png` |
+| `event-edit.png`                    | The same form in edit mode, read-only fields                           | 1440 × 1123 | none (no edit-state drawing)                     |
+| `event-detail.png`                  | Event detail, sessions table                                           | 1440 × 900  | `v2-events/02-event-detail.png`                  |
+| `event-headcount-dialog.png`        | Event detail, the headcount capture dialog                             | 1440 x 900  | `v2-events/06-record-headcount-dialog.png`       |
+| `event-import-panel.png`            | Event detail, the attendance import panel                              | 1440 x 900  | `v2-events/07-import-attendance-panel.png`       |
+| `event-attendance-dialog.png`       | Attendance dialog for the first session                                | 1440 × 900  | `v2-events/06-attendance-rows.png`               |
+| `series-new.png`                    | Orphaned: the series form retired — no capture case.                   | 1440 × 900  | `v2-events/11-series-create.png`                 |
+| `series-detail.png`                 | The **event** detail under the legacy series path (`/events/series-1`) | 1440 x 1000 | none (the series drawing was pruned)             |
+| `shepherding-officers.png`          | Shepherding officers, coverage and officer table                       | 1440 × 900  | `v2-shell/07-shepherding-officers.png`           |
+| `shepherding-roster.png`            | Shepherding roster for the fixture officer                             | 1440 × 900  | `v2-shell/08-shepherding-roster.png`             |
+| `shepherding-report.png`            | Church report and status distribution                                  | 1440 × 900  | `v2-shell/09-shepherding-report.png`             |
+| `contacts-dialog.png`               | Contacts dialog for the first fixture member                           | 1440 × 900  | `v2-shell/16-contacts.png`                       |
+| `contacts-editable.png`             | Editable contacts dialog on the member record                          | 1440 × 900  | `v2-shell/18-contacts-editable.png`              |
+| `imports-members.png`               | Member database import, format and drop zone                           | 1440 × 1150 | `v2-imports/01-members-import.png`               |
+| `imports-batches.png`               | Batch lookup, empty tab history                                        | 1440 × 900  | none (no mock)                                   |
+| `settings.png`                      | Settings, appearance / date-time / session                             | 1440 × 1150 | `v2-settings/01-date-time-settings.png`          |
+| `member-detail-overview.png`        | Member overview, four cards and fixed panels                           | 1440 × 900  | `v2-shell/19-member-overview-collapsed.png`      |
+| `member-detail-overview-empty.png`  | Member overview with no history or subscriptions                       | 1440 × 900  | `v2-shell/19-member-overview-empty.png`          |
+| `member-detail-overview-narrow.png` | Member overview in one column                                          | 860 × 900   | `v2-shell/19-member-overview-narrow.png`         |
+| `member-detail-verified.png`        | Verified record header and badge, three proofs                         | 1440 × 900  | `v2-shell/23-member-verification-badge.png`      |
+| `acceptance.png`                    | Public acceptance page, the entry form                                 | 1440 × 900  | `v2-shell/24-member-acceptance.png`              |
 
-`member-add` uses the step-flow entry's 1123 px and `series-detail` its 1000 px, rather than a
+`member-add` uses the step-flow entry's 1123 px, and `series-detail` its 1000 px because the event detail under the
+legacy series path is taller than the fold, rather than a
 rounded 900 px, because the form's first step and the series screen are taller than the fold. `imports-batches` has no local
 mock; its viewport follows the other 900 px screens.
 

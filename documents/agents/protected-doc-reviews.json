@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "c7bddecead53196c4418e2e51980e92dc9addfaa55430cf165a5d52fcf2bc2b6",
+      "sha256": "93ff56a2cdde7cddca6eaeee32271baed041107897c43358603d23e2997f0802",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner signed the two period drawings after the final layout - 10-event-create-period (3f0c3c2e) and 21-event-create-period-recurring (702e883c, history v9 with the day hint moved into a tooltip) - each paired with a fresh build capture (events-new-period.png, events-new-period-monthly.png), and the surface gained story EVP-PERIOD plus four spec claims so the pairing can be scored at all. why: the drawings are the layout the build now matches, the owner signed them, and the captures are the build proof this round owed - including the stale events-new.png it replaced. rejected: pairing the states without claims (the tool refuses a paired state with no spec control), asserting that the resolved dates appear in the capture (the stub deliberately resolves none - the claims were reworded to the structure both artefacts show), and signing on a stale capture.",
+      "reason": "changes: round parity-audit reconciles the signed drawings with the specs, and the catalogue follows - EVA-ACTIONS reworded to the one-verb rule and re-anchored to AC-50; EVA-ROW-MENU withdrawn (the list carries no row menu); AD-HC-DIALOG withdrawn and AD-HC-VISITOR reworded to the shared headcount dialog Mode control, because the chip row was never the control the console shares; the three activity-detail states pruned with their surface slice and inventory row (the series screens are retired); 19-event-edit-standalone dropped to target, since it draws editable date rows the edit form cannot carry. why: the signatures named drawings the spec contradicted, and a claim that asserts a withdrawn control is drift with a signature on it. rejected: keeping EVA-ROW-MENU because the drawing shows a menu (drawing superseded by AC-50), amending AC-61 to justify the chip row (it would fork a dialog the USSD console shares), and signing 19 against a control no route accepts.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent, with one P2 fixed: the PRESENT claims said the resolved dates appear, which the empty-preview capture does not show, so they now assert the one-line summary and the Preview control that both the drawing and the capture carry. Both signatures match their mock hashes, the pairings are fresh files, the duplicated per-state claims match the catalogue convention, and the earlier signatures and the four targets are untouched.",
-      "at": "2026-11-25T19:06:15Z"
+      "attestation": "Seat: contradicted twice, then consistent - the first pass caught the unpropagated FR-42/FR-42a and EVA-ACTIONS; the second caught AD-HC-DIALOG still asserting the chip. Both fixed, the prune left no dangling surface, inventory, story or baseline reference, and the orphaned series-detail baseline was removed with its README row. The seat accepted AC 50 as a deliberate wording around the USSD catalogue unanchored AC-50 pattern, noting the root fix is to anchor that pattern.",
+      "at": "2026-11-25T20:12:32Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

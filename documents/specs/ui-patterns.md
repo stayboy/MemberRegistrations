@@ -1,6 +1,6 @@
 # Spec — UI patterns
 
-**Status:** **DRAFT for approval, 2026-11-25.** A pattern is behaviour — it decides what a surface must look like —
+**Status:** **APPROVED 2026-11-25** by the owner, after the `0813` review of this text. A pattern is behaviour — it decides what a surface must look like —
 so this file takes the spec gate: owner approval, then a `0813` review of the exact text. It is **not** in the
 `AGENTS.md` §10a protected set, deliberately: patterns are added more often than any other spec, and a hash record per
 pattern would make the gate the bottleneck.
@@ -63,8 +63,7 @@ test cannot tell a stale citation from a current one.
 
 ## P-1 — Data row
 
-**Status:** **proposed — awaiting the owner's approval and a `0813` pass on this file.** Nothing may cite it as
-binding until then. **Provenance:** owner rulings 2026-11-13 (page trigger), 2026-11-25 (row shape, after the periods
+**Status:** **current** — approved by the owner and reviewed by `0813` on 2026-11-25. **Provenance:** owner rulings 2026-11-13 (page trigger), 2026-11-25 (row shape, after the periods
 landing page was re-cut three times for want of this entry).
 
 **Rule.** A row in a data grid presents its **identity as a link** and its **row actions in a trailing icon-only menu**;
@@ -103,10 +102,9 @@ site has arrived. Its `dom` test **will assert** the accessibility contract abov
 
 | surface      | FR / AC                                                                  | claim                                                                                         |
 | ------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| events list  | FR-42a, AC-56                                                            | `EVA-ROW-MENU`, `EVA-NO-OPEN` (`mock-only`)                                                   |
+| events list  | FR-42a, AC-56                                                            | `EVA-NO-OPEN` only - the list carries **no** row menu (FR-42; AC-50’s one verb)               |
 | roster       | FR-59a, **AC-35a**                                                       | **no atom yet** — the overflow and `Log call` live in FR-59a only                             |
 | members list | FR-29                                                                    | `ML-ROW-MENU` (`mock-only`: "each row ends in an overflow menu rather than a bare open icon") |
 | periods list | `member-registrations-event-periods.md`, "Managing the period catalogue" | none yet — the admin surface is unapproved                                                    |
 
-**Known gap.** The roster's `Log call` button is the `primary-action` variant and is **not yet** rewired to
-`RowActionsMenu`; the extraction and rewire are owed by the next UI round, which records them in its plan.
+**Known gap.** P-1 is `current`, so the two hand-rolled row menus are now **live defects**: the roster’s `RowActionMenu` and `MembersPage.tsx`’s inline menu. `RowActionsMenu` is required, and the next UI round that touches either surface must extract it and rewire both, recording that in its plan; until then the defect is named here rather than silently tolerated.

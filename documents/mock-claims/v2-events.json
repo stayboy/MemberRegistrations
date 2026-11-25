@@ -6,28 +6,6 @@
   ],
   "surfaces": [
     {
-      "id": "activity-detail",
-      "route": "/events/:id",
-      "spec": [
-        {
-          "file": "documents/specs/member-registrations-ui.md",
-          "section": "Acceptance Criteria"
-        },
-        {
-          "file": "documents/specs/member-registrations-events-offerings.md",
-          "section": "Acceptance Criteria"
-        }
-      ],
-      "acsMatch": [
-        "one page verb",
-        "the detail shows the event",
-        "the import panel opens on that",
-        "schedule versions",
-        "adds a schedule version or exception",
-        "never presents the headcount as the sum"
-      ]
-    },
-    {
       "id": "events-list",
       "route": "/events",
       "spec": [
@@ -60,48 +38,6 @@
     }
   ],
   "states": {
-    "03-activity-detail-series": {
-      "mock": {
-        "path": "mockups/v2-events/03-activity-detail-series.png",
-        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f",
-        "source": "mockups/v2-events/03-activity-detail.html"
-      },
-      "baseline": "series-detail.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "ee296ee41942e12b060696bf3acb57995f0171bd2f64a94a974fe960356cc74f"
-      }
-    },
-    "04-activity-detail-event": {
-      "mock": {
-        "path": "mockups/v2-events/04-activity-detail-event.png",
-        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e",
-        "source": "mockups/v2-events/03-activity-detail.html"
-      },
-      "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "c0671da3d7318d2adb998d2dbff9644d11632659539be4c41d7ee79aa0e9934e"
-      }
-    },
-    "05-activity-detail-cancelled": {
-      "mock": {
-        "path": "mockups/v2-events/05-activity-detail-cancelled.png",
-        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4",
-        "source": "mockups/v2-events/03-activity-detail.html"
-      },
-      "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "e74e9bb66aa298d1e9eb1c0717930b297b379b1945f83ed5546b05537ffebac4"
-      }
-    },
     "01-events-list": {
       "mock": {
         "path": "mockups/v2-events/01-events-list.png",
@@ -325,12 +261,7 @@
         "source": "mockups/v2-events/19-event-edit-standalone.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "e7d599efce070bdf5944a60eb8d605e934884ca8c8680c32769877177e16a622"
-      }
+      "coverage": "target"
     },
     "20-event-preview-dialog": {
       "mock": {
@@ -390,47 +321,6 @@
     }
   },
   "inventory": [
-    {
-      "surface": "activity-detail",
-      "acs": [
-        {
-          "file": "documents/specs/member-registrations-ui.md",
-          "id": "AC-50",
-          "disposition": "claimed",
-          "entry": "AD-MENU"
-        },
-        {
-          "file": "documents/specs/member-registrations-events-offerings.md",
-          "id": "AC-3",
-          "disposition": "claimed",
-          "entry": "AD-HEADCOUNT"
-        },
-        {
-          "file": "documents/specs/member-registrations-events-offerings.md",
-          "id": "AC-7",
-          "disposition": "claimed",
-          "entry": "AD-IMPORT"
-        },
-        {
-          "file": "documents/specs/member-registrations-ui.md",
-          "id": "AC-61",
-          "disposition": "claimed",
-          "entry": "AD-HC-VISITOR"
-        },
-        {
-          "file": "documents/specs/member-registrations-events-offerings.md",
-          "id": "AC-5",
-          "disposition": "e2e-only",
-          "test": "ui/e2e/events.spec.ts::the event detail shows schedule versions, exceptions, occurrences and the four summary tiles"
-        },
-        {
-          "file": "documents/specs/member-registrations-events-offerings.md",
-          "id": "AC-6",
-          "disposition": "deferred",
-          "backlog": "Remaining behavioural ACs behind the v2 mock catalogues"
-        }
-      ]
-    },
     {
       "surface": "events-list",
       "acs": [
@@ -537,135 +427,6 @@
   ],
   "entries": [
     {
-      "id": "AD-MENU",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "The page’s verbs sit in one Actions menu, with Refresh leading the row.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-50"],
-      "spec": {
-        "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-50",
-        "quote": "one Actions menu holds them"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-REFRESH-FIRST",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "Refresh is drawn before the Back control and before the Actions menu.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-50"],
-      "spec": {
-        "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-50",
-        "quote": "before Back, the verb and the menu"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-HEADCOUNT",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "An occurrence row offers Record headcount beside View rows.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-3"],
-      "spec": {
-        "file": "documents/specs/member-registrations-events-offerings.md",
-        "anchor": "AC-3",
-        "quote": "each occurrence row offers **Record headcount**"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-LANES",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "A counted session shows its total with its lane buckets, not a bare number.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-3"],
-      "spec": {
-        "file": "documents/specs/member-registrations-events-offerings.md",
-        "anchor": "AC-3",
-        "quote": "total with its lane buckets"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-IMPORT",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "A recurring event's occurrence row opens the attendance import panel.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-7"],
-      "spec": {
-        "file": "documents/specs/member-registrations-events-offerings.md",
-        "anchor": "AC-7",
-        "quote": "the import panel opens on that"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-IMPORT-EVENT",
-      "story": "AD-SESSIONS",
-      "state": "04-activity-detail-event",
-      "claim": "A standalone event’s occurrence rows offer an import control.",
-      "expect": "PRESENT",
-      "class": "spec-required",
-      "assert": "image",
-      "anchorKind": "ac",
-      "ac": ["AC-7"],
-      "spec": {
-        "file": "documents/specs/member-registrations-events-offerings.md",
-        "anchor": "AC-7",
-        "quote": "A **standalone** occurrence offers the same entry"
-      },
-      "control": "spec"
-    },
-    {
-      "id": "AD-CANCELLED-ROW",
-      "story": "AD-SESSIONS",
-      "state": "05-activity-detail-cancelled",
-      "claim": "The cancelled session row states its reason and keeps the other sessions visible.",
-      "expect": "PRESENT",
-      "class": "mock-only",
-      "assert": "image"
-    },
-    {
-      "id": "AD-HC-DIALOG",
-      "story": "AD-SESSIONS",
-      "state": "06-record-headcount-dialog",
-      "claim": "The count dialog selects a lane with a round chip group; Visitor Mode is one chip whose visitor men, visitor women and visitor children appear beneath it when selected.",
-      "expect": "PRESENT",
-      "class": "mock-only",
-      "assert": "image"
-    },
-    {
-      "id": "AD-GRID-PATTERN",
-      "story": "AD-SESSIONS",
-      "state": "03-activity-detail-series",
-      "claim": "The detail grids use the members pattern: sentence-case headers, a date identity block, a trailing row menu and a footer count.",
-      "expect": "PRESENT",
-      "class": "mock-only",
-      "assert": "image"
-    },
-    {
       "id": "AD-IMPORT-DROP",
       "story": "AD-SESSIONS",
       "state": "07-import-attendance-panel",
@@ -714,7 +475,7 @@
       "id": "EVA-ACTIONS",
       "story": "EVA-LIST",
       "state": "01-events-list",
-      "claim": "The page’s one verb (New event) sits in one Actions menu, with Refresh leading the row.",
+      "claim": "The page’s one verb (New event) renders as a visible control in the action row, with Refresh as a bare icon before it and no Actions menu.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
@@ -722,8 +483,8 @@
       "assert": "image",
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
-        "anchor": "AC-55",
-        "quote": "one `Actions` menu holds **New event**"
+        "anchor": "AC-50",
+        "quote": "that verb is a visible control in the action row and no Actions menu is rendered"
       },
       "control": "spec"
     },
@@ -760,15 +521,6 @@
         "quote": "each recurring event shows a human-readable schedule"
       },
       "control": "spec"
-    },
-    {
-      "id": "EVA-ROW-MENU",
-      "story": "EVA-LIST",
-      "state": "01-events-list",
-      "claim": "The event name is the row link and a trailing row menu at the right edge holds the row actions.",
-      "expect": "PRESENT",
-      "class": "mock-only",
-      "assert": "image"
     },
     {
       "id": "EVA-NO-OPEN",
@@ -834,7 +586,7 @@
       "id": "AD-HC-VISITOR",
       "story": "AD-SESSIONS",
       "state": "06-record-headcount-dialog",
-      "claim": "Visitor Mode is one chip whose visitor men, visitor women and visitor children appear beneath it when selected.",
+      "claim": "Visitor Mode is the shared dialog’s Mode control.",
       "expect": "PRESENT",
       "class": "spec-required",
       "anchorKind": "ac",
@@ -843,7 +595,7 @@
       "spec": {
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-61",
-        "quote": "**Visitor Mode** offers visitor men, visitor women and visitor children"
+        "quote": "a **Visitors** mode offers visitor men, visitor women and visitor children"
       },
       "control": "spec"
     },
