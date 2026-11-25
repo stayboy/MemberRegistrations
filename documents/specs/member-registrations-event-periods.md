@@ -2,7 +2,9 @@
 
 **Status:** **APPROVED 2026-11-24** by the owner, after two grill rounds and four behavioural review passes
 (`reviewer-pro`, `mimo-v2.6-pro`, verdict `consistent` on the fourth). The review's verdict and this approval apply to
-this exact text. **Two hard gates remain ungranted** (AGENTS.md §17): the `event_audiences` / `event_no` migration and
+this exact text. **Amended 2026-11-25** on the owner's answers: `day` codes are `MON`-`SUN`, the catalogue read gains
+`dates` (`week` | `date`), and the preview accepts either period shape; the amendment is with `0813` for review before
+any code builds against it. **Two hard gates remain ungranted** (AGENTS.md §17): the `event_audiences` / `event_no` migration and
 the event wire contract land only when an instruction names this round and both gates. No code may land before that.
 
 **Author:** Solomon Owoo (synthesised by the agent; amended after the grill)
@@ -293,7 +295,8 @@ stops describing its rule is renamed with it.
     returns distinct dates.
   - **The server resolves at create.** Create accepts `period: { id, cycleMonth }` instead of the client's
     `occurrences[]`, and the server resolves it with the same function the preview uses, so preview and create cannot
-    diverge; a create that sends both a period and explicit dates is refused. `POST /v1/events/preview` keeps taking
+    diverge; a create that sends a `period` alongside `occurrences` **or** a `recurrence` is refused (AC 18), and so is
+    a period that sends both `cycleMonth` and `frequency`. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
   - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
     created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line directly under its **identity** (not beside when and where): for a one-off period
@@ -309,6 +312,15 @@ stops describing its rule is renamed with it.
     derivable from the first occurrence, because the anchor may precede it. With `day` given it is that weekday
     inside each cycle's period ("Miracle Sunday" is the Sunday of Communion Week, every month); without it the whole
     period is generated (seven dates for Communion Week). Home Cells is a single date, so `day` is refused there.
+    **`day` is one of `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`** - three-letter upper-case codes, deliberately
+    not the rrule's two-letter `MO`-`SU`, so a stored period day can never be read as a fragment of an rrule
+    (owner, 2026-11-25). **The UI's period control therefore owns its own seven labels** and does not reuse the schedule
+    builder's `WeekdayCode`/`WEEKDAY_LABELS` (`MO`-`SU`); the only mapping between the two vocabularies is `MON`↔`MO` …
+    `SUN`↔`SU`, and it lives in the form's adapter, nowhere else (review, 2026-11-25).
+    **The window rule is the recurrence arm's** (owner, 2026-11-25, on review): the first generated date is the first
+    matching date **on or after** `effectiveFrom`, so an anchor that lands mid-cycle starts at the next cycle's date -
+    a cycle whose date has passed is skipped, never emitted and then rewritten, and `effectiveFrom` never touches an
+    occurrence that already exists.
     - **`frequency` is a closed enum that starts with `monthly`** — every named period is cycle-month based today — but
       the field exists so a genuinely annual period arrives as a new value, not a new shape. The preview and the generator use the **same 90-day horizon the create and `generate` already use**, so a monthly
       period recurrence previews and materialises every cycle falling inside that window - typically three - never a
@@ -332,10 +344,17 @@ stops describing its rule is renamed with it.
     a screen (backlog: "named-period catalogue and authoring screen"), the rule is the one audiences already follow:
     **archive, never delete**, so a form open across the change cannot fail on submit against an id that vanished
     between render and save.
-- **Two read-only contract entries:** `GET /v1/events/periods` (id, name, definition) served from the code
+- **Two read-only contract entries:** `GET /v1/events/periods` (`id`, `name`, `definition`, **`dates`**) served from the code
   constants, registered before `/:id`; and `POST /v1/events/preview` - no persistence - accepting either the create's
-  `recurrence` or `period: { id, cycleMonth }`, returning
+  `recurrence` or the create's `period` in **either** shape (`{ id, cycleMonth }` or
+  `{ id, frequency: 'monthly', day?, effectiveFrom? }`), returning
   `{ occurrences: [{ date, expected }], audienceCounts: [{ id, count }] }` within the create's 90-day window.
+  **`dates` is `week` or `date`** (owner, 2026-11-25): a `week` period returns seven dates and may take a `day`; a
+  `date` period returns one date and refuses `day` - the form hides the `day` control for it rather than offering a
+  control the server must reject, and the property is what makes that possible without the form re-deriving the rule.
+  **`dates` is the wire projection of the resolver's `kind`** (`src/domain/periods.ts`), derived from the same rule the
+  resolver reads and never hand-written, so the catalogue and the resolver cannot disagree about a period's shape
+  (review, 2026-11-25).
 - **Creating and editing named periods is another round**: an admin screen and a catalogue table are deferred, with
   the backlog row "named-period catalogue and authoring screen", triggered by a fourth period or a definition change
   that must not need a deploy.
@@ -498,6 +517,11 @@ missing one as blocking:
 - **`member-registrations-api.md`'s `event_recurrence_versions` row** - it called the table "append-only" with no
   carve-out, while §24d's guarded rewrite deletes the version in force. The row now states the carve-out and the
   reason, matching the `event_recurrence_exceptions` row's existing reasoning about records that carry no history.
+- **The period wire (this amendment, 2026-11-25)** - `member-registrations-api.md`'s event create and read rows gain the
+  `period` arm (`{ id, cycleMonth }` | `{ id, frequency: 'monthly', day?, effectiveFrom? }`), the read's
+  `period { id, name, cycle?, frequency?, day? }`, the `day` codes `MON`-`SUN`, and `dates` on the periods catalogue row;
+  `member-registrations-ui.md` FR-42f states that the period control carries its own day labels and does not reuse the
+  schedule builder's `MO`-`SU` constants.
 
 ## Out of Scope
 

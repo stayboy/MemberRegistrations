@@ -62,6 +62,26 @@ already composes a positive and a negative audience, because `noneOf` is a pure 
 (`src/domain/audience-evaluator.ts:79-80`). "Everyone but youth" is `allOf [active]` intersected with
 `noneOf [Youth]`; the audience rule language is unchanged, and one wire item left the round.
 
+### Third frontier - the period API half (2026-11-25)
+
+The create form's build proved that the approved spec's period half has **no implementation**: no `period` on create or
+read, no provenance columns, no generator arm, and `preview` still taking the pre-recurrence `{ id, cycleMonth }` alone.
+No seat ran on this frontier - the parent put the four questions directly and the owner answered them, which is the
+owner answering under §2, **not a seat-run grill**, and is recorded here rather than in the seat's name.
+
+17. **Where the period API half lands.** Recommendation: implement it now, before the UI merges. Cost: a migration plus a
+    generator arm plus readers, on a round already at 25 commits. **Answered: as recommended** (option (a)).
+18. **`period.day` encoding.** Recommendation: the rrule two-letter `MO`-`SU`. **The owner overruled it: `MON`-`SUN`** -
+    three-letter upper-case codes, deliberately not the rrule's spelling, so a stored period day cannot be read as an
+    rrule fragment. Cost: a second weekday vocabulary in the codebase, and an adapter mapping (`MON`↔`MO` …) that the
+    form owns and the tests pin, so the two spellings can never be passed to each other's code path.
+19. **How the form knows a period takes no `day`.** Recommendation: the catalogue read gains `dates: 'week' | 'date'`
+    (a spec amendment). Cost: a third restatement of the rule, and an `0813` pass. **Answered: as recommended.**
+20. **Gate cover.** Recommendation: the round's existing grant ("the migration and wire contract are approved") covers
+    this migration and this contract change. Cost: the grant is read at its widest - a second migration and a second
+    contract change inside the same named round - so the round doc must show both, and the next round inherits no
+    standing permission. **Answered: as recommended.**
+
 ## Plan
 
 The amended spec `documents/specs/member-registrations-event-periods.md` carries four changes to one surface. It is
@@ -128,12 +148,18 @@ because this commit carries no code.
 
 ## Verification
 
-| Gate                  | Command                    | Result |
-| --------------------- | -------------------------- | ------ |
-| pre-commit (this doc) | `npm run verify:precommit` | pass   |
-| PR 1 contract         | `npm run verify:fast`      | pass   |
-| PR 2 API + migration  | `npm run verify:fast`      | pass   |
-| PR 2 smoke            | `npm run smoke`            | pass   |
+| Gate                  | Command                                              | Result               |
+| --------------------- | ---------------------------------------------------- | -------------------- |
+| pre-commit (this doc) | `npm run verify:precommit`                           | pass                 |
+| PR 1 contract         | `npm run verify:fast`                                | pass                 |
+| PR 2 API + migration  | `npm run verify:fast`                                | pass                 |
+| PR 2 smoke            | `npm run smoke`                                      | pass                 |
+| PR 5 UI (create)      | `npm run verify:fast`                                | pass (re-run 1 of 2) |
+| PR 5 UI (create)      | `npm run ui:test`                                    | 546 passed           |
+| PR 5 UI (create)      | `npm --prefix ui run test:dom`                       | 249 passed           |
+| mock restore          | `node scripts/mock/shell-check.mjs v2-events`        | pass (26/26 mocks)   |
+| mock claims           | `npx vitest run tests/meta/mock-claims.test.ts`      | pass (77)            |
+| `26` re-cut           | `node mockups/v2-events/capture-events-filtered.mjs` | v4 `fb006334`        |
 
 gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 
@@ -171,5 +197,25 @@ gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
   convention per row** (the seeded calendar is Monday-start). Communion Sunday is the month's first Sunday under
   either convention; only the week's span moves. Resolver, date table (hand-computed for both conventions), OpenAPI
   examples and the catalogue definitions all follow, and per-cycle exceptions stay in the event admin.
-- The round's lineage lives on `feat/event-periods-ui`, pushed, one commit ahead of `main@46f4886`.
+- The round's lineage lives on `feat/event-periods-ui`, pushed, **25 commits ahead of `main@46f4886`**.
+- **Five signed mock states were in the wrong worktree, not lost (2026-11-25).** `01-events-list`,
+  `03`/`04`/`05-activity-detail-*` and `06-record-headcount-dialog` were recorded `signed` on 2026-11-22 with
+  hashes this worktree's files did not reproduce. The signed cuts are intact in
+  `worktree/bf3bc8/events-add/mockups/` - the worktree the re-cut round ran in - and every hash matches the
+  catalogue (`01` `dfadc7ed`, `03` `ee296ee4`, `04` `c0671da3`, `05` `e74e9bb6`, `06` `41ede1e4`); the copies
+  here and in the primary clone were the pre-re-cut 2026-11-15 files. They were copied back with their
+  `history.json` versions and archives, and **the catalogue needed no change**. Four more states
+  (`02-event-detail` and the `12`/`13`/`14` targets) were missing for the same reason and were restored too:
+  **25/25 catalogue entries now match the file on disk**, and all 134 history archive references resolve.
+  The earlier note that these signatures "cannot be verified" was a copy problem, not a signing problem, and
+  no owner re-signing is owed.
+- **`26-events-list-filtered-period` was re-cut on the signed grid (v4, `fb006334`).** It had been cut
+  against the stale `01` (Activity/Kind/When/Venue, no audience column, no footer), so it no longer read as
+  the same list twice. It now carries the signed `01`'s members grid - date tile, name link, badge, Audience
+  pill, two-line When, attendance, offerings, status, the trailing row menu - plus the period chip, the
+  `3 events` count and a split footer (`3 events from Communion Week · 1 recurring · 2 standalone`,
+  `Showing 1-3 of 3`). The kebab is **restored**: the v3 cut removed the column by inference from the owner's
+  "no `Open` verb" ruling, but the signed `01` draws it (`EVA-ROW-MENU` PRESENT) and §1 says the artefact and
+  the spec must agree. **Open question for the owner:** which non-navigation verbs an event row's menu holds,
+  now that `Open` is gone - no state sources an item, so the menu is drawn closed exactly as `01` leaves it.
 - The original draft still sits untracked in `worktree/bf3bc8/ussd-budget`, where another session left it.
