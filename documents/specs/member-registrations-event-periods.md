@@ -3,9 +3,12 @@
 **Status:** **APPROVED 2026-11-24** by the owner, after two grill rounds and four behavioural review passes
 (`reviewer-pro`, `mimo-v2.6-pro`, verdict `consistent` on the fourth). The review's verdict and this approval apply to
 this exact text. **Amended 2026-11-25** on the owner's answers: `day` codes are `MON`-`SUN`, the catalogue read gains
-`dates` (`week` | `date`), and the preview accepts either period shape; the amendment is with `0813` for review before
-any code builds against it. **Two hard gates remain ungranted** (AGENTS.md §17): the `event_audiences` / `event_no` migration and
-the event wire contract land only when an instruction names this round and both gates. No code may land before that.
+`dates` (`week` | `date`), and the preview accepts either period shape; reviewed by `0813`. **Amended again 2026-11-25**
+for round `event-edit-guard`: the guard's clock, the read's `schedule`, the `PUT .../schedule` verb, the delete set and
+the unguarded audience shrink; reviewed by `0813`. **Both hard gates were granted for round `event-periods` on
+2026-11-24** ("unattended for round `event-periods`, and the migration and wire contract are approved"), and this round's
+wire-contract change is granted on 2026-11-25 ("Round `event-edit-guard` is unattended, and its wire-contract change is
+approved"). No code lands against an ungranted change.
 
 **Author:** Solomon Owoo (synthesised by the agent; amended after the grill)
 
@@ -174,14 +177,25 @@ Four changes to the event surface, and none to the money, attendance or import p
   A standalone event's edit form edits its rows; a recurring event's edit form edits its rule within F1's guard.
 - **The rule is editable from the edit form, under a guard** (owner, 2026-11-24). It is editable only while the event
   is **untouched by history**; any one of these closes the guard:
-  - an occurrence **dated today or earlier** in UTC - the event has started (there is no "started" column:
+  - an occurrence **dated today or earlier** in the **event's own today** - UTC unless the event carries a timezone,
+    exactly as the status chip derives it - so a locked row and an editable rule can never disagree about the date
+    (owner, 2026-11-25). There is no "started" column:
     `event_occurrences.status` is `scheduled | held | cancelled`, so the test is the occurrence's date against the
-    UTC calendar date, and a same-day edit is refused rather than split by a wall-clock time the form does not
-    collect);
-  - an **offering attached** to any occurrence, or a **recorded offering count** for one (money is history);
+    calendar date, and a same-day edit is refused rather than split by a wall-clock time the form does not
+    collect;
+  - an **offering attached** to the event or to any occurrence, or a **recorded offering count** for one (money is
+    history);
   - a **headcount or attendance row**, or an **import suppression**, for any occurrence (attendance evidence is
-    history).
-    When the guard is closed the builder renders read-only with the specific cause named.
+    history; an event that does not track members still carries headcounts, so the read reports the one code
+    `attendance_recorded` for either kind);
+    When the guard is closed the builder renders read-only with the specific cause named. **The client must not
+    derive that state from data it has**: the parent read is windowed, offerings are active-only, `stats` are zeroed and
+    suppressions appear nowhere, so the read carries it - `schedule: { locked, reasons: [{ code, date }] }` - computed by
+    the **same function the write guard calls**, with a closed code set (`occurrence_started`, `offering_attached`,
+    `offering_counted`, `attendance_recorded`, `import_suppressed`) and `date` null for a bare event-level attachment
+    (owner, 2026-11-25). `offering_attached` with a null `date` is an offering attached to the **event**, a dated one
+    names the occurrence; `attendance_recorded` covers a headcount **or** an attendance row, because a
+    `tracksMembers: false` event has the first without the second.
   - **"Rewrite" and "extend" are pinned by `effectiveFrom` against the last generated occurrence** (reviewer,
     2026-11-24). A version whose `effectiveFrom` is **on or before** the last generated occurrence **rewrites** dates
     the calendar already holds - that is the edit form's save, and it answers `409 recurrence_locked` once the guard is
@@ -189,14 +203,30 @@ Four changes to the event surface, and none to the money, attendance or import p
     `AddScheduleVersionDialog`, allowed with or without history, because it adds dates ahead of the record and replaces
     none. The same split governs the exception writes: an exception on a generated date is a rewrite, one on a future
     date is an extension.
-  - **A locked event's parent `PATCH` omits `recurrence` entirely**, and an unchanged rule is not a write: editing a
-    name, description, audience or time on a locked event succeeds, and `409 recurrence_locked` fires only on an actual
-    recurrence write.
-- **Saving the edited rule replaces the version in force, and it never rewrites a past date.** The write is
-  `POST /v1/events/{id}/recurrence/versions` with `{ rrule, endsOn? }` - **`effectiveFrom` is not part of the edit
-  request body; the server derives it**, and the schema requires the field today, so the edit's input is a distinct
-  shape that omits it. In **one transaction** the server **deletes the version in force - the newest `effective_from` at or before today
-  (api.md) - and inserts the new one with the same `effective_from`**, then regenerates the window, so the preview and the calendar agree. That delete is
+  - **The parent `PATCH` refuses `recurrence` and `period` by name** (`422`, the `eventNo` idiom), because a
+    `recurrence` key is silently stripped today and a stripped write is a lost edit (owner, 2026-11-25). An unchanged
+    rule is not a write: the form sends the rule **only when the authored rule differs from the stored one**, compared
+    through the rrule mapping, so editing a name, description, audience or time on a locked event succeeds, and
+    `409 recurrence_locked` fires only on an actual schedule write.
+  - **The guard is schedule-only, and it does not guard an audience shrink** (owner, 2026-11-25). AC 9 blesses the
+    shrink, and `expected` and the window's `rate` are recomputed from the **current** set for every date, including
+    past ones, so a shrink after attendance exists already moves what a past occurrence reports. That debt is recorded
+    in the backlog rather than guarded here; the guard's reasons never name an audience cause.
+- **Saving the edited rule is one verb with two arms** (owner, 2026-11-25): **`PUT /v1/events/{id}/schedule`** takes
+  either `{ recurrence: { rrule, endsOn? } }` or `{ period: { frequency, day? } }`, and the arm that does not match the
+  event's type is refused `422`. **`effectiveFrom` is not part of the edit request body; the server derives it**, and
+  the create's schema requires the field, so the edit's input is a distinct shape that omits it. In **one transaction** the server **deletes the version in force - the newest `effective_from` at or before today
+  (api.md) - and inserts the new one with the same `effective_from`**, then regenerates the window, so the preview and the calendar agree. **Only future rows with status `scheduled` are replaced**: a future `cancelled` row
+  survives a rewrite - the officer's decision outlives the rule that produced it, and the calendar truthfully shows a
+  cancelled date the new rule no longer produces - and the resolver re-applies the `extra`/`cancelled` exceptions on
+  regeneration. The response is `{ recurrence, period, occurrences, generated }` and it **never extends the horizon**;
+  `generate` remains the calendar's own job. `recurrence` is the rule **in force after the write**
+  (`{ schedules, exceptions }`, or null for a period event) and `period` is the provenance **after** it
+  (`{ id, name, frequency, day }` - the written values, never the previous ones - or null for an rrule event), so the
+  form renders what is stored rather than what it sent; the write is offered only for a **recurring** event, so this
+  `period` carries no `cycle` and a `day` only when the rule names one; `occurrences` is the regenerated window and `generated` is
+  false when it could not be produced. A period rule needs no route of its own: the period arm replaces the stored
+  `frequency`/`day` in the same transaction, because there is no version row to supersede. That delete is
   permitted precisely because the guard is open: the guard is the test for "nothing has happened against these dates
   yet", so the version being replaced is not history (§5 protects records that have history, and this one provably has
   none). The `(event_id, effective_from)` unique index is satisfied because the old row is gone in the same
@@ -334,9 +364,10 @@ stops describing its rule is renamed with it.
       `POST /v1/events/generate` walks both kinds through a common expand step (rrule version, or period rule), over the
       same forward window, so a period event materialises exactly as a recurrence does and past dates are never rewritten.
     - **The period rule is editable under the same guard, and replaced rather than versioned** (AC 19): while the event
-      has no history the stored `frequency`/`day` may change, and saving replaces those fields in one transaction because
-      there is no version row to supersede; once the guard closes the rule is read-only and a write answers
-      `recurrence_locked`. There is no "extend" operation for a period rule - a future change is a new event.
+      has no history the stored `frequency`/`day` may change, and saving replaces those fields in one transaction through
+      the same `PUT /v1/events/{id}/schedule` period arm, because there is no version row to supersede; once the guard
+      closes the rule is read-only and a write answers `recurrence_locked`. There is no "extend" operation for a period
+      rule - a future change is a new event.
     - **Provenance for a recurring period event** records what generates it: `period { id, name, frequency, day? }`,
       with no single `cycle` — the cycle belongs to each occurrence, not to the event. A one-off period event keeps
       `period { id, name, cycle }` and no frequency.

@@ -718,9 +718,36 @@ export const createEventParentSchema = z
   });
 
 /**
+ * The schedule has its own verb, `PUT /v1/events/{eventId}/schedule`. A patch
+ * that carries either key would otherwise be silently stripped - a dropped
+ * write - so both are refused **by name**, the `eventNo` idiom at the schema.
+ */
+const recurrenceRefusalSchema = z
+  .never({
+    error:
+      'recurrence: is not accepted on the event patch; rewrite the rule with PUT /v1/events/{eventId}/schedule',
+  })
+  .optional()
+  .describe(
+    'Refused: the schedule is written by `PUT .../schedule`; sending this field is a 422 naming it.',
+  );
+
+const periodRefusalSchema = z
+  .never({
+    error:
+      'period: is not accepted on the event patch; rewrite the rule with PUT /v1/events/{eventId}/schedule',
+  })
+  .optional()
+  .describe(
+    'Refused: the schedule is written by `PUT .../schedule`; sending this field is a 422 naming it.',
+  );
+
+/**
  * `PATCH /v1/events/{eventId}`: the same parent fields without the recurrence,
  * all optional. `eventNo` is immutable and refused by name; the legacy
- * projections stay refused. `audienceIds` replaces the whole set when present.
+ * projections stay refused; `recurrence` and `period` are refused by name
+ * because the schedule has its own verb. `audienceIds` replaces the whole set
+ * when present.
  */
 export const updateEventParentSchema = z
   .object({
@@ -736,6 +763,8 @@ export const updateEventParentSchema = z
     endTime: timeStringSchema.nullable().optional(),
     tracksMembers: z.boolean().optional(),
     status: eventStatusSchema.optional(),
+    recurrence: recurrenceRefusalSchema,
+    period: periodRefusalSchema,
   })
   .superRefine((value, ctx) => {
     checkAudienceAlias(value, ctx);
@@ -744,6 +773,70 @@ export const updateEventParentSchema = z
 /** `POST .../occurrences/{date}/cancel`: the reason is stored as the occurrence's `note`. */
 export const cancelOccurrenceSchema = z.object({
   note: z.string().trim().min(1).max(200),
+});
+
+/**
+ * `PUT /v1/events/{eventId}/schedule`: the edit form's save, under the guard.
+ * The request takes **exactly one arm**, and the arm must match the event's
+ * type - `recurrence` for an rrule event, `period` for a period event - because
+ * the type is fixed at create. Both arms are strict, so a body carrying both
+ * keys, or neither, is refused `422` rather than having the extra key silently
+ * stripped. `effectiveFrom` is **not** part of the edit body: the server
+ * derives it from the version in force, and the create's schema requires the
+ * field, so the edit's input is a distinct shape that omits it.
+ */
+export const eventScheduleRecurrenceArmSchema = z
+  .object({
+    recurrence: z.object({
+      rrule: recurrenceRuleInputSchema,
+      endsOn: dateStringSchema.nullable().optional(),
+    }),
+  })
+  .strict();
+
+export const eventSchedulePeriodArmSchema = z
+  .object({
+    period: z.object({
+      frequency: eventPeriodFrequencySchema,
+      day: eventPeriodDaySchema
+        .optional()
+        .describe(
+          'A weekday inside each cycle, MON-SUN (never the rrule MO-SU); refused for a single-date period.',
+        ),
+    }),
+  })
+  .strict();
+
+export const eventScheduleWriteSchema = z
+  .union([eventScheduleRecurrenceArmSchema, eventSchedulePeriodArmSchema])
+  .describe(
+    'Exactly one arm: `{ recurrence: { rrule, endsOn? } }` for a recurring event, or `{ period: { frequency, day? } }` for a period event. The arm that does not match the event type is refused 422, and so is a body carrying both arms or neither.',
+  );
+
+/**
+ * The write's answer: the rule **in force after the write**, the provenance
+ * after it, the regenerated window and whether the window could be produced.
+ * The rule and the period are what is stored, never an echo of the request, so
+ * the form renders `recurrence`/`period` rather than what it sent.
+ */
+export const eventSchedulePeriodStateSchema = z.object({
+  id: eventPeriodIdSchema,
+  /** The name snapshot taken at save. */
+  name: z.string(),
+  frequency: eventPeriodFrequencySchema,
+  /** A weekday inside each cycle; null when the whole period is generated. */
+  day: eventPeriodDaySchema.nullable(),
+});
+
+export const eventScheduleWriteResultSchema = z.object({
+  /** The rule in force after the write; null for a period event. */
+  recurrence: eventRecurrenceSchema.nullable(),
+  /** The provenance after the write, carrying no `cycle`; null for an rrule event. */
+  period: eventSchedulePeriodStateSchema.nullable(),
+  /** The regenerated window; the write never extends the event's horizon. */
+  occurrences: z.array(eventOccurrenceSchema),
+  /** False when the window could not be produced; the rule is still saved. */
+  generated: z.boolean(),
 });
 
 export type CreateEventParentInput = z.infer<typeof createEventParentSchema>;
@@ -759,9 +852,50 @@ export type EventPeriodInput = z.infer<typeof eventPeriodInputSchema>;
 export type EventPeriodProvenance = z.infer<typeof eventPeriodProvenanceSchema>;
 export type EventPreviewInput = z.infer<typeof eventPreviewInputSchema>;
 export type EventPreview = z.infer<typeof eventPreviewSchema>;
+export type EventScheduleWrite = z.infer<typeof eventScheduleWriteSchema>;
+export type EventScheduleWriteResult = z.infer<typeof eventScheduleWriteResultSchema>;
 
 /** The parent read's window figures: the data behind the four tiles (S-Q2). */
 export const eventWindowSummarySchema = seriesSummarySchema;
+
+/**
+ * The edit guard's closed cause set. The read reports the reasons so the UI
+ * never offers a schedule edit the write would refuse; the codes are the write
+ * guard's own, never a second derivation.
+ */
+export const EVENT_SCHEDULE_LOCK_CODES = [
+  'occurrence_started',
+  'offering_attached',
+  'offering_counted',
+  'attendance_recorded',
+  'import_suppressed',
+] as const;
+export const eventScheduleLockCodeSchema = z.enum(EVENT_SCHEDULE_LOCK_CODES);
+export type EventScheduleLockCode = (typeof EVENT_SCHEDULE_LOCK_CODES)[number];
+
+export const eventScheduleLockReasonSchema = z.object({
+  code: eventScheduleLockCodeSchema,
+  /**
+   * The occurrence the cause names; null for a bare event-level offering
+   * attachment, which names no date.
+   */
+  date: dateStringSchema.nullable(),
+});
+
+/**
+ * The edit guard as the parent read reports it: computed by the **same
+ * function the write guard calls**, so the read and the write cannot disagree
+ * about whether a rule may be rewritten. It is read-only on the wire - a client
+ * never sends it back - and `reasons` is empty when `locked` is false.
+ */
+export const eventScheduleGuardSchema = z
+  .object({
+    locked: z.boolean(),
+    reasons: z.array(eventScheduleLockReasonSchema),
+  })
+  .describe(
+    'Computed by the same function the write guard calls; read-only on the wire. `reasons` is empty when `locked` is false.',
+  );
 
 export const eventParentSchema = z.object({
   id: z.string(),
@@ -786,6 +920,8 @@ export const eventParentSchema = z.object({
   endTime: z.string().nullable(),
   tracksMembers: z.boolean(),
   status: eventStatusSchema,
+  /** The edit guard's wire form; computed by the same function the write guard calls. */
+  schedule: eventScheduleGuardSchema,
   /** The provenance of a period-created event; null for every other event. */
   period: eventPeriodProvenanceSchema.nullable(),
   recurrence: eventRecurrenceSchema.nullable(),
