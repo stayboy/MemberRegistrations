@@ -545,8 +545,11 @@ per budget reasons").
 
 ### N-14. Data model
 
-Migrations `0030_event_notifications` (the implementer confirms the number) and `0031_pgboss_schema`, generated from
-pg-boss's own DDL.
+Migrations `0030_event_notifications` (the plan side: plans, plan revisions, slots, templates, fliers, defaults),
+`0031_pgboss_schema` (generated from pg-boss's own DDL) and `0032_notification_send` (the send side: instances,
+messages, deliveries, settings, blocks, mutes, preference events). The schema is split across two rounds because a table
+lands with the code that uses it: R2 cannot publish, so it has no instances, and R3 builds the send path against the
+tables it consumes.
 
 ```sql
 create table notification_plans (
