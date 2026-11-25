@@ -323,9 +323,9 @@ gate-run 2026-11-25T19:15:48.983Z profile=fast steps=4/4 lines=4 bytes=700
 
 ## Git writes
 
-| Brief                                  | Actor                                       | Verb     | Variant | Reason                                         |
-| -------------------------------------- | ------------------------------------------- | -------- | ------- | ---------------------------------------------- |
-| commit brief (spec + record + backlog) | `git-executor` rung 1, `opencode/beam-free` | `commit` | —       | Go-forward answer 1: one commit now, docs only |
+| Brief                                  | Actor                                                     | Verb     | Variant                                                                                                            | Reason                                                           |
+| -------------------------------------- | --------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| commit brief (spec + record + backlog) | `git-executor` **rung 2**, `ollama-cloud/mimo-v2.6-flash` | `commit` | `fallbackReason: free-usage-limit` — rung 1 (`opencode/beam-free`) returned its free usage limit on the same brief | Go-forward answer 1: one commit now, docs only. Commit `697e1c8` |
 
 ## Mock sign-off
 
