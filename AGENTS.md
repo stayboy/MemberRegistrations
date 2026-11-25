@@ -253,6 +253,10 @@ reintroduce them silently.
 - To build or refresh one, follow `.opencode/skills/mock-build/SKILL.md`: one live image per state, the
   complete shell, numbers that describe the rows, a 1:1 comparison against the archived previous version,
   and a signed catalogue entry.
+- **A signature request names the directory.** Whenever a mock is put to the owner for signing, the request
+  states the **folder that holds the image** (mockups/<set>/, absolute when the session works in a worktree), as
+  well as the state, its hash and what changed. A signature is given against a file the owner can open; an image
+  the owner cannot locate is not a signature (owner, 2026-11-25).
 - The durable record is the spec and the round doc. Regenerate a mock locally when a screen changes;
   `documents/` must not hold mock images.
 - Do not put real member data, contact values, bearer tokens or session credentials into a mock or its

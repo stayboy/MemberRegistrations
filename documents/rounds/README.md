@@ -74,6 +74,11 @@ not run that verb, and a variant switch carries its `fallbackReason`.
 | Surface | Mock | Capture | sha256 | Signer | Date | Verdict |
 | ------- | ---- | ------- | ------ | ------ | ---- | ------- |
 
+The **Mock** cell names the design as mockups/<set>/<file>.png - the set folder is part of the record. A signature
+request additionally names the **absolute folder on the owner’s machine**, which is a working location (the folder is
+git-ignored and per-worktree) and does not belong in this record; the state, its hash and what changed do (AGENTS.md
+section 14).
+
 ## Mock parity
 
 | Claim | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
