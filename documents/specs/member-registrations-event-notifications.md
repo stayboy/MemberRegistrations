@@ -1360,9 +1360,25 @@ reader should not have to guess which subscription is meant.
 
 ### Mock
 
-The plan form, the channel editors, the event detail's Notifications panel, the Admin Notifications page, the change
-form, the block dialog, the digest settings and the USSD screens are user-visible surfaces. They need a mock and a
-baseline capture in the build round, per `documents/rounds/README.md`. The mock is not part of this spec round.
+The surfaces are user-visible, so the build obeys the mock-first gate in `documents/agents/orchestrator-policy.md`
+("Mock parity"): a comparison mock and an owner sign-off **before the UI round's first code commit**. R1 to R3 are
+migration and API rounds and are exempt, because none of them alters a screen.
+
+- **Where the mocks sit.** Inside the UI round (R4): it opens, cuts them, parks for the owner's signature, and only
+  then writes code. One round, one gate, one record. Owner, 2026-11-25.
+- **Which set each surface joins.** The policy forbids a new folder per feature, so they join the sets that already
+  own their routes: the event detail, the plan form, the preview, the publish acknowledgement and the change notice go
+  into `mockups/v2-events/` (which owns `/events/:id`); the Admin defaults, the delivery log and the member's
+  notifications view go into `mockups/v2-shell/` (which owns `/members` and `/admin/audiences`); the member USSD
+  screens go into `mockups/ussd/`.
+- **Which states.** Success where a table can be empty, an empty state where the list is genuinely empty, and no
+  loading or error images: those states are reviewed in code. The USSD set is cut at the 182 budget, with the item
+  body and the settings list also cut at Nalo's 120 as `target` states, because those two are the ones that overflow.
+- **The sign-off row carries two artefacts.** `documents/rounds/README.md` makes the signed mock and the re-run
+  baseline under `ui/e2e/baseline/` non-substitutes, so R4's `## Mock sign-off` row names the mock first and the
+  baseline behind it, added when the screen exists.
+- The durable record is the spec and the round doc; `mockups/` is git-ignored, so the sha pin in the catalogue is a
+  tripwire over an untracked artefact, not proof.
 
 ## Change log
 

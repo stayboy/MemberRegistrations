@@ -2,12 +2,12 @@
 
 |                        |                                                                                                                                               |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                                                          |
+| Status                 | CLOSED — implemented, both gates green, reviewed ACCEPT                                                                                       |
 | Tier                   | 2 - Reviewed                                                                                                                                  |
 | Mode                   | `attended`                                                                                                                                    |
 | Base                   | `697e1c8`                                                                                                                                     |
-| Review rounds          | 0                                                                                                                                             |
-| Gate runs in parent    | 0                                                                                                                                             |
+| Review rounds          | 1                                                                                                                                             |
+| Gate runs in parent    | 4                                                                                                                                             |
 | Spec                   | `documents/specs/member-registrations-event-notifications.md`                                                                                 |
 | Workers                | `single`                                                                                                                                      |
 | Implementer            | worker ollama-cloud/deepseek-v4.1-flash:1017 (queue, worker, probe); parent cline-pass/cline-pass/deepseek-v4.1-flash-1017 (round doc, gates) |
@@ -43,6 +43,23 @@ below rather than restated.
 | 7   | The pg-boss dashboard lands here, local-only and behind basic auth                         |
 | 8   | One branch, one PR: the spec and R1 land together                                          |
 
+## Execution decisions
+
+The owner answered a second frontier on 2026-11-25 ("all as recommended"). These are the choices the implementation runs
+against.
+
+| #   | Decision                                                                                                                                                                               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Dispatch now. The worker edits `src/`, `docker-compose.yml`, `scripts/` and `tests/` only; the first commit also carries the backlog row correction and the spec's `### Mock` section. |
+| 2   | `pg-boss` is pinned **exactly `12.39.0`**. The dashboard is invoked by `npx` and is never a dependency. Every upgrade is bump + regenerate + `doctor` + commit.                        |
+| 3   | A boot check reads `pgboss.version` and fails with a diagnostic naming the expected version, `scripts/pgboss-schema.mjs` and the file to commit — not pg-boss's own assertion.         |
+| 4   | The probe enqueues only when `PGBOSS_PROBE` is set; its handler is always registered so a stray job drains instead of dead-lettering. A test asserts production does not enqueue.      |
+| 5   | The dashboard is its own optional service on `node:24.22.3-alpine`, `npx -y @pg-boss/dashboard@1.14.0`, basic auth from an env var, `profiles: ["tools"]`.                             |
+| 6   | The worker sets `healthcheck: { disable: true }` (the `api` image's HTTP probe would fail it) and `restart: unless-stopped`, and drains on `SIGTERM` with a bounded wait it logs.      |
+| 7   | PGlite proves the queue in the vitest lane; the `pg` backend is proved by `npm run smoke`, which starts the worker and asserts one probe job drains.                                   |
+
+Node is **24.22.3**, above pg-boss's 22.12 floor, so no runtime bump is needed.
+
 ## Plan
 
 **Goal.** Prove the queue. This round exists to retire one risk: that pg-boss cannot run under this repository's single
@@ -63,7 +80,7 @@ notification behaviour at all — no plan, no slot, no message, no delivery.
   `restart: unless-stopped`, waiting on `migrate` completing successfully.
 - `compose: pgboss-ui` — `@pg-boss/dashboard` behind basic auth, bound to a local port, never deployed and never linked
   from the officer UI (spec FR-43). It reads the same `pgboss` schema.
-- `scripts/pgboss-schema.mjs` — regenerates the vendored DDL with `pg-boss plans migrate --dry-run`, so an upgrade is a
+- `scripts/pgboss-schema.mjs` — regenerates the vendored DDL with `pg-boss plans create` (the `migrate` plan inlines `CREATE INDEX CONCURRENTLY`, which the runner's transaction forbids), so an upgrade is a
   command and a diff rather than a memory.
 - `tests/queue/*` — the three proofs below.
 
@@ -107,10 +124,10 @@ route; the periods-guard amendment; any UI or USSD surface; any mock. They are R
 
 This round adds a migration and a new runtime service, so `npm run smoke` is required, not optional.
 
-gate-run 2026-11-25T19:25:12.265Z profile=fast steps=4/4 lines=4 bytes=700
+gate-run 2026-11-25T20:11:22.063Z profile=fast steps=4/4 lines=4 bytes=701
 
-The run above is the round-doc gate: it proves the tree still passes with this record in it. The implementation gate is
-run at close, and the smoke is run then too.
+The signature above is the close gate: `verify:fast` 4/4 with the implementation in the tree. The smoke also passed:
+`ok worker drains a probe job end to end` … `smoke: PASS`.
 
 ## Git writes
 
@@ -120,11 +137,27 @@ run at close, and the smoke is run then too.
 
 ## Review
 
-Seat: pending — the independent reviewer has not run. This line records the shape the round closes with, not a verdict:
-at close it becomes `Seat: consistent` or `Seat: contradicted` with the reviewer’s findings and a `Verdict:`.
+Seat: consistent — the `Implementer` row names the `worker-flash` seat and this reviewer is `reviewer-pro`, which is the
+Tier 2 split AGENTS.md §3 requires.
 
-The reviewer for this round is the `reviewer-pro` class per `documents/agents/orchestrator-policy.md`, dispatched against
-`documents/rounds/review-brief.md`. It is required because the round is Tier 2 and adds a migration.
+**`reviewer-pro` / `ollama-cloud/deepseek-v4-pro:0813`, 2026-11-25. Verdict: ACCEPT. No P1s.**
+
+Three P2s and four nits, all fixed in one pass:
+
+| Finding                                                                                               | Fix                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `policy` was captured for the whole adapter, so a keyless kind could not coexist with the keyed kinds | `policyByKind` added; the port still carries no pg-boss vocabulary (pgboss.ts)                                                                                                                     |
+| A drain that threw still exited `0`, telling a supervisor the worker shut down cleanly                | The stop error sets `stopFailed` and the exit code is non-zero (worker.ts)                                                                                                                         |
+| The dashboard's read-only mode was asserted, not verified                                             | **The vendor docs were read and the claim was false**: read-only is `PGBOSS_DASHBOARD_READ_ONLY=1`, and the compose file had `'true'`. Fixed to `1`, with the docs' 403 behaviour quoted beside it |
+| `dead-letter.test.ts` comment said `retryLimit 5` while the adapter uses 4 (five attempts)            | Corrected                                                                                                                                                                                          |
+| The probe comment claimed both kinds "drain"                                                          | Corrected: the failing kind dead-letters, which is the ladder working                                                                                                                              |
+| This round doc still said the script uses `plans migrate --dry-run`                                   | Corrected to `plans create`, with the reason                                                                                                                                                       |
+| A migration comment pointed at `./pgboss-schema.ts`                                                   | Corrected to `src/db/pgboss-schema.ts`                                                                                                                                                             |
+
+The reviewer also confirmed the three decisions the worker had to make without the brief: `retryLimit: 4` is FR-21's
+"at most 5 attempts" read as five runs; the vendored DDL from `plans create` is the correct choice because the `migrate`
+plan inlines `CREATE INDEX CONCURRENTLY`, which the runner's transaction forbids; and `exclusive` is what makes a
+`singletonKey` dedupe at all.
 
 ## Mock sign-off
 
@@ -136,20 +169,32 @@ n/a — no mock.
 
 ## Acceptance
 
-| Criterion                                              | Met | Evidence | Verdict |
-| ------------------------------------------------------ | --- | -------- | ------- |
-| 1. `0031` applies on both drivers, `doctor` clean      | no  | —        | pending |
-| 2. Port enqueues, claims, completes on PGlite and `pg` | no  | —        | pending |
-| 3. Five failures dead-letter, readable                 | no  | —        | pending |
-| 4. Compose worker drains a probe job                   | no  | —        | pending |
-| 5. Vendored DDL reproducible                           | no  | —        | pending |
-| 6. Dashboard local-only, absent from production        | no  | —        | pending |
-| 7. No notification table, route or surface added       | yes | the diff | pending |
+| Criterion                                              | Met | Evidence                                                                                                              | Verdict |
+| ------------------------------------------------------ | --- | --------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1. `0031` applies on both drivers, `doctor` clean      | yes | `tests/db/pgboss-schema.test.ts` — PGlite version 47 + `detectSchemaDrift().ok`; `pg` half runs the real `doctor` CLI | pass    |
+| 2. Port enqueues, claims, completes on PGlite and `pg` | yes | `tests/queue/queue.test.ts` — the same contract on both, plus `null` on a held singleton key                          | pass    |
+| 3. Five failures dead-letter, readable                 | yes | `tests/queue/dead-letter.test.ts` — five runs, dead-letter row carries `data` and `source_output`                     | pass    |
+| 4. Compose worker drains a probe job                   | yes | `npm run smoke` — `ok worker drains a probe job end to end`                                                           | pass    |
+| 5. Vendored DDL reproducible                           | yes | `tests/db/pgboss-schema.test.ts` regenerates and compares byte-for-byte; `scripts/pgboss-schema.mjs --check`          | pass    |
+| 6. Dashboard local-only, absent from production        | yes | loopback bind, `tools` profile, read-only `1` (verified against the vendor docs), no reference outside compose        | pass    |
+| 7. No notification table, route or surface             | yes | the diff; the schema test asserts no `0030` migration                                                                 | pass    |
 
 ## Deviations
 
 - **The round doc is committed before any code, and with the previous round's correction in the same commit.** The
   owner took that shape (grill 1 and 8), so `documents/rounds/event-notifications-spec.md` and this file land together
   and the spec round's per-write row stops naming the seat that failed.
+- **The dashboard's read-only flag was wrong, and the docs caught it.** The compose file carried
+  `PGBOSS_DASHBOARD_READ_ONLY: 'true'`; the vendor documents `1`, and anything else leaves the dashboard able to
+  send, retry, cancel and delete jobs — which FR-43 forbids. The verification was a `webfetch` of
+  `pgboss.io/dashboard`, not an assumption, and the corrected value sits beside the docs' 403 behaviour.
+- **`verify:fast` flaked once on socket exhaustion, and the flake is recorded.** At 20:05 the suite failed to _load_
+  `tests/api/shepherding.test.ts` with `Error: address ENOBUFS` — all 17 tests skipped, not one assertion failing —
+  with 96 vitest workers running and a three-day-old scratch Postgres container up. Isolated re-run: 17 passed in
+  3.65 s; the full gate then passed 4/4 at 20:11:22.063Z. That is the round's first re-run (AGENTS.md §8); the
+  second remains unused.
+- **Two decisions the brief did not settle, confirmed by the reviewer.** `retryLimit: 4` is FR-21's "at most 5
+  attempts" read as five runs, and the vendored DDL comes from `plans create` because the `migrate` plan inlines
+  `CREATE INDEX CONCURRENTLY`, which cannot run inside the runner's per-migration transaction.
 - **The periods guard is not amended here.** It moves to R2 with `0030`, because this round adds no behaviour that would
   justify touching it (grill 5).

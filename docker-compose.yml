@@ -67,6 +67,50 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # The long-lived queue worker (notification spec N-8, FR-20, FR-42). Same image,
+  # no port: it polls the `pgboss` schema continuously, which is what the local
+  # stack buys (a containerised Postgres has no per-hour meter). The image's HTTP
+  # healthcheck would fail a process that never listens, so it is disabled here.
+  worker:
+    <<: *api-image
+    command: ['node', 'dist/worker.js']
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
+      LOG_LEVEL: info
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # The pg-boss dashboard is a local operations monitor (spec FR-43): on demand
+  # only (`docker compose --profile tools up`), behind basic auth, bound to the
+  # host loopback, read-only, never deployed and never linked from the officer UI.
+  # A requeue goes through the audited API retry, not through this screen.
+  pgboss-ui:
+    image: node:24.22.3-alpine
+    profiles: ['tools']
+    command: ['npx', '-y', '@pg-boss/dashboard@1.14.0']
+    ports:
+      - '127.0.0.1:3001:3000'
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
+      PGBOSS_SCHEMA: pgboss
+      PORT: '3000'
+      # Local basic auth. Not secrets: the defaults exist so the profile starts
+      # without extra setup, and the shell can override either value.
+      PGBOSS_DASHBOARD_AUTH_USERNAME: ${PGBOSS_DASHBOARD_AUTH_USERNAME:-local}
+      PGBOSS_DASHBOARD_AUTH_PASSWORD: ${PGBOSS_DASHBOARD_AUTH_PASSWORD:-local-dashboard-password-change-me}
+      # The vendor documents `1`; `true` is not the accepted form. With it set, the
+      # server rejects every non-GET/HEAD request with 403, so no action can be
+      # crafted by hand either (FR-43: the dashboard stays a monitor).
+      PGBOSS_DASHBOARD_READ_ONLY: '1'
+    depends_on:
+      db:
+        condition: service_healthy
+
   ui:
     image: member-registrations-ui:local
     build:

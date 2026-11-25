@@ -1,5 +1,6 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
+import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -1212,7 +1213,86 @@ async function runScenario() {
     JSON.stringify(devHmac.body),
   );
 
+  await checkQueueDrain();
+
   await checkDisabledSwitch();
+}
+
+/**
+ * The queue proof (round doc decision 7). Start the real worker, let it
+ * enqueue and drain one probe job, then stop it and require a clean exit.
+ *
+ * The backend follows the environment: `SMOKE_DATABASE_URL` (or
+ * `TEST_DATABASE_URL`) names a scratch Postgres and the worker runs on the
+ * pooled `pg` driver after the tracked runner migrates it; with neither set it
+ * uses the embedded PGlite, so a laptop with no database still proves the
+ * round trip.
+ */
+async function checkQueueDrain() {
+  const databaseUrl = process.env.SMOKE_DATABASE_URL ?? process.env.TEST_DATABASE_URL;
+
+  if (databaseUrl) {
+    execFileSync(process.execPath, ['dist/db/migrate-cli.js'], {
+      env: { ...process.env, NODE_ENV: 'development', DATABASE_URL: databaseUrl },
+      stdio: 'pipe',
+    });
+  }
+
+  const worker = spawn(process.execPath, ['dist/worker.js'], {
+    env: {
+      ...withoutDatabaseUrl(process.env),
+      ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
+      NODE_ENV: 'development',
+      LOG_LEVEL: 'info',
+      // The probe is opt-in; a deployed worker must never enqueue one.
+      PGBOSS_PROBE: '1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let workerOutput = '';
+  worker.stdout.on('data', (chunk) => (workerOutput += chunk));
+  worker.stderr.on('data', (chunk) => (workerOutput += chunk));
+
+  try {
+    const deadline = Date.now() + 30_000;
+    while (!workerOutput.includes('probe: drained')) {
+      if (worker.exitCode !== null) {
+        throw new Error(
+          `worker exited before draining (code ${worker.exitCode}): ${workerOutput.trim()}`,
+        );
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`worker did not drain the probe job: ${workerOutput.trim()}`);
+      }
+      await delay(100);
+    }
+    check('worker drains a probe job end to end', workerOutput.includes('queue: started'));
+
+    if (process.platform === 'win32') {
+      // Windows terminates a process on kill() instead of delivering SIGTERM, so
+      // the drain-on-signal path is asserted on POSIX only. The drain above is
+      // the round-trip proof on both.
+      worker.kill();
+    } else {
+      worker.kill('SIGTERM');
+      const code = await waitForExit(worker, 15_000);
+      check(
+        'worker drains and exits cleanly on SIGTERM',
+        code === 0,
+        `exit ${code}: ${workerOutput.trim()}`,
+      );
+    }
+  } finally {
+    if (worker.exitCode === null) worker.kill('SIGKILL');
+  }
+}
+
+/** Resolves with the exit code, or `null` when the child outlived the deadline. */
+async function waitForExit(child, timeoutMs) {
+  if (child.exitCode !== null) return child.exitCode;
+  const [code] = await Promise.race([once(child, 'exit'), delay(timeoutMs).then(() => [null])]);
+  return code;
 }
 
 /**

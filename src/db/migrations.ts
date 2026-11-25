@@ -1,3 +1,5 @@
+import { PGBOSS_SCHEMA_SQL } from './pgboss-schema.js';
+
 /**
  * Migrations are embedded rather than read from disk so the compiled function
  * bundle cannot miss a .sql file. Each entry is applied once, in order, inside
@@ -2213,5 +2215,14 @@ alter table events add constraint events_period_rule_identity_check
 
 create index if not exists events_period_id on events (period_id);
 `,
+  },
+  {
+    // pg-boss's own DDL, generated from the pinned release and committed here
+    // so the tracked runner stays the only thing that mutates the database
+    // (AGENTS 12, notification spec N-8). pg-boss runs with `migrate: false`;
+    // `scripts/pgboss-schema.mjs` regenerates this, and `pg-boss doctor` is the
+    // drift check. The script's output is `src/db/pgboss-schema.ts`.
+    version: '0031_pgboss_schema',
+    sql: PGBOSS_SCHEMA_SQL,
   },
 ];
