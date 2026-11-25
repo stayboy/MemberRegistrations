@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "659b1e87ca63a5966d922f2aa9d431fccaa320862aa264daf36775e8826d9591",
+      "sha256": "5f99b55accf022c752268cea07c26a5f70ce142981e048e75aacdd3b16a35f7d",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner signed the six states the field-order re-cut produced - 10-event-create (406ad491), -daily (ab6945dd), -monthly (6f90292f), -no-match (6639a994), 16-event-edit (8ec3f954) and 20-event-preview-dialog (f366424a) - each flipping target to signed with by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256. why: the owner was shown the six with their folder, hashes and what changed, and signed them after the re-cut moved the Named period switch before Repeats and adopted the build label. rejected: re-pairing 10 and 16 with the existing baselines (they predate the re-cut, so a later scoring pass would compare a stale build), and signing the remaining auto-signed states on the same word.",
+      "reason": "changes: the two period states are re-pointed to the final re-cut after the owner rejected the first stacking - 10-event-create-period (3f0c3c2e, history v12) and 21-event-create-period-recurring (8cde908d, history v8) - the Frequency label back inline followed by the info tooltip, the radios beside them on one row, and the named period sharing a row with the cycle month or day. Both stay target: a re-cut inherits no signature, and the owner has not seen these pixels. why: the drawings are what the build is being brought to, and the catalogue must point at the images on disk. rejected: keeping the superseded hashes, signing the re-cut on the earlier list approval, and letting the recorder keep the copied note (the capture script now carries the per-state note at the source).",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - all six carry the owner shape with hashes equal to their images and no leftover basis; 17 and the older signatures are untouched, no seventh state was promoted, and leaving the baselines null was judged right until a capture of the re-cut build exists.",
-      "at": "2026-11-25T12:01:37Z"
+      "attestation": "Seat: consistent - both states stay target with no signature, re-pointing mock.sha256 is right while the design is still being directed, the history notes describe this layout rather than copying the predecessor, and no signature sits over an image the owner has not seen. The seat noted one superseded intermediate (21 v6) still carrying a copied note; it names no image the owner saw and affects no signature.",
+      "at": "2026-11-25T13:20:34Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

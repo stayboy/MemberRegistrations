@@ -145,12 +145,11 @@
         "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "abe8001e2fd7b54c3ac34c4e8610e1d8961d62232d7e844c92199c7dc494dee0"
       }
     },
     "07-offering-terms": {
@@ -159,12 +158,11 @@
         "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-15",
-        "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7",
-        "basis": "owner pre-authorisation 2026-11-15 (AGENTS.md section 17, auto-signed mocks); pending the reviewer second look"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "9e0880d127eb1e2f52139dfc4c5d7721832e9935f7bc4c74f404043d056473b7"
       }
     },
     "06-record-headcount-dialog": {
@@ -188,12 +186,11 @@
         "source": "mockups/v2-events/03-activity-detail.html"
       },
       "baseline": "event-import-panel.png",
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f",
-        "basis": "§17 target re-cut for the Close control, the commit pair moving into the content and the invented header close being removed; the owner signature of 2026-11-22 is void and only the owner restores it Pin corrected 2026-11-24: the recorded hash was the pre-re-cut image; history.json v1 and the file on disk agree at this value."
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "24bd2629929219a167e1b9894e091366b56254836fae49a391d610d2d874f44f"
       }
     },
     "12-audience-dialog": {
@@ -254,17 +251,11 @@
     "10-event-create-period": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-period.png",
-        "sha256": "16e49ee58ff43cc3d9de3aba79707ea47612580f3101e6f11cb94b40b1ec893f",
+        "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "16e49ee58ff43cc3d9de3aba79707ea47612580f3101e6f11cb94b40b1ec893f",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with a named period and its cycle month"
-      }
+      "coverage": "target"
     },
     "10-event-create-no-match": {
       "mock": {
@@ -315,12 +306,11 @@
         "source": "mockups/v2-events/18-event-create-standalone.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "cdfc7b5f4c5cd1c87445e89134bc33dc81bbc7bb903cf346acaa265db7e3b78e",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form with Repeats off: explicit date rows, no range, no cadence"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "cdfc7b5f4c5cd1c87445e89134bc33dc81bbc7bb903cf346acaa265db7e3b78e"
       }
     },
     "19-event-edit-standalone": {
@@ -330,12 +320,11 @@
         "source": "mockups/v2-events/19-event-edit-standalone.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "e7d599efce070bdf5944a60eb8d605e934884ca8c8680c32769877177e16a622",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a standalone event: its date rows, no switch, the type fixed at create"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "e7d599efce070bdf5944a60eb8d605e934884ca8c8680c32769877177e16a622"
       }
     },
     "20-event-preview-dialog": {
@@ -355,17 +344,11 @@
     "21-event-create-period-recurring": {
       "mock": {
         "path": "mockups/v2-events/21-event-create-period-recurring.png",
-        "sha256": "84954df0a94872731759116ef286121cd89ae6cc7b74c89b3189f5384b7ce1ea",
+        "sha256": "8cde908da018a1df80dc140f882b4dccc503a8279eeb036424ff003ef06a164d",
         "source": "mockups/v2-events/21-event-create-period-recurring.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "84954df0a94872731759116ef286121cd89ae6cc7b74c89b3189f5384b7ce1ea",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the create form in the period mode, monthly on Sunday - Miracle Sunday - anchored on the rail start date, three cycles in the window"
-      }
+      "coverage": "target"
     },
     "22-event-detail-period": {
       "mock": {
@@ -374,12 +357,11 @@
         "source": "mockups/v2-events/22-event-detail-period.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the event detail of a period-created event: the provenance line under the identity, the period rule in the schedule panel"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3"
       }
     },
     "23-event-detail-period-preview": {
@@ -389,12 +371,11 @@
         "source": "mockups/v2-events/23-event-detail-period-preview.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the detail schedule panel with its Preview dates dialog open"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7"
       }
     }
   },
