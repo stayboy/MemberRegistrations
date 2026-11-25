@@ -416,7 +416,9 @@ edit dialog carrying **only** name, rule kind and its parameters, with the optio
 2026-11-24) - it follows the weekday-of-cycle-month control and adds no explaining text of its own. **Archiving is a row action on the list,
 not part of the dialog** (owner, 2026-11-24): the dialog was stretching taller than the page it opens over, and the
 lifecycle of a period belongs with its row, beside Show archived. It follows the
-application shell and the audiences page's idiom (`FR-42e`'s actions, `FR-42c`'s dialog shape).
+It follows the **events landing page** (owner, 2026-11-25): the same grid, the same
+header and filter row, and the same **kebab row menu** for actions — so a period row and an event row read the same way
+and one learned menu serves both. The create and edit dialog follows `FR-42c`'s shape.
 
 ## Acceptance Criteria
 
