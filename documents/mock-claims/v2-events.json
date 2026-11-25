@@ -291,12 +291,11 @@
         "source": "mockups/v2-events/16-event-edit.html"
       },
       "baseline": "event-edit.png",
-      "coverage": "auto-signed",
+      "coverage": "signed",
       "signed": {
-        "by": "unattended",
-        "at": "2026-11-24",
-        "sha256": "71ee1d0b49f49326941636c8c46b732d0a1c2cda8f66ca5fb68a46eff074c145",
-        "basis": "owner ruling 2026-11-24 under AGENTS.md section 17 (auto-signed; the round is unattended): wire designs drawn from the approved spec before any UI code - first drafts or re-cuts, each with its 1:1 comparison against the archived previous version recorded in the round doc; pending the reviewer second look when the unattended work ends. the edit form of a recurring event with the rule editable (no history): the rewrite notice and the dates it resolves to"
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "71ee1d0b49f49326941636c8c46b732d0a1c2cda8f66ca5fb68a46eff074c145"
       }
     },
     "17-event-edit-locked": {
@@ -306,7 +305,12 @@
         "source": "mockups/v2-events/17-event-edit-locked.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "32d65ad838d3edab61e481cac087e866f537a4c126ff3ea56ec7c5386a946cad"
+      }
     },
     "18-event-create-standalone": {
       "mock": {

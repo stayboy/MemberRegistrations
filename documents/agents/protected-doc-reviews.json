@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "51f906609c4fad831770c569c0110395fd83237132cc17181776069eef5b04c9",
+      "sha256": "b36be6258437925d15438e007a7890499a61f39bcf1a5b8ff26e80dc79be2d40",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: round event-edit-guard re-attests the catalogue after three edits - (1) 17-event-edit-locked is re-cut (history v6) to the built locked state, because the previous drawing showed the builder controls inert while FR-42h/AC-66 say a locked schedule offers none, and its auto-signature is voided to target as section 17 requires; (2) 16-event-edit is paired with the re-captured ui/e2e/baseline/event-edit.png, since the coverage tool pairs only on a non-null baseline and R6 needs the line; (3) the edit states had no claim atoms at all, so story EVE-EDIT and two spec-required controls were added (EVE-GUARD-SURFACE PRESENT anchored to AC-63a; EVE-NO-REPEATS ABSENT anchored to AC-66). why: without the atoms the surface could not be scored, and without the re-cut the drawing contradicted the text the build implements. rejected: signing 17 as drawn (a false drawing), leaving 16 unpaired (no R6 line), and scoring only surfaces this round did not touch.",
+      "reason": "changes: the owner signed two states after round event-edit-guard - 16-event-edit (71ee1d0b) and 17-event-edit-locked (32d65ad8) - each flipping coverage to signed with signed.by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256; 16 loses its auto-signed basis, 17 had none. why: the round built both surfaces and the owner was shown the two drawings before signing; 16 was unchanged by the round and 17 was re-cut to the built locked state. rejected: signing the remaining auto-signed create states and the two period-detail designs on the same word (the agent does not infer a signature the owner was not shown), and leaving 17 at target after the owner signed it.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent on both passes - the 17 re-cut judged correct for a refreshed auto-signed state with the signature block removed; then the delta judged the pairing honest (capture route, fixture and case align) and the two claims faithful to AC-63a and AC-66, with no guard weakened. Two observations recorded without action: an ABSENT claim is backstopped by the baseline diff rather than its text, and 16 stays auto-signed pending the section 17 second look.",
-      "at": "2026-11-25T10:19:44Z"
+      "attestation": "Seat: consistent - shape correct for both entries (coverage signed, by owner, at, sha256 equal to the mock hash), the stale auto-signed basis removed cleanly, 17 signable with a null baseline (no rule binds signed to one), and no other entry touched. The seat also recorded that nothing validates a signed block: the sha256 equality is a convention, not a gate - backlogging that guard is the follow-up, not a defect of this change.",
+      "at": "2026-11-25T11:14:58Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

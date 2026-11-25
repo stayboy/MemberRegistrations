@@ -142,9 +142,10 @@ gate-run 2026-11-25T09:26:21.783Z profile=fast steps=4/4 lines=4 bytes=718
 
 ## Mock sign-off
 
-| Surface                | Mock                                  | Capture                          | sha256     | Signer       | Date       | Verdict     |
-| ---------------------- | ------------------------------------- | -------------------------------- | ---------- | ------------ | ---------- | ----------- |
-| event edit, guard open | `mockups/v2-events/16-event-edit.png` | `ui/e2e/baseline/event-edit.png` | `71ee1d0b` | owner (owed) | 2026-11-25 | auto-signed |
+| Surface                  | Mock                                         | Capture                          | sha256     | Signer | Date       | Verdict |
+| ------------------------ | -------------------------------------------- | -------------------------------- | ---------- | ------ | ---------- | ------- |
+| event edit, guard open   | `mockups/v2-events/16-event-edit.png`        | `ui/e2e/baseline/event-edit.png` | `71ee1d0b` | owner  | 2026-11-25 | signed  |
+| event edit, guard closed | `mockups/v2-events/17-event-edit-locked.png` | -                                | `32d65ad8` | owner  | 2026-11-25 | signed  |
 
 Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
 
@@ -152,8 +153,7 @@ The pair is the round's surface, and the build stands under both drawings: `16` 
 recorder reported it identical) once the edit route regained FR-42b's summary and Preview, and its baseline was
 re-captured (`event-edit.png`, 67 KB -> 84 KB). `17` was **wrong** - it drew the builder's controls inert, while
 FR-42h/AC-66 say a locked schedule offers no control at all - so it was re-cut to the built state (notice with the cause,
-stored rule line, "Dates on the rule in force" with no Preview) and its auto-signature voided to `target`, as §17
-requires. The two edit claims (`EVE-GUARD-SURFACE` PRESENT, `EVE-NO-REPEATS` ABSENT) were added so the state can be
+stored rule line, "Dates on the rule in force" with no Preview) its auto-signature voided to `target` as §17 requires, and then **signed by the owner** (2026-11-25). The two edit claims (`EVE-GUARD-SURFACE` PRESENT, `EVE-NO-REPEATS` ABSENT) were added so the state can be
 scored at all. The line still runs with `--allow-short`: the **selection** carries one `spec-required` + `ABSENT`
 control, below the tool's floor of three - reaching the floor would mean scoring the create and headcount states, which
 this round did not touch.
