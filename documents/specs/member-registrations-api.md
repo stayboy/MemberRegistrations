@@ -703,7 +703,7 @@ append-only rule: purge is a legal PII erasure, not a history-management operati
 
 ### Event (parent)
 
-`{ id, eventNo, name, audienceIds, audiences[], audienceId, audience, period, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
+`{ id, eventNo, name, audienceIds, audiences[], audienceId, audience, period, schedule, timezone, description?, venueType, venueName?, startDate, endDate, startTime, endTime?, tracksMembers, status: draft | active | archived }`
 
 An **event is the parent** of its recurrence and its dates. It owns its identity, when and where it
 happens, how it is tracked, and either a recurrence that generates its dates or the dates recorded on
@@ -741,6 +741,12 @@ has no recurrence; a **recurring** event owns one recurrence and the occurrences
   the first matching date **on or after** it. Sending both forms is refused, and so is sending a period alongside
   `occurrences` **or** a `recurrence`. Either form is resolved on the server with the same function
   `POST /v1/events/preview` uses, so preview and create cannot diverge. `GET /v1/events?period=<id>` filters on it.
+- `schedule` is the **edit guard's wire form** (owner, 2026-11-25): `{ locked, reasons: [{ code, date }] }`, where
+  `code` is one of `occurrence_started`, `offering_attached`, `offering_counted`, `attendance_recorded`,
+  `import_suppressed`, and `date` is the occurrence the cause names (null for a bare event-level attachment). It is
+  computed by **the same function the write guard calls**, so the UI can never offer an edit the write refuses, and it
+  is read-only on the wire. The "today" it compares against is the event's own (UTC unless the event carries a
+  timezone), as the occurrence status already uses.
 - `ministry` and `presbyterOnly` are **read-only legacy projections** during the transition: the
   migration maps each event's old pair onto a seeded or combination audience and writes the columns from
   that audience. They are no longer accepted on create or update, and a client that sends one is `422
@@ -1454,7 +1460,8 @@ is the plain alias. There is no series list, series create or series schedule ro
 | `GET`    | `/v1/events?from&to&ministry&venueType&period`      | Parents with their occurrences in the window and attendance/offering summaries                                                                                 |
 | `POST`   | `/v1/events`                                        | Create the parent with exactly one of manual occurrences, one recurrence, or a `period` (one cycle, or a monthly rule) the server resolves; `201` + `Location` |
 | `GET`    | `/v1/events/{eventId}?from&to`                      | Parent, recurrence, occurrences in the window, offerings and stats                                                                                             |
-| `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); stale `If-Match` → `409`                                                                                                          |
+| `PATCH`  | `/v1/events/{eventId}`                              | Update the parent (partial); refuses `recurrence`/`period` by name; stale `If-Match` → `409`                                                                   |
+| `PUT`    | `/v1/events/{eventId}/schedule`                     | Replace the event rule under the edit guard, one arm (`recurrence` or `period`); `409 recurrence_locked` when closed                                           |
 | `PUT`    | `/v1/events/{eventId}`                              | The legacy per-instance update during the transition; it retires when the UI moves                                                                             |
 | `POST`   | `/v1/events/{eventId}/archive`                      | Archive the parent; history stays readable                                                                                                                     |
 | `POST`   | `/v1/events/{eventId}/occurrences/{date}/cancel`    | Cancel one occurrence with a reason; history stays readable                                                                                                    |
@@ -1474,8 +1481,12 @@ window atomically; `POST /v1/events/generate` is the refresh for later windows a
 `(eventId, date)`. The create body carries `audienceId` (default `Everyone`), `eventNo` (optional; the
 server mints it when absent) and exactly **one** of **manual `occurrences`**, **one `recurrence`** or a **`period`**
 (one cycle, or a monthly rule) the server resolves, never more than one: the derived
-range is not accepted, and `startDate`/`endDate` are read-only. `PATCH` carries the parent fields (no recurrence, no
-`eventNo`, no occurrence set) and is the write the UI uses; `PUT` stays only for the legacy per-instance form until
+range is not accepted, and `startDate`/`endDate` are read-only. `PATCH` carries the parent fields and **refuses
+`recurrence` and `period` by name** (`422`), as it refuses `eventNo`, because a stripped key is a lost edit (owner,
+2026-11-25); the schedule has its own verb, `PUT /v1/events/{eventId}/schedule`, taking exactly one arm
+(`{ recurrence: { rrule, endsOn? } }` or `{ period: { frequency, day? } }`) and answering
+`{ recurrence, period, occurrences, generated }` under the edit guard. The legacy `PUT /v1/events/{eventId}` stays only
+for the per-instance form until
 that form moves. The attendance, headcount, offering-count and import routes keep `{eventId}` as the
 **parent** and take the date. The list's `?ministry=` filter selects events whose **legacy projection's** ministry is that code - an `allOf`
 over exactly one ministry - not events whose audience merely contains such a clause, which would turn an inclusion
@@ -1542,6 +1553,28 @@ export interface Event {
   /** The event's applicability: one saved audience (member-registrations-event-audience.md). */
   audienceId: string;
   audience: AudienceSummary;
+  /** The edit guard's wire form; computed by the same function the write guard calls. */
+  schedule: {
+    locked: boolean;
+    reasons: Array<{
+      code:
+        | 'occurrence_started'
+        | 'offering_attached'
+        | 'offering_counted'
+        | 'attendance_recorded'
+        | 'import_suppressed';
+      /** The occurrence the cause names; null for a bare event-level attachment. */
+      date: string | null;
+    }>;
+  };
+  /** The period this event was created from; null when it was not (see the `period` bullet). */
+  period: {
+    id: string;
+    name: string;
+    cycle: string | null;
+    frequency: 'monthly' | null;
+    day: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN' | null;
+  } | null;
   /** Read-only legacy projection during the transition; refused on create and update. */
   ministry: { code: string; name: string } | null;
   /** Read-only legacy projection during the transition; refused on create and update. */

@@ -788,8 +788,18 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   read-only from the API's stored string rather than guessed at.
 - FR-42g: Write failures MUST be surfaced where the operator acted, never as a silent no-op: a `409` carrying a
   parent-state or recurrence code MUST appear as a banner on the acting surface, an audience code MUST appear
-  against the dialog, a create `409` MUST bind to **Event number**, and a `422` MUST appear as a banner on the form.
+  against the dialog, a create `409` MUST appear as a **banner** on the form - the create carries no Event number
+  field to bind it to (AC 8), so binding it there would name a control the form does not have - and a `422` MUST
+  appear as a banner on the form.
   The form MUST validate the cancellation reason itself, so a blank reason never reaches the API.
+- FR-42h (the edit form's guard, owner 2026-11-25): the edit route MUST render the schedule builder **only** when the
+  event is recurring and its read reports `schedule.locked: false`. A locked event MUST render the schedule read-only
+  with the **specific cause** taken from `schedule.reasons` ("an occurrence started on Thu 3 Dec 2026", "an offering
+  count was recorded on ..."), and MUST NOT offer a control the write would refuse. The form MUST send
+  `PUT /v1/events/{id}/schedule` **only when the authored rule differs from the stored one**, compared through the
+  rrule mapping - an unchanged rule is not a write - and a stored rule outside the vocabulary stays read-only, as it
+  already renders. For a **period** event the comparison is over its `cycleMonth` (one-off) or `frequency`/`day`
+  (rule) fields instead, since a period event stores no rrule. The edit form offers **no Repeats switch**: the event's type is fixed at create.
 - FR-43: Occurrences and the recurrence MUST be read from `GET /v1/events?from&to` for the list and
   `GET /v1/events/:id` for the detail; the UI MUST NOT recompute RRULEs locally. During the read transition those
   calls, and the read-back after every write, MUST send `view=parent`: the legacy per-instance shape is still the
@@ -1172,7 +1182,7 @@ exist yet. (FR-1, FR-9)
 
 ### AC-55: **Given** the events list, **When** it renders against the API, **Then** `Refresh` is a bare icon and one `Actions` menu holds **New event**; selecting it opens the event form. The list holds one row per event, and a recurring event's row carries its schedule and next occurrence. (FR-9a, FR-42, FR-42a) **Superseded clause:** the earlier requirement that the same menu also hold **New series** is retired with the series form (AC-51, 2026-11-22).
 
-### AC-56: **Given** the New event form, **When** a valid standalone event is submitted with **Save draft**, **Then** the request carries the FR-42a fields (including **Audience** and, when selected, the seeded ministry or presbyters group) and one or more occurrences, and never the parent's `status`, the retired `ministry`/`presbyterOnly` or an occurrence's `source`, and the parent is created as `draft`; **When** it is submitted with **Save and activate**, **Then** the same create runs and a `PATCH` carrying only `status: active` follows it. **Given** that `PATCH` fails, **Then** the form stays on the created draft, says it was saved but not activated, re-offers **Activate**, and does not report the registration as failed. **Given** **Event number** is left blank, **Then** the request omits it and the API's minted number is what the detail shows; any create `409` (a duplicate number) is shown against that field. **Given** **Repeats** is on, **Then** the request carries the first recurrence version and the API generates the first window. **Given** the form is opened at `#/events/:id/edit`, **Then** **Event number** and **Members tracking** are read-only and the update carries neither. Success opens the event detail. (FR-42a, FR-42b)
+### AC-56: **Given** the New event form, **When** a valid standalone event is submitted with **Save draft**, **Then** the request carries the FR-42a fields (including the **Audience** set as `audienceIds`) and one or more occurrences, and never the parent's `status`, the retired `ministry`/`presbyterOnly` or an occurrence's `source`, and the parent is created as `draft`; **When** it is submitted with **Save and activate**, **Then** the same create runs and a `PATCH` carrying only `status: active` follows it. **Given** that `PATCH` fails, **Then** the form stays on the created draft, says it was saved but not activated, re-offers **Activate**, and does not report the registration as failed. **Given** the create form, **Then** it carries no **Event number** control at all - the server mints the number (AC 8) - the request omits `eventNo`, the minted number is what the detail shows, and any create `409` (a duplicate number) appears as a **banner** on the form. **Given** **Repeats** is on, **Then** the request carries the first recurrence version and the API generates the first window. **Given** the form is opened at `#/events/:id/edit`, **Then** **Event number** and **Members tracking** are read-only and the update carries neither. Success opens the event detail. (FR-42a, FR-42b)
 
 ### AC-57: **Given** the New event form, **When** the **Audience** picker is opened, **Then** it offers the active audiences with their server-rendered summaries, the Ministry select and the Presbyter-only toggle are absent as controls, and choosing the seeded ministry group or `Presbyters` sends that `audienceId`; **Given** a legacy ministry + presbyter event, **Then** its combination audience is selected. **Superseded clause:** the series form and its **Presbyter only** toggle are retired; there is no **New series** route. (FR-42, FR-42c)
 
@@ -1188,9 +1198,11 @@ exist yet. (FR-1, FR-9)
 
 ### AC-63: **Given** **Repeats** is on in the event form, **When** the operator picks daily, weekly, fortnightly or monthly, **Then** the request carries the matching `rrule` with the weekday, interval or day taken from `effectiveFrom` and no raw `rrule` is typed, and a daily interval of 3 carries `INTERVAL=3`; **Given** a schedule version read from the API, **When** it is rendered, **Then** it shows the same label that authored it ("Daily", "Every 3 days", the weekday set), and a schedule outside the vocabulary renders read-only from the stored string. (FR-42f)
 
-### AC-64: **Given** a write the API refuses, **When** it answers `409 event_draft`, `409 recurrence`, `409 status`, `409 audience_system`, `409 audience_name_in_use`, any create `409` (a duplicate `eventNo`), or a `422`, **Then** the message appears on the surface the operator acted on (a banner on the parent or panel, the dialog field, or the **Event number** field), the form or dialog keeps its values, and no request is silently dropped; **Given** a blank cancellation reason, **Then** the form refuses it before sending and the API's `reason_required` is never reached. (FR-42g)
+### AC-64: **Given** a write the API refuses, **When** it answers `409 event_draft`, `409 recurrence`, `409 status`, `409 audience_system`, `409 audience_name_in_use`, any create `409` (a duplicate `eventNo`), or a `422`, **Then** the message appears on the surface the operator acted on (a banner on the parent, panel or form, or the dialog’s field - the create has no **Event number** control to bind to, AC 8), the form or dialog keeps its values, and no request is silently dropped; **Given** a blank cancellation reason, **Then** the form refuses it before sending and the API's `reason_required` is never reached. (FR-42g)
 
 ### AC-65: **Given** the retired series screens, **When** the app builds, **Then** no UI module references the `SeriesFormPage` or `SeriesDetailPage` verbs and no UI call reaches a `/v1/series` write, while the `/v1/series` API routes stay live for the transition. (FR-42)
+
+### AC-66: **Given** a **recurring** event whose read reports `schedule.locked: false`, **When** the edit form opens, **Then** the schedule builder is editable, and **When** the officer saves a rule that differs from the stored one, **Then** exactly one `PUT /v1/events/{id}/schedule` is sent with the matching arm. **Given** the same event with `schedule.locked: true`, **Then** the schedule renders read-only, the specific cause from `schedule.reasons` is named, no schedule control is offered, and saving the identity sends no schedule write. **Given** an unchanged rule, **Then** no `PUT` is sent, and no Repeats switch is present on the edit surface. (FR-42h)
 
 ### 7.1 Requirement traceability
 
@@ -1247,6 +1259,7 @@ exist yet. (FR-1, FR-9)
 | FR-42a      | AC-55, AC-56            | FR-42b      | AC-56                                   |
 | FR-42e      | AC-62                   | FR-42f      | AC-63                                   |
 | FR-42g      | AC-64                   |
+| FR-42h      | AC-66                   |
 
 ## Edge Cases
 
