@@ -1301,6 +1301,17 @@ const AUDIENCES: readonly AudienceItem[] = [
   YOUNG_ADULTS_AUDIENCE,
 ];
 
+/**
+ * Each audience's own count at the picker's `countAt` (AC-7/AC-60). The API serves
+ * the field only when the caller supplies the date, and never a union total.
+ */
+const AUDIENCE_MEMBER_COUNTS: Readonly<Record<string, number>> = {
+  [AUDIENCE_EVERYONE.id]: 96,
+  [PRESBYTERS_AUDIENCE.id]: 4,
+  [CHOIR_AUDIENCE.id]: 12,
+  [YOUNG_ADULTS_AUDIENCE.id]: 20,
+};
+
 const CLAUSE_LABELS: Readonly<Record<AudienceClauseInput['attribute'], string>> = {
   ministry: 'ministry',
   presbyter: 'presbyter',
@@ -2300,6 +2311,7 @@ function buildRoutes(
   parentOverrides: Map<string, EventParentItem>,
   actionStatesEnabled: () => boolean,
   importReplyFor: (commit: ImportCommit) => ImportStubReply | null,
+  simulateMintCollision: () => boolean,
   recordEventCreate: (body: unknown) => void,
   recordEventPatch: (body: unknown) => void,
   recordWrite: EventWriteRecorder,
@@ -2655,6 +2667,11 @@ function buildRoutes(
         const typedNumber = text(record.eventNo).trim();
         const minted =
           typedNumber || `EVT-2026-${String(900 + createdEvents.size + 1).padStart(3, '0')}`;
+        // AC 8: a mint collision is the create's only 409 on this form, and the
+        // form has no number control to bind it to, so it is a banner.
+        if (simulateMintCollision()) {
+          return problem(409, `Event number ${minted} is already in use`);
+        }
         const duplicate = [...currentEvents(), ...createdEvents.values()].some(
           (candidate) => candidate.eventNo === minted,
         );
@@ -3281,7 +3298,17 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/audiences$/,
-      handle: () => reply({ items: AUDIENCES }),
+      handle: (call) => {
+        // The picker asks with `countAt`; each chip then shows its audience's own
+        // count (AC-7/AC-60). Without the date the API omits the field.
+        if (!call.search.get('countAt')) return reply({ items: AUDIENCES });
+        return reply({
+          items: AUDIENCES.map((audience) => ({
+            ...audience,
+            memberCount: AUDIENCE_MEMBER_COUNTS[audience.id] ?? 0,
+          })),
+        });
+      },
     },
     {
       method: 'POST',
@@ -3389,6 +3416,12 @@ class GatewayStub {
   lastException: EventWrite | null = null;
   lastExceptionDelete: EventWrite | null = null;
   /**
+   * Opt-in: the event create answers the mint collision `409` (AC 8) instead of
+   * accepting the body, so a test can assert the banner. Unset, the stub is
+   * unchanged for every other test.
+   */
+  simulateMintCollision = false;
+  /**
    * Opt-in: the reply the confirmed import POSTs give. Unset, the stub accepts the rows and reports
    * one batch. The behavioural ACs assert the summary and the `422 import_failed` body, so the test
    * that owns the surface states the wire itself (FR-36, FR-37).
@@ -3400,6 +3433,7 @@ class GatewayStub {
     this.parentOverrides,
     () => this.includeActionStates,
     (commit) => this.importReply?.(commit) ?? null,
+    () => this.simulateMintCollision,
     (body) => {
       this.lastEventCreate = body;
     },
