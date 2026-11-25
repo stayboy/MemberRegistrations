@@ -53,6 +53,15 @@ const PARENT: EventParentItem = {
   id: 'evt-1',
   eventNo: 'EVT-2026-014',
   name: 'Strategic Conference',
+  audienceIds: ['aud-everyone'],
+  audiences: [
+    {
+      id: 'aud-everyone',
+      name: 'Everyone',
+      system: true,
+      summary: 'Everyone in the register',
+    },
+  ],
   audienceId: 'aud-everyone',
   audience: {
     id: 'aud-everyone',
@@ -60,6 +69,7 @@ const PARENT: EventParentItem = {
     system: true,
     summary: 'Everyone in the register',
   },
+  period: null,
   ministry: { code: 'LEAD', name: 'Leadership' },
   presbyterOnly: false,
   timezone: 'UTC',
@@ -457,7 +467,7 @@ describe('EventDetailPage write verbs', () => {
     expect(eventId).toBe('evt-1');
     expect(input).toEqual({
       effectiveFrom: '2026-06-07',
-      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU',
       endsOn: null,
     });
   });
@@ -546,10 +556,17 @@ describe('EventDetailPage write verbs', () => {
   });
 
   it('renders a schedule outside the vocabulary read-only from the stored string', async () => {
+    getEventParentMock.mockResolvedValue({
+      ...PARENT,
+      recurrence: {
+        schedules: [{ effectiveFrom: '2026-10-13', rrule: 'FREQ=YEARLY', endsOn: null }],
+        exceptions: [],
+      },
+    });
     renderDetail();
 
     const versions = await screen.findByRole('table', { name: 'Schedule versions' });
-    expect(within(versions).getByText('FREQ=DAILY')).toBeVisible();
+    expect(within(versions).getByText('FREQ=YEARLY')).toBeVisible();
     expect(within(versions).getByText(/cannot be edited here/)).toBeVisible();
   });
 

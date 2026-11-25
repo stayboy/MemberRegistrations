@@ -83,18 +83,22 @@ describe('GET /v1/events/periods', () => {
         id: 'communion-week',
         name: 'Communion Week',
         definition:
-          'The Sunday-to-Saturday week whose last day is the Saturday before the first Sunday of the cycle month.',
+          'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+        dates: 'week',
       },
       {
         id: 'gospel-week',
         name: 'Gospel Week',
         definition:
-          'Communion Week shifted back seven days: it ends on the Saturday eight days before the cycle month’s first Sunday.',
+          'The last week of the month before, when ministries hold their meetings: the week before Communion Week.',
+        dates: 'week',
       },
       {
         id: 'home-cells',
         name: 'Home Cells',
-        definition: 'The Monday of Communion Week.',
+        definition:
+          'The Monday of week 1 of the cycle month - the Monday of Communion Week, one date.',
+        dates: 'date',
       },
     ]);
   });
@@ -163,13 +167,13 @@ describe('POST /v1/events/preview', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.occurrences.map((row: { date: string }) => row.date)).toEqual([
-      '2026-12-27',
       '2026-12-28',
       '2026-12-29',
       '2026-12-30',
       '2026-12-31',
       '2027-01-01',
       '2027-01-02',
+      '2027-01-03',
     ]);
     expect(response.body.occurrences.every((row: { expected: number }) => row.expected === 2)).toBe(
       true,

@@ -187,8 +187,10 @@ test('the New event form creates a parent event and activates it', async ({ page
   await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
   // FR-9a: a form's commit/cancel pair replaces the page's Actions menu.
   await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
+  // AC 8: the create form has no event-number control at any point; the server
+  // mints the number, and the read-only field exists only on the edit view.
+  await expect(page.getByLabel(/^Event number/)).toHaveCount(0);
 
-  await page.getByLabel(/^Event number/).fill('EVT-2026-031');
   await page.getByLabel(/^Name/).fill('Strategic Conference');
   await page.getByLabel(/^Start time/).fill('09:00');
   await page.getByLabel('End time (optional)').fill('17:00');
@@ -197,23 +199,27 @@ test('the New event form creates a parent event and activates it', async ({ page
   await page.getByLabel('Venue name (optional)').fill('Main Auditorium');
   await page.getByLabel('Description (optional)').fill('Annual leadership conference.');
   await page.getByLabel('Occurrence 1 date').fill('2026-01-15');
-  // FR-42c: the picker opens on the seeded Everyone audience, by the server's summary.
+  // FR-42c/AC 7: the picker opens on the seeded Everyone audience as an ordered
+  // set - a Dropdown that adds audiences, and a chip carrying that audience's own
+  // count and the Primary marker.
   await expect(page.getByRole('combobox', { name: 'Audience' })).toContainText(
-    'Everyone - all of membership status active',
+    'Choose an audience to add',
   );
+  const chosen = page.getByRole('toolbar', { name: 'Chosen audiences' });
+  await expect(chosen.getByText('Everyone', { exact: true })).toBeVisible();
+  await expect(chosen.getByText('Primary · 96 members')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save and activate' }).click();
 
-  await expect(page).toHaveURL(/\/events\/created-EVT-2026-031$/);
+  await expect(page).toHaveURL(/\/events\/created-EVT-2026-\d+$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Strategic Conference' })).toBeVisible();
 
-  // AC-56: the recorded wire carries the parent fields, the audience and one
-  // occurrence, and never the retired or API-derived ones.
+  // AC-56: the recorded wire carries the parent fields, the ordered audience set
+  // and one occurrence, and never the retired, API-derived or minted ones.
   const body = gateway.lastEventCreate as Record<string, unknown>;
   expect(body).toMatchObject({
-    eventNo: 'EVT-2026-031',
     name: 'Strategic Conference',
-    audienceId: 'aud-everyone',
+    audienceIds: ['aud-everyone'],
     startTime: '09:00',
     endTime: '17:00',
     venueType: 'auditorium',
@@ -222,25 +228,42 @@ test('the New event form creates a parent event and activates it', async ({ page
     tracksMembers: true,
   });
   expect(body.occurrences).toEqual([{ date: '2026-01-15' }]);
-  for (const key of ['sessions', 'startDate', 'endDate', 'ministry', 'presbyterOnly', 'status']) {
+  for (const key of [
+    'eventNo',
+    'audienceId',
+    'sessions',
+    'startDate',
+    'endDate',
+    'ministry',
+    'presbyterOnly',
+    'status',
+  ]) {
     expect(body).not.toHaveProperty(key);
   }
   // Save and activate is a second request carrying status alone (FR-42b).
   expect(gateway.lastEventPatch).toEqual({ status: 'active' });
 });
 
-test('a duplicate event number shows the 409 against the Event number field', async ({ page }) => {
+test('a create 409 is the form banner, not a field error', async ({ page, gateway }) => {
+  // AC 8: the create's only 409 is the server-minted number's collision, and the
+  // form has no number field to bind it to.
+  gateway.simulateMintCollision = true;
+
   await open(page, '/events/new');
-  await page.getByLabel(/^Event number/).fill('EVT-2026-001');
+  await expect(page.getByLabel(/^Event number/)).toHaveCount(0);
   await page.getByLabel(/^Name/).fill('Duplicate conference');
-  await expect(page.getByRole('combobox', { name: 'Audience' })).toContainText(
-    'Everyone - all of membership status active',
-  );
+  await expect(
+    page.getByRole('toolbar', { name: 'Chosen audiences' }).getByText('Everyone', { exact: true }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Save draft' }).click();
 
   await expect(page).toHaveURL(/\/events\/new$/);
-  await expect(page.getByText('Event number EVT-2026-001 is already in use')).toBeVisible();
+  const banner = page.getByRole('group', { name: 'The event was not saved' });
+  await expect(banner).toBeVisible();
+  await expect(banner.getByText('Event number EVT-2026-901 is already in use')).toBeVisible();
+  // No Field renders a validation message: the 409 is never a field-level error.
+  await expect(page.locator('form').getByRole('alert')).toHaveCount(0);
 });
 
 // --- The detail's write verbs (FR-42e, AC-62) -------------------------------
@@ -329,11 +352,14 @@ test('Add schedule version appends a version built from the closed vocabulary', 
   await expect(versions.getByText('Fortnightly', { exact: true })).toBeVisible();
   await expect(versions.getByText('Jun 7, 2026', { exact: true })).toBeVisible();
 
+  // FR-42f: a weekly rule that carries INTERVAL is stored with WKST=SU, because
+  // RFC 5545 counts interval weeks from the week start while the church week
+  // begins on Sunday.
   expect(gateway.lastScheduleVersion).toEqual({
     eventId: 'series-1',
     body: {
       effectiveFrom: '2026-06-07',
-      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU',
       endsOn: null,
     },
   });

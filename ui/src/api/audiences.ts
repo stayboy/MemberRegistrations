@@ -40,6 +40,12 @@ export interface AudienceItem {
   readonly rule: AudienceRuleInput;
   /** Server-rendered by `renderAudienceSummary`. */
   readonly summary: string;
+  /**
+   * The audience's own member count at the list query's `countAt`. Present only
+   * when that date was supplied; the form shows it on the audience's chip, and
+   * never alongside a union total (the parts do not sum).
+   */
+  readonly memberCount?: number;
   readonly createdAt: string;
   readonly createdBy: string | null;
   readonly updatedAt: string;
@@ -55,13 +61,19 @@ export interface CreateAudienceInput {
 export interface ListAudiencesOptions {
   /** The picker asks for the offered set: active rows, plus any the caller keeps. */
   readonly includeArchived?: boolean;
+  /** The UTC date each audience's `memberCount` is evaluated at (AC-60). */
+  readonly countAt?: string;
   readonly signal?: AbortSignal;
 }
 
 export const AUDIENCES_PATH = '/gateway/v1/audiences';
 
-export function audiencesListPath(includeArchived?: boolean): string {
-  return includeArchived ? `${AUDIENCES_PATH}?includeArchived=true` : AUDIENCES_PATH;
+export function audiencesListPath(includeArchived?: boolean, countAt?: string): string {
+  const params = new URLSearchParams();
+  if (includeArchived) params.set('includeArchived', 'true');
+  if (countAt) params.set('countAt', countAt);
+  const query = params.toString();
+  return query ? `${AUDIENCES_PATH}?${query}` : AUDIENCES_PATH;
 }
 
 /** `GET /v1/audiences`: system and custom audiences with their rules and summaries. */
@@ -72,7 +84,7 @@ export async function listAudiences(
 ): Promise<AudienceItem[]> {
   const result = await gatewayRequest<{ readonly items: readonly AudienceItem[] }>(
     baseUrl,
-    audiencesListPath(options.includeArchived),
+    audiencesListPath(options.includeArchived, options.countAt),
     { sessionToken, signal: options.signal },
   );
   return [...(result?.items ?? [])];

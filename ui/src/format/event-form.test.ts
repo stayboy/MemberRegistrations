@@ -2,11 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { EventParentItem } from '../api/events';
 import {
   EVENT_VENUE_OPTIONS,
+  audienceIdsOf,
   createEmptyEventForm,
+  createEmptySchedule,
+  defaultCycleMonth,
   fromEventParent,
   latestSchedule,
   occurrenceErrorKey,
   toCreateEventPayload,
+  toPeriodInput,
+  toPreviewInput,
+  toScheduleRrule,
   toUpdateEventPayload,
   validateEventForm,
   type EventFormValues,
@@ -15,7 +21,7 @@ import {
 const VALID: EventFormValues = {
   eventNo: 'EVT-2026-031',
   name: 'Strategic Conference',
-  audienceId: 'aud-everyone',
+  audienceIds: ['aud-everyone'],
   description: 'Annual leadership conference.',
   venueType: 'auditorium',
   venueName: 'Main Auditorium',
@@ -23,7 +29,10 @@ const VALID: EventFormValues = {
   endTime: '17:00',
   tracksMembers: true,
   repeats: false,
-  cadence: 'weekly',
+  schedule: {
+    ...createEmptySchedule('2026-01-15'),
+    weekdays: ['TH'],
+  },
   effectiveFrom: '2026-01-15',
   endsOn: '',
   occurrences: [{ date: '2026-01-15', startTime: '', endTime: '' }],
@@ -33,6 +42,16 @@ const PARENT: EventParentItem = {
   id: 'event-parent-1',
   eventNo: 'EVT-2026-023',
   name: 'Sunday Celebration',
+  audienceIds: ['aud-choir', 'aud-youth'],
+  audiences: [
+    { id: 'aud-choir', name: 'Choir', system: true, summary: 'Choir - all of ministry CHR' },
+    {
+      id: 'aud-youth',
+      name: 'Youth 13-17',
+      system: true,
+      summary: 'Youth 13-17 - all of age 13-17',
+    },
+  ],
   audienceId: 'aud-choir',
   audience: {
     id: 'aud-choir',
@@ -40,6 +59,7 @@ const PARENT: EventParentItem = {
     system: true,
     summary: 'Choir - all of ministry CHR',
   },
+  period: null,
   ministry: { code: 'CHR', name: 'Choir' },
   presbyterOnly: false,
   timezone: 'Africa/Lagos',
@@ -55,7 +75,11 @@ const PARENT: EventParentItem = {
   recurrence: {
     schedules: [
       { effectiveFrom: '2025-01-05', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
-      { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU', endsOn: null },
+      {
+        effectiveFrom: '2026-01-04',
+        rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU',
+        endsOn: null,
+      },
     ],
     exceptions: [],
   },
@@ -107,13 +131,9 @@ describe('validateEventForm', () => {
     expect(validateEventForm(VALID)).toEqual({});
   });
 
-  it('treats the event number as optional and caps its 64 characters', () => {
-    expect(validateEventForm({ ...VALID, eventNo: '' })).toEqual({});
-    expect(validateEventForm({ ...VALID, eventNo: '   ' })).toEqual({});
-    expect(validateEventForm({ ...VALID, eventNo: 'x'.repeat(65) }).eventNo).toBe(
-      'Event number must be 64 characters or fewer.',
-    );
-    expect(validateEventForm({ ...VALID, eventNo: 'x'.repeat(64) })).toEqual({});
+  it('has no event-number constraint at all', () => {
+    // The field is a read-only edit seed and never a create control (AC 8).
+    expect(validateEventForm({ ...VALID, eventNo: 'x'.repeat(400) })).toEqual({});
   });
 
   it('requires a name and enforces its 200-character limit', () => {
@@ -124,8 +144,14 @@ describe('validateEventForm', () => {
     expect(validateEventForm({ ...VALID, name: 'x'.repeat(200) })).toEqual({});
   });
 
-  it('requires the audience picker to hold a selection', () => {
-    expect(validateEventForm({ ...VALID, audienceId: '' }).audienceId).toBe('Choose the audience.');
+  it('requires at least one audience in the ordered set', () => {
+    expect(validateEventForm({ ...VALID, audienceIds: [] }).audienceIds).toBe(
+      'Choose at least one audience.',
+    );
+    expect(validateEventForm({ ...VALID, audienceIds: [' ', ''] }).audienceIds).toBe(
+      'Choose at least one audience.',
+    );
+    expect(validateEventForm({ ...VALID, audienceIds: ['a', 'b'] })).toEqual({});
   });
 
   it('requires a 24-hour start time and validates an optional end time', () => {
@@ -214,30 +240,107 @@ describe('validateEventForm', () => {
     );
   });
 
-  it('validates the recurrence fields instead of the date rows when Repeats is on', () => {
+  it('validates the rule instead of the date rows when Repeats is on', () => {
+    const base = { ...VALID, repeats: true, occurrences: [] };
+
+    expect(validateEventForm(base)).toEqual({});
+    expect(validateEventForm({ ...base, effectiveFrom: '' }).effectiveFrom).toBe(
+      'Choose the date the recurrence starts.',
+    );
+    expect(validateEventForm({ ...base, effectiveFrom: '2026-13-40' }).effectiveFrom).toBe(
+      'The start date must be a real date in YYYY-MM-DD form.',
+    );
+    expect(validateEventForm({ ...base, endsOn: '2025-12-31' }).endsOn).toBe(
+      'The end date must not be before the start date.',
+    );
+  });
+
+  it('bounds the daily and weekly intervals and requires a weekday', () => {
+    const daily = {
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: { ...VALID.schedule, cadence: 'daily' as const, interval: '8' },
+    };
+    expect(validateEventForm(daily).interval).toBe('The interval must be between 1 and 7 days.');
     expect(
       validateEventForm({
-        ...VALID,
-        repeats: true,
-        occurrences: [],
-        effectiveFrom: '2026-01-15',
+        ...daily,
+        schedule: { ...daily.schedule, interval: '7' },
       }),
     ).toEqual({});
 
-    expect(validateEventForm({ ...VALID, repeats: true, effectiveFrom: '' }).effectiveFrom).toBe(
-      'Choose the date the recurrence starts.',
-    );
+    const weekly = {
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: { ...VALID.schedule, cadence: 'weekly' as const, weekdays: [], interval: '1' },
+    };
+    expect(validateEventForm(weekly).weekdays).toBe('Choose at least one day.');
     expect(
-      validateEventForm({ ...VALID, repeats: true, effectiveFrom: '2026-13-40' }).effectiveFrom,
-    ).toBe('The start date must be a real date in YYYY-MM-DD form.');
+      validateEventForm({ ...weekly, schedule: { ...weekly.schedule, interval: '5' } }).interval,
+    ).toBe('The interval must be between 1 and 4 weeks.');
+  });
+
+  it('bounds the monthly day and accepts a blank one', () => {
+    const monthly = {
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: { ...VALID.schedule, cadence: 'monthly' as const, monthlyMode: 'day' as const },
+    };
+    expect(validateEventForm(monthly)).toEqual({});
+    expect(
+      validateEventForm({ ...monthly, schedule: { ...monthly.schedule, dayOfMonth: '32' } })
+        .dayOfMonth,
+    ).toBe('The day of the month must be between 1 and 31.');
+    expect(
+      validateEventForm({ ...monthly, schedule: { ...monthly.schedule, dayOfMonth: '0' } })
+        .dayOfMonth,
+    ).toBe('The day of the month must be between 1 and 31.');
+  });
+
+  it('validates the period mode: an id, a cycle, and a day only on a week period', () => {
+    const period = {
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: {
+        ...VALID.schedule,
+        mode: 'period' as const,
+        periodId: 'communion-week',
+        cycleMonth: '2026-12',
+        periodFrequency: 'one-cycle' as const,
+      },
+    };
+    expect(validateEventForm(period)).toEqual({});
+    expect(
+      validateEventForm({ ...period, schedule: { ...period.schedule, periodId: '' } }).period,
+    ).toBe('Choose a period.');
+    expect(
+      validateEventForm({ ...period, schedule: { ...period.schedule, cycleMonth: '2026-13' } })
+        .cycleMonth,
+    ).toBe('Choose the cycle month.');
+
     expect(
       validateEventForm({
-        ...VALID,
-        repeats: true,
-        effectiveFrom: '2026-01-15',
-        endsOn: '2025-12-31',
-      }).endsOn,
-    ).toBe('The end date must not be before the start date.');
+        ...period,
+        effectiveFrom: '',
+        schedule: { ...period.schedule, periodFrequency: 'monthly' },
+      }).effectiveFrom,
+    ).toBe('Choose the date the period starts.');
+
+    expect(
+      validateEventForm({
+        ...period,
+        schedule: {
+          ...period.schedule,
+          periodFrequency: 'monthly',
+          periodDates: 'date',
+          periodDay: 'MON',
+        },
+      }).periodDay,
+    ).toBe('This period is a single date, so it takes no day inside it.');
   });
 
   it('addresses every row error by row and field', () => {
@@ -247,12 +350,12 @@ describe('validateEventForm', () => {
   });
 });
 
-describe('createEmptyEventForm', () => {
+describe('createEmptyEventForm and the period cycle default', () => {
   it('starts today in UTC with one date, no audience and members tracked', () => {
     expect(createEmptyEventForm('2026-11-22')).toEqual({
       eventNo: '',
       name: '',
-      audienceId: '',
+      audienceIds: [],
       description: '',
       venueType: 'auditorium',
       venueName: '',
@@ -260,11 +363,20 @@ describe('createEmptyEventForm', () => {
       endTime: '',
       tracksMembers: true,
       repeats: false,
-      cadence: 'weekly',
+      schedule: createEmptySchedule('2026-11-22'),
       effectiveFrom: '2026-11-22',
       endsOn: '',
       occurrences: [{ date: '2026-11-22', startTime: '', endTime: '' }],
     });
+  });
+
+  it('prefers the start date’s month only when it is still ahead, else the next month', () => {
+    // Opening on 24 November offers December: November's cycle has run.
+    expect(defaultCycleMonth('2026-11-24', '2026-11-24')).toBe('2026-12');
+    // A start date next year keeps its own month.
+    expect(defaultCycleMonth('2027-02-01', '2026-11-24')).toBe('2027-02');
+    // The year boundary rolls over.
+    expect(defaultCycleMonth('2026-12-24', '2026-12-24')).toBe('2027-01');
   });
 });
 
@@ -273,15 +385,13 @@ describe('toCreateEventPayload', () => {
     expect(
       toCreateEventPayload({
         ...VALID,
-        eventNo: '  EVT-2026-031  ',
         name: '  Strategic Conference  ',
         venueName: '  Main Auditorium  ',
         description: '  Annual leadership conference.  ',
       }),
     ).toEqual({
-      eventNo: 'EVT-2026-031',
       name: 'Strategic Conference',
-      audienceId: 'aud-everyone',
+      audienceIds: ['aud-everyone'],
       description: 'Annual leadership conference.',
       venueType: 'auditorium',
       venueName: 'Main Auditorium',
@@ -292,10 +402,10 @@ describe('toCreateEventPayload', () => {
     });
   });
 
-  it('omits blank optional fields and never sends the retired or derived fields', () => {
+  it('never sends an event number, and never the retired or derived fields', () => {
     const payload = toCreateEventPayload({
       ...VALID,
-      eventNo: '   ',
+      eventNo: 'EVT-2026-031',
       endTime: ' ',
       venueName: ' ',
       description: ' ',
@@ -319,6 +429,12 @@ describe('toCreateEventPayload', () => {
     }
   });
 
+  it('sends the audience set in order', () => {
+    const payload = toCreateEventPayload({ ...VALID, audienceIds: ['aud-choir', 'aud-youth'] });
+    expect(payload.audienceIds).toEqual(['aud-choir', 'aud-youth']);
+    expect(payload).not.toHaveProperty('audienceId');
+  });
+
   it('carries a row start and end time when the row names them', () => {
     const payload = toCreateEventPayload({
       ...VALID,
@@ -334,37 +450,143 @@ describe('toCreateEventPayload', () => {
     ]);
   });
 
-  it('maps each cadence to its rrule and the effective date to the weekday/day', () => {
+  it('maps each cadence to its rrule', () => {
     const base = { ...VALID, repeats: true, occurrences: [] };
 
     expect(
-      toCreateEventPayload({ ...base, cadence: 'weekly', effectiveFrom: '2026-01-15' }).recurrence,
-    ).toEqual({
-      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;BYDAY=TH' }],
-    });
-    expect(
-      toCreateEventPayload({ ...base, cadence: 'fortnightly', effectiveFrom: '2026-01-15' })
-        .recurrence,
-    ).toEqual({
-      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TH' }],
-    });
-    expect(
-      toCreateEventPayload({ ...base, cadence: 'monthly', effectiveFrom: '2026-01-15' }).recurrence,
-    ).toEqual({
-      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=MONTHLY;BYMONTHDAY=15' }],
-    });
+      toCreateEventPayload({
+        ...base,
+        schedule: { ...base.schedule, cadence: 'daily', interval: '3' },
+      }).recurrence,
+    ).toEqual({ schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=DAILY;INTERVAL=3' }] });
+
     expect(
       toCreateEventPayload({
         ...base,
-        cadence: 'weekly',
-        effectiveFrom: '2026-01-15',
-        endsOn: '2026-12-31',
+        schedule: { ...base.schedule, cadence: 'weekly', weekdays: ['MO', 'TH'], interval: '1' },
+      }).recurrence,
+    ).toEqual({
+      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;BYDAY=MO,TH' }],
+    });
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: { ...base.schedule, cadence: 'weekly', weekdays: ['MO', 'TH'], interval: '2' },
       }).recurrence,
     ).toEqual({
       schedules: [
-        { effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;BYDAY=TH', endsOn: '2026-12-31' },
+        { effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=MO,TH' },
       ],
     });
+
+    // Fortnightly is the interval-of-two preset on the start date's weekday.
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: { ...base.schedule, cadence: 'fortnightly', weekdays: [], interval: '2' },
+      }).recurrence,
+    ).toEqual({
+      schedules: [
+        { effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=TH' },
+      ],
+    });
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: { ...base.schedule, cadence: 'monthly', monthlyMode: 'day', dayOfMonth: '28' },
+      }).recurrence,
+    ).toEqual({
+      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=MONTHLY;BYMONTHDAY=28' }],
+    });
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          cadence: 'monthly',
+          monthlyMode: 'position',
+          position: 'last',
+          positionWeekday: 'SA',
+        },
+      }).recurrence,
+    ).toEqual({
+      schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA' }],
+    });
+  });
+
+  it('carries the end date when one is chosen', () => {
+    const payload = toCreateEventPayload({
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      endsOn: '2026-12-31',
+    });
+    expect(payload.recurrence?.schedules[0]?.endsOn).toBe('2026-12-31');
+  });
+
+  it('sends a named period instead of an rrule', () => {
+    const base = { ...VALID, repeats: true, occurrences: [] };
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          mode: 'period',
+          periodId: 'communion-week',
+          periodFrequency: 'one-cycle',
+          cycleMonth: '2026-12',
+        },
+      }),
+    ).toMatchObject({ period: { id: 'communion-week', cycleMonth: '2026-12' } });
+
+    const monthly = toCreateEventPayload({
+      ...base,
+      schedule: {
+        ...base.schedule,
+        mode: 'period',
+        periodId: 'communion-week',
+        periodFrequency: 'monthly',
+        periodDates: 'week',
+        periodDay: 'SUN',
+      },
+    });
+    expect(monthly).toMatchObject({
+      period: {
+        id: 'communion-week',
+        frequency: 'monthly',
+        day: 'SUN',
+        effectiveFrom: '2026-01-15',
+      },
+    });
+    expect(monthly).not.toHaveProperty('recurrence');
+    expect(monthly).not.toHaveProperty('occurrences');
+  });
+
+  it('never sends a day for a single-date period, even when a stale one lingers', () => {
+    const payload = toCreateEventPayload({
+      ...VALID,
+      repeats: true,
+      occurrences: [],
+      schedule: {
+        ...VALID.schedule,
+        mode: 'period',
+        periodId: 'home-cells',
+        periodFrequency: 'monthly',
+        periodDates: 'date',
+        periodDay: 'MON',
+      },
+    });
+
+    expect(payload.period).toEqual({
+      id: 'home-cells',
+      frequency: 'monthly',
+      effectiveFrom: '2026-01-15',
+    });
+    expect(payload.period).not.toHaveProperty('day');
   });
 
   it('never sends both a recurrence and date rows', () => {
@@ -373,24 +595,164 @@ describe('toCreateEventPayload', () => {
     expect(payload).not.toHaveProperty('occurrences');
   });
 
-  it('refuses to build a recurrence from a date that has no weekday', () => {
-    expect(() =>
-      toCreateEventPayload({ ...VALID, repeats: true, effectiveFrom: '2026-02-31' }),
-    ).toThrowError('The recurrence start date is invalid.');
+  it('keeps the rrule’s MO-SU and the period’s MON-SUN apart in one form', () => {
+    const base = { ...VALID, repeats: true, occurrences: [] };
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          cadence: 'weekly',
+          weekdays: ['MO', 'SU'],
+          interval: '1',
+        },
+      }).recurrence,
+    ).toEqual({ schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;BYDAY=MO,SU' }] });
+
+    expect(
+      toCreateEventPayload({
+        ...base,
+        schedule: {
+          ...base.schedule,
+          mode: 'period',
+          periodId: 'communion-week',
+          periodFrequency: 'monthly',
+          periodDates: 'week',
+          periodDay: 'SUN',
+        },
+      }).period,
+    ).toMatchObject({ day: 'SUN' });
+  });
+});
+
+describe('toPeriodInput', () => {
+  it('omits the anchor from the one-cycle arm and carries it on the monthly arm', () => {
+    const schedule = {
+      ...createEmptySchedule('2026-11-24'),
+      mode: 'period' as const,
+      periodId: 'communion-week',
+    };
+    expect(
+      toPeriodInput(
+        { ...schedule, periodFrequency: 'one-cycle', cycleMonth: '2026-12' },
+        '2026-11-24',
+      ),
+    ).toEqual({ id: 'communion-week', cycleMonth: '2026-12' });
+    expect(
+      toPeriodInput({ ...schedule, periodFrequency: 'monthly', periodDay: '' }, '2026-11-24'),
+    ).toEqual({
+      id: 'communion-week',
+      frequency: 'monthly',
+      effectiveFrom: '2026-11-24',
+    });
+  });
+
+  it('drops the day on a single-date period and keeps it in the period vocabulary', () => {
+    const schedule = {
+      ...createEmptySchedule('2026-11-24'),
+      mode: 'period' as const,
+      periodId: 'home-cells',
+    };
+    expect(
+      toPeriodInput(
+        { ...schedule, periodFrequency: 'monthly', periodDates: 'date', periodDay: 'MON' },
+        '2026-11-24',
+      ),
+    ).toEqual({ id: 'home-cells', frequency: 'monthly', effectiveFrom: '2026-11-24' });
+
+    expect(
+      toPeriodInput(
+        {
+          ...schedule,
+          periodId: 'communion-week',
+          periodFrequency: 'monthly',
+          periodDates: 'week',
+          periodDay: 'SUN',
+        },
+        '2026-11-24',
+      ),
+    ).toMatchObject({ day: 'SUN' });
+  });
+});
+
+describe('toPreviewInput', () => {
+  it('has nothing to preview for a standalone event', () => {
+    expect(toPreviewInput(VALID)).toBeNull();
+  });
+
+  it('sends the same recurrence the create would send, with the audience set', () => {
+    expect(
+      toPreviewInput({
+        ...VALID,
+        repeats: true,
+        audienceIds: ['aud-choir', 'aud-youth'],
+        endsOn: '2026-12-31',
+      }),
+    ).toEqual({
+      audienceIds: ['aud-choir', 'aud-youth'],
+      recurrence: {
+        schedules: [
+          {
+            effectiveFrom: '2026-01-15',
+            rrule: 'FREQ=WEEKLY;BYDAY=TH',
+            endsOn: '2026-12-31',
+          },
+        ],
+      },
+    });
+  });
+
+  it('sends the period shape when the period arm is live', () => {
+    expect(
+      toPreviewInput({
+        ...VALID,
+        repeats: true,
+        schedule: {
+          ...VALID.schedule,
+          mode: 'period',
+          periodId: 'communion-week',
+          periodFrequency: 'monthly',
+          periodDates: 'week',
+          periodDay: 'SUN',
+        },
+      }),
+    ).toEqual({
+      audienceIds: ['aud-everyone'],
+      period: {
+        id: 'communion-week',
+        frequency: 'monthly',
+        day: 'SUN',
+        effectiveFrom: '2026-01-15',
+      },
+    });
+  });
+
+  it('is null until the rule is buildable', () => {
+    expect(
+      toPreviewInput({ ...VALID, repeats: true, schedule: { ...VALID.schedule, interval: '9' } }),
+    ).toBeNull();
+  });
+});
+
+describe('toScheduleRrule', () => {
+  it('is null for an unbuildable rule and a string for a buildable one', () => {
+    expect(toScheduleRrule({ ...VALID.schedule, interval: '' }, '2026-01-15')).toBeNull();
+    expect(toScheduleRrule(VALID.schedule, '2026-01-15')).toBe('FREQ=WEEKLY;BYDAY=TH');
   });
 });
 
 describe('toUpdateEventPayload', () => {
-  it('sends the identity fields and neither the event number nor members tracking', () => {
+  it('sends the identity fields as an audience set, and neither the number nor tracking', () => {
     const payload = toUpdateEventPayload({
       ...VALID,
       name: '  Strategic Conference  ',
-      audienceId: 'aud-presbyters',
+      audienceIds: ['aud-choir', 'aud-presbyters'],
     });
 
     expect(payload).toEqual({
       name: 'Strategic Conference',
-      audienceId: 'aud-presbyters',
+      audienceIds: ['aud-choir', 'aud-presbyters'],
       venueType: 'auditorium',
       startTime: '09:00',
       endTime: '17:00',
@@ -398,9 +760,11 @@ describe('toUpdateEventPayload', () => {
       description: 'Annual leadership conference.',
     });
     expect(payload).not.toHaveProperty('eventNo');
+    expect(payload).not.toHaveProperty('audienceId');
     expect(payload).not.toHaveProperty('tracksMembers');
     expect(payload).not.toHaveProperty('status');
     expect(payload).not.toHaveProperty('recurrence');
+    expect(payload).not.toHaveProperty('period');
     expect(payload).not.toHaveProperty('occurrences');
   });
 
@@ -411,12 +775,20 @@ describe('toUpdateEventPayload', () => {
   });
 });
 
+describe('audienceIdsOf', () => {
+  it('prefers the ordered set and honours the one-round alias on read', () => {
+    expect(audienceIdsOf(PARENT)).toEqual(['aud-choir', 'aud-youth']);
+    expect(audienceIdsOf({ audienceIds: [], audienceId: 'aud-legacy' })).toEqual(['aud-legacy']);
+    expect(audienceIdsOf({ audienceId: 'aud-legacy' })).toEqual(['aud-legacy']);
+  });
+});
+
 describe('fromEventParent', () => {
-  it('seeds the form from the parent and its latest schedule', () => {
+  it('seeds the form from the parent, its audience set and its latest schedule', () => {
     expect(fromEventParent(PARENT, '2026-11-22')).toEqual({
       eventNo: 'EVT-2026-023',
       name: 'Sunday Celebration',
-      audienceId: 'aud-choir',
+      audienceIds: ['aud-choir', 'aud-youth'],
       description: 'Weekly worship',
       venueType: 'hybrid',
       venueName: 'Main Auditorium',
@@ -424,24 +796,53 @@ describe('fromEventParent', () => {
       endTime: '11:00',
       tracksMembers: true,
       repeats: true,
-      cadence: 'fortnightly',
+      schedule: {
+        ...createEmptySchedule('2026-11-22'),
+        cadence: 'fortnightly',
+        weekdays: ['SU'],
+        interval: '2',
+        dayOfMonth: '',
+      },
       effectiveFrom: '2026-01-04',
       endsOn: '',
       occurrences: [{ date: '2026-11-22', startTime: '', endTime: '' }],
     });
   });
 
-  it('leaves the cadence at weekly for a rule outside the vocabulary', () => {
+  it('seeds the period arm from the event’s provenance', () => {
+    const values = fromEventParent(
+      {
+        ...PARENT,
+        recurrence: null,
+        period: {
+          id: 'communion-week',
+          name: 'Communion Week',
+          cycle: null,
+          frequency: 'monthly',
+          day: 'SUN',
+        },
+      },
+      '2026-11-22',
+    );
+
+    expect(values.repeats).toBe(true);
+    expect(values.schedule.mode).toBe('period');
+    expect(values.schedule.periodId).toBe('communion-week');
+    expect(values.schedule.periodFrequency).toBe('monthly');
+    expect(values.schedule.periodDay).toBe('SUN');
+  });
+
+  it('leaves the builder at its default for a rule outside the vocabulary', () => {
     const values = fromEventParent({
       ...PARENT,
       recurrence: {
-        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY', endsOn: null }],
+        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=YEARLY', endsOn: null }],
         exceptions: [],
       },
     });
 
     expect(values.repeats).toBe(true);
-    expect(values.cadence).toBe('weekly');
+    expect(values.schedule.cadence).toBe('weekly');
     expect(values.effectiveFrom).toBe('2026-01-04');
   });
 

@@ -1301,6 +1301,17 @@ const AUDIENCES: readonly AudienceItem[] = [
   YOUNG_ADULTS_AUDIENCE,
 ];
 
+/**
+ * Each audience's own count at the picker's `countAt` (AC-7/AC-60). The API serves
+ * the field only when the caller supplies the date, and never a union total.
+ */
+const AUDIENCE_MEMBER_COUNTS: Readonly<Record<string, number>> = {
+  [AUDIENCE_EVERYONE.id]: 96,
+  [PRESBYTERS_AUDIENCE.id]: 4,
+  [CHOIR_AUDIENCE.id]: 12,
+  [YOUNG_ADULTS_AUDIENCE.id]: 20,
+};
+
 const CLAUSE_LABELS: Readonly<Record<AudienceClauseInput['attribute'], string>> = {
   ministry: 'ministry',
   presbyter: 'presbyter',
@@ -1649,8 +1660,11 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
     id: seed.id,
     eventNo: event.eventNo ?? '',
     name: event.name,
+    audienceIds: [seed.audience.id],
+    audiences: [seed.audience],
     audienceId: seed.audience.id,
     audience: seed.audience,
+    period: null,
     ministry: event.ministry,
     presbyterOnly: event.presbyterOnly,
     timezone: event.timezone,
@@ -1774,8 +1788,13 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
   const record = asRecord(body);
   const startTime = text(record.startTime);
   const endTime = optionalText(record.endTime);
+  const requestedAudienceIds = Array.isArray(record.audienceIds)
+    ? record.audienceIds.map((id) => text(id))
+    : [];
   const audience =
-    AUDIENCES.find((candidate) => candidate.id === text(record.audienceId)) ?? EVERYONE_AUDIENCE;
+    AUDIENCES.find(
+      (candidate) => candidate.id === (requestedAudienceIds[0] ?? text(record.audienceId)),
+    ) ?? EVERYONE_AUDIENCE;
   const occurrences = occurrencesFromBody(body, `created-${eventNo}`, startTime, endTime);
   const recurrenceInput = asRecord(record.recurrence);
   const schedules = Array.isArray(recurrenceInput.schedules)
@@ -1797,6 +1816,15 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
     id: `created-${eventNo}`,
     eventNo,
     name: text(record.name),
+    audienceIds: [audience.id],
+    audiences: [
+      {
+        id: audience.id,
+        name: audience.name,
+        system: audience.system,
+        summary: audience.summary,
+      },
+    ],
     audienceId: audience.id,
     audience: {
       id: audience.id,
@@ -1804,6 +1832,7 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
       system: audience.system,
       summary: audience.summary,
     },
+    period: null,
     ministry: null,
     presbyterOnly: false,
     timezone: text(record.timezone) || 'UTC',
@@ -2282,6 +2311,7 @@ function buildRoutes(
   parentOverrides: Map<string, EventParentItem>,
   actionStatesEnabled: () => boolean,
   importReplyFor: (commit: ImportCommit) => ImportStubReply | null,
+  simulateMintCollision: () => boolean,
   recordEventCreate: (body: unknown) => void,
   recordEventPatch: (body: unknown) => void,
   recordWrite: EventWriteRecorder,
@@ -2637,6 +2667,11 @@ function buildRoutes(
         const typedNumber = text(record.eventNo).trim();
         const minted =
           typedNumber || `EVT-2026-${String(900 + createdEvents.size + 1).padStart(3, '0')}`;
+        // AC 8: a mint collision is the create's only 409 on this form, and the
+        // form has no number control to bind it to, so it is a banner.
+        if (simulateMintCollision()) {
+          return problem(409, `Event number ${minted} is already in use`);
+        }
         const duplicate = [...currentEvents(), ...createdEvents.values()].some(
           (candidate) => candidate.eventNo === minted,
         );
@@ -2646,6 +2681,55 @@ function buildRoutes(
         createdEvents.set(parent.id, parent);
         return reply(parent, 201, { Location: `/v1/events/${parent.id}` });
       },
+    },
+    {
+      // The create form's read-only catalogue, registered before `/:id`
+      // (member-registrations-event-periods.md, "Two read-only contract entries").
+      // `dates` is the contract's projection of the resolver's shape, and the form
+      // uses it to hide the day control for a single-date period.
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/events\/periods$/,
+      handle: () =>
+        reply({
+          items: [
+            {
+              id: 'communion-week',
+              name: 'Communion Week',
+              definition:
+                'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+              dates: 'week',
+            },
+            {
+              id: 'gospel-week',
+              name: 'Gospel Week',
+              definition:
+                'The last week of the month before, when ministries hold their meetings: the week before Communion Week.',
+              dates: 'week',
+            },
+            {
+              id: 'home-cells',
+              name: 'Home Cells',
+              definition:
+                'The Monday of week 1 of the cycle month — the Monday of Communion Week, one date.',
+              dates: 'date',
+            },
+          ],
+        }),
+    },
+    {
+      // `POST /v1/events/preview` never persists. The fixture serves the counts
+      // shape the form renders; the dates themselves are the API's to resolve,
+      // and the e2e mock does not re-implement the resolver.
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/preview$/,
+      handle: () =>
+        reply({
+          occurrences: [],
+          audienceCounts: AUDIENCES.map((audience) => ({
+            id: audience.id,
+            count: audience.memberCount ?? 0,
+          })),
+        }),
     },
     {
       method: 'PATCH',
@@ -2671,14 +2755,22 @@ function buildRoutes(
           return problem(422, 'status must be draft or active');
         }
 
-        const audience =
-          AUDIENCES.find(
-            (candidate) => candidate.id === (text(body.audienceId) || current.audienceId),
-          ) ?? EVERYONE_AUDIENCE;
+        const requestedAudienceIds = Array.isArray(body.audienceIds)
+          ? body.audienceIds.map((id) => text(id))
+          : [];
+        const requested =
+          requestedAudienceIds.length > 0 ? requestedAudienceIds : [current.audienceId];
+        const resolvedAudiences = requested
+          .map((id) => AUDIENCES.find((candidate) => candidate.id === id))
+          .filter((candidate): candidate is AudienceItem => Boolean(candidate));
+        const audience = resolvedAudiences[0] ?? EVERYONE_AUDIENCE;
 
         const updated: EventParentItem = {
           ...current,
           name: optionalText(body.name) ?? current.name,
+          audienceIds:
+            resolvedAudiences.length > 0 ? resolvedAudiences.map((row) => row.id) : [audience.id],
+          audiences: resolvedAudiences.length > 0 ? resolvedAudiences : [audience],
           audienceId: audience.id,
           audience: {
             id: audience.id,
@@ -3206,7 +3298,17 @@ function buildRoutes(
     {
       method: 'GET',
       pattern: /^\/gateway\/v1\/audiences$/,
-      handle: () => reply({ items: AUDIENCES }),
+      handle: (call) => {
+        // The picker asks with `countAt`; each chip then shows its audience's own
+        // count (AC-7/AC-60). Without the date the API omits the field.
+        if (!call.search.get('countAt')) return reply({ items: AUDIENCES });
+        return reply({
+          items: AUDIENCES.map((audience) => ({
+            ...audience,
+            memberCount: AUDIENCE_MEMBER_COUNTS[audience.id] ?? 0,
+          })),
+        });
+      },
     },
     {
       method: 'POST',
@@ -3314,6 +3416,12 @@ class GatewayStub {
   lastException: EventWrite | null = null;
   lastExceptionDelete: EventWrite | null = null;
   /**
+   * Opt-in: the event create answers the mint collision `409` (AC 8) instead of
+   * accepting the body, so a test can assert the banner. Unset, the stub is
+   * unchanged for every other test.
+   */
+  simulateMintCollision = false;
+  /**
    * Opt-in: the reply the confirmed import POSTs give. Unset, the stub accepts the rows and reports
    * one batch. The behavioural ACs assert the summary and the `422 import_failed` body, so the test
    * that owns the surface states the wire itself (FR-36, FR-37).
@@ -3325,6 +3433,7 @@ class GatewayStub {
     this.parentOverrides,
     () => this.includeActionStates,
     (commit) => this.importReply?.(commit) ?? null,
+    () => this.simulateMintCollision,
     (body) => {
       this.lastEventCreate = body;
     },

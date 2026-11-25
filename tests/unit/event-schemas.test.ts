@@ -45,6 +45,7 @@ const parentRead = {
   endTime: null,
   tracksMembers: true,
   status: 'draft',
+  period: null,
   recurrence: null,
   occurrences: [],
   offerings: [],

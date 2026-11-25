@@ -16,6 +16,89 @@ export const eventStatusSchema = z.enum(EVENT_STATUSES);
 export const eventSessionStatusSchema = z.enum(EVENT_SESSION_STATUSES);
 export const sessionSourceSchema = z.enum(SESSION_SOURCES);
 
+/**
+ * The three named periods are declared in code (`src/domain/periods.ts`) and
+ * read from the catalogue; the ids are the wire vocabulary and are closed.
+ */
+export const EVENT_PERIOD_IDS = ['communion-week', 'gospel-week', 'home-cells'] as const;
+export const eventPeriodIdSchema = z.enum(EVENT_PERIOD_IDS);
+export type EventPeriodId = (typeof EVENT_PERIOD_IDS)[number];
+
+/** The resolver's shape projected onto the wire: a week or a single date. */
+export const EVENT_PERIOD_DATES = ['week', 'date'] as const;
+
+/** A period day is the three-letter vocabulary, never the rrule `MO`-`SU`. */
+export const PERIOD_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+export const eventPeriodDaySchema = z.enum(PERIOD_DAYS);
+export type PeriodDay = (typeof PERIOD_DAYS)[number];
+
+/** A closed enum that starts with monthly; a new cadence is a new value. */
+export const PERIOD_FREQUENCIES = ['monthly'] as const;
+export const eventPeriodFrequencySchema = z.enum(PERIOD_FREQUENCIES);
+export type PeriodFrequency = (typeof PERIOD_FREQUENCIES)[number];
+
+export const eventPeriodSchema = z.object({
+  id: eventPeriodIdSchema,
+  name: z.string(),
+  /** The declared rule, in words: the form shows it beside the choice. */
+  definition: z.string(),
+  /** The projection of the resolver's `kind`, derived - never hand-written. */
+  dates: z.enum(EVENT_PERIOD_DATES),
+});
+
+export const eventPeriodListSchema = z.object({
+  items: z.array(eventPeriodSchema),
+});
+
+const cycleMonthSchema = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'cycleMonth must be a calendar month (YYYY-MM)');
+
+/**
+ * The create's period arm has exactly two forms. `{ id, cycleMonth }` resolves
+ * one cycle once; `{ id, frequency: 'monthly', day?, effectiveFrom? }` generates
+ * one date per cycle over the create's 90-day window. Both arms are strict, so
+ * sending **both** `cycleMonth` and `frequency` is a 422 by name rather than a
+ * silently stripped key. `effectiveFrom` anchors the window only: it is
+ * input-only and never stored.
+ */
+export const eventPeriodCycleInputSchema = z
+  .object({
+    id: eventPeriodIdSchema,
+    cycleMonth: cycleMonthSchema,
+  })
+  .strict();
+
+export const eventPeriodRuleInputSchema = z
+  .object({
+    id: eventPeriodIdSchema,
+    frequency: eventPeriodFrequencySchema,
+    day: eventPeriodDaySchema
+      .optional()
+      .describe('A weekday inside the period; refused for a single-date period.'),
+    effectiveFrom: dateStringSchema
+      .optional()
+      .describe('Anchors the first 90-day window; input-only, never stored.'),
+  })
+  .strict();
+
+export const eventPeriodInputSchema = z.union([
+  eventPeriodCycleInputSchema,
+  eventPeriodRuleInputSchema,
+]);
+
+/** The provenance a period-created event carries on read. */
+export const eventPeriodProvenanceSchema = z.object({
+  id: eventPeriodIdSchema,
+  /** The name snapshot taken at save, never a live lookup. */
+  name: z.string(),
+  /** The chosen cycle for a one-off period event; null for a recurring one. */
+  cycle: z.string().nullable(),
+  frequency: eventPeriodFrequencySchema.nullable(),
+  /** A weekday inside each cycle; null for a whole week or a single date. */
+  day: eventPeriodDaySchema.nullable(),
+});
+
 export const timeStringSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a 24-hour time (HH:MM)');
@@ -26,6 +109,8 @@ export const eventListQuerySchema = z.object({
   seriesId: z.string().uuid().optional(),
   ministry: z.string().trim().min(1).optional(),
   venueType: venueTypeSchema.optional(),
+  /** The named period a parent was created from; filters on the stored id. */
+  period: eventPeriodIdSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -455,33 +540,6 @@ export const eventRecurrenceInputSchema = z.object({
 });
 
 /**
- * The three named periods are declared in code (`src/domain/periods.ts`, PR 2)
- * and read from the catalogue; the ids are the wire vocabulary and are closed.
- */
-export const EVENT_PERIOD_IDS = ['communion-week', 'gospel-week', 'home-cells'] as const;
-
-export const eventPeriodIdSchema = z.enum(EVENT_PERIOD_IDS);
-
-export const eventPeriodSchema = z.object({
-  id: eventPeriodIdSchema,
-  name: z.string(),
-  /** The declared rule, in words: the form shows it beside the choice. */
-  definition: z.string(),
-});
-
-export const eventPeriodListSchema = z.object({
-  items: z.array(eventPeriodSchema),
-});
-
-/** A period resolves against the month of the Communion Sunday it precedes: `YYYY-MM`. */
-export const eventPeriodPreviewSchema = z.object({
-  id: eventPeriodIdSchema,
-  cycleMonth: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'cycleMonth must be a calendar month (YYYY-MM)'),
-});
-
-/**
  * The event applicability on a write: an ordered set of saved audiences, the
  * first being the primary. Composition is intersection - a member matches
  * every audience - which is also how exclusion is said. `audienceId` stays a
@@ -546,7 +604,11 @@ export const eventPreviewInputSchema = z
     recurrence: eventRecurrenceInputSchema
       .optional()
       .describe("The create form's recurrence, resolved over the create's 90-day window."),
-    period: eventPeriodPreviewSchema.optional(),
+    period: eventPeriodInputSchema
+      .optional()
+      .describe(
+        'The create period in either shape: `{ id, cycleMonth }` or `{ id, frequency: "monthly", day?, effectiveFrom? }`.',
+      ),
   })
   .superRefine((value, ctx) => {
     checkAudienceAlias(value, ctx);
@@ -611,20 +673,39 @@ export const createEventParentSchema = z
       .array(eventOccurrenceInputSchema)
       .min(1)
       .optional()
-      .describe("A standalone event's dates; mutually exclusive with `recurrence`."),
+      .describe("A standalone event's dates; mutually exclusive with `recurrence` or `period`."),
     recurrence: eventRecurrenceInputSchema
       .optional()
       .describe(
-        "A recurring event's first schedule version; mutually exclusive with `occurrences`.",
+        "A recurring event's first schedule version; mutually exclusive with `occurrences` or `period`.",
+      ),
+    period: eventPeriodInputSchema
+      .optional()
+      .describe(
+        'A named period the server resolves: `{ id, cycleMonth }` for one cycle, `{ id, frequency: "monthly", day?, effectiveFrom? }` for a monthly rule.',
       ),
   })
   .superRefine((value, ctx) => {
     checkAudienceAlias(value, ctx);
-    if (!value.occurrences && !value.recurrence) {
+    if (!value.occurrences && !value.recurrence && !value.period) {
       ctx.addIssue({
         code: 'custom',
         path: ['occurrences'],
         message: 'a standalone event requires at least one occurrence, or supply a recurrence',
+      });
+    }
+    if (value.period && value.occurrences) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['period'],
+        message: 'supply either occurrences or a period, not both',
+      });
+    }
+    if (value.period && value.recurrence) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['period'],
+        message: 'supply either a recurrence or a period, not both',
       });
     }
     if (value.occurrences && value.recurrence) {
@@ -671,9 +752,11 @@ export type EventRecurrenceInput = z.infer<typeof eventRecurrenceInputSchema>;
 export type RecurrenceScheduleInput = z.infer<typeof recurrenceScheduleInputSchema>;
 export type RecurrenceExceptionInput = z.infer<typeof recurrenceExceptionInputSchema>;
 export type CancelOccurrenceInput = z.infer<typeof cancelOccurrenceSchema>;
-export type EventPeriodId = (typeof EVENT_PERIOD_IDS)[number];
 export type EventPeriod = z.infer<typeof eventPeriodSchema>;
-export type EventPeriodPreview = z.infer<typeof eventPeriodPreviewSchema>;
+export type EventPeriodCycleInput = z.infer<typeof eventPeriodCycleInputSchema>;
+export type EventPeriodRuleInput = z.infer<typeof eventPeriodRuleInputSchema>;
+export type EventPeriodInput = z.infer<typeof eventPeriodInputSchema>;
+export type EventPeriodProvenance = z.infer<typeof eventPeriodProvenanceSchema>;
 export type EventPreviewInput = z.infer<typeof eventPreviewInputSchema>;
 export type EventPreview = z.infer<typeof eventPreviewSchema>;
 
@@ -703,6 +786,8 @@ export const eventParentSchema = z.object({
   endTime: z.string().nullable(),
   tracksMembers: z.boolean(),
   status: eventStatusSchema,
+  /** The provenance of a period-created event; null for every other event. */
+  period: eventPeriodProvenanceSchema.nullable(),
   recurrence: eventRecurrenceSchema.nullable(),
   occurrences: z.array(eventOccurrenceSchema),
   offerings: z.array(eventOfferingSchema),

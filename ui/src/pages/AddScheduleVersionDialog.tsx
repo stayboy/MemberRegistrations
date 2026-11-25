@@ -47,7 +47,7 @@ function validate(values: { readonly effectiveFrom: string; readonly endsOn: str
 }
 
 function asCadence(value: string | undefined): RecurrenceCadence {
-  return value === 'fortnightly' || value === 'monthly' ? value : 'weekly';
+  return value === 'daily' || value === 'fortnightly' || value === 'monthly' ? value : 'weekly';
 }
 
 /**

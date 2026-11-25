@@ -11,7 +11,12 @@ import { ageInYears } from '../domain/age.js';
 import { assertDate } from '../domain/contacts.js';
 import { shiftDate, todayIn, validateRrule } from '../domain/series.js';
 import { resolveCalendarOccurrences, resolveSeriesOccurrences } from './occurrences.js';
-import { resolve as resolvePeriod } from '../domain/periods.js';
+import {
+  generateMonthlyPeriod,
+  generateMonthlyPeriodInWindow,
+  periodById,
+  resolve as resolvePeriod,
+} from '../domain/periods.js';
 import { memberMatchesAudience } from '../domain/audience-evaluator.js';
 import { sessionIsClosed } from './captures.js';
 import type { Gender } from './members.js';
@@ -32,8 +37,12 @@ import type { SeriesSummary } from '../schemas/reference.js';
 import type {
   CreateEventParentInput,
   EventListQuery,
+  EventPeriodId,
+  EventPeriodInput,
+  EventPeriodProvenance,
   EventPreview,
   EventPreviewInput,
+  PeriodDay,
   RecurrenceExceptionInput,
   RecurrenceScheduleInput,
   UpdateEventInput,
@@ -367,6 +376,7 @@ with page as (
       or lower(m.name) = lower($4::text)
     )
     and ($5::text is null or e.venue_type = $5::text)
+    and ($8::text is null or e.period_id = $8::text)
   order by occ.start_date nulls last, e.id
   limit $6::int offset $7::int
 )
@@ -491,6 +501,24 @@ function asVenueType(value: string | null | undefined): VenueType {
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** The stored period provenance, or null for an event not created from one. */
+function periodProvenance(row: {
+  period_id: string | null;
+  period_cycle: string | null;
+  period_name: string | null;
+  period_frequency: string | null;
+  period_day: string | null;
+}): EventPeriodProvenance | null {
+  if (!row.period_id || !row.period_name) return null;
+  return {
+    id: row.period_id as EventPeriodId,
+    name: row.period_name,
+    cycle: row.period_cycle,
+    frequency: row.period_frequency === 'monthly' ? 'monthly' : null,
+    day: (row.period_day as PeriodDay | null) ?? null,
+  };
 }
 
 /**
@@ -709,6 +737,51 @@ function normalizeSchedule(input: RecurrenceScheduleInput): NormalizedSchedule {
   return { effectiveFrom, rrule: validateRrule(input.rrule), endsOn };
 }
 
+interface ResolvedPeriodWrite {
+  dates: string[];
+  provenance: EventPeriodProvenance;
+}
+
+/**
+ * One resolution for the create and the preview, so they cannot diverge. The
+ * one-cycle arm resolves once; the monthly arm walks the create's 90-day window
+ * from `effectiveFrom` (default today, UTC) through the pure generator. A day on
+ * a single-date period is refused by field name, and `effectiveFrom` is
+ * input-only: it anchors the window and is never stored.
+ */
+function resolvePeriodWrite(period: EventPeriodInput): ResolvedPeriodWrite {
+  const named = periodById(period.id);
+  if ('cycleMonth' in period) {
+    return {
+      dates: resolvePeriod(period.id, period.cycleMonth),
+      provenance: {
+        id: period.id,
+        name: named.name,
+        cycle: period.cycleMonth,
+        frequency: null,
+        day: null,
+      },
+    };
+  }
+  if (period.day !== undefined && named.rule.kind === 'date') {
+    throw new ValidationError(
+      `period.day: ${named.name} resolves to a single date and takes no day`,
+      'validation_error',
+    );
+  }
+  const effectiveFrom = period.effectiveFrom ?? todayUtc();
+  return {
+    dates: generateMonthlyPeriod(period.id, { day: period.day, effectiveFrom }),
+    provenance: {
+      id: period.id,
+      name: named.name,
+      cycle: null,
+      frequency: period.frequency,
+      day: period.day ?? null,
+    },
+  };
+}
+
 function assertOccurrenceDates(dates: string[]): void {
   const seen = new Set<string>();
   for (const date of dates) {
@@ -855,6 +928,8 @@ export interface EventParentItem {
   endTime: string | null;
   tracksMembers: boolean;
   status: EventStatus;
+  /** The provenance of a period-created event; null for every other event. */
+  period: EventPeriodProvenance | null;
   recurrence: {
     schedules: Array<{ effectiveFrom: string; rrule: string; endsOn: string | null }>;
     exceptions: Array<{ date: string; kind: 'cancelled' | 'extra'; note: string | null }>;
@@ -871,6 +946,8 @@ export interface EventParentListQuery {
   seriesId?: string;
   ministry?: string;
   venueType?: string;
+  /** The stored period id to filter on, when the caller asks for one. */
+  period?: EventPeriodId;
   limit: number;
   offset: number;
 }
@@ -887,6 +964,11 @@ type ParentRow = {
   end_time: string | null;
   tracks_members: boolean;
   status: string;
+  period_id: string | null;
+  period_cycle: string | null;
+  period_name: string | null;
+  period_frequency: string | null;
+  period_day: string | null;
 };
 
 type OccurrenceRow = {
@@ -914,7 +996,12 @@ const PARENT_COLUMNS = `
   e.start_time,
   e.end_time,
   e.tracks_members,
-  e.status`;
+  e.status,
+  e.period_id,
+  e.period_cycle,
+  e.period_name,
+  e.period_frequency,
+  e.period_day`;
 
 const PARENT_FROM = `
   from events e`;
@@ -951,7 +1038,8 @@ const PARENT_RANGE_FILTER = `
   ($1::date is null or d.end_date is null or d.end_date >= $1::date)
   and ($2::date is null or d.start_date <= $2::date)
   and ($3::uuid is null or e.id = $3::uuid)
-  and ($4::text is null or e.venue_type = $4::text)`;
+  and ($4::text is null or e.venue_type = $4::text)
+  and ($5::text is null or e.period_id = $5::text)`;
 
 /** Every in-window parent with each of its audience rules, in set order. */
 const PARENT_IDS_SQL = `
@@ -978,7 +1066,7 @@ paged as (
     join events e on e.id = d.id
    where ${PARENT_RANGE_FILTER}
    order by d.start_date, d.id
-   limit $5::int offset $6::int
+   limit $6::int offset $7::int
 )
 select p.id, p.start_date, a.rule
   from paged p
@@ -1027,12 +1115,14 @@ export class EventRepository {
           query.to,
           query.seriesId ?? null,
           query.venueType ?? null,
+          query.period ?? null,
         ])
       : await this.db.query<{ id: string; rule: unknown }>(PARENT_PAGE_SQL, [
           query.from,
           query.to,
           query.seriesId ?? null,
           query.venueType ?? null,
+          query.period ?? null,
           query.limit,
           query.offset,
         ]);
@@ -1138,6 +1228,7 @@ export class EventRepository {
       endTime: row.end_time,
       tracksMembers: row.tracks_members,
       status: asStatus(row.status),
+      period: periodProvenance(row),
       recurrence,
       occurrences,
       offerings: offeringsByEvent.get(row.id) ?? [],
@@ -1325,16 +1416,22 @@ export class EventRepository {
   }
 
   /**
-   * `POST /v1/events`: one draft parent with either manual occurrences or one
-   * first recurrence version. The response is the parent read; the route quotes
-   * the ETag from {@link parentEtag}.
+   * `POST /v1/events`: one draft parent with exactly one of manual occurrences,
+   * one first recurrence version, or one named period. The period arm resolves
+   * to ordinary occurrences in the same transaction and records its provenance.
+   * The response is the parent read; the route quotes the ETag from
+   * {@link parentEtag}.
    */
   async createParent(input: CreateEventParentInput, actor: string): Promise<EventParentItem> {
-    if (!input.occurrences && !input.recurrence) {
+    const period = input.period ?? null;
+    const armCount = [input.occurrences, input.recurrence, period].filter(Boolean).length;
+    if (armCount === 0) {
       throw new ValidationError('occurrences: an event needs occurrences or a recurrence');
     }
-    if (input.occurrences && input.recurrence) {
-      throw new ValidationError('recurrence: supply either occurrences or a recurrence, not both');
+    if (armCount > 1) {
+      throw new ValidationError(
+        'period: supply exactly one of occurrences, a recurrence or a period',
+      );
     }
 
     const name = input.name.trim();
@@ -1357,10 +1454,14 @@ export class EventRepository {
 
     const schedules = (input.recurrence?.schedules ?? []).map(normalizeSchedule);
     const occurrences = input.occurrences ?? [];
-    if (occurrences.length === 0 && schedules.length === 0) {
+    const resolvedPeriod = period ? resolvePeriodWrite(period) : null;
+    if (occurrences.length === 0 && schedules.length === 0 && !resolvedPeriod) {
       throw new ValidationError('occurrences: an event needs occurrences or a recurrence');
     }
     assertOccurrenceDates(occurrences.map((occurrence) => occurrence.date));
+    if (resolvedPeriod && resolvedPeriod.dates.length === 0) {
+      throw new ValidationError('period: the period resolves to no dates in the window');
+    }
 
     const year = schedules.length
       ? Number(
@@ -1369,7 +1470,9 @@ export class EventRepository {
             .sort()[0]!
             .slice(0, 4),
         )
-      : currentUtcYear();
+      : resolvedPeriod
+        ? Number(resolvedPeriod.dates[0]!.slice(0, 4))
+        : currentUtcYear();
 
     const id = await this.db.transaction(async (tx) => {
       // The event number is minted here; the wire never supplies one.
@@ -1381,8 +1484,9 @@ export class EventRepository {
         [created] = await tx.query<{ id: string }>(
           `insert into events (
              event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
-             venue_type, venue_name, start_time, end_time, tracks_members, status
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft')
+             venue_type, venue_name, start_time, end_time, tracks_members, status,
+             period_id, period_cycle, period_name, period_frequency, period_day
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',$13,$14,$15,$16,$17)
            returning id`,
           [
             eventNo,
@@ -1397,6 +1501,11 @@ export class EventRepository {
             input.startTime,
             input.endTime ?? null,
             input.tracksMembers,
+            resolvedPeriod?.provenance.id ?? null,
+            resolvedPeriod?.provenance.cycle ?? null,
+            resolvedPeriod?.provenance.name ?? null,
+            resolvedPeriod?.provenance.frequency ?? null,
+            resolvedPeriod?.provenance.day ?? null,
           ],
         );
       } catch (error) {
@@ -1441,7 +1550,20 @@ export class EventRepository {
         );
       }
 
-      if (occurrences.length > 0) {
+      if (resolvedPeriod) {
+        // A period's dates are materialised as resolved, never clamped to the
+        // 90-day preview window; each is an ordinary occurrence with the
+        // parent's times, so nothing re-resolves and `generate` never touches it.
+        for (const date of resolvedPeriod.dates) {
+          await tx.query(
+            `insert into event_occurrences (
+               event_id, date, start_time, end_time, status
+             ) values ($1,$2,$3,$4,'scheduled')
+             on conflict (event_id, date) do nothing`,
+            [eventId, date, input.startTime, input.endTime ?? null],
+          );
+        }
+      } else if (occurrences.length > 0) {
         for (const occurrence of occurrences) {
           await tx.query(
             `insert into event_occurrences (
@@ -1481,9 +1603,10 @@ export class EventRepository {
    * `POST /v1/events/preview`: the dates a create would store and the audience
    * counts the form shows, with **nothing written**. A recurrence resolves
    * through the same calendar resolver the create uses, over the same 90-day
-   * first window; a named period resolves through the pure resolver and needs
-   * no window. `expected` is the intersection count from the composition
-   * function, never the primary audience and never a sum.
+   * first window; a period resolves through {@link resolvePeriodWrite}, the
+   * same path the create takes, so preview and create cannot diverge.
+   * `expected` is the intersection count from the composition function, never
+   * the primary audience and never a sum.
    */
   async preview(input: EventPreviewInput): Promise<EventPreview> {
     const requestedAudienceIds = input.audienceIds ?? (input.audienceId ? [input.audienceId] : []);
@@ -1498,8 +1621,8 @@ export class EventRepository {
     // resolved date at all, the window's start is the only date the form knows.
     let countDate: string;
     if (input.period) {
-      dates = resolvePeriod(input.period.id, input.period.cycleMonth);
-      countDate = dates[0]!;
+      dates = resolvePeriodWrite(input.period).dates;
+      countDate = dates[0] ?? todayUtc();
     } else {
       const recurrence = input.recurrence!;
       const schedules = recurrence.schedules.map(normalizeSchedule);
@@ -1852,6 +1975,7 @@ export class EventRepository {
       query.venueType ?? null,
       query.limit,
       query.offset,
+      query.period ?? null,
     ]);
     const today = todayUtc();
     const offeringsByEvent = await eventOfferingsFor(
@@ -1875,9 +1999,10 @@ export class EventRepository {
   }
 
   /**
-   * Generate occurrences for every active series parent in [from, to]. An
-   * existing (event, date) pair is skipped and never rewritten, so re-running
-   * is a no-op.
+   * Generate occurrences for every active parent in [from, to]: an rrule
+   * version or a monthly period rule. Both kinds go through one expand step over
+   * the same forward window, and an existing (event, date) pair is skipped and
+   * never rewritten, so re-running is a no-op and a past date is never moved.
    */
   async generate(from: string, to: string, actor: string): Promise<GenerateEventsResult> {
     // events has no created_by column, so the actor is accepted for route
@@ -1889,17 +2014,27 @@ export class EventRepository {
     if (from > to) throw new ValidationError('from must not be after to');
 
     return this.db.transaction(async (tx) => {
-      const series = await tx.query<{
+      const parents = await tx.query<{
         id: string;
         name: string;
         timezone: string;
         presbyter_only: boolean;
+        start_time: string | null;
+        end_time: string | null;
+        period_id: string | null;
+        period_day: string | null;
+        has_recurrence: boolean;
       }>(
-        `select e.id, e.name, e.timezone, e.presbyter_only
+        `select e.id, e.name, e.timezone, e.presbyter_only, e.start_time, e.end_time,
+                e.period_id, e.period_day,
+                exists (
+                  select 1 from event_recurrence_versions rv where rv.event_id = e.id
+                ) as has_recurrence
            from events e
           where e.status = 'active'
-            and exists (
-              select 1 from event_recurrence_versions rv where rv.event_id = e.id
+            and (
+              exists (select 1 from event_recurrence_versions rv where rv.event_id = e.id)
+              or e.period_frequency is not null
             )
           order by e.id`,
       );
@@ -1908,8 +2043,14 @@ export class EventRepository {
       let created = 0;
       let skipped = 0;
 
-      for (const row of series) {
-        const occurrences = await resolveSeriesOccurrences(tx, row.id, from, to);
+      for (const row of parents) {
+        const occurrences = row.has_recurrence
+          ? await resolveSeriesOccurrences(tx, row.id, from, to)
+          : generateMonthlyPeriodInWindow(row.period_id as EventPeriodId, {
+              day: (row.period_day as PeriodDay | null) ?? undefined,
+              from,
+              to,
+            });
         const existingRows = await tx.query<{ date: unknown }>(
           `select o.date
              from event_occurrences o
@@ -1918,6 +2059,11 @@ export class EventRepository {
           [row.id, from, to],
         );
         const existing = new Set(existingRows.map((event) => isoDate(event.date)));
+
+        // A series occurrence keeps the calendar path's bare time; a period
+        // event carries the parent's times, as its create materialised them.
+        const startTime = row.has_recurrence ? '00:00' : (row.start_time ?? '00:00');
+        const endTime = row.has_recurrence ? null : row.end_time;
 
         let added = 0;
         for (const date of occurrences) {
@@ -1928,10 +2074,10 @@ export class EventRepository {
           const [inserted] = await tx.query<{ id: string }>(
             `insert into event_occurrences (
                event_id, date, start_time, end_time, status
-             ) values ($1,$2,'00:00',null,'scheduled')
+             ) values ($1,$2,$3,$4,'scheduled')
              on conflict (event_id, date) do nothing
              returning id`,
-            [row.id, date],
+            [row.id, date, startTime, endTime],
           );
           if (inserted) {
             created += 1;

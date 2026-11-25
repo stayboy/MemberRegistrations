@@ -351,7 +351,10 @@ roster detail, not as global sidebar items.
   find (owner, 2026-11-13) — and it MUST expose `aria-haspopup` and, while open, `aria-expanded`: both are
   supplied by the Fluent trigger rather than hand-wired, and the closed state is that attribute's **absence**,
   which is what Fluent's `MenuTrigger` renders. A hand-set `aria-expanded="false"` is not required and MUST
-  NOT be added, because it would fight the library's own state. Every item MUST be a
+  NOT be added, because it would fight the library's own state.
+  **This clause is page scope only.** A **data row's** actions live in a trailing icon-only menu, where an icon-only
+  trigger is correct rather than forbidden — the row's identity is the navigation and the menu holds its secondary verbs
+  (see `ui-patterns.md` P-1, **proposed pending approval**; owner 2026-11-25). Every item MUST be a
   Fluent menu item whose
   name, icon and **disabling condition** are the ones the button it replaced had: the spec fixes the condition,
   not the button, so the item's state stays derivable after the button is gone. Items are ordered create-side
@@ -695,10 +698,28 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   **read-only** and derived: the
   form MUST NOT collect a range, and the event list and detail render the API's range with every
   occurrence inside it.
+- FR-42b (preview placement, owner 2026-11-24): the **resolved dates are a preview, not an input**, so the form shows a
+  one-line summary (range, count of dates, and the first date's member count) with a **Preview dates** control that opens
+  a dialog holding the full table - date and members - for the rule or period as it stands. **The summary is populated by the same endpoint, never locally:** the form fetches
+  `POST /v1/events/preview` once the rule settles (a short debounce, never on every keystroke) and caches the response,
+  so its range, date count and first-date member count are all the server's - a client-computed count would violate
+  AC-60. The dialog re-fetches on open so the officer sees the current dates, and it reports its own failure in the
+  dialog without ever disabling **Save** (the preview is not an input). Range and date count mean the preview's
+  90-day window, not every date the rule could ever produce. The event detail's **recurrence panel** carries the same
+  **Preview dates** control, previewing the stored rule read-only. A table rendered inline on the form is a defect under
+  this clause.
 - FR-42b: The event form's date rows MUST carry a date and optional start/end times, and nothing else:
   no per-date venue, note or status control, so a new occurrence is `scheduled`. Each date MUST be
   unique; a blank time inherits the event's time. With **Repeats** on, the date rows are replaced by the
-  recurrence fields (FR-42f) and the API generates the first window. The form MUST NOT send the parent's `status`
+  recurrence fields (FR-42f) and the API generates the first window - **on the create only**. **Repeats chooses the
+  event's type**, so the edit form offers no switch at all (not disabled, not inert, absent): a standalone event's edit
+  form edits its date rows, a recurring one edits its rule. **On the edit form the rule is editable only while the
+  event has no history** - no occurrence dated today or earlier, no offering attached or counted, and no headcount,
+  attendance row or import suppression - and saving it is a **rewrite** (a version whose `effectiveFrom` is on or
+  before the last generated occurrence) that replaces the future dates the old rule generated; otherwise the builder
+  renders read-only with the cause shown and the rewrite is refused `409 recurrence_locked`. **Appending a version
+  that starts after the last generated occurrence is an extension, not a rewrite**, and stays available through
+  `AddScheduleVersionDialog` with or without history. The form MUST NOT send the parent's `status`
   or an occurrence's `source`, which the API derives, and a successful create MUST open the event detail
   (`#/events/:id`). The form MUST offer **two commit controls**: **Save draft** creates the parent as `draft`, and
   **Save and activate** creates it as `draft` and then activates it with a `PATCH` carrying only `status: active`, so
@@ -731,16 +752,37 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   shares has already been built for the picker (FR-42c), so the page is a read surface plus that reuse.
 - FR-42e: The event detail's write verbs MUST sit where FR-9a groups them. **Edit**, **Activate** and **Archive**
   belong in the page's single `Actions` menu with `Refresh` as the bare utility to their left; **Cancel** is a
-  control on the occurrence's own row, not a page verb; **Add schedule version** and **Add exception** are buttons
-  inside the recurrence panel. The verbs MUST follow the parent's state: on a `draft`, **Activate** is the primary
+  control on the occurrence's own row, not a page verb; **Add schedule version**, **Add exception** and the **Preview dates** control
+  (FR-42b: previewing the stored rule read-only) are buttons inside the recurrence panel. **Add schedule version is an extension** - its `effectiveFrom` is after the last
+  generated occurrence and it needs no guard - while an **exception on a generated date is a rewrite** and answers
+  `409 recurrence_locked` once the guard is closed; an exception on a future date is an extension. The verbs MUST
+  follow the parent's state: on a `draft`, **Activate** is the primary
   action and **Cancel** is disabled with the reason shown (a draft cannot cancel a date), never hidden; on an
   `active` parent **Archive** and **Cancel** are offered; on an `archived` parent every write is absent and the
   screen states that the event is read-only. **Add exception** MUST offer extra dates only, because canceling a
   scheduled date is the occurrence row's **Cancel**; a `cancelled` exception is not authored from the UI while the
   two writes do not agree on the occurrence row.
+- FR-42b (event-form layout, owner 2026-11-24): the form is two columns. The **main column** holds **Identity**
+  first and, directly beneath it, the event's **period provenance or repeating cycle** line, then the schedule (Repeats or the session date rows), with the resolved-dates summary line and its **Preview dates** control at the foot of that schedule area - for a
+  recurring or period event only, since a standalone event has no rule to resolve. The **narrow right rail** holds the event's **start date, the default start and end times, and the venue**. For a
+  period recurrence the rail's start date **is** the period arm's anchor - one field, not two. Order is a
+  contract, not taste: the recurring cycle is the thing the officer is choosing and reading, so it sits with identity;
+  where and when it happens are supporting facts and belong in the rail. A single-column stack of all sections is a defect under this clause. The split is a **visual** rule, so the mock
+  catalogue and R6 are the gate that enforces it; a DOM test can assert only the field-to-column mapping (identity,
+  provenance line and schedule in the main container, the times and venue in the rail), never the layout itself.
 - FR-42f: The recurrence MUST be authored through a closed vocabulary, never a raw `rrule`: **daily** (with an
   interval of 1-7, so "every other day" is `INTERVAL=2`), **weekly**, **fortnightly** and **monthly on the day** taken
-  from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules.
+  from the chosen `effectiveFrom`, with an optional `endsOn`, plus a weekday set for weekly rules — and a **named
+  period** mode (owner, 2026-11-24): pick the period, then either **one cycle** (a month, resolved once) or **monthly**
+  (one date per cycle), and where the period is a week, an optional **day inside it**, so "Miracle Sunday" is Communion
+  Week + Sunday + monthly. The period mode never mixes with the cadence vocabulary: choosing a period replaces the
+  cadence controls, and the form submits the period (never an rrule), which is why a period event has no schedule
+  version. The period control MUST carry **its own seven day labels** rather than the schedule builder's `MO`-`SU`
+  constants: the API's period `day` is `MON`-`SUN` (owner, 2026-11-25), and **no value crosses** between the two
+  vocabularies, so there is no mapping to keep in step - a translation a later surface needs belongs in that surface's
+  adapter, never in a shared helper, so a period day can never be read as an rrule fragment. Where the
+  catalogue serves `dates: "date"` (Home Cells), the day control MUST be hidden - a single-date period offers no day
+  rather than a control the server would refuse.
   One mapping module MUST produce and parse the API's `rrule` string, and its round trip MUST be tested, so a schedule
   version read from the API renders as the label that authored it. A recurrence outside that vocabulary is rendered
   read-only from the API's stored string rather than guessed at.
@@ -786,7 +828,9 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   exceeds 30 — the same condition FR-60's filter uses, so badge and filter cannot disagree — and otherwise
   the plain date with no badge. Row actions — Contacts, Reassign and End — MUST sit in one Fluent `Menu`
   overflow on the row, with **Log call** remaining the row's visible primary action; a row control is not a
-  page action and MUST NOT enter FR-9a's menu. The footer MUST state how many assignments are **in view** —
+  page action and MUST NOT enter FR-9a's menu. This is `ui-patterns.md` P-1's **`primary-action`** variant — proposed
+  pending approval, owner 2026-11-25 — and when `RowActionsMenu` is extracted into `ui/src/components/` this row adopts it
+  (owed by the next UI round, which records the extraction and the rewire in its plan). The footer MUST state how many assignments are **in view** —
   the filtered and searched count, deliberately distinct from the Assigned tile's total. The mock's "sample
   rows" caveat is mock-only text and MUST NOT ship. The filter keeps FR-60's label, **"Follow-up"**; the
   mock's "Quiet > 30 days" label is retired.
@@ -1139,6 +1183,8 @@ exist yet. (FR-1, FR-9)
 ### AC-60: **Given** the event detail, its form and the audience picker (the Admin page is deferred, FR-42d), **When** any audience is rendered, **Then** only the API's `summary` sentence is shown, no rule JSON or client-computed member count appears, and the caption states that ministry and presbyter status are read as of today. (FR-84)
 
 ### AC-62: **Given** an event detail, **When** the parent is `draft`, **Then** **Activate** is the primary action beside the `Actions` menu (MR-1's rule for a page's primary action), **Archive** is unavailable, and **Cancel** on an occurrence row is disabled with the reason shown rather than hidden; **When** the parent is `active`, **Then** **Archive** and a row **Cancel** that collects a reason are offered, and a cancelled occurrence reads `cancelled` with its note in the row; **When** the parent is `archived`, **Then** every write verb is absent, no **Restore** is offered, and the screen says the event is read-only. (FR-42, FR-42e)
+
+### AC-63a: **Given** a recurring event or a selected period, **When** the form is open, **Then** the resolved dates appear only as a one-line summary plus a **Preview dates** control, the summary and the dialog both take their numbers from `POST /v1/events/preview` (never a client count, AC-60), the summary is fetched once the rule settles and the dialog re-fetches on open, a failed preview reports in the dialog and never disables **Save**, and no inline table lengthens the form. (FR-42b)
 
 ### AC-63: **Given** **Repeats** is on in the event form, **When** the operator picks daily, weekly, fortnightly or monthly, **Then** the request carries the matching `rrule` with the weekday, interval or day taken from `effectiveFrom` and no raw `rrule` is typed, and a daily interval of 3 carries `INTERVAL=3`; **Given** a schedule version read from the API, **When** it is rendered, **Then** it shows the same label that authored it ("Daily", "Every 3 days", the weekday set), and a schedule outside the vocabulary renders read-only from the stored string. (FR-42f)
 

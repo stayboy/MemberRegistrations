@@ -78,6 +78,15 @@ const PARENT: EventParentItem = {
   id: 'event-parent-1',
   eventNo: 'EVT-2026-023',
   name: 'Harvest Thanksgiving',
+  audienceIds: ['aud-everyone'],
+  audiences: [
+    {
+      id: 'aud-everyone',
+      name: 'Everyone',
+      system: true,
+      summary: 'Everyone - all of membership status active',
+    },
+  ],
   audienceId: 'aud-everyone',
   audience: {
     id: 'aud-everyone',
@@ -85,6 +94,7 @@ const PARENT: EventParentItem = {
     system: true,
     summary: 'Everyone - all of membership status active',
   },
+  period: null,
   ministry: null,
   presbyterOnly: false,
   timezone: 'Africa/Lagos',
@@ -287,7 +297,7 @@ describe('createEventParent', () => {
 
     const created = await createEventParent(BASE, TOKEN, {
       name: 'Harvest Thanksgiving',
-      audienceId: 'aud-everyone',
+      audienceIds: ['aud-everyone'],
       venueType: 'hybrid',
       startTime: '17:00',
       endTime: '19:30',
@@ -300,7 +310,7 @@ describe('createEventParent', () => {
     expect(requestOptions(0).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
     expect(JSON.parse(String(requestOptions(0).body))).toEqual({
       name: 'Harvest Thanksgiving',
-      audienceId: 'aud-everyone',
+      audienceIds: ['aud-everyone'],
       venueType: 'hybrid',
       startTime: '17:00',
       endTime: '19:30',

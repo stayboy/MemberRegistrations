@@ -200,14 +200,49 @@ export const events = pgTable(
     endTime: text('end_time'),
     tracksMembers: boolean('tracks_members').notNull().default(true),
     status: text('status').notNull().default('active'),
+    /**
+     * The provenance of a period-created event (`0029_event_period`). A one-off
+     * period carries `periodCycle`; a monthly rule carries `periodFrequency` and
+     * an optional `periodDay`. The checks keep the shapes coherent.
+     */
+    periodId: text('period_id'),
+    periodCycle: text('period_cycle'),
+    periodName: text('period_name'),
+    periodFrequency: text('period_frequency'),
+    periodDay: text('period_day'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('events_event_no').on(table.eventNo),
+    index('events_period_id').on(table.periodId),
     check('events_venue_type_check', sql`${table.venueType} in ('auditorium','virtual','hybrid')`),
     check('events_status_check', sql`${table.status} in ('draft','active','archived')`),
+    check(
+      'events_period_identity_check',
+      sql`(${table.periodId} is null) = (${table.periodName} is null)`,
+    ),
+    check(
+      'events_period_day_check',
+      sql`${table.periodDay} is null or ${table.periodDay} in ('MON','TUE','WED','THU','FRI','SAT','SUN')`,
+    ),
+    check(
+      'events_period_frequency_check',
+      sql`${table.periodFrequency} is null or ${table.periodFrequency} = 'monthly'`,
+    ),
+    check(
+      'events_period_shape_check',
+      sql`not (${table.periodCycle} is not null and ${table.periodFrequency} is not null)`,
+    ),
+    check(
+      'events_period_day_frequency_check',
+      sql`${table.periodDay} is null or ${table.periodFrequency} is not null`,
+    ),
+    check(
+      'events_period_rule_identity_check',
+      sql`(${table.periodCycle} is null or ${table.periodId} is not null) and (${table.periodFrequency} is null or ${table.periodId} is not null)`,
+    ),
   ],
 );
 

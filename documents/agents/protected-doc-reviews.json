@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "ef89d53db78dcdf91e2d93d5022a4dfce3a65e7ab746163a540fe08e94cd97ff",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
+      "sha256": "0d0a25e3844c27dea13d9ba8ddbf54062f8aabfc1ebff4bf4291e0abd07a4699",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: `02-event-detail` gains a rebuilt mock (new sha256 and a `source` that did not exist before), and three states are added - `12-audience-dialog`, `13-event-detail-draft` and `14-event-detail-archived` - all `coverage: \"target\"` with no baseline and no signed block; `10-event-create` is pinned unchanged. why: the round rebuilt the one state with no HTML source, drew the picker dialog the shipped form now carries, and split the detail into three documents because AC-62 has three parent branches one image cannot carry. `target` is the honest coverage for drawings nobody has signed, and the round doc now states the same value. rejected: recording the four states `auto-signed` while the catalogue said `target` (the first review caught the contradiction and the round doc was corrected, not the catalogue); adding `entry` rows that claim rendering evidence for unsigned drawings, which is why the round doc defers them to the signature; and describing the archived state as \"no verbs\" when the build disables the row controls rather than removing them - the drawing follows the build and the AC wording gap is backlogged.",
-      "verdict": "ACCEPT",
-      "attestation": "`deepseek-v4-pro:0813` (first choice; outside the 12:00-18:00 window) read the catalogue's state blocks, the round doc, the UI spec's AC-62 and the offerings spec's AC-10, and returned ACCEPT on a confirmation pass after an earlier REWORK. The REWORK found the catalogue and the round doc claiming different sign-off values for five states, the new states carrying no resolving entry, and a description of the archived state that misrepresented the build; all three were fixed in the round doc, the catalogue being unchanged since. It confirmed that `target` is honest for unsigned drawings, that deferring an entry to the signature is a correct scope rather than an avoidance, and that the archived wording now matches the build while backlogging AC-62's broader sentence. Hash recomputation is the parent's; the meta tests are the tripwires.",
-      "at": "2026-11-24"
+      "reason": "changes: 10-event-create is paired with the build's existing capture - baseline null becomes events-new.png - because the create form commits against that design and R6 needs a paired state the coverage probe can score; ui/e2e/baseline/events-new.png was captured from #/events/new on 2026-11-24 by capture.spec.ts:187 and the baseline README maps it to this state, so the catalogue recorded a null beside an existing capture. why: the pairing lets mock-claims.mjs score the state (it pairs only on a non-null baseline) and touches no signature, no mock hash and no coverage class. rejected: naming a create variant that has no capture, writing the coverage line without a paired state, and pairing the design with a capture of a different surface.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - the reviewer checked the surface route (/events/new), the capture spec and the baseline README, confirmed the entry's other fields are unchanged, that the pairing enables the probe without weakening a guard, and that baseline is the field the tool reads.",
+      "at": "2026-11-25T06:51:41Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

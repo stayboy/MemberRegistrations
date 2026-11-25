@@ -296,6 +296,7 @@ const parentEventExample = {
   endTime: '11:00',
   tracksMembers: true,
   status: 'active',
+  period: null,
   recurrence: {
     schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null }],
     exceptions: [{ date: '2026-12-27', kind: 'cancelled', note: 'Christmas break' }],
@@ -395,6 +396,7 @@ const createdEventParentExample = {
   endTime: '19:30',
   tracksMembers: true,
   status: 'draft',
+  period: null,
   recurrence: null,
   occurrences: [
     {
@@ -561,13 +563,13 @@ const eventPeriodListExample = { items: EVENT_PERIODS };
 /** A period preview: the resolved dates and both counts, nothing persisted. */
 const eventPeriodPreviewExample = {
   occurrences: [
-    { date: '2026-12-27', expected: 410 },
-    { date: '2026-12-28', expected: 402 },
-    { date: '2026-12-29', expected: 118 },
-    { date: '2026-12-30', expected: 96 },
-    { date: '2026-12-31', expected: 88 },
-    { date: '2027-01-01', expected: 54 },
-    { date: '2027-01-02', expected: 76 },
+    { date: '2026-12-28', expected: 410 },
+    { date: '2026-12-29', expected: 402 },
+    { date: '2026-12-30', expected: 118 },
+    { date: '2026-12-31', expected: 96 },
+    { date: '2027-01-01', expected: 88 },
+    { date: '2027-01-02', expected: 54 },
+    { date: '2027-01-03', expected: 76 },
   ],
   audienceCounts: [
     { id: everyoneAudienceExample.id, count: 480 },
@@ -2256,7 +2258,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
 
       '/v1/events': {
         get: {
-          summary: 'List events in a date window, standalone and series-generated',
+          summary: 'List events in a date window, standalone, series-generated or period-generated',
           parameters: [
             {
               name: 'view',
@@ -2272,6 +2274,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               name: 'venueType',
               in: 'query',
               schema: { type: 'string', enum: ['auditorium', 'virtual', 'hybrid'] },
+            },
+            {
+              name: 'period',
+              in: 'query',
+              description: 'Only events created from this named period.',
+              schema: {
+                type: 'string',
+                enum: ['communion-week', 'gospel-week', 'home-cells'],
+              },
             },
             { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } },
             { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 } },
@@ -2301,9 +2312,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           },
         },
         post: {
-          summary: 'Create the parent, with manual occurrences or one recurrence',
+          summary: 'Create the parent, with manual occurrences, one recurrence or one period',
           description:
-            'Creates the parent as a draft. Supply either manual `occurrences` (standalone) or one `recurrence` (recurring), never both; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.',
+            'Creates the parent as a draft. Supply exactly one of manual `occurrences` (standalone), one `recurrence` (recurring) or a `period` - `{ id, cycleMonth }` for one cycle or `{ id, frequency: "monthly", day?, effectiveFrom? }` for a monthly rule the server resolves - never more than one; the range is derived from them and is not accepted, so `startDate`/`endDate` are read-only. A period resolves to ordinary occurrences in the same transaction and records its provenance (`period { id, name, cycle?, frequency?, day? }`); `effectiveFrom` anchors the 90-day window and is never stored, and a day on a single-date period is refused by name. `audienceIds` is the ordered applicability set (at least one, duplicates refused) and defaults to the seeded Everyone audience; `audienceId` remains a one-element alias for one round and, when both are sent, `audienceIds` wins and the alias must equal its first element. Composition is intersection: a member is in the event when they match every audience. `tracksMembers` defaults to true and `timezone` to UTC. `eventNo` is minted by the server and refused here by name (`422`); the retired `ministry` and `presbyterOnly` fields are likewise not part of the payload. 201 with Location naming the new detail URL.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
@@ -2331,9 +2342,9 @@ export function buildOpenApiDocument(): Record<string, unknown> {
 
       '/v1/events/generate': {
         post: {
-          summary: 'Generate events from resolved series occurrences',
+          summary: 'Generate missing occurrences for series and period events',
           description:
-            'Idempotent: an event already present for a series date is skipped and never overwritten. Cancelled and extra exceptions are honoured.',
+            'Idempotent: an event already present for a series or period date is skipped and never overwritten, so a past date is never moved. Walks both kinds over the same `from..to` window - an rrule version, or a monthly period rule that keeps its parent’s times. Cancelled and extra exceptions are honoured for a series.',
           parameters: [
             actorHeader,
             {
@@ -2361,7 +2372,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         get: {
           summary: 'List the named periods the event form can choose',
           description:
-            'The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition }`, served from the code catalogue. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.',
+            'The three declared periods - Communion Week, Gospel Week and Home Cells - as `{ id, name, definition, dates }`, served from the code catalogue. `dates` is the resolver’s `kind` projected onto the wire: `week` resolves to seven dates and may take a `day`; `date` resolves to one date and refuses it. A period resolves to UTC calendar dates and is stored as ordinary occurrences, so this is a read-only choice list, not a resource.',
           responses: {
             200: {
               description: 'The three periods with their declared definitions.',
@@ -2386,7 +2397,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Resolve a recurrence or a named period to dates, without persisting',
           description:
-            'Resolves `recurrence` or `period { id, cycleMonth }` - exactly one - to the dates the event would be created with, within the create’s 90-day window. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.',
+            'Resolves `recurrence` or a `period` - exactly one - to the dates the event would be created with. A period takes either create shape: `{ id, cycleMonth }` resolves one cycle once, and `{ id, frequency: "monthly", day?, effectiveFrom? }` walks the create’s 90-day window from `effectiveFrom` (default today, UTC), skipping dates that have passed. Nothing is written. `occurrences[].expected` is the intersection count for the supplied audience set at that date; `audienceCounts[]` carries each audience’s own count, which is a secondary label and does not sum to `expected`. An empty intersection is a real answer, not an error.',
           parameters: [actorHeader],
           requestBody: {
             required: true,

@@ -7,8 +7,12 @@ import { ApiError } from '../api/errors';
 import {
   createEventParent,
   getEventParent,
+  listEventPeriods,
+  previewEvent,
   updateEventParent,
   type EventParentItem,
+  type EventPeriodItem,
+  type EventPreview,
 } from '../api/events';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -16,11 +20,10 @@ import { renderWithProviders } from '../test/render';
 import { EventFormPage } from './EventFormPage';
 
 /**
- * FR-42a/FR-42b/FR-42c, AC-56/AC-57: the event form submits the parent payload
- * (one Audience picker, date rows or one recurrence, no retired or derived
- * fields), commits with Save draft or Save and activate — the second a separate
- * `PATCH { status: 'active' }` — and serves edit mode with the event number and
- * Members tracking read-only.
+ * FR-42a/FR-42b/FR-42c/FR-42f, AC-8/AC-56/AC-57/AC-60/AC-63/AC-63a: the create
+ * form is two columns, carries no event-number control, sends an ordered
+ * audience set, authors the four cadences and a named period, and shows the
+ * resolved dates only as a server-fetched preview.
  */
 
 vi.mock('../api/events', async (importOriginal) => {
@@ -30,6 +33,8 @@ vi.mock('../api/events', async (importOriginal) => {
     createEventParent: vi.fn(),
     updateEventParent: vi.fn(),
     getEventParent: vi.fn(),
+    listEventPeriods: vi.fn(),
+    previewEvent: vi.fn(),
   };
 });
 
@@ -60,6 +65,7 @@ const EVERYONE: AudienceItem = {
   active: true,
   rule: { operator: 'allOf', clauses: [{ attribute: 'membershipStatus', value: 'active' }] },
   summary: 'Everyone - all of membership status active',
+  memberCount: 96,
   createdAt: '2026-11-22T09:00:00.000Z',
   createdBy: 'migration',
   updatedAt: '2026-11-22T09:00:00.000Z',
@@ -73,6 +79,17 @@ const CHOIR: AudienceItem = {
   systemKey: 'ministry:CHR',
   rule: { operator: 'allOf', clauses: [{ attribute: 'ministry', ministryCode: 'CHR' }] },
   summary: 'Choir - all of ministry CHR',
+  memberCount: 12,
+};
+
+const YOUTH: AudienceItem = {
+  ...EVERYONE,
+  id: 'aud-youth',
+  name: 'Youth 13-17',
+  systemKey: 'age:13-17',
+  rule: { operator: 'allOf', clauses: [{ attribute: 'ageBand', minYears: 13, maxYears: 17 }] },
+  summary: 'Youth 13-17 - all of age 13-17',
+  memberCount: 22,
 };
 
 const CREATED_AUDIENCE: AudienceItem = {
@@ -83,12 +100,56 @@ const CREATED_AUDIENCE: AudienceItem = {
   systemKey: null,
   rule: { operator: 'allOf', clauses: [{ attribute: 'ageBand', minYears: 18, maxYears: 35 }] },
   summary: 'Young Adults - all of age 18-35',
+  memberCount: 41,
+};
+
+const PERIODS: EventPeriodItem[] = [
+  {
+    id: 'communion-week',
+    name: 'Communion Week',
+    definition:
+      'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+    dates: 'week',
+  },
+  {
+    id: 'gospel-week',
+    name: 'Gospel Week',
+    definition: 'The last week of the month before, when ministries hold their meetings.',
+    dates: 'week',
+  },
+  {
+    id: 'home-cells',
+    name: 'Home Cells',
+    definition: 'The Monday of week 1 of the cycle month - the Monday of Communion Week.',
+    dates: 'date',
+  },
+];
+
+const PREVIEW: EventPreview = {
+  occurrences: [
+    { date: '2026-12-06', expected: 7 },
+    { date: '2026-12-13', expected: 7 },
+    { date: '2026-12-20', expected: 6 },
+  ],
+  audienceCounts: [
+    { id: 'aud-everyone', count: 96 },
+    { id: 'aud-choir', count: 12 },
+  ],
 };
 
 const DRAFT: EventParentItem = {
   id: 'created-1',
   eventNo: 'EVT-2026-023',
   name: 'Strategic Conference',
+  audienceIds: ['aud-everyone'],
+  audiences: [
+    {
+      id: 'aud-everyone',
+      name: 'Everyone',
+      system: true,
+      summary: 'Everyone - all of membership status active',
+    },
+  ],
   audienceId: 'aud-everyone',
   audience: {
     id: 'aud-everyone',
@@ -96,6 +157,7 @@ const DRAFT: EventParentItem = {
     system: true,
     summary: 'Everyone - all of membership status active',
   },
+  period: null,
   ministry: null,
   presbyterOnly: false,
   timezone: 'UTC',
@@ -148,10 +210,31 @@ const RECURRING: EventParentItem = {
   eventNo: 'EVT-2026-014',
   name: 'Sunday Celebration',
   status: 'active',
+  audienceIds: ['aud-choir', 'aud-youth'],
+  audiences: [
+    { id: 'aud-choir', name: 'Choir', system: true, summary: 'Choir - all of ministry CHR' },
+    {
+      id: 'aud-youth',
+      name: 'Youth 13-17',
+      system: true,
+      summary: 'Youth 13-17 - all of age 13-17',
+    },
+  ],
+  audienceId: 'aud-choir',
+  audience: {
+    id: 'aud-choir',
+    name: 'Choir',
+    system: true,
+    summary: 'Choir - all of ministry CHR',
+  },
   recurrence: {
     schedules: [
       { effectiveFrom: '2025-01-05', rrule: 'FREQ=WEEKLY;BYDAY=SU', endsOn: null },
-      { effectiveFrom: '2026-01-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU', endsOn: null },
+      {
+        effectiveFrom: '2026-01-04',
+        rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU',
+        endsOn: null,
+      },
     ],
     exceptions: [],
   },
@@ -162,6 +245,8 @@ const updateMock = vi.mocked(updateEventParent);
 const getParentMock = vi.mocked(getEventParent);
 const listAudiencesMock = vi.mocked(listAudiences);
 const createAudienceMock = vi.mocked(createAudience);
+const listPeriodsMock = vi.mocked(listEventPeriods);
+const previewMock = vi.mocked(previewEvent);
 
 beforeEach(() => {
   createMock.mockReset();
@@ -171,9 +256,13 @@ beforeEach(() => {
   getParentMock.mockReset();
   getParentMock.mockResolvedValue(RECURRING);
   listAudiencesMock.mockReset();
-  listAudiencesMock.mockResolvedValue([EVERYONE, CHOIR]);
+  listAudiencesMock.mockResolvedValue([EVERYONE, CHOIR, YOUTH]);
   createAudienceMock.mockReset();
   createAudienceMock.mockResolvedValue(CREATED_AUDIENCE);
+  listPeriodsMock.mockReset();
+  listPeriodsMock.mockResolvedValue(PERIODS);
+  previewMock.mockReset();
+  previewMock.mockResolvedValue(PREVIEW);
 });
 
 function renderCreate(): void {
@@ -212,41 +301,75 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** The picker resolves its default after the audience list arrives. */
+/** The picker resolves its default audience after the list arrives. */
 async function waitForDefaultAudience(): Promise<void> {
   await waitFor(() => {
-    expect(screen.getByRole('combobox', { name: 'Audience' })).toHaveTextContent(EVERYONE.summary);
+    expect(screen.getByText('Primary · 96 members')).toBeVisible();
   });
 }
 
-describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
-  it('renders the sections, the optional event number and the two commit controls', async () => {
+async function setStartDate(value: string): Promise<void> {
+  fireEvent.change(screen.getByLabelText(/^Starts on/), { target: { value } });
+}
+
+async function chooseCadence(name: string): Promise<void> {
+  await userEvent.click(screen.getByRole('combobox', { name: 'Repeats' }));
+  await userEvent.click(await screen.findByRole('option', { name }));
+}
+
+async function choosePeriod(name: string): Promise<void> {
+  await userEvent.click(screen.getByRole('combobox', { name: 'Named period' }));
+  await userEvent.click(await screen.findByRole('option', { name }));
+}
+
+/** A multiselect keeps its list open; reopen only when it is closed. */
+async function addAudience(user: ReturnType<typeof userEvent.setup>, summary: string) {
+  if (!screen.queryByRole('option', { name: summary })) {
+    await user.click(screen.getByRole('combobox', { name: 'Audience' }));
+  }
+  await user.click(await screen.findByRole('option', { name: summary }));
+}
+
+function lastCreatePayload(): Record<string, unknown> {
+  const call = createMock.mock.calls[0];
+  return (call?.[2] ?? {}) as unknown as Record<string, unknown>;
+}
+
+describe('EventFormPage create - layout and controls (FR-42b, AC-8)', () => {
+  it('renders two columns: identity and schedule in main, when and where in the rail', async () => {
     renderCreate();
     await waitForDefaultAudience();
 
     expect(screen.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Identity' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'When and where' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Dates' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Tracking' })).toBeVisible();
+
+    const main = screen.getByRole('group', { name: 'Event details' });
+    expect(within(main).getByRole('heading', { level: 2, name: 'Identity' })).toBeVisible();
+    expect(within(main).getByRole('heading', { level: 2, name: 'Dates' })).toBeVisible();
+    expect(within(main).getByRole('heading', { level: 2, name: 'Tracking' })).toBeVisible();
+
+    const rail = screen.getByRole('complementary', { name: 'When and where' });
+    expect(within(rail).getByLabelText(/^Start time/)).toBeVisible();
+    expect(within(rail).getByLabelText(/^End time/)).toBeVisible();
+    expect(within(rail).getByLabelText('Venue type')).toBeVisible();
+    expect(within(rail).getByLabelText(/^Venue name/)).toBeVisible();
+
+    // The field-to-column mapping (the layout itself is the mock's gate).
+    expect(within(rail).queryByLabelText(/^Name/)).toBeNull();
+    expect(within(rail).queryByRole('heading', { name: 'Identity' })).toBeNull();
+    expect(within(main).queryByLabelText(/^Start time/)).toBeNull();
+
+    // AC 8: the create form has no event-number control at any point.
+    expect(screen.queryByLabelText(/^Event number/)).toBeNull();
+    expect(screen.queryByText(/EVT-<year>/)).toBeNull();
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save and activate' })).toBeVisible();
-    // FR-9a: a form's commit/cancel pair is not a page action, so no menu.
     expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull();
 
-    // The event number is optional, with the minting hint, and the retired
-    // ministry/presbyter controls are gone.
-    expect(screen.getByLabelText(/^Event number/)).toHaveValue('');
-    expect(screen.getByText(/the API mints EVT-<year>-<sequence>/)).toBeVisible();
-    expect(screen.queryByRole('switch', { name: 'Presbyter only' })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: /Ministry/ })).toBeNull();
-
-    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00');
-    expect(screen.getByLabelText('Occurrence 1 date')).toHaveValue(today());
-    expect(screen.getByRole('switch', { name: 'Members tracking' })).toBeChecked();
     expect(screen.getByRole('switch', { name: 'Repeats' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Members tracking' })).toBeChecked();
+    expect(screen.getByLabelText('Occurrence 1 date')).toHaveValue(today());
   });
 
   it('shows the required-field errors inline and never posts an invalid form', async () => {
@@ -260,12 +383,11 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('Save draft posts the parent body with its date rows and opens the detail', async () => {
+  it('Save draft posts the ordered audience set and its date rows, and never an event number', async () => {
     const user = userEvent.setup();
     renderCreate();
     await waitForDefaultAudience();
 
-    await user.type(screen.getByLabelText(/^Event number/), '  EVT-2026-031  ');
     await user.type(screen.getByLabelText(/^Name/), '  Strategic Conference  ');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
 
@@ -277,15 +399,16 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     const [, token, payload] = createMock.mock.calls[0] ?? [];
     expect(token).toBe('dom-lane-session');
     expect(payload).toEqual({
-      eventNo: 'EVT-2026-031',
       name: 'Strategic Conference',
-      audienceId: 'aud-everyone',
+      audienceIds: ['aud-everyone'],
       venueType: 'auditorium',
       startTime: '09:00',
       tracksMembers: true,
       occurrences: [{ date: today() }],
     });
     for (const key of [
+      'eventNo',
+      'audienceId',
       'sessions',
       'startDate',
       'endDate',
@@ -330,8 +453,6 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     await user.type(screen.getByLabelText(/^Name/), 'Strategic Conference');
     await user.click(screen.getByRole('button', { name: 'Save and activate' }));
 
-    // FR-42b/AC-56: the create is not reported as failed; the form stays on the
-    // created event and offers Activate again.
     expect(await screen.findByText('Saved as a draft but not activated')).toBeVisible();
     expect(screen.getByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
     expect(createMock).toHaveBeenCalledTimes(1);
@@ -351,51 +472,49 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     );
   });
 
-  it('puts a duplicate-number 409 against the Event number field', async () => {
+  it('reports a create 409 as a banner, because there is no number field to bind it to', async () => {
     createMock.mockRejectedValue(new ApiError(409, 'Event number EVT-2026-001 is already in use'));
     const user = userEvent.setup();
     renderCreate();
     await waitForDefaultAudience();
 
-    await user.type(screen.getByLabelText(/^Event number/), 'EVT-2026-001');
     await user.type(screen.getByLabelText(/^Name/), 'Duplicate conference');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
 
-    expect(await screen.findByText('Event number EVT-2026-001 is already in use')).toBeVisible();
-    expect(screen.getByLabelText(/^Event number/)).toHaveValue('EVT-2026-001');
+    expect(await screen.findByText('The event was not saved')).toBeVisible();
+    expect(screen.getByText('Event number EVT-2026-001 is already in use')).toBeVisible();
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Duplicate conference');
     expect(screen.getByRole('heading', { level: 1, name: 'New event' })).toBeVisible();
+    expect(screen.queryByLabelText(/^Event number/)).toBeNull();
   });
+});
 
-  it('Repeats replaces the date rows with the vocabulary and posts the rule', async () => {
+describe('EventFormPage create - the audience set (FR-42c, AC-60)', () => {
+  it('shows each audience’s own count, marks the first primary, and sends the order', async () => {
     const user = userEvent.setup();
     renderCreate();
     await waitForDefaultAudience();
 
-    await user.type(screen.getByLabelText(/^Name/), 'Fortnight study');
-    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    // The first selected audience is the primary; its count is the server's.
+    expect(screen.getByText('Primary · 96 members')).toBeVisible();
 
-    expect(screen.queryByLabelText('Occurrence 1 date')).toBeNull();
-    fireEvent.change(screen.getByLabelText(/^Starts on/), {
-      target: { value: '2026-01-15' },
-    });
-    await user.click(screen.getByRole('combobox', { name: 'Repeats' }));
-    await user.click(await screen.findByRole('option', { name: 'Fortnightly' }));
+    await addAudience(user, CHOIR.summary);
+    expect(await screen.findByText('12 members')).toBeVisible();
 
+    await addAudience(user, YOUTH.summary);
+
+    // No union total is shown anywhere.
+    expect(screen.queryByText(/130 members/)).toBeNull();
+    expect(screen.queryByText(/total/i)).toBeNull();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Choir and youth');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
-
     await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
-    const [, , payload] = createMock.mock.calls[0] ?? [];
-    expect(payload).toMatchObject({
-      name: 'Fortnight study',
-      recurrence: {
-        schedules: [{ effectiveFrom: '2026-01-15', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TH' }],
-      },
-    });
-    expect(payload).not.toHaveProperty('occurrences');
+
+    expect(lastCreatePayload().audienceIds).toEqual(['aud-everyone', 'aud-choir', 'aud-youth']);
   });
 
-  it('offers New audience in the picker, selects the created audience and sends its id', async () => {
+  it('offers New audience and adds the created audience to the set', async () => {
     const user = userEvent.setup();
     renderCreate();
     await waitForDefaultAudience();
@@ -404,9 +523,7 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New audience' });
     expect(dialog).toBeVisible();
 
-    // The refetch that follows the create offers the new audience by its
-    // server-rendered summary.
-    listAudiencesMock.mockResolvedValue([EVERYONE, CHOIR, CREATED_AUDIENCE]);
+    listAudiencesMock.mockResolvedValue([EVERYONE, CHOIR, YOUTH, CREATED_AUDIENCE]);
 
     await user.type(within(dialog).getByLabelText(/^Name/), 'Young Adults');
     await user.click(within(dialog).getByRole('combobox', { name: 'Clause 1 attribute' }));
@@ -419,23 +536,296 @@ describe('EventFormPage create (FR-42a, FR-42b, AC-56)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'New audience' })).toBeNull();
     });
-    // The created audience is selected and shown by its server-rendered summary.
-    await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Audience' })).toHaveTextContent(
-        CREATED_AUDIENCE.summary,
-      );
-    });
+    expect(await screen.findByText(/41 members/)).toBeVisible();
+
     await user.type(screen.getByLabelText(/^Name/), 'Young adults meeting');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
     await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
 
-    const [, , payload] = createMock.mock.calls[0] ?? [];
-    expect(payload).toMatchObject({ audienceId: 'aud-young-adults' });
+    expect(lastCreatePayload().audienceIds).toEqual(['aud-everyone', 'aud-young-adults']);
+  });
+});
+
+describe('EventFormPage create - the schedule builder (FR-42f, AC-63)', () => {
+  it('authors a daily rule with its interval and no weekday', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Choir morning prayer');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await chooseCadence('Daily');
+    await user.clear(screen.getByLabelText('Interval in days'));
+    await user.type(screen.getByLabelText('Interval in days'), '3');
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().recurrence).toEqual({
+      schedules: [{ effectiveFrom: '2027-03-04', rrule: 'FREQ=DAILY;INTERVAL=3' }],
+    });
+    expect(lastCreatePayload()).not.toHaveProperty('occurrences');
+  });
+
+  it('authors a weekly weekday set, emitting WKST=SU when an interval is present', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Choir and youth rehearsal');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    // The start date re-seeds the untouched weekday; Thursday 4 March 2027.
+    await setStartDate('2027-03-04');
+    expect(screen.getByRole('button', { name: 'Thursday' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Monday' }));
+    await user.clear(screen.getByLabelText('Interval in weeks'));
+    await user.type(screen.getByLabelText('Interval in weeks'), '2');
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().recurrence).toEqual({
+      schedules: [
+        { effectiveFrom: '2027-03-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=MO,TH' },
+      ],
+    });
+  });
+
+  it('keeps fortnightly as the interval-of-two preset on the start date’s weekday', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Fortnight study');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await chooseCadence('Fortnightly');
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().recurrence).toEqual({
+      schedules: [
+        { effectiveFrom: '2027-03-04', rrule: 'FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=TH' },
+      ],
+    });
+  });
+
+  it('authors monthly on the day', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Monthly vigil');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await chooseCadence('Monthly on the day');
+    await user.click(screen.getByRole('radio', { name: 'On a day of the month' }));
+    await user.clear(screen.getByLabelText('Day of the month'));
+    await user.type(screen.getByLabelText('Day of the month'), '28');
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().recurrence).toEqual({
+      schedules: [{ effectiveFrom: '2027-03-04', rrule: 'FREQ=MONTHLY;BYMONTHDAY=28' }],
+    });
+  });
+
+  it('authors the monthly positional rule (last Saturday)', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Last Saturday vigil');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await chooseCadence('Monthly on the day');
+    await user.click(
+      screen.getByRole('radio', { name: 'On the first or last weekday of the month' }),
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Which one' }));
+    await user.click(await screen.findByRole('option', { name: 'Last' }));
+    await user.click(screen.getByRole('combobox', { name: 'Weekday' }));
+    await user.click(await screen.findByRole('option', { name: 'Saturday' }));
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().recurrence).toEqual({
+      schedules: [{ effectiveFrom: '2027-03-04', rrule: 'FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA' }],
+    });
+  });
+});
+
+describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
+  it('resolves one cycle on the server and sends the period instead of an rrule', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Communion Week services');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await choosePeriod('Communion Week');
+
+    // The period replaces the cadence controls.
+    expect(screen.queryByRole('combobox', { name: 'Repeats' })).toBeNull();
+    expect(screen.getByRole('radio', { name: /One cycle/ })).toBeChecked();
+    // The cycle defaults to the start date's month when it is still ahead.
+    expect(screen.getByLabelText(/^Cycle month/)).toHaveValue('2027-03');
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    expect(lastCreatePayload().period).toEqual({
+      id: 'communion-week',
+      cycleMonth: '2027-03',
+    });
+    expect(lastCreatePayload()).not.toHaveProperty('recurrence');
+    expect(lastCreatePayload()).not.toHaveProperty('occurrences');
+  });
+
+  it('sends a monthly period recurrence with the day inside the period and its anchor', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Miracle Sunday');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await choosePeriod('Communion Week');
+    await user.click(screen.getByRole('radio', { name: /Monthly/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Day inside the period' }));
+    await user.click(await screen.findByRole('option', { name: 'Sunday' }));
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    // The period day is the API's three-letter vocabulary, never the rrule's `SU`.
+    expect(lastCreatePayload().period).toEqual({
+      id: 'communion-week',
+      frequency: 'monthly',
+      day: 'SUN',
+      effectiveFrom: '2027-03-04',
+    });
+  });
+
+  it('hides the day control for a single-date period and submits it with no day', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Home cells meeting');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await setStartDate('2027-03-04');
+    await choosePeriod('Home Cells');
+    await user.click(screen.getByRole('radio', { name: /Monthly/ }));
+
+    // `dates: "date"` means one date, so there is no day control to offer.
+    expect(screen.queryByRole('combobox', { name: 'Day inside the period' })).toBeNull();
+    expect(screen.getByText(/resolves to a single date/)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await screen.findByRole('heading', { level: 1, name: 'Created event detail' });
+
+    const period = lastCreatePayload().period;
+    expect(period).toEqual({
+      id: 'home-cells',
+      frequency: 'monthly',
+      effectiveFrom: '2027-03-04',
+    });
+    expect(period).not.toHaveProperty('day');
+  });
+});
+
+describe('EventFormPage create - the resolved-dates preview (FR-42b, AC-63a)', () => {
+  it('fetches once the rule settles, never on each keystroke, and shows no inline table', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+    expect(previewMock).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText(/^Name/), 'Previewed rehearsal');
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+
+    expect(await screen.findByText(/3 dates/)).toBeVisible();
+    expect(screen.getByText(/7 members on/)).toBeVisible();
+    // A preview, not an input: no table lengthens the form.
+    expect(screen.queryByRole('table')).toBeNull();
+
+    // Two quick edits coalesce into one fetch once they settle.
+    previewMock.mockClear();
+    const start = screen.getByLabelText(/^Starts on/);
+    fireEvent.change(start, { target: { value: '2027-03-07' } });
+    fireEvent.change(start, { target: { value: '2027-03-08' } });
+    expect(previewMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('re-fetches when the dialog opens and renders the server table', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+    previewMock.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Preview dates' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Preview dates' });
+
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+    const table = await within(dialog).findByRole('table', { name: 'Resolved dates' });
+    expect(within(table).getAllByText('7').length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByRole('row')).toHaveLength(4); // header + three dates
+  });
+
+  it('reports a failed preview inside the dialog and never disables Save', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+
+    previewMock.mockRejectedValueOnce(new ApiError(500, 'The preview is unavailable'));
+    await user.click(screen.getByRole('button', { name: 'Preview dates' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Preview dates' });
+
+    expect(await within(dialog).findByText('The dates could not be resolved')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+  });
+
+  it('warns when no member matches every audience at these dates', async () => {
+    previewMock.mockResolvedValue({
+      occurrences: [
+        { date: '2026-12-03', expected: 0 },
+        { date: '2026-12-10', expected: 0 },
+      ],
+      audienceCounts: [],
+    });
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+
+    expect(
+      await screen.findByText('No member matches every audience at these dates'),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
   });
 });
 
 describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
-  it('seeds from the parent with the event number and Members tracking read-only', async () => {
+  it('seeds from the parent with the event number read-only and no Repeats switch', async () => {
     renderEdit();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
@@ -443,8 +833,11 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     expect(screen.getByLabelText(/^Event number/)).toHaveAttribute('readonly');
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Sunday Celebration');
     expect(screen.getByRole('switch', { name: 'Members tracking' })).toBeDisabled();
+    // The one-round alias is honoured: the ordered set is read from `audienceIds`.
+    expect(await screen.findByText('Choir')).toBeVisible();
+    expect(screen.getByText('Youth 13-17')).toBeVisible();
+    expect(screen.getByText(/^Primary/)).toBeVisible();
     // The recurrence is read-only here and shows the label that authored it.
-    expect(screen.getByText('Fortnightly')).toBeVisible();
     expect(screen.getByText('Every 2 weeks on Sunday')).toBeVisible();
     expect(screen.queryByRole('switch', { name: 'Repeats' })).toBeNull();
     expect(screen.queryByLabelText('Occurrence 1 date')).toBeNull();
@@ -454,17 +847,17 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     getParentMock.mockResolvedValue({
       ...RECURRING,
       recurrence: {
-        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY', endsOn: null }],
+        schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=YEARLY', endsOn: null }],
         exceptions: [],
       },
     });
     renderEdit();
 
     expect(await screen.findByText("A schedule outside the form's vocabulary")).toBeVisible();
-    expect(screen.getByText('FREQ=DAILY')).toBeVisible();
+    expect(screen.getAllByText('FREQ=YEARLY').length).toBeGreaterThan(0);
   });
 
-  it('PATCHes the identity fields without the event number or Members tracking', async () => {
+  it('PATCHes the identity fields as a set, without the event number or Members tracking', async () => {
     const user = userEvent.setup();
     renderEdit();
 
@@ -482,7 +875,7 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     expect(eventId).toBe('event-recurring');
     expect(payload).toEqual({
       name: 'Sunday Gathering',
-      audienceId: 'aud-everyone',
+      audienceIds: ['aud-choir', 'aud-youth'],
       venueType: 'auditorium',
       startTime: '09:00',
       endTime: null,
@@ -490,6 +883,7 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
       description: null,
     });
     expect(payload).not.toHaveProperty('eventNo');
+    expect(payload).not.toHaveProperty('audienceId');
     expect(payload).not.toHaveProperty('tracksMembers');
     expect(payload).not.toHaveProperty('status');
     expect(createMock).not.toHaveBeenCalled();
