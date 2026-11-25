@@ -10,14 +10,14 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "35a71354b7388e217b6d7be4e7ff3dd7826a7f33fb0acab1f2ae8c41ff67ac67",
-      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
-      "model": "mimo-v2.6-pro",
+      "sha256": "a69f13d4a76f781e8065a795ddf50da101103a86d937abd07f0429b11bdd622c",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
+      "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: section 10a adds documents/agents/parallel-ui-api.md to the protected set, dated 2026-11-24, so editing the design-first workflow now needs the reviewer seat and a hash record. why: the document owns a non-negotiable (the wire design precedes UI code and shapes the contract) and was amended twice in a day without that gate. rejected: leaving protection to the backlog row alone, which is what allowed the two amendments to land ahead of a review.",
+      "reason": "changes: section 14 gains one bullet - a signature request names the folder that holds the image (mockups/<set>/, absolute in a worktree) as well as the state, its hash and what changed. why: the previous round asked the owner to sign two designs by state name and hash only, while the images live in a git-ignored folder that exists per worktree, and that folder had already had to be reconstructed from another worktree once; a signature is given against a file the owner can open. rejected: putting the directory only in the round doc (ephemeral) or only in the mock-build skill (a second place to drift), and naming a versioned path (the folder is git-ignored, so its path is a working location, not a repository one).",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
-      "at": "2026-11-24T17:45:00Z",
+      "attestation": "Seat: consistent - the bullet agrees with the other section 14 rules (the folder is git-ignored and never committed), the directory is knowable at request time even when mocks were copied between worktrees, and \"names the directory\" was judged unambiguous about the set folder rather than the repository root. A P2 asked that the durable record carry the location too, which the rounds README note closes in the same change.",
+      "at": "2026-11-25T11:27:09Z",
       "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813."
     },
     {
@@ -56,14 +56,14 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "5dc8caeadd61b60ceb57c632be934481a497df0d6cd938a72d29cf44b740741b",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
+      "sha256": "caec8f1472ac45680917cc09ed4971f63830f36d1abe5c862be3b268b608d69a",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the git-seat rules gain one owner each, on five grill-me decisions of 2026-11-17 answered \"all as recommended\" about a duplication the day exposed. The policy carries a five-row ownership table (a verb's meaning, a brief's shape, a round's budget amount, the default/0-parks/retry/actor/probe/replacement mechanics, and the model ids) naming per rule the files that must not restate it; the budget default is now written by the parent into the round doc's `git-seat-budget:` line at open rather than inferred by anyone; a drift is asymmetric (widening blocks the next git verb until fixed and re-reviewed, narrowing is a note for the next touch); detection is the authoring round's Verification row plus tests/meta/seat-rule-agreement.test.ts; and the merge policy gained `sync`/`tag` verb rows and a pointer block, while AGENTS.md section 9 lost its restatement of the number. why: three refusals in one day came from the same shape - the policy made the default apply with no line while the fallback seat file demanded a literal amount, and two briefs died on a self-imposed pre-check - and the hash tripwire can never prove two files agree, so a rule stated twice is a rule that drifts until a commit stops. rejected: moving all seat mechanics into .github/merge-policy.md (every probe tweak would become a protected pass); accepting the duplication with a test alone (a test over contradictory text still leaves the contradiction); asking the pro reviewer to certify the operational seat files (that would smuggle them into section 10a's protected set); keeping AGENTS.md's \"defaults to 12 briefs (a line may only lower or raise it)\" (the pro review caught it as the second statement the change exists to remove).",
-      "verdict": "REWORK then ACCEPT",
-      "attestation": "The pro seat (ollama-cloud/deepseek-v4-pro:0813, outside the 12:00-18:00 window on 2026-11-17) read the exact landing text twice. The first pass returned REWORK with three P1s and one P2: the ownership table named no AGENTS.md cell although section 9 restated the default and the 0-parks rule; section 9 still encoded the old optional-line model, contradicting the new parent-writes-the-default rule; the agreement test never read AGENTS.md and never asserted the table's rows, so it false-passed while the drift it exists to catch was present; and row 4's \"the seat files implement only the refusal\" was false because both seat files carry the retry rule. Four nits were also raised (a universal \"a brief without an amount is refused\" when rung 1 has no budget section, an ambiguous README \"adds a row here\", the table's width, and the round doc's \"declared here\" against parent-writes). All findings were fixed: section 9 now points at the policy for the budget/default/retry/probe/ranking and at seats.json for the ids, the table names AGENTS.md in three cells, row 4 says the seat files carry only the refusal and the retry mechanics, the test reads four files and asserts the five table cells (6/6 passing), and the three nits were reworded. The confirmation pass closed every finding and returned ACCEPT, with one non-blocking residue recorded as a narrowing note: .github/merge-policy.md's closing \"this section owns what a brief contains and who is accountable for it\" is descriptive against the single-home table and is to be aligned the next time that file is touched, which is the policy's own narrowing-drift rule. The template gains a verification row for a round that changes a seat rule, because the hash tripwire never proves two files agree.",
-      "at": "2026-11-17"
+      "reason": "changes: one note under the Mock sign-off template - the Mock cell names mockups/<set>/<file>, which is the stable part of the record, while a signature request additionally names the absolute folder on the owner’s machine, which does not belong in the durable record because worktrees are ephemeral and the folder is git-ignored. why: it closes the P2 from the review of the AGENTS.md section 14 bullet in the same change - the rule bound the request, and the record that outlives it carries the set-relative path. rejected: writing an absolute path into round docs (it ages with the worktree) and leaving the division implicit.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - the set-relative path is the right thing to record, the note contradicts neither the template above it nor section 14, and it sits where every round doc reads its shape from.",
+      "at": "2026-11-25T11:27:09Z"
     },
     {
       "path": ".github/merge-policy.md",
