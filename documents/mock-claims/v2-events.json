@@ -123,7 +123,12 @@
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "406ad491d819c41ecf2955797234b4eb4bc859a37c3d9423f3eb373b3c4a1f74"
+      }
     },
     "02-event-detail": {
       "mock": {
@@ -225,7 +230,12 @@
         "source": "mockups/v2-events/10-event-create-daily.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "ab6945dddaf813ae38c55ec677ddebff4123df46c72a60ff92cf321178904ad1"
+      }
     },
     "10-event-create-monthly": {
       "mock": {
@@ -234,7 +244,12 @@
         "source": "mockups/v2-events/10-event-create-monthly.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "6f90292fe8dda018024eb7143ba15c9e1f276e8cdb4049b7e597df737b230333"
+      }
     },
     "10-event-create-period": {
       "mock": {
@@ -258,7 +273,12 @@
         "source": "mockups/v2-events/10-event-create-no-match.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "6639a994d3663bbef58c5e38ce06a8a76c112c3a198c428683aa3318d0d33dea"
+      }
     },
     "16-event-edit": {
       "mock": {
@@ -267,7 +287,12 @@
         "source": "mockups/v2-events/16-event-edit.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "8ec3f954443bb186cfa2f35034711cc02a16352b4dba15d15d1ed6cd03a103f5"
+      }
     },
     "17-event-edit-locked": {
       "mock": {
@@ -320,7 +345,12 @@
         "source": "mockups/v2-events/20-event-preview-dialog.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-25",
+        "sha256": "f366424aa4c63a7f49c8fd5a3559ee974ffe55599864479ea348f19694e460f6"
+      }
     },
     "21-event-create-period-recurring": {
       "mock": {
