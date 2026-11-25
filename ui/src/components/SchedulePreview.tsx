@@ -81,8 +81,9 @@ function plural(count: number, one: string, many: string): string {
 
 export interface SchedulePreviewProps {
   /**
-   * The rule or period exactly as the create will send it, memoised by the
-   * caller so the settle timer is not reset by unrelated typing. Null when
+   * The rule or period exactly as the form will send it, memoised by the caller
+   * so the settle timer is not reset by unrelated typing. The create passes its
+   * own values; the edit route passes the **authored** rule (FR-42h). Null when
    * there is nothing to resolve (a standalone event, or an incomplete rule).
    */
   readonly input: EventPreviewInput | null;

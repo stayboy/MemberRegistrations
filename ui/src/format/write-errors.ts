@@ -13,6 +13,7 @@ import { problemCode } from '../api/errors';
 const CODE_TITLES: Readonly<Record<string, string>> = {
   event_draft: 'The event is still a draft',
   recurrence: 'This event has no recurrence to change',
+  recurrence_locked: 'The schedule cannot change',
   status: 'The API refused this status change',
   reason_required: 'A cancellation reason is required',
 };

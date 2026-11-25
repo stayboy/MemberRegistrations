@@ -142,6 +142,34 @@ export interface EventRecurrence {
 }
 
 /**
+ * Mirrors `EVENT_SCHEDULE_LOCK_CODES`: the closed cause set the parent read
+ * reports and the write guard calls. A cause with `date: null` is an offering
+ * attached to the event itself; every other cause names the occurrence it found.
+ */
+export type EventScheduleLockCode =
+  | 'occurrence_started'
+  | 'offering_attached'
+  | 'offering_counted'
+  | 'attendance_recorded'
+  | 'import_suppressed';
+
+/** One cause that closes the edit form's schedule guard (FR-42h). */
+export interface EventScheduleLockReason {
+  readonly code: EventScheduleLockCode;
+  readonly date: string | null;
+}
+
+/**
+ * Mirrors `EventScheduleGuardState`: the edit guard on the read and behind the
+ * write. Both are computed by the same server function, so the form can never
+ * offer an edit the write refuses.
+ */
+export interface EventScheduleGuard {
+  readonly locked: boolean;
+  readonly reasons: readonly EventScheduleLockReason[];
+}
+
+/**
  * The period `day` vocabulary: three-letter, upper case. It is **deliberately
  * not** the rrule's two-letter `MO`-`SU`, so a stored period day can never be
  * read as a fragment of an rrule (owner, 2026-11-25); mirrors `PERIOD_DAYS` in
@@ -263,6 +291,8 @@ export interface EventParentItem {
   readonly endTime: string | null;
   readonly tracksMembers: boolean;
   readonly status: EventParentStatus;
+  /** The edit guard's wire form; computed by the same function the write guard calls. */
+  readonly schedule: EventScheduleGuard;
   readonly recurrence: EventRecurrence | null;
   readonly occurrences: readonly EventOccurrenceItem[];
   readonly offerings: readonly EventOfferingItem[];
@@ -641,6 +671,67 @@ export async function cancelEventOccurrence(
     { method: 'POST', sessionToken, body: input },
   );
   if (!result) throw new ApiError(500, 'The cancelled occurrence response was empty.');
+  return result;
+}
+
+/**
+ * `PUT /v1/events/:id/schedule`: the edit form's save, one arm only (FR-42h).
+ * `effectiveFrom` is not part of the body - the server derives it from the
+ * version in force - and the arm that does not match the event's type is
+ * refused `422`. `day` is the period's own `MON`-`SUN` vocabulary.
+ */
+export interface EventScheduleWriteRecurrenceArm {
+  readonly recurrence: {
+    readonly rrule: string;
+    readonly endsOn?: string | null;
+  };
+}
+
+export interface EventScheduleWritePeriodArm {
+  readonly period: {
+    readonly frequency: 'monthly';
+    readonly day?: PeriodDay;
+  };
+}
+
+export type EventScheduleWriteInput = EventScheduleWriteRecurrenceArm | EventScheduleWritePeriodArm;
+
+/** Mirrors `eventSchedulePeriodStateSchema`: the provenance after the write. */
+export interface EventSchedulePeriodState {
+  readonly id: string;
+  readonly name: string;
+  readonly frequency: 'monthly';
+  readonly day: PeriodDay | null;
+}
+
+/**
+ * Mirrors `eventScheduleWriteResultSchema`: the rule and provenance **after** the
+ * write (never an echo of the request), the regenerated window, and false when
+ * the window could not be produced - the rule is still saved.
+ */
+export interface EventScheduleWriteResult {
+  readonly recurrence: EventRecurrence | null;
+  readonly period: EventSchedulePeriodState | null;
+  readonly occurrences: readonly EventOccurrenceItem[];
+  readonly generated: boolean;
+}
+
+export function eventSchedulePath(eventId: string): string {
+  return `${eventDetailPath(eventId)}/schedule`;
+}
+
+export async function writeEventSchedule(
+  baseUrl: string,
+  sessionToken: string,
+  eventId: string,
+  input: EventScheduleWriteInput,
+): Promise<EventScheduleWriteResult> {
+  const result = await gatewayRequest<EventScheduleWriteResult>(
+    baseUrl,
+    eventSchedulePath(eventId),
+    { method: 'PUT', sessionToken, body: input },
+  );
+  if (!result) throw new ApiError(500, 'The schedule response was empty.');
   return result;
 }
 

@@ -10,9 +10,11 @@ import {
   listEventPeriods,
   previewEvent,
   updateEventParent,
+  writeEventSchedule,
   type EventParentItem,
   type EventPeriodItem,
   type EventPreview,
+  type EventScheduleWriteResult,
 } from '../api/events';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -35,6 +37,7 @@ vi.mock('../api/events', async (importOriginal) => {
     getEventParent: vi.fn(),
     listEventPeriods: vi.fn(),
     previewEvent: vi.fn(),
+    writeEventSchedule: vi.fn(),
   };
 });
 
@@ -170,6 +173,7 @@ const DRAFT: EventParentItem = {
   endTime: null,
   tracksMembers: true,
   status: 'draft',
+  schedule: { locked: false, reasons: [] },
   recurrence: null,
   occurrences: [],
   offerings: [],
@@ -240,6 +244,65 @@ const RECURRING: EventParentItem = {
   },
 };
 
+/** A monthly period rule: the arm the contract can rewrite (FR-42h). */
+const PERIOD_RULE: EventParentItem = {
+  ...RECURRING,
+  id: 'event-period',
+  eventNo: 'EVT-2026-031',
+  name: 'Miracle Sunday',
+  recurrence: null,
+  period: {
+    id: 'communion-week',
+    name: 'Communion Week',
+    cycle: null,
+    frequency: 'monthly',
+    day: 'SUN',
+  },
+};
+
+/** One cycle resolved once: no stored rule, so the write offers no arm. */
+const PERIOD_ONE_CYCLE: EventParentItem = {
+  ...PERIOD_RULE,
+  id: 'event-period-once',
+  period: {
+    id: 'communion-week',
+    name: 'Communion Week',
+    cycle: '2026-12',
+    frequency: null,
+    day: null,
+  },
+};
+
+/**
+ * A single-date period rule. The stored `day` is impossible in production (the
+ * API refuses one for Home Cells); it is here so the write test proves the
+ * **catalogue's** `dates: 'date'` drops the day, not a null seed.
+ */
+const HOME_CELLS_RULE: EventParentItem = {
+  ...PERIOD_RULE,
+  id: 'event-home-cells',
+  name: 'Home Cells',
+  period: {
+    id: 'home-cells',
+    name: 'Home Cells',
+    cycle: null,
+    frequency: 'monthly',
+    day: 'MON',
+  },
+};
+
+/** The guard closed by history: the read names the causes (FR-42h). */
+const LOCKED: EventParentItem = {
+  ...RECURRING,
+  schedule: {
+    locked: true,
+    reasons: [
+      { code: 'occurrence_started', date: '2026-12-03' },
+      { code: 'offering_attached', date: null },
+    ],
+  },
+};
+
 const createMock = vi.mocked(createEventParent);
 const updateMock = vi.mocked(updateEventParent);
 const getParentMock = vi.mocked(getEventParent);
@@ -247,6 +310,14 @@ const listAudiencesMock = vi.mocked(listAudiences);
 const createAudienceMock = vi.mocked(createAudience);
 const listPeriodsMock = vi.mocked(listEventPeriods);
 const previewMock = vi.mocked(previewEvent);
+const scheduleMock = vi.mocked(writeEventSchedule);
+
+const SCHEDULE_RESULT: EventScheduleWriteResult = {
+  recurrence: RECURRING.recurrence,
+  period: null,
+  occurrences: [],
+  generated: true,
+};
 
 beforeEach(() => {
   createMock.mockReset();
@@ -263,6 +334,8 @@ beforeEach(() => {
   listPeriodsMock.mockResolvedValue(PERIODS);
   previewMock.mockReset();
   previewMock.mockResolvedValue(PREVIEW);
+  scheduleMock.mockReset();
+  scheduleMock.mockResolvedValue(SCHEDULE_RESULT);
 });
 
 function renderCreate(): void {
@@ -833,12 +906,19 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     expect(screen.getByLabelText(/^Event number/)).toHaveAttribute('readonly');
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Sunday Celebration');
     expect(screen.getByRole('switch', { name: 'Members tracking' })).toBeDisabled();
-    // The one-round alias is honoured: the ordered set is read from `audienceIds`.
-    expect(await screen.findByText('Choir')).toBeVisible();
-    expect(screen.getByText('Youth 13-17')).toBeVisible();
-    expect(screen.getByText(/^Primary/)).toBeVisible();
-    // The recurrence is read-only here and shows the label that authored it.
-    expect(screen.getByText('Every 2 weeks on Sunday')).toBeVisible();
+
+    // The authored-rule preview settles and moves the chip count basis, so the
+    // audience query re-renders; wait for the settled tree before asserting it.
+    expect(await screen.findByText(/3 dates/)).toBeVisible();
+    await waitFor(() => {
+      // The one-round alias is honoured: the ordered set is read from `audienceIds`.
+      expect(screen.getByText('Choir')).toBeVisible();
+      expect(screen.getByText('Youth 13-17')).toBeVisible();
+      expect(screen.getByText(/^Primary/)).toBeVisible();
+    });
+
+    // The cycle line shows the label that authored the stored rule.
+    expect(screen.getByText('Every 2 weeks on Sunday.')).toBeVisible();
     expect(screen.queryByRole('switch', { name: 'Repeats' })).toBeNull();
     expect(screen.queryByLabelText('Occurrence 1 date')).toBeNull();
   });
@@ -887,6 +967,219 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     expect(payload).not.toHaveProperty('tracksMembers');
     expect(payload).not.toHaveProperty('status');
     expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('offers the builder while the guard is open and sends exactly one PUT for a changed rule', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    const cadence = screen.getByRole('combobox', { name: 'Repeats' });
+    expect(cadence).toBeEnabled();
+    expect(cadence).toHaveTextContent('Fortnightly');
+    // The type is fixed at create: no Repeats switch on the edit surface.
+    expect(screen.queryByRole('switch', { name: 'Repeats' })).toBeNull();
+
+    await user.click(cadence);
+    await user.click(await screen.findByRole('option', { name: 'Daily' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Created event detail' }),
+    ).toBeVisible();
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).toHaveBeenCalledWith(
+      expect.any(String),
+      'dom-lane-session',
+      'event-recurring',
+      {
+        recurrence: { rrule: 'FREQ=DAILY' },
+      },
+    );
+  });
+
+  it('sends no schedule write when the rule is unchanged', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    await user.clear(screen.getByLabelText(/^Name/));
+    await user.type(screen.getByLabelText(/^Name/), 'Sunday Gathering');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Created event detail' }),
+    ).toBeVisible();
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).not.toHaveBeenCalled();
+  });
+
+  it('previews the authored rule from the edit route and re-fetches it on open', async () => {
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    // The resolved-dates summary is the create route's own component (FR-42b).
+    expect(await screen.findByText(/3 dates/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Preview dates' })).toBeVisible();
+
+    await user.click(screen.getByRole('combobox', { name: 'Repeats' }));
+    await user.click(await screen.findByRole('option', { name: 'Daily' }));
+    await waitFor(() => expect(previewMock).toHaveBeenCalled());
+    previewMock.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Preview dates' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Preview dates' });
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+
+    // The preview resolves the **authored** rule, not the stored one.
+    expect(previewMock.mock.calls[0]?.[2]).toEqual({
+      audienceIds: ['aud-choir', 'aud-youth'],
+      recurrence: { schedules: [{ effectiveFrom: '2026-01-04', rrule: 'FREQ=DAILY' }] },
+    });
+    expect(await within(dialog).findByRole('table', { name: 'Resolved dates' })).toBeVisible();
+  });
+
+  it('renders a locked rule read-only with its causes and sends no schedule write', async () => {
+    getParentMock.mockResolvedValue(LOCKED);
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    expect(screen.getByText('The schedule cannot change')).toBeVisible();
+    expect(screen.getAllByText(/An occurrence started on/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/an offering is attached to the event/).length).toBeGreaterThan(0);
+
+    // No schedule control is offered at all (AC-66).
+    expect(screen.queryByRole('combobox', { name: 'Repeats' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Named period' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Repeat on' })).toBeNull();
+    expect(screen.queryByLabelText(/^Ends on/)).toBeNull();
+    // The stored rule is still readable, but there is no preview to open: the
+    // officer cannot author a different one.
+    expect(screen.getByText(/Every 2 weeks on Sunday · from/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Preview dates' })).toBeNull();
+    expect(previewMock).not.toHaveBeenCalled();
+    expect(screen.getByText('Every 2 weeks on Sunday')).toBeVisible();
+
+    await user.clear(screen.getByLabelText(/^Name/));
+    await user.type(screen.getByLabelText(/^Name/), 'Sunday Gathering');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Created event detail' }),
+    ).toBeVisible();
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).not.toHaveBeenCalled();
+  });
+
+  it('edits a monthly period rule through the period arm, in the period vocabulary', async () => {
+    getParentMock.mockResolvedValue(PERIOD_RULE);
+    const user = userEvent.setup();
+    renderEdit('event-period');
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    // The frequency is the stored rule's, not a choice on edit.
+    expect(screen.queryByRole('radio', { name: /One cycle/ })).toBeNull();
+    const day = screen.getByRole('combobox', { name: 'Day inside the period' });
+    expect(day).toHaveTextContent('Sunday');
+
+    await user.click(day);
+    await user.click(await screen.findByRole('option', { name: 'Monday' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Created event detail' }),
+    ).toBeVisible();
+    expect(scheduleMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).toHaveBeenCalledWith(
+      expect.any(String),
+      'dom-lane-session',
+      'event-period',
+      {
+        period: { frequency: 'monthly', day: 'MON' },
+      },
+    );
+  });
+
+  it('derives a single-date period from the catalogue, so the write carries no day', async () => {
+    getParentMock.mockResolvedValue(HOME_CELLS_RULE);
+    const user = userEvent.setup();
+    renderEdit('event-home-cells');
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    // The catalogue says `dates: 'date'`; the edit seed cannot carry that shape
+    // itself, so the page seeds it and the day control is absent.
+    await waitFor(() => {
+      expect(screen.queryByRole('combobox', { name: 'Day inside the period' })).toBeNull();
+    });
+    expect(screen.getByText(/resolves to a single date/)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Created event detail' }),
+    ).toBeVisible();
+    expect(scheduleMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).toHaveBeenCalledWith(
+      expect.any(String),
+      'dom-lane-session',
+      'event-home-cells',
+      { period: { frequency: 'monthly' } },
+    );
+  });
+
+  it('keeps a one-cycle period read-only, because the write has no cycle arm', async () => {
+    getParentMock.mockResolvedValue(PERIOD_ONE_CYCLE);
+    renderEdit('event-period-once');
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    expect(screen.queryByRole('combobox', { name: 'Day inside the period' })).toBeNull();
+    expect(screen.getByText(/resolved once and stores no rule/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Preview dates' })).toBeNull();
+    expect(previewMock).not.toHaveBeenCalled();
+  });
+
+  it('renders a 409 recurrence_locked as the banner with its reasons and stays on the form', async () => {
+    scheduleMock.mockRejectedValueOnce(
+      new ApiError(409, 'The event has history; its schedule cannot be rewritten', {
+        code: 'recurrence_locked',
+        reasons: [{ code: 'offering_counted', date: '2026-12-03' }],
+      }),
+    );
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    await user.click(screen.getByRole('combobox', { name: 'Repeats' }));
+    await user.click(await screen.findByRole('option', { name: 'Daily' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('The schedule cannot change')).toBeVisible();
+    expect(screen.getAllByText(/An offering count was recorded on/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(scheduleMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a saved rule whose window could not be generated, without failing twice', async () => {
+    scheduleMock.mockResolvedValueOnce({ ...SCHEDULE_RESULT, generated: false });
+    const user = userEvent.setup();
+    renderEdit();
+
+    await screen.findByRole('heading', { level: 1, name: 'Edit event' });
+    await user.click(screen.getByRole('combobox', { name: 'Repeats' }));
+    await user.click(await screen.findByRole('option', { name: 'Daily' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByText('The schedule was saved; its dates were not generated'),
+    ).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit event' })).toBeVisible();
+    expect(scheduleMock).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a duplicate date row before sending', async () => {
