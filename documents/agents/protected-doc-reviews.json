@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "5f99b55accf022c752268cea07c26a5f70ce142981e048e75aacdd3b16a35f7d",
+      "sha256": "c7bddecead53196c4418e2e51980e92dc9addfaa55430cf165a5d52fcf2bc2b6",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the two period states are re-pointed to the final re-cut after the owner rejected the first stacking - 10-event-create-period (3f0c3c2e, history v12) and 21-event-create-period-recurring (8cde908d, history v8) - the Frequency label back inline followed by the info tooltip, the radios beside them on one row, and the named period sharing a row with the cycle month or day. Both stay target: a re-cut inherits no signature, and the owner has not seen these pixels. why: the drawings are what the build is being brought to, and the catalogue must point at the images on disk. rejected: keeping the superseded hashes, signing the re-cut on the earlier list approval, and letting the recorder keep the copied note (the capture script now carries the per-state note at the source).",
+      "reason": "changes: the owner signed the two period drawings after the final layout - 10-event-create-period (3f0c3c2e) and 21-event-create-period-recurring (702e883c, history v9 with the day hint moved into a tooltip) - each paired with a fresh build capture (events-new-period.png, events-new-period-monthly.png), and the surface gained story EVP-PERIOD plus four spec claims so the pairing can be scored at all. why: the drawings are the layout the build now matches, the owner signed them, and the captures are the build proof this round owed - including the stale events-new.png it replaced. rejected: pairing the states without claims (the tool refuses a paired state with no spec control), asserting that the resolved dates appear in the capture (the stub deliberately resolves none - the claims were reworded to the structure both artefacts show), and signing on a stale capture.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - both states stay target with no signature, re-pointing mock.sha256 is right while the design is still being directed, the history notes describe this layout rather than copying the predecessor, and no signature sits over an image the owner has not seen. The seat noted one superseded intermediate (21 v6) still carrying a copied note; it names no image the owner saw and affects no signature.",
-      "at": "2026-11-25T13:20:34Z"
+      "attestation": "Seat: consistent, with one P2 fixed: the PRESENT claims said the resolved dates appear, which the empty-preview capture does not show, so they now assert the one-line summary and the Preview control that both the drawing and the capture carry. Both signatures match their mock hashes, the pairings are fresh files, the duplicated per-state claims match the catalogue convention, and the earlier signatures and the four targets are untouched.",
+      "at": "2026-11-25T19:06:15Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

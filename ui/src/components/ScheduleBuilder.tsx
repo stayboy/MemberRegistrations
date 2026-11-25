@@ -2,15 +2,19 @@ import {
   Dropdown,
   Field,
   Input,
+  Label,
   Option,
   Radio,
   RadioGroup,
   Spinner,
   Text,
   ToggleButton,
+  Tooltip,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
+import { InfoRegular } from '@fluentui/react-icons';
+import type { ReactNode } from 'react';
 import { type EventPeriodItem } from '../api/events';
 import {
   defaultCycleMonth,
@@ -29,6 +33,26 @@ import {
   type RecurrenceCadence,
   type WeekdayCode,
 } from '../format/rrule';
+
+/**
+ * The two frequencies in a sentence or two, carried by the info glyph's tooltip
+ * (the owner's drawing): the radios say only what they are named.
+ */
+const FREQUENCY_EXPLANATION =
+  'One cycle resolves the period once, for a single month. Monthly stores the period rule and generates one date per cycle over the same 90-day window a recurrence uses.';
+
+/** The info glyph's accessible name; its tooltip is {@link FREQUENCY_EXPLANATION}. */
+const FREQUENCY_INFO_LABEL = 'What the frequency means';
+
+/**
+ * The day control's explanation likewise rides an info glyph's tooltip rather
+ * than a hint line under the select (the owner's drawing).
+ */
+const PERIOD_DAY_EXPLANATION =
+  'Leave blank for the whole period; pick a weekday for one date per cycle.';
+
+/** The day glyph's accessible name; its tooltip is {@link PERIOD_DAY_EXPLANATION}. */
+const PERIOD_DAY_INFO_LABEL = 'What the day inside the period means';
 
 const useStyles = makeStyles({
   stack: {
@@ -53,6 +77,45 @@ const useStyles = makeStyles({
     alignItems: 'flex-end',
     gap: tokens.spacingHorizontalXL,
     flexWrap: 'wrap',
+  },
+  /**
+   * The period arm's one row: the named period stretches and the arm's own field
+   * (the cycle month or the day inside it) sits beside it, as drawn.
+   */
+  periodRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+    gap: tokens.spacingHorizontalL,
+    alignItems: 'start',
+  },
+  /** The frequency row sits under that one: label, explanation, then the radios. */
+  frequencyRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalL,
+    flexWrap: 'wrap',
+  },
+  /** A visible label with its info glyph after it, on one line. */
+  labelWithInfo: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+  },
+  infoTrigger: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    color: tokens.colorNeutralForeground3,
+    borderRadius: tokens.borderRadiusCircular,
+    cursor: 'help',
+    ':focus-visible': {
+      outlineStyle: 'solid',
+      outlineWidth: tokens.strokeWidthThick,
+      outlineColor: tokens.colorStrokeFocus2,
+      outlineOffset: tokens.strokeWidthThin,
+    },
+  },
+  infoIcon: {
+    fontSize: tokens.fontSizeBase400,
   },
   days: {
     display: 'flex',
@@ -151,6 +214,145 @@ export function ScheduleBuilder({
   const selectedPeriod = periods.find((period) => period.id === value.periodId);
   const dates = periodShapeOf(value, selectedPeriod?.dates);
 
+  const cadenceLabelText =
+    CADENCE_OPTIONS.find((option) => option.value === value.cadence)?.label ?? 'Weekly';
+
+  // The one period select, handed to whichever arm is mounted: the rule mode's
+  // grid, or the period mode's own row. Both arms never hold a copy at once.
+  const namedPeriod =
+    fixedArm === undefined ? (
+      <NamedPeriodField
+        value={value}
+        onChange={onChange}
+        effectiveFrom={effectiveFrom}
+        periods={periods}
+        loading={periodsLoading}
+        readOnly={readOnly}
+        error={errors.period}
+      />
+    ) : null;
+
+  return (
+    <div className={styles.stack}>
+      {value.mode === 'rule' ? (
+        <div className={styles.grid}>
+          {namedPeriod}
+
+          <Field label="Repeats" required>
+            <Dropdown
+              aria-label="Repeats"
+              value={cadenceLabelText}
+              selectedOptions={[value.cadence]}
+              disabled={readOnly}
+              onOptionSelect={(_, data) => {
+                const cadence = asRecurrenceCadence(data.optionValue);
+                // Fortnightly is the weekly rule at an interval of two; the
+                // others reset to one so a stale interval cannot follow a
+                // cadence the operator did not mean.
+                onChange({
+                  cadence,
+                  interval:
+                    cadence === value.cadence
+                      ? value.interval
+                      : cadence === 'fortnightly'
+                        ? '2'
+                        : '1',
+                });
+              }}
+            >
+              {CADENCE_OPTIONS.map((option) => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+
+          <Field
+            label="Ends on (optional)"
+            hint="Leave blank when the recurrence has no planned end."
+            validationState={errors.endsOn ? 'error' : 'none'}
+            validationMessage={errors.endsOn}
+          >
+            <Input
+              type="date"
+              value={endsOn}
+              readOnly={readOnly}
+              min={effectiveFrom || undefined}
+              onChange={(_, data) => onEndsOnChange(data.value)}
+            />
+          </Field>
+        </div>
+      ) : null}
+
+      {periodsLoading ? <Spinner size="tiny" /> : null}
+
+      {periodsError ? (
+        <Text size={200} role="alert" className={styles.error}>
+          The period catalogue is unavailable. Repeat by rule still works.
+        </Text>
+      ) : null}
+
+      {value.mode === 'period' ? (
+        <PeriodControls
+          value={value}
+          onChange={onChange}
+          period={selectedPeriod}
+          dates={dates}
+          namedPeriod={namedPeriod}
+          frequencyLocked={fixedArm === 'period'}
+          errors={errors}
+          readOnly={readOnly}
+        />
+      ) : (
+        <RuleControls value={value} onChange={onChange} errors={errors} readOnly={readOnly} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A field's info glyph: the explanation rides its tooltip instead of a hint line
+ * under the control, so the row stays one line per field. It is focusable because
+ * a tooltip must be reachable without a mouse.
+ */
+function FieldInfo({ name, explanation }: { readonly name: string; readonly explanation: string }) {
+  const styles = useStyles();
+
+  return (
+    <Tooltip content={explanation} relationship="description" withArrow>
+      <span className={styles.infoTrigger} tabIndex={0} aria-label={name}>
+        <InfoRegular aria-hidden className={styles.infoIcon} />
+      </span>
+    </Tooltip>
+  );
+}
+
+/**
+ * The one named-period select (FR-42f). Both arms render it — the rule mode's
+ * grid and the period mode's own row — but only one is ever mounted. Picking
+ * "None" hands the form back to the rule arm.
+ */
+function NamedPeriodField({
+  value,
+  onChange,
+  effectiveFrom,
+  periods,
+  loading,
+  readOnly,
+  error,
+}: {
+  readonly value: EventScheduleForm;
+  readonly onChange: (patch: Partial<EventScheduleForm>) => void;
+  /** The rail's start date: the period's cycle defaults from it. */
+  readonly effectiveFrom: string;
+  readonly periods: readonly EventPeriodItem[];
+  readonly loading: boolean;
+  readonly readOnly: boolean;
+  readonly error: string | undefined;
+}) {
+  const selectedPeriod = periods.find((period) => period.id === value.periodId);
+
   function choosePeriod(periodId: string): void {
     if (periodId.length === 0) {
       onChange({ mode: 'rule', periodId: '', periodDates: null, periodDay: '' });
@@ -171,120 +373,46 @@ export function ScheduleBuilder({
     });
   }
 
-  const cadenceLabelText =
-    CADENCE_OPTIONS.find((option) => option.value === value.cadence)?.label ?? 'Weekly';
-  const periodName = selectedPeriod?.name ?? 'None';
-
   return (
-    <div className={styles.stack}>
-      <div className={styles.grid}>
-        {fixedArm === undefined ? (
-          <Field
-            label="Named period"
-            hint="A named period replaces the cadence. The API resolves its dates, not this form."
-            validationMessage={errors.period}
-            validationState={errors.period ? 'error' : 'none'}
-          >
-            <Dropdown
-              aria-label="Named period"
-              value={periodName}
-              selectedOptions={[value.periodId]}
-              disabled={readOnly || periodsLoading}
-              onOptionSelect={(_, data) => choosePeriod(data.optionValue ?? '')}
-            >
-              <Option value="" text="None">
-                None — repeat by rule
-              </Option>
-              {periods.map((period) => (
-                <Option key={period.id} value={period.id} text={period.name}>
-                  {period.name}
-                </Option>
-              ))}
-            </Dropdown>
-          </Field>
-        ) : null}
-
-        {value.mode === 'rule' ? (
-          <>
-            <Field label="Repeats" required>
-              <Dropdown
-                aria-label="Repeats"
-                value={cadenceLabelText}
-                selectedOptions={[value.cadence]}
-                disabled={readOnly}
-                onOptionSelect={(_, data) => {
-                  const cadence = asRecurrenceCadence(data.optionValue);
-                  // Fortnightly is the weekly rule at an interval of two; the
-                  // others reset to one so a stale interval cannot follow a
-                  // cadence the operator did not mean.
-                  onChange({
-                    cadence,
-                    interval:
-                      cadence === value.cadence
-                        ? value.interval
-                        : cadence === 'fortnightly'
-                          ? '2'
-                          : '1',
-                  });
-                }}
-              >
-                {CADENCE_OPTIONS.map((option) => (
-                  <Option key={option.value} value={option.value}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Dropdown>
-            </Field>
-
-            <Field
-              label="Ends on (optional)"
-              hint="Leave blank when the recurrence has no planned end."
-              validationState={errors.endsOn ? 'error' : 'none'}
-              validationMessage={errors.endsOn}
-            >
-              <Input
-                type="date"
-                value={endsOn}
-                readOnly={readOnly}
-                min={effectiveFrom || undefined}
-                onChange={(_, data) => onEndsOnChange(data.value)}
-              />
-            </Field>
-          </>
-        ) : null}
-      </div>
-
-      {periodsLoading ? <Spinner size="tiny" /> : null}
-
-      {periodsError ? (
-        <Text size={200} role="alert" className={styles.error}>
-          The period catalogue is unavailable. Repeat by rule still works.
-        </Text>
-      ) : null}
-
-      {value.mode === 'period' ? (
-        <PeriodControls
-          value={value}
-          onChange={onChange}
-          period={selectedPeriod}
-          dates={dates}
-          frequencyLocked={fixedArm === 'period'}
-          errors={errors}
-          readOnly={readOnly}
-        />
-      ) : (
-        <RuleControls value={value} onChange={onChange} errors={errors} readOnly={readOnly} />
-      )}
-    </div>
+    <Field
+      label="Named period"
+      hint="A named period replaces the cadence. The API resolves its dates, not this form."
+      validationMessage={error}
+      validationState={error ? 'error' : 'none'}
+    >
+      <Dropdown
+        aria-label="Named period"
+        value={selectedPeriod?.name ?? 'None'}
+        selectedOptions={[value.periodId]}
+        disabled={readOnly || loading}
+        onOptionSelect={(_, data) => choosePeriod(data.optionValue ?? '')}
+      >
+        <Option value="" text="None">
+          None — repeat by rule
+        </Option>
+        {periods.map((period) => (
+          <Option key={period.id} value={period.id} text={period.name}>
+            {period.name}
+          </Option>
+        ))}
+      </Dropdown>
+    </Field>
   );
 }
 
-/** The period arm: one cycle, or a monthly period recurrence inside the period. */
+/**
+ * The period arm: one cycle, or a monthly period recurrence inside the period.
+ * The owner's drawing puts the period select and the arm's own field on one row
+ * (the select stretching, the arm's field beside it) and the frequency directly
+ * beneath it, inline — label, an info glyph with the explanation, then the two
+ * radios, which carry only their own names.
+ */
 function PeriodControls({
   value,
   onChange,
   period,
   dates,
+  namedPeriod,
   frequencyLocked,
   errors,
   readOnly,
@@ -294,6 +422,8 @@ function PeriodControls({
   readonly period: EventPeriodItem | undefined;
   /** The form's own `periodDates`: set when a period is picked, or seeded on edit. */
   readonly dates: 'week' | 'date' | null;
+  /** The shared period select, or null on the edit route, where the period is fixed. */
+  readonly namedPeriod: ReactNode;
   /** The edit route's stored period rule: the frequency cannot change (FR-42h). */
   readonly frequencyLocked: boolean;
   readonly errors: EventFormErrors;
@@ -304,27 +434,8 @@ function PeriodControls({
 
   return (
     <div className={styles.stack}>
-      <div className={styles.two}>
-        {frequencyLocked ? (
-          <div>
-            <Text size={200} className={styles.hint}>
-              Frequency
-            </Text>
-            <Text>Monthly — one date per cycle, generated</Text>
-          </div>
-        ) : (
-          <Field label="Frequency" required>
-            <RadioGroup
-              aria-label="Frequency"
-              value={value.periodFrequency}
-              disabled={readOnly}
-              onChange={(_, data) => onChange({ periodFrequency: data.value as PeriodFrequency })}
-            >
-              <Radio value="one-cycle" label="One cycle — a single month, resolved once" />
-              <Radio value="monthly" label="Monthly — one date per cycle, generated" />
-            </RadioGroup>
-          </Field>
-        )}
+      <div className={namedPeriod ? styles.periodRow : styles.grid}>
+        {namedPeriod}
 
         {frequency === 'one-cycle' ? (
           <Field
@@ -350,8 +461,12 @@ function PeriodControls({
           </Text>
         ) : (
           <Field
-            label="Day inside the period (optional)"
-            hint="Leave it blank to schedule the whole period, all seven dates."
+            label={
+              <span className={styles.labelWithInfo}>
+                Day inside the period (optional)
+                <FieldInfo name={PERIOD_DAY_INFO_LABEL} explanation={PERIOD_DAY_EXPLANATION} />
+              </span>
+            }
             validationState={errors.periodDay ? 'error' : 'none'}
             validationMessage={errors.periodDay}
           >
@@ -374,6 +489,34 @@ function PeriodControls({
               ))}
             </Dropdown>
           </Field>
+        )}
+      </div>
+
+      <div className={styles.frequencyRow}>
+        <span className={styles.labelWithInfo}>
+          <Label id="event-period-frequency" size="small">
+            Frequency
+          </Label>
+          {/*
+            The info glyph is the row's only explanation: it carries the sentence
+            on both frequencies, so the radios never repeat it as sub-labels.
+          */}
+          <FieldInfo name={FREQUENCY_INFO_LABEL} explanation={FREQUENCY_EXPLANATION} />
+        </span>
+
+        {frequencyLocked ? (
+          <Text size={200}>Monthly — one date per cycle, generated</Text>
+        ) : (
+          <RadioGroup
+            aria-labelledby="event-period-frequency"
+            layout="horizontal"
+            value={value.periodFrequency}
+            disabled={readOnly}
+            onChange={(_, data) => onChange({ periodFrequency: data.value as PeriodFrequency })}
+          >
+            <Radio value="one-cycle" label="One cycle" />
+            <Radio value="monthly" label="Monthly" />
+          </RadioGroup>
         )}
       </div>
 
