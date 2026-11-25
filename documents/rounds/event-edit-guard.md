@@ -2,7 +2,7 @@
 
 |                        |                                                                                                                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                                                                                         |
+| Status                 | CLOSED                                                                                                                                                                       |
 | Tier                   | 2                                                                                                                                                                            |
 | Mode                   | `unattended (auto-accept recommendations)`                                                                                                                                   |
 | Base                   | `748f6d2`                                                                                                                                                                    |
@@ -165,8 +165,14 @@ this round did not touch.
 
 ## Acceptance
 
-| Criterion | Met | Evidence | Verdict |
-| --------- | --- | -------- | ------- |
+| Criterion                                                                                 | Met | Evidence                                                                                                                                      | Verdict  |
+| ----------------------------------------------------------------------------------------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Each guard cause locks the read and refuses the write with its code                       | yes | `tests/api/event-schedule-write.test.ts` - every cause, on the read and on the 409                                                            | ACCEPTED |
+| An unchanged rule writes nothing; a changed one writes once                               | yes | DOM tests: "sends no schedule write when the rule is unchanged", and one `PUT` for a changed rule                                             | ACCEPTED |
+| No occurrence on or before today is deleted or moved, and a future cancelled row survives | yes | API test: the rewrite keeps the cancelled row and its note; the window is read before the delete                                              | ACCEPTED |
+| A period rule edits frequency/day and 409s once the guard closes                          | yes | API and DOM tests, including Home Cells taking no day                                                                                         | ACCEPTED |
+| `PATCH` refuses `recurrence` and `period` by name                                         | yes | `tests/unit/event-schemas.test.ts`; the contract merged in #237                                                                               | ACCEPTED |
+| The UI never offers an edit the write would refuse                                        | yes | `canEditSchedule` reads `schedule.locked`, computed by the same function the write calls; the code review confirmed no second source of truth | ACCEPTED |
 
 ## Deviations
 
