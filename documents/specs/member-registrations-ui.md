@@ -351,7 +351,10 @@ roster detail, not as global sidebar items.
   find (owner, 2026-11-13) — and it MUST expose `aria-haspopup` and, while open, `aria-expanded`: both are
   supplied by the Fluent trigger rather than hand-wired, and the closed state is that attribute's **absence**,
   which is what Fluent's `MenuTrigger` renders. A hand-set `aria-expanded="false"` is not required and MUST
-  NOT be added, because it would fight the library's own state. Every item MUST be a
+  NOT be added, because it would fight the library's own state.
+  **This clause is page scope only.** A **data row's** actions live in a trailing icon-only menu, where an icon-only
+  trigger is correct rather than forbidden — the row's identity is the navigation and the menu holds its secondary verbs
+  (see `ui-patterns.md` P-1, **proposed pending approval**; owner 2026-11-25). Every item MUST be a
   Fluent menu item whose
   name, icon and **disabling condition** are the ones the button it replaced had: the spec fixes the condition,
   not the button, so the item's state stays derivable after the button is gone. Items are ordered create-side
@@ -820,7 +823,9 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   exceeds 30 — the same condition FR-60's filter uses, so badge and filter cannot disagree — and otherwise
   the plain date with no badge. Row actions — Contacts, Reassign and End — MUST sit in one Fluent `Menu`
   overflow on the row, with **Log call** remaining the row's visible primary action; a row control is not a
-  page action and MUST NOT enter FR-9a's menu. The footer MUST state how many assignments are **in view** —
+  page action and MUST NOT enter FR-9a's menu. This is `ui-patterns.md` P-1's **`primary-action`** variant — proposed
+  pending approval, owner 2026-11-25 — and when `RowActionsMenu` is extracted into `ui/src/components/` this row adopts it
+  (owed by the next UI round, which records the extraction and the rewire in its plan). The footer MUST state how many assignments are **in view** —
   the filtered and searched count, deliberately distinct from the Assigned tile's total. The mock's "sample
   rows" caveat is mock-only text and MUST NOT ship. The filter keeps FR-60's label, **"Follow-up"**; the
   mock's "Quiet > 30 days" label is retired.
