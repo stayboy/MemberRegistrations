@@ -9,7 +9,7 @@
 | Review rounds          | 0                                                                                                                                                                            |
 | Gate runs in parent    | 0                                                                                                                                                                            |
 | Spec                   | `documents/specs/member-registrations-event-periods.md`, `member-registrations-api.md`, `member-registrations-ui.md`                                                         |
-| Workers                | `parallel (tracks: API, UI)`                                                                                                                                                 |
+| Workers                | `single (the two tracks run serially; no persistent worktree slot existed, so parallel would have paid two full installs - see Deviations)`                                  |
 | Implementer            | `worker ollama-cloud/deepseek-v4.1-flash:1017 (contract); worker ollama-cloud/deepseek-v4.1-flash:1017 (API track); worker ollama-cloud/deepseek-v4.1-flash:1017 (UI track)` |
 | Verbs this round needs | `branch, commit, push, pr, merge`                                                                                                                                            |
 | Git-seat budget        | 20 (`3 branch + N commits + 3 push + 3 pr + 3 merge` = 12 + N; the previous round spent 22 against a declared 16, so this is set from evidence)                              |
@@ -118,8 +118,10 @@ Acceptance criteria (numbered):
 | ------------------------------ | --------------------- | --------------------- |
 | docs (round doc + three specs) | `npm run verify:fast` | pass 4/4              |
 | PR 1 contract                  | `npm run verify:fast` | pass 4/4 (1223 tests) |
+| PR 2 API                       | `npm run verify:fast` | pass 4/4 (1245 tests) |
+| PR 2 API                       | `npm run smoke`       | PASS, 84 checks       |
 
-gate-run 2026-11-25T08:50:28.400Z profile=fast steps=4/4 lines=4 bytes=718
+gate-run 2026-11-25T09:26:21.783Z profile=fast steps=4/4 lines=4 bytes=718
 
 ## Git writes
 
@@ -143,5 +145,9 @@ gate-run 2026-11-25T08:50:28.400Z profile=fast steps=4/4 lines=4 bytes=718
 
 ## Deviations
 
+- **The tracks ran serially, not in parallel** (2026-11-25). The plan declared `parallel (tracks: API, UI)`, but no
+  persistent worktree slot existed for either track, and a fresh slot pays a full install; two installs to run two
+  file-disjoint tracks was the worse trade. The API track therefore merged before the UI track branched, which also
+  satisfies the contract-first ordering the round already required.
 - The frontier was seat-run; the owner answered "all as recommended" on the whole round, which is also the grant for
   its wire-contract gate (Q13).

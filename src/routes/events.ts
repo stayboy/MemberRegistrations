@@ -14,6 +14,7 @@ import {
   eventParentDetailQuerySchema,
   eventParentListQuerySchema,
   eventPreviewInputSchema,
+  eventScheduleWriteSchema,
   eventViewQuerySchema,
   headcountInputSchema,
   headcountListQuerySchema,
@@ -269,6 +270,16 @@ export function eventsRouter(
     const recurrence = await repo.addRecurrenceVersion(id, input, actorOf(req));
     res.setHeader('Cache-Control', 'no-store');
     res.status(201).json(recurrence);
+  });
+
+  // The edit form's save: one arm, under the guard. A closed guard is the
+  // repository's `409 recurrence_locked` carrying the reasons.
+  router.put('/:id/schedule', async (req, res) => {
+    const id = eventIdSchema.parse(req.params.id);
+    const input = eventScheduleWriteSchema.parse(req.body);
+    const result = await repo.writeSchedule(id, input, actorOf(req));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(result);
   });
 
   router.post('/:id/recurrence/exceptions', async (req, res) => {

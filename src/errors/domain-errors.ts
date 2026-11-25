@@ -255,6 +255,17 @@ export class SessionClosedError extends ConflictError {
   }
 }
 
+/**
+ * The edit guard is closed: an occurrence has started, or offering, attendance
+ * or import history exists, so the event's rule cannot be rewritten. The reasons
+ * are the guard's own closed codes, carried so the client can name the cause.
+ */
+export class RecurrenceLockedError extends ConflictError {
+  constructor(readonly reasons: ReadonlyArray<{ code: string; date: string | null }>) {
+    super('The event has history; its schedule cannot be rewritten', 'recurrence_locked');
+  }
+}
+
 /** The member already has an attendance row for that event session. */ export class AlreadyClockedError extends ConflictError {
   constructor(message = 'Attendance is already recorded for this member and session') {
     super(message, 'already_clocked');

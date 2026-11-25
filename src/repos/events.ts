@@ -3,6 +3,7 @@ import type { Db, DbClient, Row } from '../db/sql.js';
 import {
   ConflictError,
   NotFoundError,
+  RecurrenceLockedError,
   SessionClosedError,
   ValidationError,
 } from '../errors/domain-errors.js';
@@ -42,6 +43,9 @@ import type {
   EventPeriodProvenance,
   EventPreview,
   EventPreviewInput,
+  EventScheduleLockCode,
+  EventScheduleWrite,
+  EventScheduleWriteResult,
   PeriodDay,
   RecurrenceExceptionInput,
   RecurrenceScheduleInput,
@@ -905,6 +909,26 @@ export interface EventOccurrenceItem {
   legacyEventNo: string | null;
 }
 
+/**
+ * One cause that closes the edit guard: a closed code and the occurrence it
+ * names. `date` is null only for an offering attached to the event itself,
+ * which names no occurrence.
+ */
+export interface EventScheduleLockReason {
+  code: EventScheduleLockCode;
+  date: string | null;
+}
+
+/**
+ * The edit guard's state, on the read and behind the write. It is computed by
+ * one function ({@link scheduleGuardsFor}) so the read can never offer an edit
+ * the write refuses.
+ */
+export interface EventScheduleGuardState {
+  locked: boolean;
+  reasons: EventScheduleLockReason[];
+}
+
 export interface EventParentItem {
   id: string;
   eventNo: string;
@@ -928,6 +952,8 @@ export interface EventParentItem {
   endTime: string | null;
   tracksMembers: boolean;
   status: EventStatus;
+  /** The edit guard's wire form; computed by the same function the write guard calls. */
+  schedule: EventScheduleGuardState;
   /** The provenance of a period-created event; null for every other event. */
   period: EventPeriodProvenance | null;
   recurrence: {
@@ -1044,7 +1070,7 @@ const PARENT_RANGE_FILTER = `
 /** Every in-window parent with each of its audience rules, in set order. */
 const PARENT_IDS_SQL = `
 ${PARENT_DERIVED}
-select d.id, d.start_date, a.rule
+select d.id, d.start_date, e.timezone, a.rule
   from derived d
   join events e on e.id = d.id
   join event_audiences ea on ea.event_id = d.id
@@ -1061,14 +1087,14 @@ select d.id, d.start_date, a.rule
 const PARENT_PAGE_SQL = `
 ${PARENT_DERIVED},
 paged as (
-  select d.id, d.start_date
+  select d.id, d.start_date, e.timezone
     from derived d
     join events e on e.id = d.id
    where ${PARENT_RANGE_FILTER}
    order by d.start_date, d.id
    limit $6::int offset $7::int
 )
-select p.id, p.start_date, a.rule
+select p.id, p.start_date, p.timezone, a.rule
   from paged p
   join event_audiences ea on ea.event_id = p.id
   join audiences a on a.id = ea.audience_id
@@ -1101,6 +1127,119 @@ function occurrenceStatus(
   return date <= today ? 'held' : 'scheduled';
 }
 
+type GuardRow = Row & {
+  event_id: string;
+  occurrence_started: unknown;
+  /** True when an offering is attached to the event itself, which names no date. */
+  offering_attached_event: boolean | null;
+  offering_attached_occurrence: unknown;
+  offering_counted: unknown;
+  attendance_recorded: unknown;
+  import_suppressed: unknown;
+};
+
+/**
+ * One batch for every cause, for every assembled parent: no per-row call, and a
+ * page of events pays one query. `$1`/`$2` are the (event, today) pairs the
+ * caller derived with `todayIn` per event, so a batch cannot disagree with a
+ * single guard about whose "today" applies.
+ *
+ * Each cause reports the **earliest** occurrence date that carries it - one
+ * choice for every dated cause, so the reason names the first date that closed
+ * the guard, and a reader never has to ask why two causes picked different
+ * dates. A bare event-level attachment names none and reports `null`.
+ */
+const SCHEDULE_GUARD_SQL = `
+  select t.event_id,
+         (select min(o.date)
+            from event_occurrences o
+           where o.event_id = t.event_id
+             and o.date <= t.today) as occurrence_started,
+         exists (
+           select 1
+             from event_offerings f
+            where f.event_id = t.event_id
+              and f.occurrence_id is null
+              and f.detached_on is null
+         ) as offering_attached_event,
+         (select min(o.date)
+            from event_offerings f
+            join event_occurrences o on o.id = f.occurrence_id
+           where f.event_id = t.event_id
+             and f.occurrence_id is not null
+             and f.detached_on is null) as offering_attached_occurrence,
+         (select min(o.date)
+            from event_session_offering_counts c
+            join event_occurrences o on o.id = c.occurrence_id
+           where o.event_id = t.event_id) as offering_counted,
+         (select min(recorded.d)
+            from (
+              select o.date as d
+                from attendance a
+                join event_occurrences o on o.id = a.occurrence_id
+               where o.event_id = t.event_id
+              union all
+              select o.date
+                from event_session_headcounts h
+                join event_occurrences o on o.id = h.occurrence_id
+               where o.event_id = t.event_id
+            ) recorded) as attendance_recorded,
+         (select min(o.date)
+            from attendance_suppressions s
+            join event_occurrences o on o.id = s.occurrence_id
+           where o.event_id = t.event_id) as import_suppressed
+    from unnest($1::uuid[], $2::date[]) as t(event_id, today)`;
+
+function guardFromRow(row: GuardRow): EventScheduleGuardState {
+  const reasons: EventScheduleLockReason[] = [];
+  const dated = (code: EventScheduleLockCode, value: unknown): void => {
+    if (value === null || value === undefined) return;
+    reasons.push({ code, date: isoDate(value) });
+  };
+  dated('occurrence_started', row.occurrence_started);
+  if (row.offering_attached_event === true) {
+    reasons.push({ code: 'offering_attached', date: null });
+  }
+  dated('offering_attached', row.offering_attached_occurrence);
+  dated('offering_counted', row.offering_counted);
+  dated('attendance_recorded', row.attendance_recorded);
+  dated('import_suppressed', row.import_suppressed);
+  return { locked: reasons.length > 0, reasons };
+}
+
+/**
+ * The edit guard for a batch of events, computed by the **one** function the
+ * read and the write both call. Its "today" is each event's own
+ * (`todayIn(event.timezone)`), so the guard can never contradict the status the
+ * same read derives.
+ */
+export async function scheduleGuardsFor(
+  db: DbClient,
+  events: ReadonlyArray<{ id: string; timezone: string }>,
+): Promise<Map<string, EventScheduleGuardState>> {
+  const guards = new Map<string, EventScheduleGuardState>();
+  if (events.length === 0) return guards;
+  const rows = await db.query<GuardRow>(SCHEDULE_GUARD_SQL, [
+    events.map((event) => event.id),
+    events.map((event) => todayIn(event.timezone)),
+  ]);
+  for (const row of rows) guards.set(row.event_id, guardFromRow(row));
+  // Every requested event has a row from the unnest; a missing one would be a
+  // caller passing an id the batch did not receive, which cannot happen.
+  for (const event of events) {
+    if (!guards.has(event.id)) guards.set(event.id, { locked: false, reasons: [] });
+  }
+  return guards;
+}
+
+/** One event's guard, through the same batch, for the write path. */
+export async function scheduleGuardFor(
+  db: DbClient,
+  event: { id: string; timezone: string },
+): Promise<EventScheduleGuardState> {
+  return (await scheduleGuardsFor(db, [event])).get(event.id)!;
+}
+
 export class EventRepository {
   constructor(private readonly db: Db) {}
 
@@ -1110,14 +1249,14 @@ export class EventRepository {
     // takes it. With a ministry the filter reads each audience's legacy
     // projection, so the set is grouped and the page is taken after it.
     const rows = query.ministry
-      ? await this.db.query<{ id: string; rule: unknown }>(PARENT_IDS_SQL, [
+      ? await this.db.query<{ id: string; timezone: string; rule: unknown }>(PARENT_IDS_SQL, [
           query.from,
           query.to,
           query.seriesId ?? null,
           query.venueType ?? null,
           query.period ?? null,
         ])
-      : await this.db.query<{ id: string; rule: unknown }>(PARENT_PAGE_SQL, [
+      : await this.db.query<{ id: string; timezone: string; rule: unknown }>(PARENT_PAGE_SQL, [
           query.from,
           query.to,
           query.seriesId ?? null,
@@ -1130,6 +1269,7 @@ export class EventRepository {
     // The rows arrive as (event, audience); keep the list's order while grouping
     // each event's rules. An event the query's order placed first stays first.
     const rulesByEvent = new Map<string, AudienceRule[]>();
+    const timezoneByEvent = new Map<string, string>();
     const order: string[] = [];
     for (const row of rows) {
       const rules = rulesByEvent.get(row.id);
@@ -1137,6 +1277,7 @@ export class EventRepository {
         rules.push(parseAudienceRule(row.rule));
       } else {
         rulesByEvent.set(row.id, [parseAudienceRule(row.rule)]);
+        timezoneByEvent.set(row.id, row.timezone);
         order.push(row.id);
       }
     }
@@ -1158,14 +1299,26 @@ export class EventRepository {
         .slice(query.offset, query.offset + query.limit);
     }
 
+    // The edit guard is computed for the whole page in one query, so assembling
+    // a list never issues a query per row.
+    const guards = await scheduleGuardsFor(
+      this.db,
+      candidates.map((id) => ({ id, timezone: timezoneByEvent.get(id)! })),
+    );
     const items = await Promise.all(
-      candidates.map((id) => this.getParent(id, query.from, query.to)),
+      candidates.map((id) => this.getParent(id, query.from, query.to, guards.get(id))),
     );
     return items.filter((item): item is EventParentItem => item !== null);
   }
 
   /** The parent detail for the window; null when the event does not exist. */
-  async getParent(id: string, from: string, to: string): Promise<EventParentItem | null> {
+  async getParent(
+    id: string,
+    from: string,
+    to: string,
+    /** Precomputed by {@link scheduleGuardsFor} for a list; a detail computes its own. */
+    guard?: EventScheduleGuardState,
+  ): Promise<EventParentItem | null> {
     const [row] = await this.db.query<ParentRow>(
       `select ${PARENT_COLUMNS} ${PARENT_FROM} where e.id = $1`,
       [id],
@@ -1182,9 +1335,10 @@ export class EventRepository {
     const rules = audienceRules(set);
 
     const today = todayIn(row.timezone);
-    const range = await this.parentRange(row.id);
+    const range = await this.parentRange(this.db, row.id);
     const recurrence = await this.parentRecurrence(row.id, range.isRecurring);
     const occurrences = await this.parentOccurrences(row, rules, from, to, today);
+    const schedule = guard ?? (await scheduleGuardFor(this.db, row));
     const summary = await parentWindowSummary(
       this.db,
       { id: row.id, timezone: row.timezone },
@@ -1228,6 +1382,7 @@ export class EventRepository {
       endTime: row.end_time,
       tracksMembers: row.tracks_members,
       status: asStatus(row.status),
+      schedule,
       period: periodProvenance(row),
       recurrence,
       occurrences,
@@ -1243,12 +1398,15 @@ export class EventRepository {
     };
   }
 
-  private async parentRange(id: string): Promise<{
+  private async parentRange(
+    db: DbClient,
+    id: string,
+  ): Promise<{
     startDate: string;
     endDate: string | null;
     isRecurring: boolean;
   }> {
-    const [row] = await this.db.query<{
+    const [row] = await db.query<{
       first_occ: unknown;
       last_occ: unknown;
       first_sch: unknown;
@@ -1595,7 +1753,7 @@ export class EventRepository {
       return eventId;
     });
 
-    const window = await this.parentWindow(id);
+    const window = await this.parentWindow(this.db, id);
     return (await this.getParent(id, window.from, window.to))!;
   }
 
@@ -1769,8 +1927,182 @@ export class EventRepository {
       await replaceEventAudiences(tx, id, audienceIds);
     });
 
-    const window = await this.parentWindow(id);
+    const window = await this.parentWindow(this.db, id);
     return (await this.getParent(id, window.from, window.to))!;
+  }
+
+  /**
+   * `PUT /v1/events/{eventId}/schedule`: the edit form's save, under the guard.
+   * The body takes exactly one arm and the arm must match the event's type,
+   * which is fixed at create. In one transaction the write replaces the rule
+   * that is in force - the version row for an rrule event, the stored fields for
+   * a period event - deletes only future `scheduled` occurrences, and resolves
+   * the new rule over the window the calendar already held, never extending it.
+   * A future `cancelled` row survives, and `extra`/`cancelled` exceptions
+   * re-apply on regeneration. `generated` is false when the new rule produces
+   * no future date: the rule is still saved, so the form can say so.
+   */
+  async writeSchedule(
+    id: string,
+    input: EventScheduleWrite,
+    actor: string,
+  ): Promise<EventScheduleWriteResult> {
+    const recurrenceInput = 'recurrence' in input ? input.recurrence : null;
+    const periodInput = 'period' in input ? input.period : null;
+
+    const written = await this.db.transaction(async (tx) => {
+      const [event] = await tx.query<{
+        id: string;
+        timezone: string;
+        status: string;
+        start_time: string | null;
+        end_time: string | null;
+        period_id: string | null;
+        period_frequency: string | null;
+      }>(
+        `select id, timezone, status, start_time, end_time,
+                period_id, period_frequency
+           from events
+          where id = $1`,
+        [id],
+      );
+      if (!event) throw new NotFoundError(`Event ${id} was not found`);
+      if (event.status === 'archived') {
+        throw new ConflictError('An archived event is read-only');
+      }
+
+      // The type is fixed at create, so the arm that does not match it is a
+      // request error named by field, checked before the guard: a client that
+      // sends the wrong arm is told which arm the event takes.
+      if (recurrenceInput) {
+        if (!(await hasRecurrence(tx, id))) {
+          throw new ValidationError(
+            'recurrence: this event has no schedule version; only a recurring event’s rule can be rewritten',
+          );
+        }
+      } else if (!event.period_frequency) {
+        throw new ValidationError(
+          'period: this event has no stored period rule; only a recurring period event’s rule can be rewritten',
+        );
+      }
+
+      const today = todayIn(event.timezone);
+      // The read and the write call the same function, so the form can never
+      // offer an edit this write refuses (owner, 2026-11-25).
+      const guard = await scheduleGuardFor(tx, event);
+      if (guard.locked) throw new RecurrenceLockedError(guard.reasons);
+
+      // The window the calendar already holds, read before the write deletes a
+      // row. A rewrite replaces this window's future rows and never extends it.
+      const window = await this.parentWindow(tx, id);
+
+      let day: PeriodDay | null = null;
+
+      if (recurrenceInput) {
+        // The version in force is the newest starting on or before the event's
+        // today. When every version starts later, the newest one still owns the
+        // window the form is editing, so it is the one replaced.
+        const [inForce] = await tx.query<{ id: string; effective_from: unknown }>(
+          `select id, effective_from
+             from event_recurrence_versions
+            where event_id = $1
+            order by (effective_from <= $2::date) desc, effective_from desc
+            limit 1`,
+          [id, today],
+        );
+        if (!inForce) {
+          throw new ConflictError('recurrence: the event has no schedule version to replace');
+        }
+        const effectiveFrom = isoDate(inForce.effective_from);
+        const endsOn = recurrenceInput.endsOn ? assertDate(recurrenceInput.endsOn, 'endsOn') : null;
+        if (endsOn && endsOn < effectiveFrom) {
+          throw new ValidationError('endsOn must not be before effectiveFrom');
+        }
+        // The same start replaces the row the calendar already holds, so the
+        // `(event_id, effective_from)` unique index is satisfied because the old
+        // row is gone in this transaction, not shadowed by a duplicate.
+        await tx.query('delete from event_recurrence_versions where id = $1', [inForce.id]);
+        await tx.query(
+          `insert into event_recurrence_versions (
+             event_id, effective_from, rrule, ends_on, created_by
+           ) values ($1,$2,$3,$4,$5)`,
+          [id, effectiveFrom, validateRrule(recurrenceInput.rrule), endsOn, actor],
+        );
+      } else {
+        const periodId = event.period_id as EventPeriodId | null;
+        if (!periodId) {
+          throw new ConflictError('period: the event has no period to rewrite');
+        }
+        const named = periodById(periodId);
+        const frequency = periodInput!.frequency;
+        day = periodInput!.day ?? null;
+        if (day !== null && named.rule.kind === 'date') {
+          throw new ValidationError(
+            `period.day: ${named.name} resolves to a single date and takes no day`,
+          );
+        }
+        // A period rule lives on the event, not in a version row, so it is
+        // replaced in place - permitted because the guard is open.
+        await tx.query(
+          `update events
+              set period_frequency = $2, period_day = $3, updated_at = now()
+            where id = $1`,
+          [id, frequency, day],
+        );
+      }
+
+      const resolved =
+        recurrenceInput !== null
+          ? await resolveSeriesOccurrences(tx, id, window.from, window.to)
+          : generateMonthlyPeriodInWindow(event.period_id as EventPeriodId, {
+              day: day ?? undefined,
+              from: window.from,
+              to: window.to,
+            });
+      // A date on or before the event's today is never produced: an open guard
+      // means no such occurrence exists, and regeneration must not invent one.
+      const generated = resolved.filter((date) => date > today);
+
+      // Only future `scheduled` rows are replaced. A future `cancelled` row is
+      // the officer's decision and outlives the rule that produced it.
+      await tx.query(
+        `delete from event_occurrences
+          where event_id = $1 and date > $2::date and status = 'scheduled'`,
+        [id, today],
+      );
+      for (const date of generated) {
+        await tx.query(
+          `insert into event_occurrences (event_id, date, start_time, end_time, status)
+           values ($1,$2,$3,$4,'scheduled')
+           on conflict (event_id, date) do nothing`,
+          [id, date, event.start_time ?? '00:00', event.end_time],
+        );
+      }
+
+      return { window, generated: generated.length > 0 };
+    });
+
+    // The answer is read through the parent read, so it is the state after the
+    // write and never an echo of the request.
+    const parent = await this.getParent(id, written.window.from, written.window.to);
+    if (!parent) throw new NotFoundError(`Event ${id} was not found`);
+    // The wire's period carries no `cycle`: the write is offered only for a
+    // recurring event, so this is the rule in force, not a one-off provenance.
+    const period =
+      periodInput && parent.period?.frequency
+        ? {
+            id: parent.period.id,
+            name: parent.period.name,
+            frequency: parent.period.frequency,
+            day: parent.period.day,
+          }
+        : null;
+    return {
+      recurrence: recurrenceInput ? parent.recurrence : null,
+      period,
+      occurrences: parent.occurrences,
+      generated: written.generated,
+    };
   }
 
   /** `POST /v1/events/{eventId}/archive`: history stays readable; a second archive is a conflict. */
@@ -1785,7 +2117,7 @@ export class EventRepository {
         where id = $1`,
       [id],
     );
-    const window = await this.parentWindow(id);
+    const window = await this.parentWindow(this.db, id);
     return (await this.getParent(id, window.from, window.to))!;
   }
 
@@ -1952,9 +2284,9 @@ export class EventRepository {
   }
 
   /** The derived range actually backed by generated occurrences, for a write response. */
-  private async parentWindow(id: string): Promise<{ from: string; to: string }> {
-    const range = await this.parentRange(id);
-    const [row] = await this.db.query<{ last_occ: unknown }>(
+  private async parentWindow(db: DbClient, id: string): Promise<{ from: string; to: string }> {
+    const range = await this.parentRange(db, id);
+    const [row] = await db.query<{ last_occ: unknown }>(
       'select max(o.date) as last_occ from event_occurrences o where o.event_id = $1',
       [id],
     );
