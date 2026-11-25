@@ -7,6 +7,7 @@ import { NullMailer } from '../../src/authn/mailer.js';
 import type { EmailSender, MessageSender, Senders } from '../../src/messaging/senders.js';
 import type { AuthConfig } from '../../src/authn/service.js';
 import type { PaymentGateway } from '../../src/payments/gateway.js';
+import type { FlierStore } from '../../src/storage/flier-store.js';
 import { migrate } from '../../src/db/migrate.js';
 import { createPgliteDb } from '../../src/db/pglite.js';
 import type { Db } from '../../src/db/sql.js';
@@ -43,6 +44,8 @@ export interface TestAppOptions {
     naloUserId?: string;
     naloMaxMsgChars?: number;
   };
+  /** The flier store (N-9); the default app keeps the bytes in the register. */
+  flierStore?: FlierStore;
 }
 
 /** A message one of the capturing senders received; the code is in `body`. */

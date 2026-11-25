@@ -2217,6 +2217,157 @@ create index if not exists events_period_id on events (period_id);
 `,
   },
   {
+    version: '0030_event_notifications',
+    sql: `
+-- The plan side of the notification schema (member-registrations-event-notifications.md
+-- N-14): plans, their revisions, revision-keyed slots, per-channel templates, the
+-- flier and the church defaults. The send side (instances, messages, deliveries,
+-- settings, blocks, mutes, preference events) is 0032 in R3, because a table lands
+-- with the code that uses it and R2 cannot publish.
+--
+-- Every constraint below is named explicitly. The SQL migration is the owner, and
+-- the Drizzle mirror in src/db/schema.ts is compared to these names by the drift
+-- test; an automatically generated name would make that comparison a guess.
+
+create table notification_plans (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null,
+  next_revision int not null default 1,
+  created_by text not null, created_at timestamptz not null default now(),
+  updated_by text not null, updated_at timestamptz not null default now(),
+  constraint notification_plans_event_id_fkey foreign key (event_id) references events(id),
+  constraint notification_plans_event_id_key unique (event_id),
+  constraint notification_plans_next_revision_check check (next_revision > 0)
+);
+
+-- One row per revision: this is what "published" means, and what pins an instance.
+create table notification_plan_revisions (
+  plan_id uuid not null,
+  revision int not null,
+  status text not null default 'draft',
+  published_by text, published_at timestamptz,
+  cancelled_by text, cancelled_at timestamptz,
+  acknowledgement jsonb,           -- the typed publish acknowledgement, when one was required
+  created_by text not null, created_at timestamptz not null default now(),
+  updated_by text not null, updated_at timestamptz not null default now(),
+  primary key (plan_id, revision),
+  constraint notification_plan_revisions_plan_id_fkey
+    foreign key (plan_id) references notification_plans(id),
+  constraint notification_plan_revisions_status_check
+    check (status in ('draft', 'published', 'superseded', 'cancelled')),
+  constraint notification_plan_revisions_published_check
+    check ((status = 'published') = (published_at is not null))
+);
+create unique index notification_plan_one_published
+  on notification_plan_revisions (plan_id) where status = 'published';
+-- Publishing revision N+1 supersedes N in the same transaction: one published at a
+-- time, while an already-created instance keeps the revision it pinned.
+
+create table notification_plan_slots (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null,
+  revision int not null,
+  kind text not null,
+  anchor text not null,
+  offset_minutes int not null,
+  sort_order int not null,
+  constraint notification_plan_slots_revision_fkey
+    foreign key (plan_id, revision)
+    references notification_plan_revisions (plan_id, revision),
+  constraint notification_plan_slots_order_key unique (plan_id, revision, sort_order),
+  constraint notification_plan_slots_kind_check
+    check (kind in ('announce', 'reminder', 'starts', 'last')),
+  constraint notification_plan_slots_anchor_check
+    check (anchor in
+      ('publish', 'event_start', 'event_end', 'occurrence_start', 'occurrence_end')),
+  constraint notification_plan_slots_offset_check
+    check (offset_minutes between -10080 and 10080)
+);
+
+create table notification_templates (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null,
+  revision int not null,
+  channel text not null,
+  subject text,                     -- email: required, the message subject
+  body_json jsonb,                  -- TipTap document, email only
+  body_text text,                   -- the sms/ussd body, and email's plain-text alternative
+  template_name text,               -- whatsapp: the approved template
+  parameter_map jsonb,              -- whatsapp: variable -> ordered slot, e.g. {"firstName": 1}
+  created_by text not null, created_at timestamptz not null default now(),
+  constraint notification_templates_revision_fkey
+    foreign key (plan_id, revision)
+    references notification_plan_revisions (plan_id, revision),
+  constraint notification_templates_channel_key unique (plan_id, revision, channel),
+  constraint notification_templates_channel_check
+    check (channel in ('email', 'whatsapp', 'sms', 'ussd')),
+  -- FR-15: the browser sends structured JSON or plain text, never HTML. Only the
+  -- email channel carries a document at all.
+  constraint notification_templates_no_client_html_check
+    check (channel = 'email' or body_json is null),
+  constraint notification_templates_email_body_check
+    check (channel <> 'email' or (subject is not null and body_json is not null and body_text is not null)),
+  constraint notification_templates_whatsapp_text_check
+    check (channel <> 'whatsapp' or body_text is null),
+  constraint notification_templates_template_name_check
+    check ((channel = 'whatsapp') = (template_name is not null))
+);
+
+create table event_fliers (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null,
+  revision int not null,
+  token text not null,
+  storage text not null,
+  storage_key text,
+  bytes bytea,
+  content_type text not null,
+  byte_size int not null,
+  sha256 text not null,
+  uploaded_by text not null, uploaded_at timestamptz not null default now(),
+  constraint event_fliers_revision_fkey
+    foreign key (plan_id, revision)
+    references notification_plan_revisions (plan_id, revision),
+  constraint event_fliers_token_key unique (token),
+  constraint event_fliers_revision_key unique (plan_id, revision),
+  constraint event_fliers_storage_check check (storage in ('s3', 'db')),
+  constraint event_fliers_content_type_check
+    check (content_type in ('image/webp', 'image/jpeg', 'image/png')),
+  constraint event_fliers_byte_size_check check (byte_size > 0 and byte_size <= 2097152),
+  -- A stored flier is in exactly one place: the register's bytea column or the
+  -- object store's key. Either both locators or neither, never a half-written row.
+  constraint event_fliers_storage_shape_check
+    check ((storage = 'db') = (bytes is not null) and (storage = 's3') = (storage_key is not null))
+);
+
+create table notification_defaults (
+  id text primary key default 'church',
+  slots jsonb not null,
+  church_name text not null,
+  email_signature text not null default '',
+  email_reply_to text,
+  sms_confirm_threshold int not null default 250,
+  whatsapp_templates jsonb not null default '{}'::jsonb,
+  send_mode text not null default 'window',
+  send_from time not null default '08:00',
+  send_to time not null default '20:00',
+  send_hour time not null default '14:00',
+  church_timezone text not null default 'Africa/Lagos',
+  digest_hour time not null default '09:00',
+  failure_digest_to text,
+  failure_digest_enabled boolean not null default true,
+  last_digest_at timestamptz,
+  updated_at timestamptz not null default now(),
+  updated_by text not null,
+  constraint notification_defaults_id_check check (id = 'church'),
+  constraint notification_defaults_sms_confirm_threshold_check
+    check (sms_confirm_threshold >= 0),
+  constraint notification_defaults_send_mode_check
+    check (send_mode in ('always', 'window', 'daily'))
+);
+`,
+  },
+  {
     // pg-boss's own DDL, generated from the pinned release and committed here
     // so the tracked runner stays the only thing that mutates the database
     // (AGENTS 12, notification spec N-8). pg-boss runs with `migrate: false`;

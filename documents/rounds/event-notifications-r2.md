@@ -2,12 +2,12 @@
 
 |                        |                                                                                                                                                          |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                                                                                     |
+| Status                 | CLOSED - implemented, gates green, reviewed REWORK then fixed                                                                                            |
 | Tier                   | 2 - Reviewed                                                                                                                                             |
 | Mode                   | `attended`                                                                                                                                               |
 | Base                   | `10d8198`                                                                                                                                                |
-| Review rounds          | 0                                                                                                                                                        |
-| Gate runs in parent    | 1                                                                                                                                                        |
+| Review rounds          | 1                                                                                                                                                        |
+| Gate runs in parent    | 4                                                                                                                                                        |
 | Spec                   | `documents/specs/member-registrations-event-notifications.md`                                                                                            |
 | Workers                | `single`                                                                                                                                                 |
 | Implementer            | worker ollama-cloud/deepseek-v4.1-flash:1017 (plan API, renderer, flier store); parent cline-pass/cline-pass/deepseek-v4.1-flash-1017 (round doc, gates) |
@@ -121,15 +121,32 @@ the inbox, the digest, the send window's enforcement, every UI and USSD surface,
 
 This round adds a migration, new routes and a new Compose service, so `npm run smoke` is required at close.
 
-gate-run 2026-11-25T22:12:41.619Z profile=fast steps=4/4 lines=4 bytes=701
+gate-run 2026-11-25T22:44:58.962Z profile=fast steps=4/4 lines=4 bytes=903
 
-The signature above is the round-doc gate: the tree still passes with this record in it. The implementation gate and
-the smoke are run at close.
+The signature above is the close gate, after the fix pass. The smoke passes on PGlite, and the migration test's new
+`pg` leg was run separately with `TEST_DATABASE_URL` against the Compose database: 12/12, including the partial unique
+index on real Postgres.
 
 ## Review
 
-Seat: pending - the independent reviewer has not run. At close this line carries the reviewer's verdict and the
-findings that produced it.
+Seat: consistent - the `Implementer` row names the `worker-flash` seat and this reviewer is `reviewer-pro`, the Tier 2
+split AGENTS.md §3 requires.
+
+**`reviewer-pro` / `ollama-cloud/deepseek-v4-pro:0813`, 2026-11-25. Verdict: REWORK** - one P1, two P2s, three nits.
+
+The P1 was the round's own criterion 1: "`0030` applies on PGlite and `pg`", and the only leg was PGlite. The reviewer's
+point was that a manual proof in the parent is not a test, and AGENTS.md §12 asks both drivers to pass _the same_ tests.
+
+| Finding                                                                              | Fix                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P1** - the `pg` leg was not gated by the suite                                     | A `pg`-gated block added to `tests/db/event-notifications-migration.test.ts`, on the `createScratchDatabase` pattern R1 established: the six tables exist, none of the send tables does, and the partial unique index refuses a second published revision. Run with `TEST_DATABASE_URL`: 12/12                             |
+| **P2** - the S3 double ignores auth, so the hand-rolled SigV4 was never exercised    | The double now records each request's headers and the suite asserts the signature's shape on every signed request: the `AWS4-HMAC-SHA256` credential scope, a hex `x-amz-content-sha256`, a well-formed `x-amz-date`, and `host` among the signed headers. Structural, not verified against a server - see the backlog row |
+| **P2** - `minio/minio:latest`, `minio/mc:latest` float while every sibling is pinned | Not fixed: Docker Hub refused both images in this environment, so neither a digest nor a release tag could be resolved, and the MinIO service has therefore never been pulled. Recorded in the backlog with its trigger                                                                                                    |
+| Nit - `next_revision` written and never read                                         | Left: it is R3's publish that reads it                                                                                                                                                                                                                                                                                     |
+| Nit - `assertIfMatch` accepts the bare `r<revision>` form                            | Left: it matches the event-write convention, and tightening it is a wire change no round asked for                                                                                                                                                                                                                         |
+| Nit - `db.ts` re-queries a flier row the repo already loaded                         | Left: the public route has only a token, and the extra read is the price of that route sharing the adapter                                                                                                                                                                                                                 |
+
+No confirmation round was run: the P1's remedy was mechanical and its result is a passing test rather than a judgement.
 
 ## Git writes
 
@@ -147,17 +164,17 @@ n/a — no mock.
 
 ## Acceptance
 
-| Criterion                                              | Met | Evidence | Verdict |
-| ------------------------------------------------------ | --- | -------- | ------- |
-| 1. `0030` on both drivers, six tables, no send table   | no  | —        | pending |
-| 2. Authoring, `If-Match`, slot rules                   | no  | —        | pending |
-| 3. A published revision is frozen                      | no  | —        | pending |
-| 4. Preview: four bodies, counts, segments, no writes   | no  | —        | pending |
-| 5. Template validation refusals                        | no  | —        | pending |
-| 6. Flier cap, magic bytes, public route, both adapters | no  | —        | pending |
-| 7. Defaults round-trip and the copy into a new plan    | no  | —        | pending |
-| 8. `openapi.json` regenerated and served               | no  | —        | pending |
-| 9. Nothing from the send path or the UI                | yes | the diff | pending |
+| Criterion                                              | Met | Evidence                                                                                                                        | Verdict |
+| ------------------------------------------------------ | --- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1. `0030` on both drivers, six tables, no send table   | yes | `event-notifications-migration.test.ts` - PGlite block, plus the `pg` block added after review (12/12 with `TEST_DATABASE_URL`) | pass    |
+| 2. Authoring, `If-Match`, slot rules                   | yes | `notification-plans.test.ts` - revision 1, ETag, stale `412` with nothing written, the four refusals                            | pass    |
+| 3. A published revision is frozen                      | yes | `notification-plans.test.ts` and the flier `writableRevision` path                                                              | pass    |
+| 4. Preview: four bodies, counts, segments, no writes   | yes | `notification-preview.test.ts` - renders, unchanged row counts, no sender called                                                | pass    |
+| 5. Template validation refusals                        | yes | `notification-plans.test.ts` "template validation" and the renderer unit tests                                                  | pass    |
+| 6. Flier cap, magic bytes, public route, both adapters | yes | `notification-flier.test.ts` - cap, sniffing, headers on `/fliers/{token}`, identical bytes, signature shape                    | pass    |
+| 7. Defaults round-trip and the copy into a new plan    | yes | `notification-defaults.test.ts`                                                                                                 | pass    |
+| 8. `openapi.json` regenerated and served               | yes | `notification-plans.test.ts` and `tests/api/openapi-snapshot.test.ts`; the diff is purely additive                              | pass    |
+| 9. Nothing from the send path or the UI                | yes | `notification-plans.test.ts` "the send path is absent, not stubbed"; no `ui/` or mock change                                    | pass    |
 
 ## Deviations
 

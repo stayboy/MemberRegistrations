@@ -266,6 +266,13 @@ export class RecurrenceLockedError extends ConflictError {
   }
 }
 
+/** The request named a base revision the record has already moved past (RFC 9110). */
+export class PreconditionFailedError extends DomainError {
+  constructor(message: string, code = 'precondition_failed') {
+    super(message, code);
+  }
+}
+
 /** The member already has an attendance row for that event session. */ export class AlreadyClockedError extends ConflictError {
   constructor(message = 'Attendance is already recorded for this member and session') {
     super(message, 'already_clocked');
@@ -370,6 +377,22 @@ export class UnsupportedPhotoError extends BadRequestError {
 export class PhotoTooLargeError extends DomainError {
   constructor(message = 'The photo exceeds the 2 MiB limit') {
     super(message, 'photo_too_large');
+  }
+}
+
+/** A flier payload is empty or its magic bytes are not WebP, JPEG or PNG (N-9). */
+export class UnsupportedFlierError extends BadRequestError {
+  constructor(
+    message = 'The flier must be a WebP, JPEG or PNG image whose content type matches its bytes',
+  ) {
+    super(message, 'unsupported_flier');
+  }
+}
+
+/** A flier payload exceeds the 2 MiB ceiling (N-9, FR-22). */
+export class FlierTooLargeError extends DomainError {
+  constructor(message = 'The flier exceeds the 2 MiB limit') {
+    super(message, 'flier_too_large');
   }
 }
 

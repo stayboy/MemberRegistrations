@@ -14,7 +14,9 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -839,5 +841,234 @@ export const eventOfferings = pgTable(
     uniqueIndex('event_offerings_active_event')
       .on(table.offeringId, table.eventId)
       .where(sql`${table.occurrenceId} is null and ${table.detachedOn} is null`),
+  ],
+);
+
+/**
+ * The notification plan (member-registrations-event-notifications.md N-14, the
+ * `0030_event_notifications` slice). An event has at most one plan; the plan owns
+ * its revisions and every revision carries its own slots and templates, so an
+ * edit after publishing writes revision + 1 instead of rewriting a sent message.
+ *
+ * The constraint names are spelled out on both sides: the SQL migration is the
+ * owner and `tests/db/event-notifications-migration.test.ts` compares them.
+ */
+export const notificationPlans = pgTable(
+  'notification_plans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id').notNull(),
+    nextRevision: integer('next_revision').notNull().default(1),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_plans_event_id_fkey',
+      columns: [table.eventId],
+      foreignColumns: [events.id],
+    }),
+    unique('notification_plans_event_id_key').on(table.eventId),
+    check('notification_plans_next_revision_check', sql`${table.nextRevision} > 0`),
+  ],
+);
+
+/** One row per revision: what "published" means, and what an instance pins. */
+export const notificationPlanRevisions = pgTable(
+  'notification_plan_revisions',
+  {
+    planId: uuid('plan_id').notNull(),
+    revision: integer('revision').notNull(),
+    status: text('status').notNull().default('draft'),
+    publishedBy: text('published_by'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    cancelledBy: text('cancelled_by'),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    /** The typed publish acknowledgement, when one was required. */
+    acknowledgement: jsonb('acknowledgement'),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.planId, table.revision] }),
+    foreignKey({
+      name: 'notification_plan_revisions_plan_id_fkey',
+      columns: [table.planId],
+      foreignColumns: [notificationPlans.id],
+    }),
+    check(
+      'notification_plan_revisions_status_check',
+      sql`${table.status} in ('draft', 'published', 'superseded', 'cancelled')`,
+    ),
+    check(
+      'notification_plan_revisions_published_check',
+      sql`(${table.status} = 'published') = (${table.publishedAt} is not null)`,
+    ),
+    uniqueIndex('notification_plan_one_published')
+      .on(table.planId)
+      .where(sql`${table.status} = 'published'`),
+  ],
+);
+
+/** Slots are revision-keyed, so a new revision carries a complete set of its own. */
+export const notificationPlanSlots = pgTable(
+  'notification_plan_slots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id').notNull(),
+    revision: integer('revision').notNull(),
+    kind: text('kind').notNull(),
+    anchor: text('anchor').notNull(),
+    offsetMinutes: integer('offset_minutes').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_plan_slots_revision_fkey',
+      columns: [table.planId, table.revision],
+      foreignColumns: [notificationPlanRevisions.planId, notificationPlanRevisions.revision],
+    }),
+    unique('notification_plan_slots_order_key').on(table.planId, table.revision, table.sortOrder),
+    check(
+      'notification_plan_slots_kind_check',
+      sql`${table.kind} in ('announce', 'reminder', 'starts', 'last')`,
+    ),
+    check(
+      'notification_plan_slots_anchor_check',
+      sql`${table.anchor} in ('publish', 'event_start', 'event_end', 'occurrence_start', 'occurrence_end')`,
+    ),
+    check(
+      'notification_plan_slots_offset_check',
+      sql`${table.offsetMinutes} between -10080 and 10080`,
+    ),
+  ],
+);
+
+/** Email is the only rich surface; WhatsApp is an approved template, not HTML. */
+export const notificationTemplates = pgTable(
+  'notification_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id').notNull(),
+    revision: integer('revision').notNull(),
+    channel: text('channel').notNull(),
+    subject: text('subject'),
+    /** TipTap document, email only. */
+    bodyJson: jsonb('body_json'),
+    /** The sms/ussd body, and email's stored plain-text alternative. */
+    bodyText: text('body_text'),
+    templateName: text('template_name'),
+    parameterMap: jsonb('parameter_map'),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_templates_revision_fkey',
+      columns: [table.planId, table.revision],
+      foreignColumns: [notificationPlanRevisions.planId, notificationPlanRevisions.revision],
+    }),
+    unique('notification_templates_channel_key').on(table.planId, table.revision, table.channel),
+    check(
+      'notification_templates_channel_check',
+      sql`${table.channel} in ('email', 'whatsapp', 'sms', 'ussd')`,
+    ),
+    check(
+      'notification_templates_no_client_html_check',
+      sql`${table.channel} = 'email' or ${table.bodyJson} is null`,
+    ),
+    check(
+      'notification_templates_email_body_check',
+      sql`${table.channel} <> 'email' or (${table.subject} is not null and ${table.bodyJson} is not null and ${table.bodyText} is not null)`,
+    ),
+    check(
+      'notification_templates_whatsapp_text_check',
+      sql`${table.channel} <> 'whatsapp' or ${table.bodyText} is null`,
+    ),
+    check(
+      'notification_templates_template_name_check',
+      sql`(${table.channel} = 'whatsapp') = (${table.templateName} is not null)`,
+    ),
+  ],
+);
+
+/** One flier per revision; the bytes live in the store the row names (N-9). */
+export const eventFliers = pgTable(
+  'event_fliers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id').notNull(),
+    revision: integer('revision').notNull(),
+    token: text('token').notNull(),
+    storage: text('storage').notNull(),
+    storageKey: text('storage_key'),
+    bytes: bytea('bytes'),
+    contentType: text('content_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    sha256: text('sha256').notNull(),
+    uploadedBy: text('uploaded_by').notNull(),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'event_fliers_revision_fkey',
+      columns: [table.planId, table.revision],
+      foreignColumns: [notificationPlanRevisions.planId, notificationPlanRevisions.revision],
+    }),
+    unique('event_fliers_token_key').on(table.token),
+    unique('event_fliers_revision_key').on(table.planId, table.revision),
+    check('event_fliers_storage_check', sql`${table.storage} in ('s3', 'db')`),
+    check(
+      'event_fliers_content_type_check',
+      sql`${table.contentType} in ('image/webp', 'image/jpeg', 'image/png')`,
+    ),
+    check(
+      'event_fliers_byte_size_check',
+      sql`${table.byteSize} > 0 and ${table.byteSize} <= 2097152`,
+    ),
+    check(
+      'event_fliers_storage_shape_check',
+      sql`(${table.storage} = 'db') = (${table.bytes} is not null) and (${table.storage} = 's3') = (${table.storageKey} is not null)`,
+    ),
+  ],
+);
+
+/** The one `church` row: the standard slot template and the officer-facing defaults. */
+export const notificationDefaults = pgTable(
+  'notification_defaults',
+  {
+    id: text('id').primaryKey().default('church'),
+    slots: jsonb('slots').notNull(),
+    churchName: text('church_name').notNull(),
+    emailSignature: text('email_signature').notNull().default(''),
+    emailReplyTo: text('email_reply_to'),
+    smsConfirmThreshold: integer('sms_confirm_threshold').notNull().default(250),
+    whatsappTemplates: jsonb('whatsapp_templates').notNull().default({}),
+    sendMode: text('send_mode').notNull().default('window'),
+    sendFrom: time('send_from').notNull().default('08:00'),
+    sendTo: time('send_to').notNull().default('20:00'),
+    sendHour: time('send_hour').notNull().default('14:00'),
+    churchTimezone: text('church_timezone').notNull().default('Africa/Lagos'),
+    digestHour: time('digest_hour').notNull().default('09:00'),
+    failureDigestTo: text('failure_digest_to'),
+    failureDigestEnabled: boolean('failure_digest_enabled').notNull().default(true),
+    lastDigestAt: timestamp('last_digest_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+  },
+  (table) => [
+    check('notification_defaults_id_check', sql`${table.id} = 'church'`),
+    check(
+      'notification_defaults_sms_confirm_threshold_check',
+      sql`${table.smsConfirmThreshold} >= 0`,
+    ),
+    check(
+      'notification_defaults_send_mode_check',
+      sql`${table.sendMode} in ('always', 'window', 'daily')`,
+    ),
   ],
 );

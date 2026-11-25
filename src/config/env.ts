@@ -83,6 +83,15 @@ const envSchema = z.object({
   // The public member acceptance page, outside the officer `#/` router. The SMS
   // appends `#t=<token>`; production has no safe default (MR-51).
   VERIFICATION_LINK_BASE: z.string().url().default(DEFAULT_VERIFICATION_LINK_BASE),
+  // The flier store (notification spec N-9). `db` keeps the bytes in the
+  // register so a clone with no bucket still runs; `s3` is MinIO in Compose and
+  // R2 (or any S3 target) hosted. Path-style addressing is what MinIO requires.
+  FLIER_STORE: z.enum(['db', 's3']).default('db'),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_BUCKET: z.string().min(1).max(255).optional(),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -135,6 +144,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
     if (env.PAYMENTS_ENABLED && env.PAYMENT_GATEWAY_SECRET === DEFAULT_PAYMENT_GATEWAY_SECRET) {
       throw new Error('PAYMENT_GATEWAY_SECRET is required when NODE_ENV=production');
+    }
+    if (env.FLIER_STORE === 's3') {
+      if (
+        !env.S3_ENDPOINT ||
+        !env.S3_BUCKET ||
+        !env.S3_ACCESS_KEY_ID ||
+        !env.S3_SECRET_ACCESS_KEY
+      ) {
+        throw new Error(
+          'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when FLIER_STORE=s3',
+        );
+      }
     }
   }
 

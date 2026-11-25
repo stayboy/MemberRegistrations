@@ -36,12 +36,14 @@ const installedPgBoss = JSON.parse(readFileSync(pgBossManifestPath, 'utf8')) as 
 };
 
 describe('the vendored pgboss schema', () => {
-  it('is migration 0031 and nothing else in src/db/migrations.ts', () => {
+  it('is migration 0031, after the plan-side 0030 and before the send-side 0032', () => {
     const migration = MIGRATIONS.find((entry) => entry.version === '0031_pgboss_schema');
     expect(migration).toBeDefined();
     expect(migration?.sql).toBe(PGBOSS_SCHEMA_SQL);
-    // 0030 belongs to R2 and this round adds no notification table of its own.
-    expect(MIGRATIONS.some((entry) => entry.version.startsWith('0030'))).toBe(false);
+    // 0030 is R2's plan side and landed with this round; the send side (0032)
+    // is still R3's, so this test guards both ends of the ordering.
+    expect(MIGRATIONS.map((entry) => entry.version)).toContain('0030_event_notifications');
+    expect(MIGRATIONS.some((entry) => entry.version.startsWith('0032'))).toBe(false);
   });
 
   it('matches the pinned pg-boss release the package depends on', () => {
