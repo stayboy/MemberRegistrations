@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "659b1e87ca63a5966d922f2aa9d431fccaa320862aa264daf36775e8826d9591",
+      "sha256": "6652071e7362747d2ac6497300a2c2a7eab46a8a2bffd4643a1bd0d34705d2c5",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner signed the six states the field-order re-cut produced - 10-event-create (406ad491), -daily (ab6945dd), -monthly (6f90292f), -no-match (6639a994), 16-event-edit (8ec3f954) and 20-event-preview-dialog (f366424a) - each flipping target to signed with by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256. why: the owner was shown the six with their folder, hashes and what changed, and signed them after the re-cut moved the Named period switch before Repeats and adopted the build label. rejected: re-pairing 10 and 16 with the existing baselines (they predate the re-cut, so a later scoring pass would compare a stale build), and signing the remaining auto-signed states on the same word.",
+      "reason": "changes: the owner signed seven of the nine remaining auto-signed states - 05-offerings-landing (abe8001e), 07-offering-terms (9e0880d1), 07-import-attendance-panel (24bd2629), 18-event-create-standalone (cdfc7b5f), 19-event-edit-standalone (e7d599ef), 22-event-detail-period (08fddd49) and 23-event-detail-period-preview (e57b8b55) - each signed with by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256. The other two, 10-event-create-period and 21-event-create-period-recurring, were re-cut in the same change (the named-period dropdown on its own row with the Frequency radio beneath it, matching the build) and are therefore target at their new hashes d778a0b8 and 8d8b6278: the owner approved a list, not the re-cut pixels, and a re-cut passes through target before a signature. why: seven signatures are the images the owner was shown; the two re-cuts need their own look. rejected: signing the two re-cut states on the list approval (the review contradicted it), leaving their history notes claiming the frequency was unchanged, and signing the four remaining targets.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - all six carry the owner shape with hashes equal to their images and no leftover basis; 17 and the older signatures are untouched, no seventh state was promoted, and leaving the baselines null was judged right until a capture of the re-cut build exists.",
-      "at": "2026-11-25T12:01:37Z"
+      "attestation": "Seat: contradicted on the first pass, then consistent - the history notes now describe the stacking re-cut rather than copying their predecessor, the two re-cut states are back to target with their signatures removed, and the seven that remain signed are the un-re-cut images the owner approved.",
+      "at": "2026-11-25T12:32:34Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
