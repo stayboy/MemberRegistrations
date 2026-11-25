@@ -163,6 +163,22 @@ because this commit carries no code.
 
 gate-run 2026-11-24T16:43:55.250Z profile=fast steps=4/4 lines=4 bytes=924
 
+## Mock sign-off
+
+| surface      | design                                  | baseline                         | state         | verdict |
+| ------------ | --------------------------------------- | -------------------------------- | ------------- | ------- |
+| event create | `mockups/v2-events/10-event-create.png` | `ui/e2e/baseline/events-new.png` | `auto-signed` | signed  |
+
+Mock coverage: claimed 10 · e2e-only 1 · deferred 1 · prose 0
+
+The row names the create design this UI commits against, and the baseline is the build's existing capture of
+`#/events/new` (`events-new.png`, 2026-11-24) - paired for the first time in this commit, because the create design had no
+baseline while its capture existed. The line scores `{10-event-create, 01-events-list}`: the form, and the list its events
+appear in. It was produced with `--allow-short`, and the reason is the catalogue's, not the selection's - this set holds
+**two** `spec-required` + `ABSENT` controls (`EVC-NO-MINISTRY`, `AD-HC-NO-SUM`), so no selection can reach the tool's floor
+of three, and the line is advisory for that reason. The create states stay `auto-signed` under §17 until the unattended
+work ends.
+
 ## Git writes
 
 | Brief | Actor                 | Verb   | Variant                        | Reason                                                                                                                                                                                                           |

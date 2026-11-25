@@ -1649,8 +1649,11 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
     id: seed.id,
     eventNo: event.eventNo ?? '',
     name: event.name,
+    audienceIds: [seed.audience.id],
+    audiences: [seed.audience],
     audienceId: seed.audience.id,
     audience: seed.audience,
+    period: null,
     ministry: event.ministry,
     presbyterOnly: event.presbyterOnly,
     timezone: event.timezone,
@@ -1774,8 +1777,13 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
   const record = asRecord(body);
   const startTime = text(record.startTime);
   const endTime = optionalText(record.endTime);
+  const requestedAudienceIds = Array.isArray(record.audienceIds)
+    ? record.audienceIds.map((id) => text(id))
+    : [];
   const audience =
-    AUDIENCES.find((candidate) => candidate.id === text(record.audienceId)) ?? EVERYONE_AUDIENCE;
+    AUDIENCES.find(
+      (candidate) => candidate.id === (requestedAudienceIds[0] ?? text(record.audienceId)),
+    ) ?? EVERYONE_AUDIENCE;
   const occurrences = occurrencesFromBody(body, `created-${eventNo}`, startTime, endTime);
   const recurrenceInput = asRecord(record.recurrence);
   const schedules = Array.isArray(recurrenceInput.schedules)
@@ -1797,6 +1805,15 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
     id: `created-${eventNo}`,
     eventNo,
     name: text(record.name),
+    audienceIds: [audience.id],
+    audiences: [
+      {
+        id: audience.id,
+        name: audience.name,
+        system: audience.system,
+        summary: audience.summary,
+      },
+    ],
     audienceId: audience.id,
     audience: {
       id: audience.id,
@@ -1804,6 +1821,7 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
       system: audience.system,
       summary: audience.summary,
     },
+    period: null,
     ministry: null,
     presbyterOnly: false,
     timezone: text(record.timezone) || 'UTC',
@@ -2648,6 +2666,53 @@ function buildRoutes(
       },
     },
     {
+      // The create form's read-only catalogue, registered before `/:id`
+      // (member-registrations-event-periods.md, "Two read-only contract entries").
+      method: 'GET',
+      pattern: /^\/gateway\/v1\/events\/periods$/,
+      handle: () =>
+        reply({
+          items: [
+            {
+              id: 'communion-week',
+              name: 'Communion Week',
+              definition:
+                'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+              kind: 'week',
+            },
+            {
+              id: 'gospel-week',
+              name: 'Gospel Week',
+              definition:
+                'The last week of the month before, when ministries hold their meetings: the week before Communion Week.',
+              kind: 'week',
+            },
+            {
+              id: 'home-cells',
+              name: 'Home Cells',
+              definition:
+                'The Monday of week 1 of the cycle month — the Monday of Communion Week, one date.',
+              kind: 'date',
+            },
+          ],
+        }),
+    },
+    {
+      // `POST /v1/events/preview` never persists. The fixture serves the counts
+      // shape the form renders; the dates themselves are the API's to resolve,
+      // and the e2e mock does not re-implement the resolver.
+      method: 'POST',
+      pattern: /^\/gateway\/v1\/events\/preview$/,
+      handle: () =>
+        reply({
+          occurrences: [],
+          audienceCounts: AUDIENCES.map((audience) => ({
+            id: audience.id,
+            count: audience.memberCount ?? 0,
+          })),
+        }),
+    },
+    {
       method: 'PATCH',
       pattern: /^\/gateway\/v1\/events\/([^/]+)$/,
       handle: (call, [eventId]) => {
@@ -2671,14 +2736,22 @@ function buildRoutes(
           return problem(422, 'status must be draft or active');
         }
 
-        const audience =
-          AUDIENCES.find(
-            (candidate) => candidate.id === (text(body.audienceId) || current.audienceId),
-          ) ?? EVERYONE_AUDIENCE;
+        const requestedAudienceIds = Array.isArray(body.audienceIds)
+          ? body.audienceIds.map((id) => text(id))
+          : [];
+        const requested =
+          requestedAudienceIds.length > 0 ? requestedAudienceIds : [current.audienceId];
+        const resolvedAudiences = requested
+          .map((id) => AUDIENCES.find((candidate) => candidate.id === id))
+          .filter((candidate): candidate is AudienceItem => Boolean(candidate));
+        const audience = resolvedAudiences[0] ?? EVERYONE_AUDIENCE;
 
         const updated: EventParentItem = {
           ...current,
           name: optionalText(body.name) ?? current.name,
+          audienceIds:
+            resolvedAudiences.length > 0 ? resolvedAudiences.map((row) => row.id) : [audience.id],
+          audiences: resolvedAudiences.length > 0 ? resolvedAudiences : [audience],
           audienceId: audience.id,
           audience: {
             id: audience.id,

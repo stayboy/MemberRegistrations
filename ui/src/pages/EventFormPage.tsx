@@ -23,19 +23,25 @@ import {
 } from '@fluentui/react-components';
 import { AddRegular } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, isUnauthorized } from '../api/errors';
+import { isUnauthorized } from '../api/errors';
 import {
   createEventParent,
   getEventParent,
+  listEventPeriods,
   updateEventParent,
   type CreateEventParentPayload,
+  type EventParentItem,
+  type EventPeriodItem,
+  type EventPreview,
   type UpdateEventParentInput,
 } from '../api/events';
 import { useSession } from '../auth/SessionProvider';
-import { AudiencePicker } from '../components/AudiencePicker';
+import { AudienceSetPicker } from '../components/AudienceSetPicker';
 import { PageFrame } from '../components/PageFrame';
+import { ScheduleBuilder } from '../components/ScheduleBuilder';
+import { SchedulePreview } from '../components/SchedulePreview';
 import {
   EVENT_VENUE_OPTIONS,
   createEmptyEventForm,
@@ -43,15 +49,18 @@ import {
   latestSchedule,
   occurrenceErrorKey,
   toCreateEventPayload,
+  toPreviewInput,
+  toScheduleRrule,
   toUpdateEventPayload,
   validateEventForm,
   type EventFormErrors,
   type EventFormField,
   type EventFormValues,
+  type EventScheduleForm,
   type OccurrenceFormValues,
 } from '../format/event-form';
 import { utcToday } from '../format/member-form';
-import { CADENCE_OPTIONS, cadenceLabel, fromRrule, type RecurrenceCadence } from '../format/rrule';
+import { WEEKDAY_LABELS, cadenceLabel, fromRrule, weekdayOf } from '../format/rrule';
 import { scheduleLabel } from '../format/series';
 import { useDateTimeFormat } from '../shell/DateTimeProvider';
 import { useEventStyles } from './events-styles';
@@ -61,6 +70,30 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalL,
+  },
+  // FR-42b (event-form layout, owner 2026-11-24): two columns, never a stack.
+  // Identity, the cycle/provenance line and the schedule live in the main
+  // column; when and where are supporting facts in the narrow rail.
+  columns: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) 320px',
+    gap: tokens.spacingHorizontalL,
+    alignItems: 'start',
+    '@media (max-width: 960px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
+  },
+  main: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalL,
+    minWidth: 0,
+  },
+  rail: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalM,
+    minWidth: 0,
   },
   section: {
     display: 'flex',
@@ -94,15 +127,37 @@ const useStyles = makeStyles({
     gap: tokens.spacingHorizontalL,
     alignItems: 'start',
   },
-  toggle: {
+  railGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr)',
+    gap: tokens.spacingVerticalM,
+    alignItems: 'start',
+  },
+  // The cycle/provenance line sits at the foot of Identity, separated by a
+  // hairline, so identity -> cycle -> schedule reads as one column (FR-42b).
+  cycle: {
+    margin: 0,
+    paddingTop: tokens.spacingVerticalS,
+    ...shorthands.borderTop('1px', 'solid', tokens.colorNeutralStroke2),
+    color: tokens.colorBrandForeground1,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+  },
+  // The rail's start date is a derived fact for a period or a standalone event,
+  // and an input only where it is the rule's first date.
+  startBlock: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: tokens.spacingVerticalXS,
+    gap: tokens.spacingVerticalXXS,
+    paddingBottom: tokens.spacingVerticalS,
+    ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke2),
+  },
+  startValue: {
+    fontWeight: tokens.fontWeightSemibold,
   },
   readOnlyRows: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
     gap: tokens.spacingVerticalM,
     margin: 0,
   },
@@ -163,8 +218,16 @@ function asVenueType(value: string | undefined): EventFormValues['venueType'] {
   return value === 'virtual' || value === 'hybrid' ? value : 'auditorium';
 }
 
-function asCadence(value: string | undefined): RecurrenceCadence {
-  return value === 'fortnightly' || value === 'monthly' ? value : 'weekly';
+/** The earliest date among the standalone rows, which is where counts read. */
+function firstRowDate(occurrences: readonly OccurrenceFormValues[]): string | undefined {
+  return occurrences
+    .map((row) => row.date.trim())
+    .filter((date) => date.length > 0)
+    .sort()[0];
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 /** The `state` the create hands its edit view when activation failed (FR-42b). */
@@ -176,11 +239,15 @@ interface EventFormLocationState {
 type CommitMode = 'draft' | 'activate' | 'update';
 
 /**
- * Events → New event / Edit event (FR-42, FR-42a, FR-42b, AC-56). One **Audience**
- * picker replaces the retired Ministry select and Presbyter-only toggle; the
- * event is either its date rows or its first recurrence version; and the form
- * commits with **Save draft** or **Save and activate**, where activation is a
- * separate `PATCH` carrying only `status: active`.
+ * Events → New event / Edit event (FR-42, FR-42a, FR-42b, FR-42f, AC-56,
+ * AC-63a). The create is two columns: identity, the cycle/provenance line and
+ * the schedule in the main column, when and where in the narrow rail.
+ *
+ * The event number is **minted by the server**: the create carries no number
+ * control, never sends one, and reports a mint collision as a banner (AC 8). The
+ * audience is an ordered set; the schedule is the shared builder (four cadences
+ * plus the named-period mode); and the resolved dates are a preview fetched from
+ * `POST /v1/events/preview`, never a table the form builds.
  *
  * The commit/cancel pair is the form's own control, so the page renders no
  * `Actions` menu (FR-9a). The form never sends the parent's `status`, an
@@ -194,7 +261,7 @@ export function EventFormPage() {
   const queryClient = useQueryClient();
   const { id } = useParams<{ id?: string }>();
   const isEdit = Boolean(id);
-  const { formatDate } = useDateTimeFormat();
+  const { formatDate, formatRange } = useDateTimeFormat();
   const { baseUrl, session, signOut } = useSession();
   const token = session?.token ?? '';
   const today = utcToday();
@@ -204,6 +271,7 @@ export function EventFormPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<EventPreview | undefined>(undefined);
 
   const locationState = (location.state ?? null) as EventFormLocationState | null;
   const notActivated = isEdit && locationState?.notActivated === true;
@@ -214,6 +282,19 @@ export function EventFormPage() {
       getEventParent(baseUrl, token, id ?? '', { from: today, to: today, signal }),
     enabled: isEdit && Boolean(token) && Boolean(id),
   });
+
+  // The named-period catalogue: the builder lists it and the cycle line names
+  // the chosen period from the same rows, so no id or name is hard-coded here.
+  const periodsQuery = useQuery({
+    queryKey: ['events', 'periods', baseUrl],
+    queryFn: ({ signal }) => listEventPeriods(baseUrl, token, signal),
+    enabled: Boolean(token),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (isUnauthorized(periodsQuery.error)) void signOut();
+  }, [periodsQuery.error, signOut]);
 
   useEffect(() => {
     if (isUnauthorized(parentQuery.error)) void signOut();
@@ -277,6 +358,53 @@ export function EventFormPage() {
     setFormError(null);
   }
 
+  /**
+   * The start date is the rule's anchor, so changing it re-seeds the weekday
+   * **while the weekday set is still the untouched seed** (the cadence presets
+   * take their weekday from this date). A set the operator ticked is never
+   * rewritten.
+   */
+  function setStartDate(next: string): void {
+    setValues((current) => {
+      const previousSeed = weekdayOf(current.effectiveFrom);
+      const untouched =
+        current.schedule.weekdays.length === 1 &&
+        previousSeed !== null &&
+        current.schedule.weekdays[0] === previousSeed;
+      const nextSeed = weekdayOf(next);
+      return {
+        ...current,
+        effectiveFrom: next,
+        schedule:
+          untouched && nextSeed ? { ...current.schedule, weekdays: [nextSeed] } : current.schedule,
+      };
+    });
+    clearError('effectiveFrom');
+    setFormError(null);
+  }
+
+  /** The builder is one control group, so its keys clear together. */
+  function patchSchedule(patch: Partial<EventScheduleForm>): void {
+    setValues((current) => ({ ...current, schedule: { ...current.schedule, ...patch } }));
+    setErrors((current) => {
+      const next = { ...current };
+      for (const key of [
+        'weekdays',
+        'interval',
+        'dayOfMonth',
+        'position',
+        'period',
+        'cycleMonth',
+        'periodDay',
+        'endsOn',
+      ] as const) {
+        delete next[key];
+      }
+      return next;
+    });
+    setFormError(null);
+  }
+
   function setOccurrence(index: number, key: keyof OccurrenceFormValues, value: string): void {
     setValues((current) => ({
       ...current,
@@ -307,20 +435,14 @@ export function EventFormPage() {
     clearOccurrenceErrors();
   }
 
-  function onRequestError(error: unknown, mode: CommitMode): void {
+  function onRequestError(error: unknown): void {
     if (isUnauthorized(error)) {
       void signOut();
       return;
     }
-    // FR-42a/AC-56: the create's sole 409 is a duplicate event number, so it
-    // binds to that field and every other entered value survives.
-    if (mode !== 'update' && error instanceof ApiError && error.status === 409) {
-      setErrors({
-        eventNo: error.message.trim() || 'An event with this number already exists.',
-      });
-      return;
-    }
-    // FR-42g: an update's conflict stays a banner on the form.
+    // AC 8/FR-42g: a create 409 is a mint collision. The form has no number
+    // field to bind it to, so it is the form's banner; an update's conflict is a
+    // banner too.
     setFormError(errorMessage(error));
   }
 
@@ -340,12 +462,20 @@ export function EventFormPage() {
           invalidateEvents();
           navigate(`/events/${encodeURIComponent(updated.id)}`);
         },
-        onError: (error: unknown) => onRequestError(error, 'update'),
+        onError: onRequestError,
       });
       return;
     }
 
-    createMutation.mutate(toCreateEventPayload(values), {
+    let payload: CreateEventParentPayload;
+    try {
+      payload = toCreateEventPayload(values);
+    } catch (error) {
+      setFormError(errorMessage(error));
+      return;
+    }
+
+    createMutation.mutate(payload, {
       onSuccess: (created) => {
         invalidateEvents();
         if (mode === 'draft') {
@@ -377,7 +507,7 @@ export function EventFormPage() {
           },
         });
       },
-      onError: (error: unknown) => onRequestError(error, mode),
+      onError: onRequestError,
     });
   }
 
@@ -404,6 +534,13 @@ export function EventFormPage() {
     if (isEdit && id) navigate(`/events/${encodeURIComponent(id)}`);
     else navigate('/events');
   }
+
+  /**
+   * The preview body. `values` is a new object per keystroke, but the debounce in
+   * `SchedulePreview` means a settle — not a keystroke — is what fetches, so no
+   * extra identity plumbing is needed here (AC-63a).
+   */
+  const previewInput = useMemo(() => toPreviewInput(values), [values]);
 
   // The edit form is seeded from the parent read (FR-43), so the frame shows the
   // read's own states rather than an empty form.
@@ -440,13 +577,58 @@ export function EventFormPage() {
   }
 
   const schedule = parent ? latestSchedule(parent) : null;
-  const cadence = schedule ? fromRrule(schedule.rrule) : null;
+  const storedRule = schedule ? scheduleLabel(schedule.rrule) : null;
+  const storedCadence = schedule ? fromRrule(schedule.rrule) : null;
+  const storedRuleInVocabulary = storedCadence !== null;
+  const parentPeriod = parent?.period ?? null;
+  const periods = periodsQuery.data ?? [];
+  const selectedPeriod = periods.find((period) => period.id === values.schedule.periodId);
+  const firstResolvedDate = preview?.occurrences[0]?.date;
   const activationMessage = activationError ?? locationState?.activationError ?? null;
+
+  const scheduleRrule =
+    values.repeats && values.schedule.mode === 'rule'
+      ? toScheduleRrule(values.schedule, values.effectiveFrom)
+      : null;
+
+  const cycleLine = buildCycleLine({
+    isEdit,
+    storedRule,
+    storedRuleInVocabulary,
+    parentPeriod,
+    values,
+    selectedPeriod,
+    preview,
+    scheduleRrule,
+    formatDate,
+    formatRange,
+  });
+
+  const railStart = railStartOf({
+    isEdit,
+    values,
+    parent,
+    firstResolvedDate,
+    formatDate,
+  });
+
+  // The chips count at the first resolved date; the edit form has no preview,
+  // so it reads the parent's stored start date instead.
+  const countAt = values.repeats
+    ? (firstResolvedDate ?? (isEdit ? parent?.startDate : undefined))
+    : firstRowDate(values.occurrences);
+
+  const scheduleContext = describeSchedule({
+    values,
+    selectedPeriod,
+    scheduleRrule,
+    formatDate,
+  });
 
   const title = isEdit ? 'Edit event' : 'New event';
   const description = isEdit
     ? 'Update the identity and when/where fields. Dates and schedule versions are managed from the event detail.'
-    : "The event identity, its dates or recurrence, and its venue. The API derives its status, its range and an occurrence's source.";
+    : 'The event identity, its schedule or named period, and its venue. The API mints the event number, derives the range and generates the first window.';
 
   return (
     <PageFrame
@@ -515,224 +697,338 @@ export function EventFormPage() {
             </MessageBar>
           ) : null}
 
-          <section className={styles.section} aria-labelledby="event-identity-heading">
-            <div className={styles.sectionHeader}>
-              <h2 id="event-identity-heading" className={styles.sectionTitle}>
-                Identity
-              </h2>
-              <Text size={200} className={styles.helper}>
-                An event number is unique and never reused.
-              </Text>
-            </div>
-
-            <div className={styles.grid}>
-              <Field
-                label="Event number (optional)"
-                hint={
-                  isEdit
-                    ? 'The event number is immutable; it is not sent with an update.'
-                    : 'Leave blank and the API mints EVT-<year>-<sequence> when the event is created.'
-                }
-                validationState={errors.eventNo ? 'error' : 'none'}
-                validationMessage={errors.eventNo}
-              >
-                <Input
-                  value={values.eventNo}
-                  maxLength={64}
-                  readOnly={isEdit}
-                  onChange={(_, data) => setField('eventNo', data.value)}
-                />
-              </Field>
-
-              <Field
-                label="Name"
-                required
-                validationState={errors.name ? 'error' : 'none'}
-                validationMessage={errors.name}
-              >
-                <Input
-                  value={values.name}
-                  maxLength={200}
-                  onChange={(_, data) => setField('name', data.value)}
-                />
-              </Field>
-            </div>
-
-            <AudiencePicker
-              value={values.audienceId}
-              onChange={(audienceId) => setField('audienceId', audienceId)}
-              validationState={errors.audienceId ? 'error' : 'none'}
-              validationMessage={errors.audienceId}
-            />
-
-            <Field
-              label="Description (optional)"
-              validationState={errors.description ? 'error' : 'none'}
-              validationMessage={errors.description}
-            >
-              <Textarea
-                value={values.description}
-                maxLength={2000}
-                rows={3}
-                resize="vertical"
-                onChange={(_, data) => setField('description', data.value)}
-              />
-            </Field>
-          </section>
-
-          <section className={styles.section} aria-labelledby="event-when-heading">
-            <div className={styles.sectionHeader}>
-              <h2 id="event-when-heading" className={styles.sectionTitle}>
-                When and where
-              </h2>
-              <Text size={200} className={styles.helper}>
-                Times are wall-clock times in the event&apos;s stored zone. A date row that leaves
-                its times blank inherits them.
-              </Text>
-            </div>
-
-            <div className={styles.grid}>
-              <Field
-                label="Start time"
-                required
-                validationState={errors.startTime ? 'error' : 'none'}
-                validationMessage={errors.startTime}
-              >
-                <Input
-                  type="time"
-                  value={values.startTime}
-                  onChange={(_, data) => setField('startTime', data.value)}
-                />
-              </Field>
-
-              <Field
-                label="End time (optional)"
-                validationState={errors.endTime ? 'error' : 'none'}
-                validationMessage={errors.endTime}
-              >
-                <Input
-                  type="time"
-                  value={values.endTime}
-                  onChange={(_, data) => setField('endTime', data.value)}
-                />
-              </Field>
-
-              <Field
-                label="Venue type"
-                required
-                validationState={errors.venueType ? 'error' : 'none'}
-                validationMessage={errors.venueType}
-              >
-                <Dropdown
-                  aria-label="Venue type"
-                  value={
-                    EVENT_VENUE_OPTIONS.find((option) => option.value === values.venueType)
-                      ?.label ?? 'Auditorium'
-                  }
-                  selectedOptions={[values.venueType]}
-                  onOptionSelect={(_, data) => setField('venueType', asVenueType(data.optionValue))}
-                >
-                  {EVENT_VENUE_OPTIONS.map((option) => (
-                    <Option key={option.value} value={option.value}>
-                      {option.label}
-                    </Option>
-                  ))}
-                </Dropdown>
-              </Field>
-
-              <Field
-                label="Venue name (optional)"
-                validationState={errors.venueName ? 'error' : 'none'}
-                validationMessage={errors.venueName}
-              >
-                <Input
-                  value={values.venueName}
-                  maxLength={200}
-                  onChange={(_, data) => setField('venueName', data.value)}
-                />
-              </Field>
-            </div>
-          </section>
-
-          <section className={styles.section} aria-labelledby="event-dates-heading">
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitleRow}>
-                <h2 id="event-dates-heading" className={styles.sectionTitle}>
-                  Dates
-                </h2>
-                {isEdit ? null : (
-                  <Switch
-                    checked={values.repeats}
-                    onChange={(_, data) => setField('repeats', data.checked)}
-                    label="Repeats"
-                  />
-                )}
-              </div>
-              <Text size={200} className={styles.helper}>
-                {isEdit
-                  ? 'Dates and schedule versions are added from the event detail; an update carries neither.'
-                  : values.repeats
-                    ? 'The API generates the first window from this version; the weekday or day comes from the start date.'
-                    : 'One row per date. Each date is unique; the API derives the event’s range from them.'}
-              </Text>
-            </div>
-
-            {isEdit ? (
-              <div className={styles.readOnlyRows}>
-                <div className={styles.readOnlyRow}>
-                  <Text className={styles.label}>Repeats</Text>
-                  <Text>
-                    {parent?.recurrence
-                      ? cadence
-                        ? cadenceLabel(cadence)
-                        : "A schedule outside the form's vocabulary"
-                      : 'Standalone event'}
+          <div className={styles.columns}>
+            <div className={styles.main} role="group" aria-label="Event details">
+              <section className={styles.section} aria-labelledby="event-identity-heading">
+                <div className={styles.sectionHeader}>
+                  <h2 id="event-identity-heading" className={styles.sectionTitle}>
+                    Identity
+                  </h2>
+                  <Text size={200} className={styles.helper}>
+                    {isEdit
+                      ? 'The event number is minted by the server and never changes.'
+                      : 'The event number is minted by the server when you save, and never changes.'}
                   </Text>
                 </div>
-                {schedule ? (
-                  <>
-                    <div className={styles.readOnlyRow}>
-                      <Text className={styles.label}>Schedule</Text>
-                      <Text>{cadence ? scheduleLabel(schedule.rrule) : schedule.rrule}</Text>
-                    </div>
-                    <div className={styles.readOnlyRow}>
-                      <Text className={styles.label}>From</Text>
-                      <Text>{formatDate(schedule.effectiveFrom)}</Text>
-                    </div>
-                    <div className={styles.readOnlyRow}>
-                      <Text className={styles.label}>Ends on</Text>
-                      <Text>{schedule.endsOn ? formatDate(schedule.endsOn) : 'No end date'}</Text>
-                    </div>
-                  </>
+
+                {isEdit ? (
+                  <Field label="Event number">
+                    <Input value={values.eventNo} readOnly />
+                  </Field>
                 ) : null}
-              </div>
-            ) : values.repeats ? (
-              <div className={styles.grid}>
+
                 <Field
-                  label="Starts on"
+                  label="Name"
                   required
-                  hint="The first date of this version. Its weekday (or day of the month) is what repeats."
-                  validationState={errors.effectiveFrom ? 'error' : 'none'}
-                  validationMessage={errors.effectiveFrom}
+                  validationState={errors.name ? 'error' : 'none'}
+                  validationMessage={errors.name}
                 >
                   <Input
-                    type="date"
-                    value={values.effectiveFrom}
-                    onChange={(_, data) => setField('effectiveFrom', data.value)}
+                    value={values.name}
+                    maxLength={200}
+                    onChange={(_, data) => setField('name', data.value)}
                   />
                 </Field>
 
-                <Field label="Repeats" required>
-                  <Dropdown
-                    aria-label="Repeats"
-                    value={
-                      CADENCE_OPTIONS.find((option) => option.value === values.cadence)?.label ??
-                      'Weekly'
-                    }
-                    selectedOptions={[values.cadence]}
-                    onOptionSelect={(_, data) => setField('cadence', asCadence(data.optionValue))}
+                <AudienceSetPicker
+                  value={values.audienceIds}
+                  onChange={(audienceIds) => setField('audienceIds', audienceIds)}
+                  countAt={countAt}
+                  validationState={errors.audienceIds ? 'error' : 'none'}
+                  validationMessage={errors.audienceIds}
+                />
+
+                <Field
+                  label="Description (optional)"
+                  validationState={errors.description ? 'error' : 'none'}
+                  validationMessage={errors.description}
+                >
+                  <Textarea
+                    value={values.description}
+                    maxLength={2000}
+                    rows={3}
+                    resize="vertical"
+                    onChange={(_, data) => setField('description', data.value)}
+                  />
+                </Field>
+
+                <p className={styles.cycle}>{cycleLine}</p>
+              </section>
+
+              <section className={styles.section} aria-labelledby="event-dates-heading">
+                <div className={styles.sectionHeader}>
+                  <div className={styles.sectionTitleRow}>
+                    <h2 id="event-dates-heading" className={styles.sectionTitle}>
+                      Dates
+                    </h2>
+                    {isEdit ? null : (
+                      <Switch
+                        checked={values.repeats}
+                        onChange={(_, data) => setField('repeats', data.checked)}
+                        label="Repeats"
+                      />
+                    )}
+                  </div>
+                  <Text size={200} className={styles.helper}>
+                    {isEdit
+                      ? 'Dates and schedule versions are added from the event detail; an update carries neither.'
+                      : values.repeats
+                        ? 'The API generates the first window from this rule, or resolves the period’s dates. The weekday or day comes from the start date in When and where.'
+                        : 'One row per date, and nothing else. Each date is unique; the API derives the event’s range from them.'}
+                  </Text>
+                </div>
+
+                {isEdit ? (
+                  <div className={styles.readOnlyRows}>
+                    <div className={styles.readOnlyRow}>
+                      <Text className={styles.label}>Repeats</Text>
+                      <Text>
+                        {parentPeriod
+                          ? parentPeriod.name
+                          : parent?.recurrence
+                            ? storedCadence
+                              ? cadenceLabel(storedCadence)
+                              : "A schedule outside the form's vocabulary"
+                            : 'Standalone event'}
+                      </Text>
+                    </div>
+                    {schedule ? (
+                      <>
+                        <div className={styles.readOnlyRow}>
+                          <Text className={styles.label}>Schedule</Text>
+                          <Text>{storedRule ?? schedule.rrule}</Text>
+                        </div>
+                        <div className={styles.readOnlyRow}>
+                          <Text className={styles.label}>From</Text>
+                          <Text>{formatDate(schedule.effectiveFrom)}</Text>
+                        </div>
+                        <div className={styles.readOnlyRow}>
+                          <Text className={styles.label}>Ends on</Text>
+                          <Text>
+                            {schedule.endsOn ? formatDate(schedule.endsOn) : 'No end date'}
+                          </Text>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : values.repeats ? (
+                  <>
+                    <ScheduleBuilder
+                      value={values.schedule}
+                      onChange={patchSchedule}
+                      effectiveFrom={values.effectiveFrom}
+                      endsOn={values.endsOn}
+                      onEndsOnChange={(endsOn) => setField('endsOn', endsOn)}
+                      errors={errors}
+                      periods={periods}
+                      periodsLoading={periodsQuery.isPending}
+                      periodsError={periodsQuery.isError}
+                    />
+                    <SchedulePreview
+                      input={previewInput}
+                      context={scheduleContext}
+                      onPreview={setPreview}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {errors.occurrences ? (
+                      <Text size={200} role="alert" className={styles.error}>
+                        {errors.occurrences}
+                      </Text>
+                    ) : null}
+
+                    <div className={eventStyles.tableWrap}>
+                      <Table
+                        className={styles.occurrencesTable}
+                        size="small"
+                        aria-label="Event dates"
+                      >
+                        <TableHeader>
+                          <TableRow>
+                            <TableHeaderCell>Date</TableHeaderCell>
+                            <TableHeaderCell>Start time</TableHeaderCell>
+                            <TableHeaderCell>End time</TableHeaderCell>
+                            <TableHeaderCell>
+                              <span className={styles.visuallyHidden}>Row actions</span>
+                            </TableHeaderCell>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {values.occurrences.map((row, index) => {
+                            const dateError = errors[occurrenceErrorKey(index, 'date')];
+                            const startError = errors[occurrenceErrorKey(index, 'startTime')];
+                            const endError = errors[occurrenceErrorKey(index, 'endTime')];
+
+                            return (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Input
+                                    type="date"
+                                    aria-label={`Occurrence ${index + 1} date`}
+                                    value={row.date}
+                                    onChange={(_, data) => setOccurrence(index, 'date', data.value)}
+                                  />
+                                  {dateError ? (
+                                    <Text size={200} role="alert" className={styles.error}>
+                                      {dateError}
+                                    </Text>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="time"
+                                    aria-label={`Occurrence ${index + 1} start time`}
+                                    value={row.startTime}
+                                    onChange={(_, data) =>
+                                      setOccurrence(index, 'startTime', data.value)
+                                    }
+                                  />
+                                  {startError ? (
+                                    <Text size={200} role="alert" className={styles.error}>
+                                      {startError}
+                                    </Text>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="time"
+                                    aria-label={`Occurrence ${index + 1} end time`}
+                                    value={row.endTime}
+                                    onChange={(_, data) =>
+                                      setOccurrence(index, 'endTime', data.value)
+                                    }
+                                  />
+                                  {endError ? (
+                                    <Text size={200} role="alert" className={styles.error}>
+                                      {endError}
+                                    </Text>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    appearance="transparent"
+                                    className={styles.removeButton}
+                                    aria-label={`Remove occurrence ${index + 1}`}
+                                    onClick={() => removeOccurrence(index)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    <div>
+                      <Button icon={<AddRegular />} appearance="secondary" onClick={addOccurrence}>
+                        Add date
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <section className={styles.section} aria-labelledby="event-tracking-heading">
+                <div className={styles.sectionHeader}>
+                  <h2 id="event-tracking-heading" className={styles.sectionTitle}>
+                    Tracking
+                  </h2>
+                </div>
+
+                <Switch
+                  checked={values.tracksMembers}
+                  disabled={isEdit}
+                  onChange={(_, data) => setField('tracksMembers', data.checked)}
+                  label="Members tracking"
+                />
+                <Text size={200} className={styles.helper}>
+                  {isEdit
+                    ? 'Members tracking is read-only here: flipping it changes whether future attendance is counted, and that decision is not offered as an edit.'
+                    : 'Off records a headcount only.'}
+                </Text>
+              </section>
+            </div>
+
+            <aside className={styles.rail} aria-labelledby="event-when-heading">
+              <h2 id="event-when-heading" className={styles.sectionTitle}>
+                When and where
+              </h2>
+
+              <div className={styles.startBlock}>
+                {railStart.editable ? (
+                  <Field
+                    label="Starts on"
+                    required
+                    hint={railStart.hint}
+                    validationState={errors.effectiveFrom ? 'error' : 'none'}
+                    validationMessage={errors.effectiveFrom}
                   >
-                    {CADENCE_OPTIONS.map((option) => (
+                    <Input
+                      type="date"
+                      value={values.effectiveFrom}
+                      onChange={(_, data) => setStartDate(data.value)}
+                    />
+                  </Field>
+                ) : (
+                  <>
+                    <Text size={200} className={styles.label}>
+                      Starts
+                    </Text>
+                    <Text className={styles.startValue}>{railStart.value}</Text>
+                    <Text size={200} className={styles.helper}>
+                      {railStart.hint}
+                    </Text>
+                  </>
+                )}
+              </div>
+
+              <div className={styles.railGrid}>
+                <Field
+                  label="Start time"
+                  required
+                  validationState={errors.startTime ? 'error' : 'none'}
+                  validationMessage={errors.startTime}
+                >
+                  <Input
+                    type="time"
+                    value={values.startTime}
+                    onChange={(_, data) => setField('startTime', data.value)}
+                  />
+                </Field>
+
+                <Field
+                  label="End time (optional)"
+                  validationState={errors.endTime ? 'error' : 'none'}
+                  validationMessage={errors.endTime}
+                >
+                  <Input
+                    type="time"
+                    value={values.endTime}
+                    onChange={(_, data) => setField('endTime', data.value)}
+                  />
+                </Field>
+
+                <Field
+                  label="Venue type"
+                  required
+                  validationState={errors.venueType ? 'error' : 'none'}
+                  validationMessage={errors.venueType}
+                >
+                  <Dropdown
+                    aria-label="Venue type"
+                    value={
+                      EVENT_VENUE_OPTIONS.find((option) => option.value === values.venueType)
+                        ?.label ?? 'Auditorium'
+                    }
+                    selectedOptions={[values.venueType]}
+                    onOptionSelect={(_, data) =>
+                      setField('venueType', asVenueType(data.optionValue))
+                    }
+                  >
+                    {EVENT_VENUE_OPTIONS.map((option) => (
                       <Option key={option.value} value={option.value}>
                         {option.label}
                       </Option>
@@ -741,137 +1037,182 @@ export function EventFormPage() {
                 </Field>
 
                 <Field
-                  label="Ends on (optional)"
-                  hint="Leave blank when the recurrence has no planned end."
-                  validationState={errors.endsOn ? 'error' : 'none'}
-                  validationMessage={errors.endsOn}
+                  label="Venue name (optional)"
+                  validationState={errors.venueName ? 'error' : 'none'}
+                  validationMessage={errors.venueName}
                 >
                   <Input
-                    type="date"
-                    value={values.endsOn}
-                    min={values.effectiveFrom || undefined}
-                    onChange={(_, data) => setField('endsOn', data.value)}
+                    value={values.venueName}
+                    maxLength={200}
+                    onChange={(_, data) => setField('venueName', data.value)}
                   />
                 </Field>
               </div>
-            ) : (
-              <>
-                {errors.occurrences ? (
-                  <Text size={200} role="alert" className={styles.error}>
-                    {errors.occurrences}
-                  </Text>
-                ) : null}
 
-                <div className={eventStyles.tableWrap}>
-                  <Table className={styles.occurrencesTable} size="small" aria-label="Event dates">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHeaderCell>Date</TableHeaderCell>
-                        <TableHeaderCell>Start time</TableHeaderCell>
-                        <TableHeaderCell>End time</TableHeaderCell>
-                        <TableHeaderCell>
-                          <span className={styles.visuallyHidden}>Row actions</span>
-                        </TableHeaderCell>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {values.occurrences.map((row, index) => {
-                        const dateError = errors[occurrenceErrorKey(index, 'date')];
-                        const startError = errors[occurrenceErrorKey(index, 'startTime')];
-                        const endError = errors[occurrenceErrorKey(index, 'endTime')];
-
-                        return (
-                          <TableRow key={index}>
-                            <TableCell>
-                              <Input
-                                type="date"
-                                aria-label={`Occurrence ${index + 1} date`}
-                                value={row.date}
-                                onChange={(_, data) => setOccurrence(index, 'date', data.value)}
-                              />
-                              {dateError ? (
-                                <Text size={200} role="alert" className={styles.error}>
-                                  {dateError}
-                                </Text>
-                              ) : null}
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="time"
-                                aria-label={`Occurrence ${index + 1} start time`}
-                                value={row.startTime}
-                                onChange={(_, data) =>
-                                  setOccurrence(index, 'startTime', data.value)
-                                }
-                              />
-                              {startError ? (
-                                <Text size={200} role="alert" className={styles.error}>
-                                  {startError}
-                                </Text>
-                              ) : null}
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="time"
-                                aria-label={`Occurrence ${index + 1} end time`}
-                                value={row.endTime}
-                                onChange={(_, data) => setOccurrence(index, 'endTime', data.value)}
-                              />
-                              {endError ? (
-                                <Text size={200} role="alert" className={styles.error}>
-                                  {endError}
-                                </Text>
-                              ) : null}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                appearance="transparent"
-                                className={styles.removeButton}
-                                aria-label={`Remove occurrence ${index + 1}`}
-                                onClick={() => removeOccurrence(index)}
-                              >
-                                Remove
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div>
-                  <Button icon={<AddRegular />} appearance="secondary" onClick={addOccurrence}>
-                    Add date
-                  </Button>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className={styles.section} aria-labelledby="event-tracking-heading">
-            <div className={styles.sectionHeader}>
-              <h2 id="event-tracking-heading" className={styles.sectionTitle}>
-                Tracking
-              </h2>
-            </div>
-
-            <div className={styles.toggle}>
-              <Switch
-                checked={values.tracksMembers}
-                disabled={isEdit}
-                onChange={(_, data) => setField('tracksMembers', data.checked)}
-                label="Members tracking"
-              />
               <Text size={200} className={styles.helper}>
-                {isEdit
-                  ? 'Members tracking is read-only here: flipping it changes whether future attendance is counted, and that decision is not offered as an edit.'
-                  : 'Off records a headcount only.'}
+                {values.repeats
+                  ? 'The times apply to every date. A blank end time leaves the session open-ended.'
+                  : 'The times apply to every date that leaves them blank; a date row can set its own. A blank end time leaves that session open-ended.'}
               </Text>
-            </div>
-          </section>
+            </aside>
+          </div>
         </form>
       </div>
     </PageFrame>
   );
+}
+
+/** The provenance/cycle line at the foot of Identity (FR-42b). */
+function buildCycleLine({
+  isEdit,
+  storedRule,
+  storedRuleInVocabulary,
+  parentPeriod,
+  values,
+  selectedPeriod,
+  preview,
+  scheduleRrule,
+  formatDate,
+  formatRange,
+}: {
+  readonly isEdit: boolean;
+  readonly storedRule: string | null;
+  readonly storedRuleInVocabulary: boolean;
+  readonly parentPeriod: EventParentItem['period'];
+  readonly values: EventFormValues;
+  readonly selectedPeriod: EventPeriodItem | undefined;
+  readonly preview: EventPreview | undefined;
+  readonly scheduleRrule: string | null;
+  readonly formatDate: (value: string | null | undefined) => string;
+  readonly formatRange: (from: string | null | undefined, to: string | null | undefined) => string;
+}): string {
+  if (isEdit) {
+    if (parentPeriod)
+      return periodLine(
+        parentPeriod.name,
+        parentPeriod.frequency,
+        parentPeriod.day,
+        parentPeriod.cycle,
+      );
+    if (storedRule)
+      return storedRuleInVocabulary
+        ? `${storedRule}.`
+        : 'A schedule outside the form’s vocabulary, shown from its stored string.';
+    return 'Does not repeat.';
+  }
+
+  if (!values.repeats) {
+    const dates = values.occurrences
+      .map((row) => row.date.trim())
+      .filter((date) => date.length > 0)
+      .sort();
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    if (!first) return 'Does not repeat.';
+    return `Does not repeat · ${plural(dates.length, 'date', 'dates')}, ${formatDate(first)}${
+      last && last !== first ? ` – ${formatDate(last)}` : ''
+    }.`;
+  }
+
+  if (values.schedule.mode === 'period') {
+    const name = selectedPeriod?.name ?? 'No period chosen';
+    if (values.schedule.periodFrequency === 'monthly') {
+      return periodLine(name, 'monthly', values.schedule.periodDay || null, null);
+    }
+    const first = preview?.occurrences[0]?.date;
+    const last = preview?.occurrences[preview.occurrences.length - 1]?.date;
+    if (first && last) return `${name} · ${formatRange(first, last)}.`;
+    return `${name} · cycle ${values.schedule.cycleMonth}.`;
+  }
+
+  if (!scheduleRrule) return 'Choose the schedule.';
+  return `${scheduleRrule} from ${formatDate(values.effectiveFrom)}.`;
+}
+
+function periodLine(
+  name: string,
+  frequency: 'monthly' | null,
+  day: string | null,
+  cycle: string | null,
+): string {
+  const dayLabel = day ? `${WEEKDAY_LABELS[day as keyof typeof WEEKDAY_LABELS] ?? day}s` : null;
+  if (frequency === 'monthly') {
+    return `${name} · ${dayLabel ?? 'whole period'} · monthly.`;
+  }
+  if (cycle) return `${name} · ${cycle}.`;
+  return `${name}.`;
+}
+
+/** The rail's start date: an input where it is the rule's anchor, else a fact. */
+function railStartOf({
+  isEdit,
+  values,
+  parent,
+  firstResolvedDate,
+  formatDate,
+}: {
+  readonly isEdit: boolean;
+  readonly values: EventFormValues;
+  readonly parent: { readonly startDate: string } | undefined;
+  readonly firstResolvedDate: string | undefined;
+  readonly formatDate: (value: string | null | undefined) => string;
+}): { readonly editable: boolean; readonly value: string; readonly hint: string } {
+  if (isEdit) {
+    return {
+      editable: false,
+      value: parent ? formatDate(parent.startDate) : '—',
+      hint: 'The event’s first date, derived by the API.',
+    };
+  }
+
+  if (!values.repeats) {
+    const first = firstRowDate(values.occurrences);
+    return {
+      editable: false,
+      value: first ? formatDate(first) : '—',
+      hint: 'The earliest date row; the API derives the event’s range from the rows.',
+    };
+  }
+
+  if (values.schedule.mode === 'period' && values.schedule.periodFrequency === 'one-cycle') {
+    return {
+      editable: false,
+      value: firstResolvedDate ? formatDate(firstResolvedDate) : 'Resolving the dates…',
+      hint: 'The period’s first resolved date, from the server preview.',
+    };
+  }
+
+  return {
+    editable: true,
+    value: formatDate(values.effectiveFrom),
+    hint:
+      values.schedule.mode === 'period'
+        ? 'Anchors the period’s monthly window. It is a start date, not stored; past dates are never generated.'
+        : 'The rule’s first date; its weekday or day is what repeats.',
+  };
+}
+
+/** The rule in words, for the preview dialog's context line. */
+function describeSchedule({
+  values,
+  selectedPeriod,
+  scheduleRrule,
+  formatDate,
+}: {
+  readonly values: EventFormValues;
+  readonly selectedPeriod: EventPeriodItem | undefined;
+  readonly scheduleRrule: string | null;
+  readonly formatDate: (value: string | null | undefined) => string;
+}): string {
+  if (!values.repeats) return 'Standalone event';
+
+  if (values.schedule.mode === 'period') {
+    const frequency =
+      values.schedule.periodFrequency === 'monthly'
+        ? `${values.schedule.periodDay ? WEEKDAY_LABELS[values.schedule.periodDay] : 'whole period'}, monthly`
+        : `one cycle, ${values.schedule.cycleMonth}`;
+    return `${selectedPeriod?.name ?? 'Named period'} · ${frequency}`;
+  }
+
+  return `${scheduleRrule ?? 'Incomplete rule'} · from ${formatDate(values.effectiveFrom)}`;
 }

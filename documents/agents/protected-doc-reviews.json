@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "afde1ca7c2999fc97859945c38fd6fad3a98e424435137ecbd3e9da408dbe6eb",
+      "sha256": "0d0a25e3844c27dea13d9ba8ddbf54062f8aabfc1ebff4bf4291e0abd07a4699",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the catalogue records nine event-form wire designs as auto-signed - the create form (re-cut from a target whose pin had gone stale at 95cfe358 against a live 7a5823a5), four create variants (daily, monthly, named period, empty intersection), the recurring edit, the locked edit, the standalone create, the standalone edit and the resolved-dates dialog the form now defers to, and why: round event-periods is unattended and its design-first ruling means the wire designs must be signed before any UI code, so the round cannot proceed without these entries; the nine were target or absent, never owner-signed, which is what section 17 requires for auto-signed. rejected: recording the advisory pass that ran without the seat model named (a false attestation), leaving 10-event-create pinned at its stale hash, and marking any of the nine as signed by the owner.",
+      "reason": "changes: 10-event-create is paired with the build's existing capture - baseline null becomes events-new.png - because the create form commits against that design and R6 needs a paired state the coverage probe can score; ui/e2e/baseline/events-new.png was captured from #/events/new on 2026-11-24 by capture.spec.ts:187 and the baseline README maps it to this state, so the catalogue recorded a null beside an existing capture. why: the pairing lets mock-claims.mjs score the state (it pairs only on a non-null baseline) and touches no signature, no mock hash and no coverage class. rejected: naming a create variant that has no capture, writing the coverage line without a paired state, and pairing the design with a capture of a different surface.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - nine auto-signed states verified against history.json and the mockup inventory, all §17-legal, one basis wording fixed after the review (18/19 had no archived predecessor). PNG hashes were recomputed from disk by the parent before the review; the seat could not run shell to repeat it.",
-      "at": "2026-11-24T20:05:00Z"
+      "attestation": "Seat: consistent - the reviewer checked the surface route (/events/new), the capture spec and the baseline README, confirmed the entry's other fields are unchanged, that the pairing enables the probe without weakening a guard, and that baseline is the field the tool reads.",
+      "at": "2026-11-25T06:51:41Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

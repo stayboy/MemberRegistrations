@@ -122,7 +122,7 @@
         "sha256": "62cce6b18bd30b89da572437099e1054d3034f54a1fc8c283d2545f50c0a12bb",
         "source": "mockups/v2-events/10-event-create.html"
       },
-      "baseline": null,
+      "baseline": "events-new.png",
       "coverage": "auto-signed",
       "signed": {
         "by": "unattended",

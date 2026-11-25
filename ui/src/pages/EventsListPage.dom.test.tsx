@@ -46,6 +46,15 @@ function parent(overrides: Partial<EventParentItem> = {}): EventParentItem {
     id: 'evt-draft',
     eventNo: 'EVT-2026-014',
     name: 'Strategic Conference',
+    audienceIds: ['aud-presbyters'],
+    audiences: [
+      {
+        id: 'aud-presbyters',
+        name: 'Presbyters',
+        system: true,
+        summary: 'All presbyters, active and retired',
+      },
+    ],
     audienceId: 'aud-presbyters',
     audience: {
       id: 'aud-presbyters',
@@ -53,6 +62,7 @@ function parent(overrides: Partial<EventParentItem> = {}): EventParentItem {
       system: true,
       summary: 'All presbyters, active and retired',
     },
+    period: null,
     ministry: { code: 'LEAD', name: 'Leadership' },
     presbyterOnly: true,
     timezone: 'UTC',

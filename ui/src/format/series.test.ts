@@ -38,6 +38,24 @@ describe('scheduleLabel', () => {
     expect(scheduleLabel('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=1')).toBe('Every 2 months on day 1');
   });
 
+  it('names the monthly positional form', () => {
+    expect(scheduleLabel('FREQ=MONTHLY;BYSETPOS=-1;BYDAY=SA')).toBe(
+      'Monthly on the last Saturday of the month',
+    );
+    expect(scheduleLabel('FREQ=MONTHLY;BYSETPOS=1;BYDAY=MO')).toBe(
+      'Monthly on the first Monday of the month',
+    );
+    expect(scheduleLabel('FREQ=MONTHLY;BYSETPOS=2;BYDAY=SA')).toBe(
+      'FREQ=MONTHLY;BYSETPOS=2;BYDAY=SA',
+    );
+  });
+
+  it('ignores WKST, which the vocabulary emits on an interval-bearing weekly rule', () => {
+    expect(scheduleLabel('FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU')).toBe(
+      'Every 2 weeks on Sunday',
+    );
+  });
+
   it('accepts lower-case input, because the API normalises before storage', () => {
     expect(scheduleLabel('freq=weekly;byday=su')).toBe('Weekly on Sunday');
   });

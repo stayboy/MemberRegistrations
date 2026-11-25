@@ -141,6 +141,67 @@ export interface EventRecurrence {
   readonly exceptions: readonly EventRecurrenceException[];
 }
 
+/** Mirrors `eventPeriodSchema`: the catalogue row `GET /v1/events/periods` serves. */
+export interface EventPeriodItem {
+  readonly id: string;
+  readonly name: string;
+  /** The declared rule, in the parish's words; the form shows it beside the choice. */
+  readonly definition: string;
+  /**
+   * The resolver's shape, when the catalogue carries it. A `date` period (Home
+   * Cells) returns one date, so it takes no day inside it. The contract does not
+   * serve this today; absent means "a week", and the server refuses a day on a
+   * single-date period if one is sent.
+   */
+  readonly kind?: 'week' | 'date';
+}
+
+/** The period an event was created from (`null` when it was not). */
+export interface EventPeriodProvenance {
+  readonly id: string;
+  /** The name as it was written at save - a snapshot, never a live lookup. */
+  readonly name: string;
+  /** `YYYY-MM` for a one-off period event; null when the period recurs. */
+  readonly cycle: string | null;
+  /** `monthly` for a period recurrence; null for a one-off. */
+  readonly frequency: 'monthly' | null;
+  /** A weekday inside each cycle's period (`MO`-`SU`); null for the whole period. */
+  readonly day: string | null;
+}
+
+/**
+ * The create's period arm. One cycle resolves once, on the server, into that
+ * month's dates; `frequency: 'monthly'` stores a period rule that generates one
+ * date per cycle. `effectiveFrom` anchors the 90-day window and is input-only.
+ */
+export type CreateEventPeriodInput =
+  | { readonly id: string; readonly cycleMonth: string }
+  | {
+      readonly id: string;
+      readonly frequency: 'monthly';
+      readonly day?: string;
+      readonly effectiveFrom?: string;
+    };
+
+/** `POST /v1/events/preview`: the create's own shapes, resolved without persisting. */
+export interface EventPreviewInput {
+  readonly audienceIds?: readonly string[];
+  readonly audienceId?: string;
+  readonly recurrence?: CreateEventRecurrenceInput;
+  readonly period?: CreateEventPeriodInput;
+}
+
+export interface EventPreviewOccurrence {
+  readonly date: string;
+  /** The intersection count at that date, not a sum of the audiences. */
+  readonly expected: number;
+}
+
+export interface EventPreview {
+  readonly occurrences: readonly EventPreviewOccurrence[];
+  readonly audienceCounts: readonly { readonly id: string; readonly count: number }[];
+}
+
 /**
  * Mirrors `eventOccurrenceSchema`: a dated child of the event. `status` is the
  * API's derived status, `expected` is the transitional roster count and
@@ -170,8 +231,14 @@ export interface EventParentItem {
   readonly id: string;
   readonly eventNo: string;
   readonly name: string;
+  /** The ordered audience set; the first is the primary. */
+  readonly audienceIds: readonly string[];
+  readonly audiences: readonly EventAudienceItem[];
+  /** The legacy primary alias, kept for one round beside `audiences[]`. */
   readonly audienceId: string;
   readonly audience: EventAudienceItem;
+  /** What the event was created from; null when it was not a period event. */
+  readonly period: EventPeriodProvenance | null;
   readonly ministry: { readonly code: string; readonly name: string } | null;
   readonly presbyterOnly: boolean;
   readonly timezone: string;
@@ -238,14 +305,15 @@ export interface CreateEventRecurrenceInput {
 
 /**
  * Mirrors `createEventParentSchema` (FR-42a): the parent as a draft with either
- * manual `occurrences` or one `recurrence`, never both. `eventNo` is optional —
- * the API mints `EVT-<year>-<sequence>` — and the retired `ministry`,
- * `presbyterOnly` and the derived range are not part of the payload.
+ * manual `occurrences`, one `recurrence`, or a named `period`, never two of them.
+ * `eventNo` is absent because the server mints it and refuses a client value by
+ * name (AC 8); the retired `ministry`, `presbyterOnly` and the derived range are
+ * not part of the payload.
  */
 export interface CreateEventParentInput {
-  readonly eventNo?: string;
   readonly name: string;
-  readonly audienceId?: string;
+  /** The ordered set; the first is the primary. At least one entry. */
+  readonly audienceIds?: readonly string[];
   readonly timezone?: string;
   readonly description?: string | null;
   readonly venueType: EventVenueType;
@@ -255,18 +323,19 @@ export interface CreateEventParentInput {
   readonly tracksMembers?: boolean;
   readonly occurrences?: readonly CreateEventOccurrenceInput[];
   readonly recurrence?: CreateEventRecurrenceInput;
+  readonly period?: CreateEventPeriodInput;
 }
 
 export type CreateEventParentPayload = CreateEventParentInput;
 
 /**
  * Mirrors `updateEventParentSchema`: the same parent fields without the
- * recurrence, all optional. `eventNo` is immutable and absent; `status` is the
- * activate/archive move.
+ * recurrence or period, all optional. `eventNo` is immutable and refused by
+ * name; `status` is the activate/archive move. `audienceIds` replaces the set.
  */
 export interface UpdateEventParentInput {
   readonly name?: string;
-  readonly audienceId?: string;
+  readonly audienceIds?: readonly string[];
   readonly timezone?: string;
   readonly description?: string | null;
   readonly venueType?: EventVenueType;
@@ -463,6 +532,50 @@ export async function getEventParent(
     { sessionToken, signal: options.signal },
   );
   if (!result) throw new ApiError(500, 'The event response was empty.');
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// The create form's two read-only contracts: the named-period catalogue and the
+// resolved-dates preview. Neither persists anything (AC-63a).
+// ---------------------------------------------------------------------------
+
+export const EVENT_PERIODS_PATH = `${EVENTS_PATH}/periods`;
+export const EVENT_PREVIEW_PATH = `${EVENTS_PATH}/preview`;
+
+/** `GET /v1/events/periods`: the active named periods, registered before `/:id`. */
+export async function listEventPeriods(
+  baseUrl: string,
+  sessionToken: string,
+  signal?: AbortSignal,
+): Promise<EventPeriodItem[]> {
+  const result = await gatewayRequest<{ readonly items: readonly EventPeriodItem[] }>(
+    baseUrl,
+    EVENT_PERIODS_PATH,
+    { sessionToken, signal },
+  );
+  return [...(result?.items ?? [])];
+}
+
+/**
+ * `POST /v1/events/preview`: the dates a recurrence or a period resolves to
+ * inside the create's 90-day window, with the intersection count at each date
+ * and each audience's own count. No client ever expands a rule or counts a
+ * member (FR-42b, AC-60, AC-63a).
+ */
+export async function previewEvent(
+  baseUrl: string,
+  sessionToken: string,
+  input: EventPreviewInput,
+  signal?: AbortSignal,
+): Promise<EventPreview> {
+  const result = await gatewayRequest<EventPreview>(baseUrl, EVENT_PREVIEW_PATH, {
+    method: 'POST',
+    sessionToken,
+    body: input,
+    signal,
+  });
+  if (!result) throw new ApiError(500, 'The preview response was empty.');
   return result;
 }
 

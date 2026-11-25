@@ -16,7 +16,7 @@ const DAY_LABELS: Record<string, string> = {
   SU: 'Sunday',
 };
 
-const RECOGNIZED_KEYS = new Set(['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'WKST']);
+const RECOGNIZED_KEYS = new Set(['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYSETPOS', 'WKST']);
 
 export const EXCEPTION_KIND_LABELS: Record<SeriesExceptionKind, string> = {
   cancelled: 'Cancelled',
@@ -111,6 +111,15 @@ export function scheduleLabel(rrule: string): string {
   }
 
   if (frequency === 'MONTHLY') {
+    const bySetPos = parts.get('BYSETPOS');
+    if (bySetPos !== undefined) {
+      const position = bySetPos === '1' ? 'first' : bySetPos === '-1' ? 'last' : null;
+      const day = byDayLabels(parts.get('BYDAY'));
+      if (!position || !day || day.length !== 1) return raw;
+      const prefix = interval === 1 ? 'Monthly' : `Every ${interval} months`;
+      return `${prefix} on the ${position} ${day[0]} of the month`;
+    }
+
     if (parts.has('BYDAY')) return raw;
     const days = byMonthDayValues(parts.get('BYMONTHDAY'));
     if (!days) return raw;
