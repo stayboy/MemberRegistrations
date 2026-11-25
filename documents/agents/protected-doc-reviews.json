@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "6652071e7362747d2ac6497300a2c2a7eab46a8a2bffd4643a1bd0d34705d2c5",
+      "sha256": "5f99b55accf022c752268cea07c26a5f70ce142981e048e75aacdd3b16a35f7d",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner signed seven of the nine remaining auto-signed states - 05-offerings-landing (abe8001e), 07-offering-terms (9e0880d1), 07-import-attendance-panel (24bd2629), 18-event-create-standalone (cdfc7b5f), 19-event-edit-standalone (e7d599ef), 22-event-detail-period (08fddd49) and 23-event-detail-period-preview (e57b8b55) - each signed with by owner, at 2026-11-25, and signed.sha256 equal to mock.sha256. The other two, 10-event-create-period and 21-event-create-period-recurring, were re-cut in the same change (the named-period dropdown on its own row with the Frequency radio beneath it, matching the build) and are therefore target at their new hashes d778a0b8 and 8d8b6278: the owner approved a list, not the re-cut pixels, and a re-cut passes through target before a signature. why: seven signatures are the images the owner was shown; the two re-cuts need their own look. rejected: signing the two re-cut states on the list approval (the review contradicted it), leaving their history notes claiming the frequency was unchanged, and signing the four remaining targets.",
+      "reason": "changes: the two period states are re-pointed to the final re-cut after the owner rejected the first stacking - 10-event-create-period (3f0c3c2e, history v12) and 21-event-create-period-recurring (8cde908d, history v8) - the Frequency label back inline followed by the info tooltip, the radios beside them on one row, and the named period sharing a row with the cycle month or day. Both stay target: a re-cut inherits no signature, and the owner has not seen these pixels. why: the drawings are what the build is being brought to, and the catalogue must point at the images on disk. rejected: keeping the superseded hashes, signing the re-cut on the earlier list approval, and letting the recorder keep the copied note (the capture script now carries the per-state note at the source).",
       "verdict": "accepted",
-      "attestation": "Seat: contradicted on the first pass, then consistent - the history notes now describe the stacking re-cut rather than copying their predecessor, the two re-cut states are back to target with their signatures removed, and the seven that remain signed are the un-re-cut images the owner approved.",
-      "at": "2026-11-25T12:32:34Z"
+      "attestation": "Seat: consistent - both states stay target with no signature, re-pointing mock.sha256 is right while the design is still being directed, the history notes describe this layout rather than copying the predecessor, and no signature sits over an image the owner has not seen. The seat noted one superseded intermediate (21 v6) still carrying a copied note; it names no image the owner saw and affects no signature.",
+      "at": "2026-11-25T13:20:34Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

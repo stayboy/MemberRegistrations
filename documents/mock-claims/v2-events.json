@@ -251,7 +251,7 @@
     "10-event-create-period": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-period.png",
-        "sha256": "d778a0b8cbc593d30f752b2e193c83ef1c52fffd673b94a69ee4017a116df874",
+        "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
       "baseline": null,
@@ -344,7 +344,7 @@
     "21-event-create-period-recurring": {
       "mock": {
         "path": "mockups/v2-events/21-event-create-period-recurring.png",
-        "sha256": "8d8b627884c56c39ef97ff48c989e8a524ff042f3e5aeb640cb0cf70047eb47a",
+        "sha256": "8cde908da018a1df80dc140f882b4dccc503a8279eeb036424ff003ef06a164d",
         "source": "mockups/v2-events/21-event-create-period-recurring.html"
       },
       "baseline": null,
