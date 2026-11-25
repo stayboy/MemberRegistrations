@@ -11,6 +11,7 @@ import {
   PhotoTooLargeError,
   RateLimitedError,
   ReassignmentRequiredError,
+  RecurrenceLockedError,
   TooManyTriesError,
   UnauthorizedError,
   ValidationError,
@@ -158,6 +159,17 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof AlreadyVerifiedError) {
     sendProblem(res, 409, 'Conflict', error.message, 'already_verified');
+    return;
+  }
+
+  if (error instanceof RecurrenceLockedError) {
+    res
+      .status(409)
+      .type('application/problem+json')
+      .json({
+        ...problemBody(409, 'Conflict', error.message, 'recurrence_locked'),
+        reasons: error.reasons,
+      });
     return;
   }
 
