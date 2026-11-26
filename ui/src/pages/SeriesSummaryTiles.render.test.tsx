@@ -66,8 +66,11 @@ describe('series summary tiles', () => {
     expect(markup).toContain('75%');
     expect(markup).toContain('2 of 3 on 2026-11-08');
     expect(markup).toContain('1 headcount-only');
-    expect(markup).toContain('GHS');
-    expect(markup).toContain('paid this window');
+    // The offerings tile is a count with a caption that implies no money: an
+    // offering may come in any currency (owner, 2026-11-26).
+    expect(markup).toContain('attached to this event');
+    expect(markup).not.toContain('GHS');
+    expect(markup).not.toContain('paid this window');
   });
 
   it('shows the empty-window zeros and null states', () => {
@@ -96,7 +99,7 @@ describe('series summary tiles', () => {
 
     expect(markup).toContain('None in 90 days');
     expect(markup).toContain('No held sessions in this window');
-    expect(markup).toContain('No offerings attached');
+    expect(markup).toContain('attached to this event');
     expect(markup).not.toContain('NaN');
   });
 });

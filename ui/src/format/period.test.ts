@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PERIOD_DAY_LABELS, PERIOD_DAYS, isPeriodDay } from './period';
+import type { EventPeriodProvenance } from '../api/events';
+import { PERIOD_DAY_LABELS, PERIOD_DAYS, isPeriodDay, periodProvenanceLine } from './period';
 import { WEEKDAYS, WEEKDAY_LABELS, parseSchedule, toRrule } from './rrule';
 
 /**
@@ -43,5 +44,56 @@ describe('the period day vocabulary', () => {
     expect(isPeriodDay('MON')).toBe(true);
     expect(isPeriodDay('MO')).toBe(false);
     expect(isPeriodDay(undefined)).toBe(false);
+  });
+});
+
+/**
+ * The detail's provenance line (spec: named periods). The shapes are the spec's
+ * own four, and the ambiguous one - `day: null` for both a whole week and a
+ * single date - is settled by the catalogue's `dates`, never by the name.
+ */
+describe('the period provenance line', () => {
+  const oneOff: EventPeriodProvenance = {
+    id: 'communion-week',
+    name: 'Communion Week',
+    cycle: '2026-12',
+    frequency: null,
+    day: null,
+  };
+
+  const monthly = (day: EventPeriodProvenance['day']): EventPeriodProvenance => ({
+    id: 'communion-week',
+    name: 'Communion Week',
+    cycle: null,
+    frequency: 'monthly',
+    day,
+  });
+
+  it('names a one-off period from the range it resolved to', () => {
+    expect(periodProvenanceLine(oneOff, 'Nov 29, 2026 – Dec 5, 2026', null)).toBe(
+      'Communion Week · Nov 29, 2026 – Dec 5, 2026',
+    );
+  });
+
+  it('names the day inside a monthly period in the period vocabulary', () => {
+    expect(periodProvenanceLine(monthly('SUN'), '', 'week')).toBe(
+      'Communion Week · Sundays · monthly',
+    );
+  });
+
+  it('says whole week for a monthly week period with no day chosen', () => {
+    expect(periodProvenanceLine(monthly(null), '', 'week')).toBe(
+      'Communion Week · whole week · monthly',
+    );
+  });
+
+  it('names only the period and the frequency for a single-date period', () => {
+    expect(periodProvenanceLine({ ...monthly(null), name: 'Home Cells' }, '', 'date')).toBe(
+      'Home Cells · monthly',
+    );
+  });
+
+  it('makes no span claim when the catalogue row is unknown', () => {
+    expect(periodProvenanceLine(monthly(null), '', null)).toBe('Communion Week · monthly');
   });
 });

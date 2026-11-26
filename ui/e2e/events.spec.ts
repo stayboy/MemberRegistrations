@@ -146,24 +146,26 @@ test('a standalone event offers the attendance import on each member-tracking oc
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 });
 
-test('the event detail shows the read-only Active offerings panel and terms', async ({ page }) => {
+test('the event detail summarises its offerings in the identity card, with no grid', async ({
+  page,
+}) => {
   await open(page, '/events/event-1');
 
-  const panel = page.getByRole('region', { name: 'Active offerings' });
-  await expect(panel).toBeVisible();
-  const table = panel.getByRole('table', { name: 'Active offerings' });
-  await expect(table.getByText('Tithe').first()).toBeVisible();
-  await expect(table.getByText('Missions').first()).toBeVisible();
-  await expect(table.getByText('Building fund')).toBeVisible();
-  await expect(table.getByText('Active', { exact: true })).toHaveCount(2);
-  await expect(table.getByText('Expired', { exact: true })).toHaveCount(1);
-  await expect(table.getByText('v1', { exact: true })).toHaveCount(3);
+  // Owner, 2026-11-26: the count, then each name as an anchor in brackets,
+  // middle-dot separated - inline in the meta value. Names only, and no grid.
+  const identity = page.getByTestId('event-identity');
+  await expect(identity.getByTestId('event-offerings')).toHaveText(
+    '3 (Tithe · Missions · Building fund)',
+  );
+  await expect(identity.getByText('Tithe')).toHaveJSProperty('tagName', 'A');
+  await expect(identity.getByText('Building fund')).toHaveJSProperty('tagName', 'A');
 
-  await panel.getByRole('button', { name: 'View terms for Tithe' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Terms of reference · Tithe' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Close' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // The grid and its terms dialog retired; the full offering detail is post-MVP.
+  await expect(page.getByRole('table', { name: 'Active offerings' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^View terms for / })).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Event summary' }).getByText('attached to this event'),
+  ).toBeVisible();
 });
 
 test('the events list offers New event as its single visible verb', async ({ page }) => {

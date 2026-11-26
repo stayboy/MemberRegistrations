@@ -1,6 +1,5 @@
 import { Card, Text } from '@fluentui/react-components';
 import type { SeriesSummaryDto } from '../api/series';
-import { formatMoneyMinor } from '../format/welfare';
 import { useEventStyles } from './events-styles';
 
 function percentLabel(rate: number): string {
@@ -30,10 +29,14 @@ function SummaryTile({
 }
 
 /**
- * Call site: SeriesDetailPage (FR-6e) and EventDetailPage's parent read. Four
- * presentational tiles fed by one summary request. The occurrence count is the
- * list the page already renders, so the tile and the table cannot disagree; the
- * mock's rail and per-occurrence columns stay queued.
+ * Call site: EventDetailPage's parent read (the retired SeriesDetailPage used it
+ * too, FR-6e). Four presentational tiles fed by one summary request. The
+ * occurrence count is the list the page already renders, so the tile and the
+ * table cannot disagree; the mock's rail and per-occurrence columns stay queued.
+ *
+ * The Offerings tile is a **count with no money in it** (owner, 2026-11-26): an
+ * offering is not tied to one currency, so its caption names the attachment only
+ * and the names live in the identity card's summary row.
  */
 export function SeriesSummaryTiles({
   summary,
@@ -80,11 +83,7 @@ export function SeriesSummaryTiles({
       <SummaryTile
         label="Offerings"
         value={offerings.attachedCount}
-        caption={
-          offerings.attachedCount === 0
-            ? 'No offerings attached'
-            : `${formatMoneyMinor(offerings.paidMinor, offerings.currency)} paid this window`
-        }
+        caption="attached to this event"
       />
     </section>
   );

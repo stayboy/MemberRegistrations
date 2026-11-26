@@ -329,10 +329,15 @@ stops describing its rule is renamed with it.
     a period that sends both `cycleMonth` and `frequency`. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
   - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
-    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line directly under its **identity** (not beside when and where): for a one-off period
+    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows the period under its **identity** (not beside when and where) as the period’s **name and its
+    definition**, with the resolution mechanics - week start, resolved at save, no rrule - in a tooltip after it (owner,
+    2026-11-26): for a one-off period
     event it is "Communion Week - 29 Nov - 5 Dec 2026", and for a recurring period event it is the **period - day or span - frequency**: "Communion Week - Sundays - monthly" when
     `day` is given, "Communion Week - whole week - monthly" when it is not, and "Home Cells - monthly" for a
-    single-date period (which cannot take a day). A recurring period event names no single cycle.
+    single-date period (which cannot take a day). A recurring period event names no single cycle. **The line never
+    claims a span the read cannot support**: when the period's shape is unknown - the read carries `day: null` for both
+    a whole-week and a single-date period until `period.dates` lands - it names the period and the frequency only
+    ("Communion Week - monthly"), because a sentence true of both shapes beats one true of one (owner, 2026-11-26).
   - **A period can recur, not only resolve once** (owner, 2026-11-24): an event may be scheduled **by period** instead of
     on literal dates — the create's period arm takes either `{ id, cycleMonth }` (one cycle, resolved once, as above) or
     `{ id, frequency: 'monthly', day?, effectiveFrom? }`, which **generates** one date per cycle. The optional
@@ -388,6 +393,10 @@ stops describing its rule is renamed with it.
   **`dates` is the wire projection of the resolver's `kind`** (`src/domain/periods.ts`), derived from the same rule the
   resolver reads and never hand-written, so the catalogue and the resolver cannot disagree about a period's shape
   (review, 2026-11-25).
+- **A one-cycle event whose dates were edited keeps its range and loses its cycle claim** (owner, 2026-11-26). The
+  line names the period and the range the event actually holds; when the held dates no longer fall inside
+  `period_cycle`'s month, the line drops the cycle claim and keeps the range, because the cycle is creation
+  provenance and the dates are the record. Recorded now; it is testable when an occurrence date can be edited.
 - **Creating and editing named periods is another round**: an admin screen and a catalogue table are deferred, with
   the backlog row "named-period catalogue and authoring screen", triggered by a fourth period or a definition change
   that must not need a deploy.

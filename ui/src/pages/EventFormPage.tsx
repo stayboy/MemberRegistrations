@@ -66,7 +66,7 @@ import {
   type OccurrenceFormValues,
 } from '../format/event-form';
 import { utcToday } from '../format/member-form';
-import { PERIOD_DAY_LABELS } from '../format/period';
+import { periodProvenanceLine } from '../format/period';
 import { cadenceLabel, fromRrule, weekdayOf } from '../format/rrule';
 import { lockReasonsFromProblem, scheduleLockSentence } from '../format/schedule-lock';
 import { scheduleLabel } from '../format/series';
@@ -659,6 +659,15 @@ export function EventFormPage() {
   const firstResolvedDate = preview?.occurrences[0]?.date;
   const activationMessage = activationError ?? locationState?.activationError ?? null;
 
+  // The catalogue's shape for the chosen period, or null when there is no row:
+  // the line then makes no span claim (round `detail-grammar`, Q4).
+  const periodShape = selectedPeriod?.dates ?? null;
+  // A period's line names a span, never a date list. On the edit route the span
+  // is the range the event actually holds (a fact); on the create it is the
+  // preview's range, which `buildCycleLine` computes.
+  const heldPeriodSpan =
+    parent && parentPeriod ? formatRange(parent.startDate, parent.endDate ?? parent.startDate) : '';
+
   const scheduleRrule =
     values.repeats && values.schedule.mode === 'rule'
       ? toScheduleRrule(values.schedule, values.effectiveFrom)
@@ -669,6 +678,7 @@ export function EventFormPage() {
     storedRule,
     storedRuleInVocabulary,
     parentPeriod,
+    heldPeriodSpan,
     values,
     selectedPeriod,
     preview,
@@ -714,7 +724,7 @@ export function EventFormPage() {
    * rule and its window.
    */
   const storedScheduleLine = parentPeriod
-    ? periodLine(parentPeriod.name, parentPeriod.frequency, parentPeriod.day, parentPeriod.cycle)
+    ? `${periodProvenanceLine(parentPeriod, heldPeriodSpan, periodShape)}.`
     : schedule
       ? `${storedRule ?? schedule.rrule} · from ${formatDate(schedule.effectiveFrom)}${
           schedule.endsOn ? ` to ${formatDate(schedule.endsOn)}` : ', with no end date'
@@ -1242,6 +1252,7 @@ function buildCycleLine({
   storedRule,
   storedRuleInVocabulary,
   parentPeriod,
+  heldPeriodSpan,
   values,
   selectedPeriod,
   preview,
@@ -1253,6 +1264,8 @@ function buildCycleLine({
   readonly storedRule: string | null;
   readonly storedRuleInVocabulary: boolean;
   readonly parentPeriod: EventParentItem['period'];
+  /** The event's held range, formatted: a one-off period's span on an edit. */
+  readonly heldPeriodSpan: string;
   readonly values: EventFormValues;
   readonly selectedPeriod: EventPeriodItem | undefined;
   readonly preview: EventPreview | undefined;
@@ -1262,12 +1275,7 @@ function buildCycleLine({
 }): string {
   if (isEdit) {
     if (parentPeriod)
-      return periodLine(
-        parentPeriod.name,
-        parentPeriod.frequency,
-        parentPeriod.day,
-        parentPeriod.cycle,
-      );
+      return `${periodProvenanceLine(parentPeriod, heldPeriodSpan, selectedPeriod?.dates ?? null)}.`;
     if (storedRule)
       return storedRuleInVocabulary
         ? `${storedRule}.`
@@ -1289,33 +1297,28 @@ function buildCycleLine({
   }
 
   if (values.schedule.mode === 'period') {
-    const name = selectedPeriod?.name ?? 'No period chosen';
-    if (values.schedule.periodFrequency === 'monthly') {
-      return periodLine(name, 'monthly', values.schedule.periodDay || null, null);
-    }
+    // One grammar for both surfaces (round `detail-grammar`, Q6): the name, the
+    // span and the frequency, with the catalogue's shape deciding whether a
+    // day-less monthly period says "whole week" or makes no span claim at all.
+    const period = {
+      name: selectedPeriod?.name ?? 'No period chosen',
+      frequency: values.schedule.periodFrequency === 'monthly' ? ('monthly' as const) : null,
+      day: (values.schedule.periodDay || null) as PeriodDay | null,
+    };
+    const shape = selectedPeriod?.dates ?? null;
+    if (period.frequency === 'monthly') return `${periodProvenanceLine(period, '', shape)}.`;
+
+    // A one-cycle input: the preview's range once it settles, and the chosen
+    // cycle month until then - never a date list. The word "cycle" belongs to
+    // this caller's span: the create names its input, not a fact.
     const first = preview?.occurrences[0]?.date;
     const last = preview?.occurrences[preview.occurrences.length - 1]?.date;
-    if (first && last) return `${name} · ${formatRange(first, last)}.`;
-    return `${name} · cycle ${values.schedule.cycleMonth}.`;
+    const span = first && last ? formatRange(first, last) : `cycle ${values.schedule.cycleMonth}`;
+    return `${periodProvenanceLine(period, span, shape)}.`;
   }
 
   if (!scheduleRrule) return 'Choose the schedule.';
   return `${scheduleRrule} from ${formatDate(values.effectiveFrom)}.`;
-}
-
-function periodLine(
-  name: string,
-  frequency: 'monthly' | null,
-  day: PeriodDay | null,
-  cycle: string | null,
-): string {
-  // The period's own day vocabulary, never the rrule labels (FR-42f).
-  const dayLabel = day ? `${PERIOD_DAY_LABELS[day]}s` : null;
-  if (frequency === 'monthly') {
-    return `${name} · ${dayLabel ?? 'whole period'} · monthly.`;
-  }
-  if (cycle) return `${name} · ${cycle}.`;
-  return `${name}.`;
 }
 
 /** The rail's start date: an input where it is the rule's anchor, else a fact. */
@@ -1384,11 +1387,16 @@ function describeSchedule({
   if (!values.repeats) return 'Standalone event';
 
   if (values.schedule.mode === 'period') {
-    const frequency =
-      values.schedule.periodFrequency === 'monthly'
-        ? `${values.schedule.periodDay ? PERIOD_DAY_LABELS[values.schedule.periodDay] : 'whole period'}, monthly`
-        : `one cycle, ${values.schedule.cycleMonth}`;
-    return `${selectedPeriod?.name ?? 'Named period'} · ${frequency}`;
+    // The dialog's context line is the period line, so the form cannot describe a
+    // day-less monthly period as a "whole period" (Q6); with no catalogue row it
+    // makes no span claim at all (Q4).
+    const period = {
+      name: selectedPeriod?.name ?? 'Named period',
+      frequency: values.schedule.periodFrequency === 'monthly' ? ('monthly' as const) : null,
+      day: (values.schedule.periodDay || null) as PeriodDay | null,
+    };
+    const span = period.frequency === 'monthly' ? '' : `one cycle, ${values.schedule.cycleMonth}`;
+    return periodProvenanceLine(period, span, selectedPeriod?.dates ?? null);
   }
 
   return `${scheduleRrule ?? 'Incomplete rule'} · from ${formatDate(values.effectiveFrom)}`;

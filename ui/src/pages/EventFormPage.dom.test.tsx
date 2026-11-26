@@ -260,10 +260,29 @@ const PERIOD_RULE: EventParentItem = {
   },
 };
 
+/**
+ * A monthly period with no day inside it: the shape whose line must say "whole
+ * week" (Q6) - and must make no span claim when the catalogue row is missing (Q4).
+ */
+const PERIOD_WHOLE_WEEK: EventParentItem = {
+  ...PERIOD_RULE,
+  id: 'event-period-week',
+  period: {
+    id: 'communion-week',
+    name: 'Communion Week',
+    cycle: null,
+    frequency: 'monthly',
+    day: null,
+  },
+};
+
 /** One cycle resolved once: no stored rule, so the write offers no arm. */
 const PERIOD_ONE_CYCLE: EventParentItem = {
   ...PERIOD_RULE,
   id: 'event-period-once',
+  // The week the cycle resolved to - the range the line must name (Q6).
+  startDate: '2026-11-30',
+  endDate: '2026-12-06',
   period: {
     id: 'communion-week',
     name: 'Communion Week',
@@ -775,6 +794,31 @@ describe('EventFormPage create - the named period (FR-42f, AC-18)', () => {
     expect(lastCreatePayload()).not.toHaveProperty('occurrences');
   });
 
+  it('carries the named period explanation on an info glyph, not a hint line', async () => {
+    const user = userEvent.setup();
+    renderCreate();
+    await waitForDefaultAudience();
+
+    await user.click(screen.getByRole('switch', { name: 'Repeats' }));
+    await choosePeriod('Communion Week');
+
+    // The glyph is a named, focusable tab stop (a tooltip must be reachable
+    // without a mouse); the form prints no hint line under the select.
+    const glyph = screen.getByLabelText('What a named period means');
+    expect(glyph).toHaveAttribute('tabindex', '0');
+    // The sentence is nowhere but the tooltip: no hint line under the select.
+    expect(
+      screen.queryByText(/A named period replaces the cadence/, { ignore: '[role="tooltip"]' }),
+    ).toBeNull();
+
+    await user.hover(glyph);
+    const tooltip = await screen.findByRole('tooltip');
+    await waitFor(() => expect(tooltip).toBeVisible());
+    expect(tooltip).toHaveTextContent(
+      'A named period replaces the cadence. The API resolves its dates, not this form.',
+    );
+  });
+
   it('sends a monthly period recurrence with the day inside the period and its anchor', async () => {
     const user = userEvent.setup();
     renderCreate();
@@ -1168,6 +1212,37 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     expect(screen.getByText(/resolved once and stores no rule/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Preview dates' })).toBeNull();
     expect(previewMock).not.toHaveBeenCalled();
+  });
+
+  it('names the held range, not the cycle month, for a one-off edit', async () => {
+    // Q6: "Communion Week · 2026-12" described an input; the edit describes the
+    // range the event actually holds.
+    getParentMock.mockResolvedValue(PERIOD_ONE_CYCLE);
+    renderEdit('event-period-once');
+
+    const lines = await screen.findAllByText('Communion Week · Nov 30, 2026 – Dec 6, 2026.');
+    expect(lines.length).toBeGreaterThan(0);
+    expect(screen.queryByText(/2026-12/)).toBeNull();
+  });
+
+  it('says whole week for a day-less monthly period, through the shared line', async () => {
+    getParentMock.mockResolvedValue(PERIOD_WHOLE_WEEK);
+    renderEdit('event-period-week');
+
+    // The line, not the builder's tooltip: "whole period" is the control's own
+    // copy and stays (FR-42f); the line says what the period is.
+    expect(await screen.findByText('Communion Week · whole week · monthly.')).toBeVisible();
+  });
+
+  it('makes no span claim when the catalogue row is missing', async () => {
+    // Q4: the read cannot tell a whole week from a single date, so with no row
+    // the line names the period and the frequency only.
+    listPeriodsMock.mockResolvedValue([]);
+    getParentMock.mockResolvedValue(PERIOD_WHOLE_WEEK);
+    renderEdit('event-period-week');
+
+    expect(await screen.findByText('Communion Week · monthly.')).toBeVisible();
+    expect(screen.queryByText(/whole week/)).toBeNull();
   });
 
   it('renders a 409 recurrence_locked as the banner with its reasons and stays on the form', async () => {

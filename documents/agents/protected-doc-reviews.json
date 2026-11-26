@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "93ff56a2cdde7cddca6eaeee32271baed041107897c43358603d23e2997f0802",
+      "sha256": "8947b87b2c5e7a1369b4405b47f0b20bdbb0cc092be325c50600f9d1d60f4c97",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: round parity-audit reconciles the signed drawings with the specs, and the catalogue follows - EVA-ACTIONS reworded to the one-verb rule and re-anchored to AC-50; EVA-ROW-MENU withdrawn (the list carries no row menu); AD-HC-DIALOG withdrawn and AD-HC-VISITOR reworded to the shared headcount dialog Mode control, because the chip row was never the control the console shares; the three activity-detail states pruned with their surface slice and inventory row (the series screens are retired); 19-event-edit-standalone dropped to target, since it draws editable date rows the edit form cannot carry. why: the signatures named drawings the spec contradicted, and a claim that asserts a withdrawn control is drift with a signature on it. rejected: keeping EVA-ROW-MENU because the drawing shows a menu (drawing superseded by AC-50), amending AC-61 to justify the chip row (it would fork a dialog the USSD console shares), and signing 19 against a control no route accepts.",
+      "reason": "changes: round detail-grammar - 22-event-detail-period is signed by the owner at its re-cut (185c79d9): the detail as a 02 variant, the period’s name and definition in the identity card with the resolution mechanics in a tooltip, the offerings as inline anchors, and the occurrence table with its verbs. 23-event-detail-period-preview retires with the preview block the owner dropped - its state and entries are gone and its images are archived - and the builder no longer emits it. The state gains EVP-DETAIL-NO-PREVIEW, spec-required and ABSENT, anchored to AC-63a’s “no preview is drawn on it”; a provenance-line claim was dropped because a prose claim needs an inventory row on a detail surface no longer declared. why: the preview resolved from the earliest stored rule version while the table shows the 90 days ending today, so the two shared no dates. rejected: converting 23 into a stored-dates view the round did not design, inventing a detail surface to hang one prose claim on, and signing the drawing before the owner had seen the re-cut.",
       "verdict": "accepted",
-      "attestation": "Seat: contradicted twice, then consistent - the first pass caught the unpropagated FR-42/FR-42a and EVA-ACTIONS; the second caught AD-HC-DIALOG still asserting the chip. Both fixed, the prune left no dangling surface, inventory, story or baseline reference, and the orphaned series-detail baseline was removed with its README row. The seat accepted AC 50 as a deliberate wording around the USSD catalogue unanchored AC-50 pattern, noting the root fix is to anchor that pattern.",
-      "at": "2026-11-25T20:12:32Z"
+      "attestation": "Seat: consistent on two passes - the signature shape, the retirement, the ABSENT claim and the absence of dangling references; then the delta after both P2s, which fixed the story so it is covered by the one claim it carries and removed the retired state from the builder so a rebuild cannot resurrect it. The hash-to-image check is the parent’s gate and was run.",
+      "at": "2026-11-26T09:03:08Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

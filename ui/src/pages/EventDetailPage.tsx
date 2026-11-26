@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Divider,
+  Link,
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
@@ -25,12 +26,13 @@ import {
   EditRegular,
 } from '@fluentui/react-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type ComponentProps } from 'react';
+import { Fragment, useEffect, useState, type ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { isUnauthorized } from '../api/errors';
 import {
   archiveEventParent,
   getEventParent,
+  listEventPeriods,
   removeEventRecurrenceException,
   updateEventParent,
   type EventOccurrenceItem,
@@ -41,22 +43,22 @@ import {
 import { useSession } from '../auth/SessionProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateWindowControl, useDateWindow } from '../components/DateWindowControl';
+import { InfoTooltip } from '../components/InfoTooltip';
 import { PageFrame } from '../components/PageFrame';
 import type { PageAction } from '../components/PageActions';
 import { SessionHeadcount } from '../components/SessionHeadcount';
 import { SessionImportPanel } from '../components/SessionImportPanel';
-import { TermsDialog } from '../components/TermsDialog';
 import { occurrenceFrom, type Occurrence } from '../features/attendance-import/AttendanceWorkspace';
 import { captureState, endActionState } from '../format/capture';
 import {
   eventStatusLabel,
   ministryLabel,
-  offeringsLabel,
   sessionCaptureLine,
   sessionSourceLabel,
   sessionStatusLabel,
   venueLabel,
 } from '../format/events';
+import { periodProvenanceLine } from '../format/period';
 import { cadenceLabel, fromRrule } from '../format/rrule';
 import { exceptionKindLabel, exceptionNoteLabel } from '../format/series';
 import { writeFailure, type WriteFailure } from '../format/write-errors';
@@ -73,6 +75,19 @@ type BadgeColor = ComponentProps<typeof Badge>['color'];
 
 /** AC-62: a draft cannot cancel a date, and the row says why rather than hiding it. */
 export const DRAFT_CANCEL_REASON = 'Activate the event before cancelling a date';
+
+/**
+ * The named period's mechanics (owner, 2026-11-26): the card prints the name and
+ * the catalogue's definition, and everything about what a period is and what
+ * happened to its dates rides the info glyph's tooltip. It states only what the
+ * read supports - the dates were resolved at save and are stored, not regenerated
+ * - never a week-start rule the read does not carry.
+ */
+const PERIOD_PROVENANCE_EXPLANATION =
+  'This event is scheduled by a named period rather than an rrule. Its rule is stored on the event, so it has no schedule versions, and the dates it generated are ordinary occurrences. The dates were resolved when the event was saved and are stored: they are not regenerated from the rule.';
+
+/** The period glyph's accessible name; its tooltip is {@link PERIOD_PROVENANCE_EXPLANATION}. */
+const PERIOD_INFO_LABEL = 'What the named period means';
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -91,15 +106,13 @@ function statusColor(status: EventParentStatus): BadgeColor {
   return 'informative';
 }
 
-function kindLabel(kind: string): string {
-  return kind.charAt(0).toUpperCase() + kind.slice(1);
-}
-
 /**
  * Events → event detail (events FR-4/FR-5/FR-6, UI FR-42/FR-42e): the parent read
  * with its identity, the server-rendered audience summary, the recurrence's
  * schedule versions and exceptions, the window occurrence table with the derived
- * status and capture state, the window summary tiles and the read-only offerings.
+ * status and capture state and the window summary tiles. **The offerings are a
+ * summary, not a panel**: the count and the names sit in the identity card, and
+ * the full offering detail is post-MVP (owner, 2026-11-26).
  *
  * The page's write verbs follow the parent's state (AC-62): **Edit** and, on a
  * draft, **Activate** and a disabled **Archive**, or **Archive** on an active
@@ -112,6 +125,12 @@ function kindLabel(kind: string): string {
  * The roster figure is the API's transitional `expected` count, labelled Roster
  * and never merged with present or coloured here. The status and next occurrence
  * are the API's; the screen never classifies an event by comparing dates (FR-3).
+ *
+ * A period-created event carries its provenance as one line at the head of its
+ * identity card (spec: named periods; round `detail-grammar`, Q5). The detail
+ * has no resolved-dates preview: its dates are stored, and the occurrence table
+ * is the record, so a preview resolved from the earliest schedule version would
+ * describe a different window from the one on screen (Q1).
  */
 export function EventDetailPage() {
   const styles = useEventStyles();
@@ -125,10 +144,6 @@ export function EventDetailPage() {
   const [importFor, setImportFor] = useState<Occurrence | null>(null);
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [termsTarget, setTermsTarget] = useState<{
-    readonly offeringId: string;
-    readonly name: string;
-  } | null>(null);
   // FR-42e: the page's own confirm targets and the acting surface's failures.
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [actionFailure, setActionFailure] = useState<WriteFailure | null>(null);
@@ -147,6 +162,17 @@ export function EventDetailPage() {
         signal,
       }),
     enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
+  });
+
+  // The catalogue serves two things on this page: the period's **definition**
+  // (printed beneath its name, owner 2026-11-26) and, for a monthly period with no
+  // day, the `dates` shape the read cannot tell from a single date. A period
+  // event therefore reads it; every other event does not, and the form shares the
+  // same cache entry.
+  const periodsQuery = useQuery({
+    queryKey: ['events', 'periods', baseUrl],
+    queryFn: ({ signal }) => listEventPeriods(baseUrl, token, signal),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.period),
   });
 
   const activateMutation = useMutation({
@@ -172,6 +198,26 @@ export function EventDetailPage() {
   const archived = event?.status === 'archived';
   const draft = event?.status === 'draft';
   const actionBusy = activateMutation.isPending || archiveMutation.isPending;
+
+  // The catalogue row for this event's period: its `definition` is the sentence
+  // the card prints beneath the name, and its `dates` settles the one shape the
+  // read cannot. A missing row (an archived period, or a failed read) leaves both
+  // out - never an invented definition.
+  const cataloguePeriod =
+    event?.period === null || event?.period === undefined
+      ? undefined
+      : periodsQuery.data?.find((period) => period.id === event.period?.id);
+
+  // The rule in words, for the block's tooltip: the event's own span (the API
+  // derives it from the occurrences it holds, never from this page's window) and
+  // the catalogue's shape, so the grammar is the form's own.
+  const provenanceLine = event?.period
+    ? periodProvenanceLine(
+        event.period,
+        formatRange(event.startDate, event.endDate ?? event.startDate),
+        cataloguePeriod?.dates ?? null,
+      )
+    : null;
 
   function invalidateEvent(): void {
     void queryClient.invalidateQueries({ queryKey: ['events', baseUrl] });
@@ -368,7 +414,7 @@ export function EventDetailPage() {
               />
             </div>
 
-            <Card className={styles.meta}>
+            <Card className={styles.meta} data-testid="event-identity">
               <div className={styles.metaRows}>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Event number</Text>
@@ -424,9 +470,72 @@ export function EventDetailPage() {
                 </div>
                 <div className={styles.metaRow}>
                   <Text className={styles.metaLabel}>Offerings</Text>
-                  <Text className={styles.metaValue}>{offeringsLabel(event.offerings.length)}</Text>
+                  {/*
+                    Owner, 2026-11-26 (drawing v16): the count, then the names in
+                    brackets as anchors, middle-dot separated, inline in the meta
+                    value - `2 (Sunday offering · Building fund)`. Names only: an
+                    offering is not tied to a currency. The grid retired with this
+                    line, and the full offering detail is post-MVP, so the anchors
+                    have **no destination yet**: Fluent `Link` with `as="a"` and no
+                    `href` is blue and hover-underlined but inert - never a button,
+                    and never an invented route.
+                  */}
+                  <Text data-testid="event-offerings">
+                    {event.offerings.length === 0 ? (
+                      'None'
+                    ) : (
+                      <>
+                        {`${event.offerings.length} (`}
+                        {event.offerings.map((offering, index) => (
+                          <Fragment key={offering.offeringId}>
+                            {index > 0 ? ' · ' : null}
+                            <Link as="a">{offering.name}</Link>
+                          </Fragment>
+                        ))}
+                        {')'}
+                      </>
+                    )}
+                  </Text>
                 </div>
               </div>
+              {/*
+                The named period's block sits at the foot of the identity card,
+                inside it (owner, 2026-11-26; drawing v16): the label, the period's
+                **name** in semibold with the mechanics on its info glyph, and the
+                catalogue's own **definition** as the visible sentence beneath - no
+                invented prose. With no catalogue row (an archived period, or a
+                failed read) the block shows the name and the tooltip only; it never
+                invents a definition.
+              */}
+              {event.period ? (
+                <>
+                  <Divider />
+                  <div className={styles.periodBlock}>
+                    <Text className={styles.metaLabel}>Named period</Text>
+                    <span className={styles.periodNameRow}>
+                      <Text
+                        weight="semibold"
+                        className={styles.periodName}
+                        data-testid="event-period-provenance"
+                      >
+                        {event.period.name}
+                      </Text>
+                      <InfoTooltip
+                        name={PERIOD_INFO_LABEL}
+                        explanation={`${provenanceLine ?? event.period.name}. ${PERIOD_PROVENANCE_EXPLANATION}`}
+                      />
+                    </span>
+                    {cataloguePeriod?.definition ? (
+                      <Text
+                        className={styles.periodDefinition}
+                        data-testid="event-period-definition"
+                      >
+                        {cataloguePeriod.definition}
+                      </Text>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
               {event.description ? (
                 <>
                   <Divider />
@@ -454,173 +563,182 @@ export function EventDetailPage() {
               expectedLabel="Roster"
             />
 
-            <section className={styles.panel} aria-label="Recurrence">
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.panelTitle}>Recurrence</h2>
-                <Text size={200} className={styles.muted}>
-                  {event.recurrence
-                    ? `${schedules.length} schedule version${schedules.length === 1 ? '' : 's'} · ${exceptions.length} exception${exceptions.length === 1 ? '' : 's'}`
-                    : 'Standalone event'}
-                </Text>
-              </div>
-
-              {recurrenceFailure ? (
-                <div className={styles.panelBanner}>
-                  <MessageBar intent="error">
-                    <MessageBarBody>
-                      <MessageBarTitle>{recurrenceFailure.title}</MessageBarTitle>
-                      {recurrenceFailure.message}
-                    </MessageBarBody>
-                  </MessageBar>
-                </div>
-              ) : null}
-
-              {!event.recurrence ? (
-                <div className={styles.empty}>
-                  <Text className={styles.emptyTitle}>No recurrence</Text>
+            {/*
+              A period event has no schedule versions and no exceptions, so it has
+              no recurrence panel: the block at the foot of the identity card carries
+              the name, the catalogue's definition and the mechanics on its tooltip.
+            */}
+            {event.period ? null : (
+              <section className={styles.panel} aria-label="Recurrence">
+                <div className={styles.sectionHeader}>
+                  <h2 className={styles.panelTitle}>Recurrence</h2>
                   <Text size={200} className={styles.muted}>
-                    This event is standalone: its dated occurrences stand on their own, with no
-                    schedule versions or exceptions.
+                    {event.recurrence
+                      ? `${schedules.length} schedule version${schedules.length === 1 ? '' : 's'} · ${exceptions.length} exception${exceptions.length === 1 ? '' : 's'}`
+                      : 'Standalone event'}
                   </Text>
                 </div>
-              ) : (
-                <>
-                  <div className={styles.sectionHeader}>
-                    <Text className={styles.emptyTitle}>Schedule versions</Text>
-                    {archived ? null : (
-                      <Button
-                        icon={<AddRegular />}
-                        appearance="secondary"
-                        onClick={() => {
-                          setRecurrenceFailure(null);
-                          setScheduleOpen(true);
-                        }}
-                      >
-                        Add schedule version
-                      </Button>
-                    )}
-                  </div>
-                  <div className={styles.tableWrap}>
-                    <Table className={styles.table} size="small" aria-label="Schedule versions">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHeaderCell>Effective from</TableHeaderCell>
-                          <TableHeaderCell>Schedule</TableHeaderCell>
-                          <TableHeaderCell>Ends on</TableHeaderCell>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {schedules.map((version) => {
-                          // AC-63: a stored version renders the vocabulary's own
-                          // label; anything outside it is read-only from the string.
-                          const cadence = fromRrule(version.rrule);
-                          return (
-                            <TableRow key={version.effectiveFrom}>
-                              <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
-                              <TableCell>
-                                <div className={styles.identity}>
-                                  <Text>{cadence ? cadenceLabel(cadence) : version.rrule}</Text>
-                                  {cadence ? null : (
-                                    <Text size={200} className={styles.muted}>
-                                      Outside the recurrence vocabulary · cannot be edited here
-                                    </Text>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
 
-                  <div className={styles.sectionHeader}>
-                    <Text className={styles.emptyTitle}>Exceptions</Text>
-                    {archived ? null : (
-                      <Button
-                        icon={<AddRegular />}
-                        appearance="secondary"
-                        onClick={() => {
-                          setRecurrenceFailure(null);
-                          setExceptionOpen(true);
-                        }}
-                      >
-                        Add exception
-                      </Button>
-                    )}
+                {recurrenceFailure ? (
+                  <div className={styles.panelBanner}>
+                    <MessageBar intent="error">
+                      <MessageBarBody>
+                        <MessageBarTitle>{recurrenceFailure.title}</MessageBarTitle>
+                        {recurrenceFailure.message}
+                      </MessageBarBody>
+                    </MessageBar>
                   </div>
+                ) : null}
 
-                  {exceptions.length === 0 ? (
-                    <div className={styles.empty}>
-                      <Text size={200} className={styles.muted}>
-                        The schedule&apos;s generated dates stand as they are.
-                      </Text>
+                {!event.recurrence ? (
+                  <div className={styles.empty}>
+                    <Text className={styles.emptyTitle}>No recurrence</Text>
+                    <Text size={200} className={styles.muted}>
+                      This event is standalone: its dated occurrences stand on their own, with no
+                      schedule versions or exceptions.
+                    </Text>
+                  </div>
+                ) : (
+                  <>
+                    <div className={styles.sectionHeader}>
+                      <Text className={styles.emptyTitle}>Schedule versions</Text>
+                      {archived ? null : (
+                        <Button
+                          icon={<AddRegular />}
+                          appearance="secondary"
+                          onClick={() => {
+                            setRecurrenceFailure(null);
+                            setScheduleOpen(true);
+                          }}
+                        >
+                          Add schedule version
+                        </Button>
+                      )}
                     </div>
-                  ) : (
                     <div className={styles.tableWrap}>
-                      <Table className={styles.table} size="small" aria-label="Exceptions">
+                      <Table className={styles.table} size="small" aria-label="Schedule versions">
                         <TableHeader>
                           <TableRow>
-                            <TableHeaderCell>Date</TableHeaderCell>
-                            <TableHeaderCell>Kind</TableHeaderCell>
-                            <TableHeaderCell>Note</TableHeaderCell>
-                            <TableHeaderCell aria-label="Action" />
+                            <TableHeaderCell>Effective from</TableHeaderCell>
+                            <TableHeaderCell>Schedule</TableHeaderCell>
+                            <TableHeaderCell>Ends on</TableHeaderCell>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {exceptions.map((exception) => (
-                            <TableRow key={exception.date}>
-                              <TableCell>{formatDate(exception.date)}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  appearance="tint"
-                                  color={exception.kind === 'cancelled' ? 'danger' : 'informative'}
-                                  size="small"
-                                >
-                                  {exceptionKindLabel(exception.kind)}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {exception.note ? (
-                                  exception.note
-                                ) : (
-                                  <Text size={200} className={styles.muted}>
-                                    {exceptionNoteLabel(exception.kind, exception.note)}
-                                  </Text>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {archived ? (
-                                  <Text size={200} className={styles.muted}>
-                                    Read-only
-                                  </Text>
-                                ) : (
-                                  <Button
-                                    size="small"
-                                    appearance="transparent"
-                                    icon={<DeleteRegular />}
-                                    aria-label={`Remove exception on ${formatDate(exception.date)}`}
-                                    onClick={() => {
-                                      setRecurrenceFailure(null);
-                                      setRemovingException(exception);
-                                    }}
-                                  >
-                                    Remove
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {schedules.map((version) => {
+                            // AC-63: a stored version renders the vocabulary's own
+                            // label; anything outside it is read-only from the string.
+                            const cadence = fromRrule(version.rrule);
+                            return (
+                              <TableRow key={version.effectiveFrom}>
+                                <TableCell>{formatDate(version.effectiveFrom)}</TableCell>
+                                <TableCell>
+                                  <div className={styles.identity}>
+                                    <Text>{cadence ? cadenceLabel(cadence) : version.rrule}</Text>
+                                    {cadence ? null : (
+                                      <Text size={200} className={styles.muted}>
+                                        Outside the recurrence vocabulary · cannot be edited here
+                                      </Text>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {version.endsOn ? formatDate(version.endsOn) : 'No end date'}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
-                  )}
-                </>
-              )}
-            </section>
+
+                    <div className={styles.sectionHeader}>
+                      <Text className={styles.emptyTitle}>Exceptions</Text>
+                      {archived ? null : (
+                        <Button
+                          icon={<AddRegular />}
+                          appearance="secondary"
+                          onClick={() => {
+                            setRecurrenceFailure(null);
+                            setExceptionOpen(true);
+                          }}
+                        >
+                          Add exception
+                        </Button>
+                      )}
+                    </div>
+
+                    {exceptions.length === 0 ? (
+                      <div className={styles.empty}>
+                        <Text size={200} className={styles.muted}>
+                          The schedule&apos;s generated dates stand as they are.
+                        </Text>
+                      </div>
+                    ) : (
+                      <div className={styles.tableWrap}>
+                        <Table className={styles.table} size="small" aria-label="Exceptions">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHeaderCell>Date</TableHeaderCell>
+                              <TableHeaderCell>Kind</TableHeaderCell>
+                              <TableHeaderCell>Note</TableHeaderCell>
+                              <TableHeaderCell aria-label="Action" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {exceptions.map((exception) => (
+                              <TableRow key={exception.date}>
+                                <TableCell>{formatDate(exception.date)}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    appearance="tint"
+                                    color={
+                                      exception.kind === 'cancelled' ? 'danger' : 'informative'
+                                    }
+                                    size="small"
+                                  >
+                                    {exceptionKindLabel(exception.kind)}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {exception.note ? (
+                                    exception.note
+                                  ) : (
+                                    <Text size={200} className={styles.muted}>
+                                      {exceptionNoteLabel(exception.kind, exception.note)}
+                                    </Text>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {archived ? (
+                                    <Text size={200} className={styles.muted}>
+                                      Read-only
+                                    </Text>
+                                  ) : (
+                                    <Button
+                                      size="small"
+                                      appearance="transparent"
+                                      icon={<DeleteRegular />}
+                                      aria-label={`Remove exception on ${formatDate(exception.date)}`}
+                                      onClick={() => {
+                                        setRecurrenceFailure(null);
+                                        setRemovingException(exception);
+                                      }}
+                                    >
+                                      Remove
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
 
             <section className={styles.panel} aria-label="Event occurrences">
               <div className={styles.sectionHeader}>
@@ -781,85 +899,6 @@ export function EventDetailPage() {
                 </div>
               )}
             </section>
-
-            <section className={styles.panel} aria-label="Active offerings">
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.panelTitle}>Active offerings</h2>
-                <Text size={200} className={styles.muted}>
-                  Every offering attached · current terms
-                </Text>
-              </div>
-              {event.offerings.length === 0 ? (
-                <div className={styles.empty}>
-                  <Text className={styles.emptyTitle}>No offerings attached</Text>
-                  <Text size={200} className={styles.muted}>
-                    Attach an offering to this event before recording giving.
-                  </Text>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.tableWrap}>
-                    <Table className={styles.table} size="small" aria-label="Active offerings">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHeaderCell>Offering</TableHeaderCell>
-                          <TableHeaderCell>Kind</TableHeaderCell>
-                          <TableHeaderCell>Currency</TableHeaderCell>
-                          <TableHeaderCell>Available until</TableHeaderCell>
-                          <TableHeaderCell>Status</TableHeaderCell>
-                          <TableHeaderCell>Terms</TableHeaderCell>
-                          <TableHeaderCell aria-label="Action" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {event.offerings.map((offering) => (
-                          <TableRow key={offering.offeringId}>
-                            <TableCell>
-                              <Text weight="semibold">{offering.name}</Text>
-                            </TableCell>
-                            <TableCell>{kindLabel(offering.terms.kind)}</TableCell>
-                            <TableCell>{offering.terms.currency}</TableCell>
-                            <TableCell>
-                              {offering.availableUntil ? formatDate(offering.availableUntil) : '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                appearance="tint"
-                                color={offering.expired ? 'warning' : 'success'}
-                                size="small"
-                              >
-                                {offering.expired ? 'Expired' : 'Active'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{`v${offering.terms.version}`}</TableCell>
-                            <TableCell>
-                              <Button
-                                size="small"
-                                appearance="transparent"
-                                aria-label={`View terms for ${offering.name}`}
-                                onClick={() =>
-                                  setTermsTarget({
-                                    offeringId: offering.offeringId,
-                                    name: offering.name,
-                                  })
-                                }
-                              >
-                                View terms
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className={styles.listFooter}>
-                    <Text size={200} className={styles.muted}>
-                      Read-only summary · the full offering detail is post-MVP.
-                    </Text>
-                  </div>
-                </>
-              )}
-            </section>
           </>
         )}
       </div>
@@ -870,8 +909,6 @@ export function EventDetailPage() {
         session={selected}
         onClose={() => setSelected(null)}
       />
-
-      <TermsDialog offering={termsTarget} onClose={() => setTermsTarget(null)} />
 
       {/*
         Mounted from the first render and closed until an occurrence is named: a Fluent surface that

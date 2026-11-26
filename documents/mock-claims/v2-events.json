@@ -294,29 +294,15 @@
     "22-event-detail-period": {
       "mock": {
         "path": "mockups/v2-events/22-event-detail-period.png",
-        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3",
+        "sha256": "185c79d91de99bd3f1ad5c5eea87786140db5f42f1bba40d0fb774f02ee39fcd",
         "source": "mockups/v2-events/22-event-detail-period.html"
       },
-      "baseline": null,
+      "baseline": "event-detail-period.png",
       "coverage": "signed",
       "signed": {
         "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "08fddd49ce9527a352ec87f1a1449a4b7f0ee50d6ab74952856799dd3d6ce8e3"
-      }
-    },
-    "23-event-detail-period-preview": {
-      "mock": {
-        "path": "mockups/v2-events/23-event-detail-period-preview.png",
-        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7",
-        "source": "mockups/v2-events/23-event-detail-period-preview.html"
-      },
-      "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "e57b8b55f79e802f1637f7d6ed8bc6a80d645b262e5bfa82e17a8b7969ed29d7"
+        "at": "2026-11-26",
+        "sha256": "185c79d91de99bd3f1ad5c5eea87786140db5f42f1bba40d0fb774f02ee39fcd"
       }
     }
   },
@@ -422,6 +408,17 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-63a",
         "quote": "the resolved dates appear only as a one-line summary plus a **Preview dates** control"
+      }
+    },
+    {
+      "id": "EVP-DETAIL",
+      "as": "an events officer",
+      "iWant": "the detail to show a period event as the record it stores - its own dates and rows - rather than a preview that re-resolves the rule",
+      "soThat": "what I read on the page is what the event actually holds",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "no preview is drawn on it"
       }
     }
   ],
@@ -715,6 +712,23 @@
         "file": "documents/specs/member-registrations-ui.md",
         "anchor": "AC-63a",
         "quote": "no inline table lengthens the form"
+      },
+      "control": "spec"
+    },
+    {
+      "id": "EVP-DETAIL-NO-PREVIEW",
+      "story": "EVP-DETAIL",
+      "state": "22-event-detail-period",
+      "claim": "A Preview dates control on the event detail.",
+      "expect": "ABSENT",
+      "class": "spec-required",
+      "anchorKind": "ac",
+      "ac": ["AC-63a"],
+      "assert": "image",
+      "spec": {
+        "file": "documents/specs/member-registrations-ui.md",
+        "anchor": "AC-63a",
+        "quote": "no preview is drawn on it"
       },
       "control": "spec"
     }

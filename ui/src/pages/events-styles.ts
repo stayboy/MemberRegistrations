@@ -170,6 +170,29 @@ export const useEventStyles = makeStyles({
     whiteSpace: 'pre-wrap',
     color: tokens.colorNeutralForeground2,
   },
+  // The period's block at the foot of the identity card: its label, the name with
+  // its info glyph, and the catalogue's definition beneath (owner, 2026-11-26).
+  periodBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXS,
+    minWidth: 0,
+  },
+  periodNameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    minWidth: 0,
+  },
+  periodName: {
+    color: tokens.colorNeutralForeground1,
+    fontSize: tokens.fontSizeBase300,
+  },
+  periodDefinition: {
+    color: tokens.colorNeutralForeground2,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+  },
   dialogSurface: {
     maxWidth: '760px',
   },
