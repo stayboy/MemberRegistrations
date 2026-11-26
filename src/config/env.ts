@@ -92,6 +92,14 @@ const envSchema = z.object({
   S3_REGION: z.string().min(1).default('us-east-1'),
   S3_ACCESS_KEY_ID: z.string().min(1).optional(),
   S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /**
+   * The deployed notification trigger (N-8, FR-42). No default in code: `0`
+   * means continuous (Compose), a hosted deployment sets `15`, and an unset
+   * value refuses to boot so the cadence read and the refusal cannot disagree.
+   */
+  NOTIFICATION_TRIGGER_MINUTES: z.coerce.number().int().min(0).max(1440),
+  /** The sender identity notifications use; defaults to the magic-link From. */
+  NOTIFICATIONS_EMAIL_FROM: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -34,20 +34,27 @@ const productionSecrets = {
   PAYMENT_GATEWAY_SECRET: 'production-payment-gateway-secret',
 };
 
+/**
+ * The deployed trigger cadence has no default in code (N-8), so every boot in
+ * this suite names it; the refusal test calls `loadEnv` directly.
+ */
+const base = (source: NodeJS.ProcessEnv) =>
+  loadEnv({ NOTIFICATION_TRIGGER_MINUTES: '0', ...source });
+
 describe('environment', () => {
   it('fails a production boot without a visitor phone pepper override', () => {
-    expect(() => loadEnv(production)).toThrow(/VISITOR_PHONE_PEPPER/);
+    expect(() => base(production)).toThrow(/VISITOR_PHONE_PEPPER/);
   });
 
   it('fails a production boot without an OTP pepper override', () => {
-    expect(() =>
-      loadEnv({ ...production, VISITOR_PHONE_PEPPER: 'production-phone-pepper' }),
-    ).toThrow(/OTP_PEPPER/);
+    expect(() => base({ ...production, VISITOR_PHONE_PEPPER: 'production-phone-pepper' })).toThrow(
+      /OTP_PEPPER/,
+    );
   });
 
   it('fails a production boot without a registration phone key or a link base', () => {
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         VISITOR_PHONE_PEPPER: 'production-phone-pepper',
         OTP_PEPPER: 'production-otp-pepper',
@@ -55,7 +62,7 @@ describe('environment', () => {
     ).toThrow(/REGISTRATION_PHONE_KEY/);
 
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         VISITOR_PHONE_PEPPER: 'production-phone-pepper',
         OTP_PEPPER: 'production-otp-pepper',
@@ -65,7 +72,7 @@ describe('environment', () => {
   });
 
   it('boots production with only the required names and both subsystems off', () => {
-    const env = loadEnv({
+    const env = base({
       ...production,
       VISITOR_PHONE_PEPPER: 'production-phone-pepper',
       OTP_PEPPER: 'production-otp-pepper',
@@ -89,7 +96,7 @@ describe('environment', () => {
 
   it('fails a production boot with a development secret when that subsystem is on', () => {
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         ...productionSecrets,
         USSD_ENABLED: 'true',
@@ -97,7 +104,7 @@ describe('environment', () => {
       }),
     ).toThrow(/USSD_GATEWAY_SECRET/);
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         ...productionSecrets,
         USSD_ENABLED: 'true',
@@ -105,7 +112,7 @@ describe('environment', () => {
       }),
     ).toThrow(/USSD_PHONE_PEPPER/);
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         ...productionSecrets,
         USSD_ENABLED: 'true',
@@ -113,7 +120,7 @@ describe('environment', () => {
       }),
     ).toThrow(/USSD_CODE_PEPPER/);
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         ...productionSecrets,
         USSD_ENABLED: 'true',
@@ -121,7 +128,7 @@ describe('environment', () => {
       }),
     ).toThrow(/USSD_NALO_USER_ID/);
     expect(() =>
-      loadEnv({
+      base({
         ...production,
         ...productionSecrets,
         PAYMENTS_ENABLED: 'true',
@@ -131,34 +138,34 @@ describe('environment', () => {
   });
 
   it('validates the Nalo client id and message cap bounds', () => {
-    expect(loadEnv({ NODE_ENV: 'test' }).USSD_NALO_USER_ID).toBe(DEFAULT_USSD_NALO_USER_ID);
-    expect(loadEnv({ NODE_ENV: 'test' }).USSD_NALO_MAX_MSG_CHARS).toBe(
+    expect(base({ NODE_ENV: 'test' }).USSD_NALO_USER_ID).toBe(DEFAULT_USSD_NALO_USER_ID);
+    expect(base({ NODE_ENV: 'test' }).USSD_NALO_MAX_MSG_CHARS).toBe(
       DEFAULT_USSD_NALO_MAX_MSG_CHARS,
     );
-    expect(loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'a' }).USSD_NALO_USER_ID).toBe('a');
+    expect(base({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'a' }).USSD_NALO_USER_ID).toBe('a');
     expect(
-      loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(32) }).USSD_NALO_USER_ID,
+      base({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(32) }).USSD_NALO_USER_ID,
     ).toHaveLength(32);
-    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: '' })).toThrow(/USSD_NALO_USER_ID/);
-    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(33) })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', USSD_NALO_USER_ID: '' })).toThrow(/USSD_NALO_USER_ID/);
+    expect(() => base({ NODE_ENV: 'test', USSD_NALO_USER_ID: 'x'.repeat(33) })).toThrow(
       /USSD_NALO_USER_ID/,
     );
-    expect(
-      loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '1' }).USSD_NALO_MAX_MSG_CHARS,
-    ).toBe(1);
-    expect(
-      loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '182' }).USSD_NALO_MAX_MSG_CHARS,
-    ).toBe(182);
-    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '0' })).toThrow(
+    expect(base({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '1' }).USSD_NALO_MAX_MSG_CHARS).toBe(
+      1,
+    );
+    expect(base({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '182' }).USSD_NALO_MAX_MSG_CHARS).toBe(
+      182,
+    );
+    expect(() => base({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '0' })).toThrow(
       /USSD_NALO_MAX_MSG_CHARS/,
     );
-    expect(() => loadEnv({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '183' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', USSD_NALO_MAX_MSG_CHARS: '183' })).toThrow(
       /USSD_NALO_MAX_MSG_CHARS/,
     );
   });
 
   it('accepts production with explicit secrets and both subsystems off', () => {
-    const env = loadEnv({ ...production, ...productionSecrets });
+    const env = base({ ...production, ...productionSecrets });
     expect(env.VISITOR_PHONE_PEPPER).toBe('production-phone-pepper');
     expect(env.OTP_PEPPER).toBe('production-otp-pepper');
     expect(env.REGISTRATION_PHONE_KEY).toBe('production-registration-key');
@@ -170,7 +177,7 @@ describe('environment', () => {
   });
 
   it('accepts production with payments enabled and a real secret', () => {
-    const env = loadEnv({
+    const env = base({
       ...production,
       VISITOR_PHONE_PEPPER: 'production-phone-pepper',
       OTP_PEPPER: 'production-otp-pepper',
@@ -183,54 +190,48 @@ describe('environment', () => {
   });
 
   it('refuses to enable USSD in production', () => {
-    expect(() => loadEnv({ ...production, ...productionSecrets, USSD_ENABLED: 'true' })).toThrow(
+    expect(() => base({ ...production, ...productionSecrets, USSD_ENABLED: 'true' })).toThrow(
       /USSD_ENABLED must be false when NODE_ENV=production until a real aggregator exists/,
     );
   });
 
   it('keeps USSD driveable with the development defaults outside production', () => {
-    const env = loadEnv({ NODE_ENV: 'development', USSD_ENABLED: 'true' });
+    const env = base({ NODE_ENV: 'development', USSD_ENABLED: 'true' });
     expect(env.USSD_ENABLED).toBe(true);
     expect(env.USSD_GATEWAY_SECRET).toBe(DEFAULT_USSD_GATEWAY_SECRET);
   });
 
   it('keeps the development and test defaults', () => {
-    expect(loadEnv({ NODE_ENV: 'development' }).VISITOR_PHONE_PEPPER).toBe(
+    expect(base({ NODE_ENV: 'development' }).VISITOR_PHONE_PEPPER).toBe(
       DEFAULT_VISITOR_PHONE_PEPPER,
     );
-    expect(loadEnv({ NODE_ENV: 'test' }).VISITOR_PHONE_PEPPER).toBe(DEFAULT_VISITOR_PHONE_PEPPER);
-    expect(loadEnv({ NODE_ENV: 'test' }).OTP_PEPPER).toBe(DEFAULT_OTP_PEPPER);
-    expect(loadEnv({ NODE_ENV: 'test' }).REGISTRATION_PHONE_KEY).toBe(
-      DEFAULT_REGISTRATION_PHONE_KEY,
-    );
-    expect(loadEnv({ NODE_ENV: 'test' }).VERIFICATION_LINK_BASE).toBe(
-      DEFAULT_VERIFICATION_LINK_BASE,
-    );
-    expect(loadEnv({ NODE_ENV: 'test' }).DEFAULT_COUNTRY_CODE).toBe(DEFAULT_COUNTRY_CODE);
-    expect(loadEnv({ NODE_ENV: 'test' }).WHATSAPP_SEND_URL).toBeUndefined();
-    expect(loadEnv({ NODE_ENV: 'test' }).SMS_SEND_URL).toBeUndefined();
-    expect(loadEnv({ NODE_ENV: 'test' }).MESSAGE_SEND_TOKEN).toBeUndefined();
-    expect(loadEnv({ NODE_ENV: 'test' }).USSD_ENABLED).toBe(false);
-    expect(loadEnv({ NODE_ENV: 'test' }).PAYMENTS_ENABLED).toBe(false);
-    expect(loadEnv({ NODE_ENV: 'test', PAYMENTS_ENABLED: 'true' }).PAYMENTS_ENABLED).toBe(true);
-    expect(loadEnv({ NODE_ENV: 'test' }).PAYMENT_GATEWAY_SECRET).toBe(
-      DEFAULT_PAYMENT_GATEWAY_SECRET,
-    );
+    expect(base({ NODE_ENV: 'test' }).VISITOR_PHONE_PEPPER).toBe(DEFAULT_VISITOR_PHONE_PEPPER);
+    expect(base({ NODE_ENV: 'test' }).OTP_PEPPER).toBe(DEFAULT_OTP_PEPPER);
+    expect(base({ NODE_ENV: 'test' }).REGISTRATION_PHONE_KEY).toBe(DEFAULT_REGISTRATION_PHONE_KEY);
+    expect(base({ NODE_ENV: 'test' }).VERIFICATION_LINK_BASE).toBe(DEFAULT_VERIFICATION_LINK_BASE);
+    expect(base({ NODE_ENV: 'test' }).DEFAULT_COUNTRY_CODE).toBe(DEFAULT_COUNTRY_CODE);
+    expect(base({ NODE_ENV: 'test' }).WHATSAPP_SEND_URL).toBeUndefined();
+    expect(base({ NODE_ENV: 'test' }).SMS_SEND_URL).toBeUndefined();
+    expect(base({ NODE_ENV: 'test' }).MESSAGE_SEND_TOKEN).toBeUndefined();
+    expect(base({ NODE_ENV: 'test' }).USSD_ENABLED).toBe(false);
+    expect(base({ NODE_ENV: 'test' }).PAYMENTS_ENABLED).toBe(false);
+    expect(base({ NODE_ENV: 'test', PAYMENTS_ENABLED: 'true' }).PAYMENTS_ENABLED).toBe(true);
+    expect(base({ NODE_ENV: 'test' }).PAYMENT_GATEWAY_SECRET).toBe(DEFAULT_PAYMENT_GATEWAY_SECRET);
   });
 
   it('validates the country code and the provider-neutral sender settings', () => {
-    expect(loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1' }).DEFAULT_COUNTRY_CODE).toBe('1');
-    expect(loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '234' }).DEFAULT_COUNTRY_CODE).toBe(
+    expect(base({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1' }).DEFAULT_COUNTRY_CODE).toBe('1');
+    expect(base({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '234' }).DEFAULT_COUNTRY_CODE).toBe(
       '234',
     );
-    expect(() => loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1234' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '1234' })).toThrow(
       /DEFAULT_COUNTRY_CODE/,
     );
-    expect(() => loadEnv({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '+233' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', DEFAULT_COUNTRY_CODE: '+233' })).toThrow(
       /DEFAULT_COUNTRY_CODE/,
     );
 
-    const configured = loadEnv({
+    const configured = base({
       NODE_ENV: 'test',
       WHATSAPP_SEND_URL: 'https://messages.example.test/whatsapp',
       SMS_SEND_URL: 'https://messages.example.test/sms',
@@ -239,31 +240,41 @@ describe('environment', () => {
     expect(configured.WHATSAPP_SEND_URL).toBe('https://messages.example.test/whatsapp');
     expect(configured.SMS_SEND_URL).toBe('https://messages.example.test/sms');
     expect(configured.MESSAGE_SEND_TOKEN).toBe('provider-token');
-    expect(() => loadEnv({ NODE_ENV: 'test', WHATSAPP_SEND_URL: 'not-a-url' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', WHATSAPP_SEND_URL: 'not-a-url' })).toThrow(
       /WHATSAPP_SEND_URL/,
     );
   });
 
   it('validates the registration key length and the acceptance page URL', () => {
-    expect(() => loadEnv({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'too-short' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'too-short' })).toThrow(
       /REGISTRATION_PHONE_KEY/,
     );
     expect(
-      loadEnv({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'a-valid-key-of-16' })
+      base({ NODE_ENV: 'test', REGISTRATION_PHONE_KEY: 'a-valid-key-of-16' })
         .REGISTRATION_PHONE_KEY,
     ).toBe('a-valid-key-of-16');
-    expect(() => loadEnv({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'not-a-url' })).toThrow(
+    expect(() => base({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'not-a-url' })).toThrow(
       /VERIFICATION_LINK_BASE/,
     );
     expect(
-      loadEnv({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'https://example.test/v' })
+      base({ NODE_ENV: 'test', VERIFICATION_LINK_BASE: 'https://example.test/v' })
         .VERIFICATION_LINK_BASE,
     ).toBe('https://example.test/v');
   });
 
   it('rejects a PAYMENTS_ENABLED value other than true or false', () => {
-    expect(() => loadEnv({ NODE_ENV: 'test', PAYMENTS_ENABLED: 'yes' })).toThrow(
-      /PAYMENTS_ENABLED/,
+    expect(() => base({ NODE_ENV: 'test', PAYMENTS_ENABLED: 'yes' })).toThrow(/PAYMENTS_ENABLED/);
+  });
+
+  it('refuses to boot without NOTIFICATION_TRIGGER_MINUTES and decodes the cadence', () => {
+    // No default in code: an unset value is a boot failure, not a silent 1.
+    expect(() => loadEnv({ NODE_ENV: 'test' })).toThrow(/NOTIFICATION_TRIGGER_MINUTES/);
+    expect(base({ NODE_ENV: 'test' }).NOTIFICATION_TRIGGER_MINUTES).toBe(0);
+    expect(
+      base({ NODE_ENV: 'test', NOTIFICATION_TRIGGER_MINUTES: '15' }).NOTIFICATION_TRIGGER_MINUTES,
+    ).toBe(15);
+    expect(() => base({ NODE_ENV: 'test', NOTIFICATION_TRIGGER_MINUTES: '-1' })).toThrow(
+      /NOTIFICATION_TRIGGER_MINUTES/,
     );
   });
 });

@@ -51,6 +51,8 @@ import {
 import type { Db, DbClient, Row } from '../db/sql.js';
 import { audienceRegister, type RegisterMember } from './audience-members.js';
 import { audienceRules, eventAudiences } from './event-audiences.js';
+import { cadenceAllows } from '../domain/notifications/skip.js';
+import { eventPeriodId, preferenceStates, resolveRecipients } from './notification-recipients.js';
 import { flierStorageKey, type FlierLocator, type FlierStore } from '../storage/flier-store.js';
 
 export type NotificationPlanDetail = z.infer<typeof notificationPlanSchema>;
@@ -77,6 +79,16 @@ export interface NotificationPreview {
   };
   counts: { audience: number; email: number; whatsapp: number; sms: number; ussd: number };
   sample: { memberNo: string; displayName: string } | null;
+  excluded: {
+    counts: {
+      channel_blocked: number;
+      event_muted: number;
+      period_muted: number;
+      cadence_filtered: number;
+      no_contact: number;
+    };
+    sample: Array<{ memberNo: string; displayName: string }>;
+  };
 }
 
 /** The standard slot template every new plan starts from (FR-31, AC-40). */
@@ -90,9 +102,31 @@ export const DEFAULT_SLOT_TEMPLATE: NotificationSlotInput[] = [
 export const DEFAULT_CHURCH_NAME = 'The Church';
 
 const PUBLISH_UNAVAILABLE = {
-  enabled: false,
-  reason: 'Publishing, instances and deliveries ship with the send path in R3.',
+  enabled: true,
+  reason: 'Publishing materialises instances and fans them out to the audience.',
 };
+
+/**
+ * The content token publish pins (N-3, FR-17). It hashes the revision's slots,
+ * templates and flier, because a draft edits in place and the revision number
+ * cannot tell two drafts apart.
+ */
+function planContentEtag(
+  slots: readonly SlotRow[],
+  templates: readonly TemplateRow[],
+  flierToken: string | null,
+): string {
+  const payload = JSON.stringify({
+    slots: slots.map((slot) => ({
+      kind: slot.kind,
+      anchor: slot.anchor,
+      offsetMinutes: slot.offset_minutes,
+    })),
+    templates: templates.map((template) => template.channel).sort(),
+    flier: flierToken,
+  });
+  return `"c${createHash('sha256').update(payload).digest('hex').slice(0, 16)}"`;
+}
 
 function isoTimestamp(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
@@ -187,6 +221,8 @@ export class NotificationPlanRepository {
   constructor(
     private readonly db: Db,
     private readonly flierStore: FlierStore,
+    /** The deployed trigger cadence (N-8, FR-41); `0` is continuous. */
+    private readonly triggerMinutes: number = 0,
   ) {}
 
   private async eventContext(client: DbClient, eventId: string): Promise<EventContext> {
@@ -320,6 +356,7 @@ export class NotificationPlanRepository {
         revision: 1,
         status: 'draft',
         etag: planEtag(0),
+        contentEtag: planContentEtag([], [], null),
         slots: [],
         templates: [],
         flier: null,
@@ -340,6 +377,7 @@ export class NotificationPlanRepository {
       revision: highest > 0 ? highest : 1,
       status: current?.status ?? 'draft',
       etag: planEtag(highest),
+      contentEtag: planContentEtag(slots, templates, flier?.token ?? null),
       slots: slots.map((slot) => ({
         id: slot.id,
         kind: slot.kind,
@@ -559,10 +597,12 @@ export class NotificationPlanRepository {
     const rules = audienceRules(await eventAudiences(this.db, eventId));
     const register = await audienceRegister(this.db, at);
     const matched = register.filter((member) => memberMatchesEventAudiences(rules, member, at));
-    const reachable = await this.channelReachability(
-      this.db,
-      matched.map((member) => member.id),
-    );
+    const memberIds = matched.map((member) => member.id);
+    // The preview and the fan-out share one resolver, so their counts cannot
+    // disagree (N-5).
+    const resolvedRecipients = await resolveRecipients(this.db, memberIds, now);
+    const periodId = await eventPeriodId(this.db, eventId);
+    const states = await preferenceStates(this.db, memberIds, eventId, periodId, now);
 
     const defaults = await this.defaults();
     const sample = [...matched].sort((left, right) =>
@@ -580,11 +620,67 @@ export class NotificationPlanRepository {
     const values = resolvedValues(this.renderValues(context, sample, at, defaults, flierRef));
     const counts = {
       audience: matched.length,
-      email: matched.filter((member) => reachable.email.has(member.id)).length,
-      whatsapp: matched.filter((member) => reachable.whatsapp.has(member.id)).length,
-      sms: matched.filter((member) => reachable.sms.has(member.id)).length,
-      ussd: matched.filter((member) => reachable.own.has(member.id)).length,
+      email: matched.filter((member) =>
+        resolvedRecipients.destinations.get(member.id)?.has('email'),
+      ).length,
+      whatsapp: matched.filter((member) =>
+        resolvedRecipients.destinations.get(member.id)?.has('whatsapp'),
+      ).length,
+      sms: matched.filter((member) => resolvedRecipients.destinations.get(member.id)?.has('sms'))
+        .length,
+      ussd: matched.filter((member) => resolvedRecipients.inboxEligible.has(member.id)).length,
     };
+
+    // FR-16/FR-44: aggregate excluded counts by reason and a named sample only
+    // of the `no_contact` exclusions; the muted and blocked are never named.
+    const slotKinds = new Set(slots.map((slot) => slot.kind));
+    const cadenceOccurrence = {
+      hasStarts: slotKinds.has('starts'),
+      hasLast: slotKinds.has('last'),
+      isFirst: true,
+      isLast: true,
+    };
+    const excludedCounts = {
+      channel_blocked: 0,
+      event_muted: 0,
+      period_muted: 0,
+      cadence_filtered: 0,
+      no_contact: 0,
+    };
+    const noContact: Array<{ memberNo: string; displayName: string }> = [];
+    for (const member of matched) {
+      const destinations = resolvedRecipients.destinations.get(member.id) ?? new Map();
+      const state = states.get(member.id)!;
+      const reachableChannels = [...destinations.keys()];
+      const everyReachableBlocked =
+        reachableChannels.length > 0 &&
+        reachableChannels.every((channel) => state.blocked.has(channel));
+      const anySlotAllowed = [...slotKinds].some((kind) =>
+        cadenceAllows(state.cadence, kind, cadenceOccurrence),
+      );
+      const reason = everyReachableBlocked
+        ? 'channel_blocked'
+        : state.eventMuted
+          ? 'event_muted'
+          : state.periodMuted
+            ? 'period_muted'
+            : !anySlotAllowed
+              ? 'cadence_filtered'
+              : reachableChannels.length === 0
+                ? 'no_contact'
+                : null;
+      if (!reason) continue;
+      excludedCounts[reason] += 1;
+      if (reason === 'no_contact') {
+        noContact.push({
+          memberNo: member.memberNo,
+          displayName: displayName(member.firstName, member.lastName, member.otherNames),
+        });
+      }
+    }
+    const excludedSample = noContact
+      .sort((left, right) => left.memberNo.localeCompare(right.memberNo))
+      .slice(0, 5);
 
     const byChannel = new Map(templates.map((template) => [template.channel, template]));
     const email = byChannel.get('email');
@@ -636,6 +732,7 @@ export class NotificationPlanRepository {
             displayName: displayName(sample.firstName, sample.lastName, sample.otherNames),
           }
         : null,
+      excluded: { counts: excludedCounts, sample: excludedSample },
     };
   }
 
@@ -665,85 +762,9 @@ export class NotificationPlanRepository {
   }
 
   /**
-   * Per-channel destination resolution (N-5): an own contact of the kind, else
-   * the guardian chain. `own` is the inbox test - a member who cannot
-   * authenticate gets no inbox row (N-4) - so it counts any owned contact.
+   * The preview's exclusions used to read reachability here; the fan-out and
+   * the preview now share `resolveRecipients` (N-5) so they cannot disagree.
    */
-  private async channelReachability(
-    client: DbClient,
-    memberIds: readonly string[],
-  ): Promise<{ email: Set<string>; whatsapp: Set<string>; sms: Set<string>; own: Set<string> }> {
-    const result = {
-      email: new Set<string>(),
-      whatsapp: new Set<string>(),
-      sms: new Set<string>(),
-      own: new Set<string>(),
-    };
-    if (memberIds.length === 0) return result;
-
-    const contactKinds = new Map<string, Set<string>>();
-    const loadContacts = async (ids: readonly string[]): Promise<void> => {
-      if (ids.length === 0) return;
-      const rows = await client.query<{ member_id: string; kind: string }>(
-        'select member_id, kind from member_contacts where member_id = any($1::uuid[])',
-        [ids],
-      );
-      for (const row of rows) {
-        const kinds = contactKinds.get(row.member_id) ?? new Set<string>();
-        kinds.add(row.kind);
-        contactKinds.set(row.member_id, kinds);
-      }
-    };
-    await loadContacts(memberIds);
-
-    // Walk the guardian chain once per audience member, at most three links
-    // (MR-40). A guardian who is themselves in the audience is still an edge.
-    const guardians = new Map<string, string>();
-    let frontier = [...memberIds];
-    const discovered = new Set(frontier);
-    for (let hop = 0; hop < 3 && frontier.length > 0; hop += 1) {
-      const edges = await client.query<{ member_id: string; related_member_id: string }>(
-        `select member_id, related_member_id
-           from member_relationships
-          where type = 'guardian' and member_id = any($1::uuid[])
-          order by created_at, id`,
-        [frontier],
-      );
-      const next: string[] = [];
-      for (const edge of edges) {
-        if (guardians.has(edge.member_id)) continue;
-        guardians.set(edge.member_id, edge.related_member_id);
-        if (!discovered.has(edge.related_member_id)) {
-          discovered.add(edge.related_member_id);
-          next.push(edge.related_member_id);
-        }
-      }
-      frontier = next;
-    }
-    await loadContacts([...discovered].filter((id) => !memberIds.includes(id)));
-
-    const channels: Array<['email' | 'whatsapp' | 'sms', string]> = [
-      ['email', 'email'],
-      ['whatsapp', 'whatsapp'],
-      ['sms', 'phone'],
-    ];
-    for (const memberId of memberIds) {
-      if ((contactKinds.get(memberId)?.size ?? 0) > 0) result.own.add(memberId);
-      for (const [channel, kind] of channels) {
-        let current: string | undefined = memberId;
-        const seen = new Set<string>();
-        while (current && !seen.has(current)) {
-          seen.add(current);
-          if (contactKinds.get(current)?.has(kind)) {
-            result[channel].add(memberId);
-            break;
-          }
-          current = guardians.get(current);
-        }
-      }
-    }
-    return result;
-  }
 
   // -- flier (N-9) -----------------------------------------------------------
 
@@ -936,6 +957,10 @@ export class NotificationPlanRepository {
         digestHour: '09:00',
         failureDigestTo: null,
         failureDigestEnabled: true,
+        trigger:
+          this.triggerMinutes > 0
+            ? { kind: 'interval' as const, minutes: this.triggerMinutes }
+            : { kind: 'continuous' as const },
         updatedAt: null,
         updatedBy: null,
       };
@@ -959,6 +984,10 @@ export class NotificationPlanRepository {
       digestHour: row.digest_hour.slice(0, 5),
       failureDigestTo: row.failure_digest_to,
       failureDigestEnabled: row.failure_digest_enabled,
+      trigger:
+        this.triggerMinutes > 0
+          ? { kind: 'interval' as const, minutes: this.triggerMinutes }
+          : { kind: 'continuous' as const },
       updatedAt: isoTimestamp(row.updated_at),
       updatedBy: row.updated_by,
     };

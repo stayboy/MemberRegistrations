@@ -32,6 +32,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
       NODE_ENV: development
+      # Required even by the migration CLI: the config schema has no default (N-8).
+      NOTIFICATION_TRIGGER_MINUTES: 0
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +99,9 @@ services:
       # The public member acceptance page is served by the Compose UI on 8080;
       # the SMS appends #t=<token> to this base (MR-51).
       VERIFICATION_LINK_BASE: http://localhost:8080/v
+      # The local stack polls continuously (N-8, FR-42): a containerised Postgres
+      # has no hourly meter, so cadence buys nothing here. Hosted sets 15.
+      NOTIFICATION_TRIGGER_MINUTES: 0
       # Fliers go to MinIO locally and to the register only when no bucket is
       # configured (N-9). Path-style addressing is what MinIO requires.
       FLIER_STORE: s3
@@ -122,6 +127,9 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@db:5432/member_registrations
+      # Continuous locally, with no in-code default; the config schema refuses
+      # to boot without it (N-8).
+      NOTIFICATION_TRIGGER_MINUTES: 0
       FLIER_STORE: s3
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: fliers

@@ -74,9 +74,9 @@ describe('GET /v1/events/{eventId}/notification-plan', () => {
       templates: [],
       flier: null,
       revisions: [],
-      publish: { enabled: false },
+      publish: { enabled: true },
     });
-    expect(response.body.publish.reason).toMatch(/R3/);
+    expect(response.body.publish.reason).toMatch(/Publishing/);
   });
 
   it('answers 404 for an event that does not exist', async () => {
@@ -334,16 +334,22 @@ describe('a published revision is frozen', () => {
   });
 });
 
-describe('the send path is absent, not stubbed', () => {
-  it('has no publish, cancel, change or deliveries route', async () => {
-    for (const path of ['publish', 'cancel', 'change', 'deliveries']) {
+describe('the send path exists', () => {
+  it('has publish, cancel, change and instances routes', async () => {
+    for (const path of ['publish', 'cancel', 'change']) {
       const response = await request(app)
         .post(`/v1/events/${eventId}/notification-plan/${path}`)
         .set(writeHeaders)
         .send({});
-      expect(response.status).toBe(404);
-      expect(response.body.code).toBe('route_not_found');
+      // A route that exists refuses for its own reason rather than answering
+      // route_not_found.
+      expect(response.body.code).not.toBe('route_not_found');
     }
+    const instances = await request(app)
+      .get(`/v1/events/${eventId}/notification-plan/instances`)
+      .set(readHeaders);
+    expect(instances.status).toBe(200);
+    expect(Array.isArray(instances.body.instances)).toBe(true);
   });
 });
 
@@ -363,7 +369,7 @@ describe('the contract', () => {
     }
     // The public image is the one path with no bearer requirement.
     expect((paths['/fliers/{token}'] as { get: { security: unknown[] } }).get.security).toEqual([]);
-    // The send path is not in the contract either.
-    expect(paths['/v1/events/{eventId}/notification-plan/publish']).toBeUndefined();
+    expect(paths['/v1/events/{eventId}/notification-plan/publish']).toBeDefined();
+    expect(paths['/v1/notification-deliveries/{id}/retry']).toBeDefined();
   });
 });

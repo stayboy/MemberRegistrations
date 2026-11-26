@@ -172,15 +172,23 @@ import {
   rosterSchema,
 } from './schemas/shepherding.js';
 import {
+  notificationCancelResultSchema,
+  notificationChangeInputSchema,
+  notificationChangeResultSchema,
   notificationDefaultsSchema,
   notificationDefaultsWriteSchema,
+  notificationDeliverySchema,
   notificationFlierSchema,
+  notificationInstanceSchema,
   notificationPlanSchema,
   notificationPlanWriteSchema,
   notificationPreviewSchema,
+  notificationPublishInputSchema,
+  notificationPublishResultSchema,
   notificationSlotSchema,
   notificationTemplateInputSchema,
   notificationTemplateSchema,
+  notificationTriggerSchema,
 } from './schemas/notifications.js';
 import {
   createSubscriptionProductSchema,
@@ -585,6 +593,7 @@ const notificationPlanExample = {
   revision: 2,
   status: 'draft',
   etag: '"r2"',
+  contentEtag: '"c8f1a2b3c4d5e6f7"',
   slots: [
     {
       id: 'b0c1d2e3-f4a5-4b6c-8d7e-9f0a1b2c3d4e',
@@ -630,8 +639,8 @@ const notificationPlanExample = {
     { revision: 2, status: 'draft', publishedAt: null, cancelledAt: null },
   ],
   publish: {
-    enabled: false,
-    reason: 'Publishing, instances and deliveries ship with the send path in R3.',
+    enabled: true,
+    reason: 'Publishing materialises instances and fans them out to the audience.',
   },
 };
 
@@ -668,6 +677,65 @@ const notificationPreviewExample = {
   },
   counts: { audience: 120, email: 64, whatsapp: 88, sms: 120, ussd: 118 },
   sample: { memberNo: 'M-1042', displayName: 'Ada Mensah' },
+  excluded: {
+    counts: {
+      channel_blocked: 3,
+      event_muted: 1,
+      period_muted: 0,
+      cadence_filtered: 2,
+      no_contact: 1,
+    },
+    sample: [{ memberNo: 'M-2001', displayName: 'Kofi Boateng' }],
+  },
+};
+
+const notificationInstanceExample = {
+  id: '2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7d',
+  planId: '6a1d2f5e-0c3b-4a7e-9a4f-2f1f7b8c0d11',
+  kind: 'announce',
+  revision: 2,
+  occurrenceDate: '2026-12-06',
+  sendAt: '2026-12-06T08:00:00.000Z',
+  deliveryAt: '2026-12-06T08:00:00.000Z',
+  status: 'scheduled',
+  recipientCount: 0,
+  sentCount: 0,
+  skippedCount: 0,
+  failedCount: 0,
+};
+
+const notificationPublishExample = {
+  planId: notificationInstanceExample.planId,
+  revision: 2,
+  status: 'published',
+  contentEtag: '"c8f1a2b3c4d5e6f7"',
+  created: 1,
+  instances: [notificationInstanceExample],
+};
+
+const notificationCancelExample = {
+  planId: notificationInstanceExample.planId,
+  revision: 2,
+  status: 'cancelled',
+  cancelledAt: '2026-12-06T07:00:00.000Z',
+  cancelledInstances: 1,
+};
+
+const notificationDeliveryExample = {
+  id: '3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8e',
+  instanceId: notificationInstanceExample.id,
+  memberId: '4d5e6f70-8192-4c0d-9e3f-4a5b6c7d8e9f',
+  memberNo: 'M-1042',
+  channel: 'sms',
+  routedVia: 'own',
+  contactId: '5e6f7081-92a3-4d1e-8f4a-5b6c7d8e9f01',
+  destinationMasked: '***1042',
+  status: 'failed',
+  skipReason: null,
+  attempts: 1,
+  lastErrorCode: 'transport_unavailable',
+  sentAt: null,
+  createdAt: '2026-12-06T08:00:00.000Z',
 };
 
 const notificationDefaultsExample = {
@@ -690,6 +758,7 @@ const notificationDefaultsExample = {
   digestHour: '09:00',
   failureDigestTo: 'office@example.org',
   failureDigestEnabled: true,
+  trigger: { kind: 'continuous' },
   updatedAt: '2026-11-24T10:00:00.000Z',
   updatedBy: 'test-admin',
 };
@@ -1032,6 +1101,14 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         NotificationFlier: toSchema(notificationFlierSchema, 'output'),
         NotificationDefaults: toSchema(notificationDefaultsSchema, 'output'),
         NotificationDefaultsWrite: toSchema(notificationDefaultsWriteSchema, 'input'),
+        NotificationTrigger: toSchema(notificationTriggerSchema, 'output'),
+        NotificationPublish: toSchema(notificationPublishInputSchema, 'input'),
+        NotificationPublishResult: toSchema(notificationPublishResultSchema, 'output'),
+        NotificationCancelResult: toSchema(notificationCancelResultSchema, 'output'),
+        NotificationChange: toSchema(notificationChangeInputSchema, 'input'),
+        NotificationChangeResult: toSchema(notificationChangeResultSchema, 'output'),
+        NotificationInstance: toSchema(notificationInstanceSchema, 'output'),
+        NotificationDelivery: toSchema(notificationDeliverySchema, 'output'),
       },
     },
     paths: {
@@ -4214,6 +4291,139 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             401: unauthorized,
             404: notFound,
             422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan/publish': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Publish the draft revision and materialise its instances',
+          description:
+            'Requires an `active` event and a saved draft. `If-Match` pins a content token over slots, templates and flier (not the revision, because a draft edits in place). Materialises one instance per slot and occurrence over the 90-day horizon and applies the send-time policy to `delivery_at`. Refusals: `409 event_not_active`, `409 cadence_too_coarse` when a `starts` slot meets a trigger coarser than 15 minutes, `422 slot_in_past`, `422 duplicate_slot_time`, `422 template_required`, and `412 plan_content_stale` on a stale token. Republishing the published revision returns the same instances and creates none.',
+          parameters: [actorHeader, ifMatchHeader],
+          requestBody: {
+            required: false,
+            content: { 'application/json': { schema: ref('NotificationPublish') } },
+          },
+          responses: {
+            200: {
+              description: 'The published revision and its instances.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPublishResult'),
+                  examples: {
+                    published: { summary: 'A first publish', value: notificationPublishExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            412: problem('The plan content has moved past the token in `If-Match`.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan/cancel': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Cancel the published revision',
+          description:
+            'Cancels the plan’s `scheduled` instances; created inbox messages and sent deliveries remain. A queued job drains as a no-op because the handler claims with a status re-check, and a cancelled instance does not block republishing the same moment.',
+          parameters: [actorHeader],
+          responses: {
+            200: {
+              description: 'The cancelled revision and how many instances stopped.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationCancelResult'),
+                  examples: {
+                    cancelled: { summary: 'A cancelled plan', value: notificationCancelExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem('The plan has no published revision (plan_not_published).'),
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan/change': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Publish a one-off change notice',
+          description:
+            'Writes its own `notification_change_notices` row and its own `change` instance to the published plan’s audience. It touches no slot and no future instance; the notice carries its own WhatsApp template and parameters and its own email subject and body because a published revision is frozen.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('NotificationChange') } },
+          },
+          responses: {
+            201: {
+              description: 'The notice and its instance.',
+              content: { 'application/json': { schema: ref('NotificationChangeResult') } },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan/instances': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'Read the plan’s instances and their counts',
+          responses: {
+            200: {
+              description: 'Every instance for the plan, ordered by send instant.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['instances'],
+                    properties: {
+                      instances: { type: 'array', items: ref('NotificationInstance') },
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/notification-deliveries/{id}/retry': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Retry a failed delivery once (audited)',
+          description:
+            'Accepts only a `failed` delivery (`409 delivery_not_failed` otherwise), re-renders from the revision the instance pinned, re-checks live mutes and blocks (so a retry may end `skipped`), and records `field = delivery_retry`, `source = admin` and the actor.',
+          parameters: [actorHeader],
+          responses: {
+            200: {
+              description: 'The delivery, now pending.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDelivery'),
+                  examples: {
+                    retried: { summary: 'A retried delivery', value: notificationDeliveryExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem('The delivery is not failed (delivery_not_failed).'),
           },
         },
       },

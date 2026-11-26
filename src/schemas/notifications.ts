@@ -148,6 +148,12 @@ export const notificationPlanSchema = z.object({
   revision: z.number().int().positive(),
   status: z.enum(['draft', 'published', 'superseded', 'cancelled']),
   etag: z.string(),
+  /**
+   * The publish precondition: a hash over slots, templates and flier, not the
+   * revision. A draft edits in place, so the revision cannot tell two drafts
+   * apart (N-3, FR-17).
+   */
+  contentEtag: z.string(),
   slots: z.array(notificationSlotSchema),
   templates: z.array(notificationTemplateSchema),
   flier: notificationFlierSchema.nullable(),
@@ -226,7 +232,30 @@ export const notificationPreviewSchema = z.object({
   }),
   /** The member the rendered variables came from; null when nobody matched. */
   sample: z.object({ memberNo: z.string(), displayName: z.string() }).nullable(),
+  /**
+   * FR-16/FR-44: aggregate counts by reason, and a named sample only of the
+   * `no_contact` exclusions. Members who muted or blocked are counted, never
+   * named.
+   */
+  excluded: z.object({
+    counts: z.object({
+      channel_blocked: z.number().int().nonnegative(),
+      event_muted: z.number().int().nonnegative(),
+      period_muted: z.number().int().nonnegative(),
+      cadence_filtered: z.number().int().nonnegative(),
+      no_contact: z.number().int().nonnegative(),
+    }),
+    sample: z.array(z.object({ memberNo: z.string(), displayName: z.string() })),
+  }),
 });
+
+/** The deployed cadence, read-only (N-8, FR-41). `0` is continuous. */
+export const notificationTriggerSchema = z.union([
+  z.object({ kind: z.literal('continuous') }),
+  z.object({ kind: z.literal('interval'), minutes: z.number().int().positive() }),
+]);
+
+export type NotificationTrigger = z.infer<typeof notificationTriggerSchema>;
 
 export const notificationDefaultsSchema = z.object({
   slots: notificationSlotsInputSchema,
@@ -243,6 +272,8 @@ export const notificationDefaultsSchema = z.object({
   digestHour: z.string(),
   failureDigestTo: z.string().nullable(),
   failureDigestEnabled: z.boolean(),
+  /** Deployment configuration, not an editable default. */
+  trigger: notificationTriggerSchema,
   updatedAt: z.string().nullable(),
   updatedBy: z.string().nullable(),
 });
@@ -267,3 +298,86 @@ export const notificationDefaultsWriteSchema = z.object({
 });
 
 export type NotificationDefaultsWrite = z.infer<typeof notificationDefaultsWriteSchema>;
+
+// -- the send side (R3) -------------------------------------------------------
+
+export const notificationPublishInputSchema = z.object({
+  /** The UI's typed confirmation above the SMS threshold (N-3). */
+  confirmed: z.boolean().optional(),
+});
+
+export const notificationInstanceSchema = z.object({
+  id: z.string(),
+  planId: z.string(),
+  kind: z.enum(['announce', 'reminder', 'starts', 'last', 'change']),
+  revision: z.number().int().positive(),
+  occurrenceDate: z.string().nullable(),
+  sendAt: z.string(),
+  deliveryAt: z.string().nullable(),
+  status: z.enum(['scheduled', 'fanning_out', 'sent', 'cancelled', 'failed']),
+  recipientCount: z.number().int().nonnegative(),
+  sentCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+});
+
+export const notificationPublishResultSchema = z.object({
+  planId: z.string(),
+  revision: z.number().int().positive(),
+  status: z.literal('published'),
+  contentEtag: z.string(),
+  /** How many instances this call created; a republish creates none. */
+  created: z.number().int().nonnegative(),
+  instances: z.array(notificationInstanceSchema),
+});
+
+export const notificationCancelResultSchema = z.object({
+  planId: z.string(),
+  revision: z.number().int().positive(),
+  status: z.literal('cancelled'),
+  cancelledAt: z.string(),
+  cancelledInstances: z.number().int().nonnegative(),
+});
+
+export const notificationChangeInputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  bodyText: z.string().min(1),
+  whatsappTemplate: z.string().trim().min(1).max(120).optional(),
+  whatsappParameters: z.array(z.string()).optional(),
+  emailSubject: z.string().trim().min(1).max(200).optional(),
+  emailBodyText: z.string().min(1).optional(),
+});
+
+export const notificationChangeResultSchema = z.object({
+  noticeId: z.string(),
+  instance: notificationInstanceSchema,
+});
+
+export const notificationDeliverySchema = z.object({
+  id: z.string(),
+  instanceId: z.string(),
+  memberId: z.string(),
+  memberNo: z.string(),
+  channel: z.enum(['email', 'sms', 'whatsapp']),
+  routedVia: z.enum(['own', 'guardian']),
+  contactId: z.string().nullable(),
+  destinationMasked: z.string().nullable(),
+  status: z.enum(['pending', 'sending', 'sent', 'failed', 'skipped']),
+  skipReason: z
+    .enum(['channel_blocked', 'event_muted', 'period_muted', 'cadence_filtered', 'no_contact'])
+    .nullable(),
+  attempts: z.number().int().nonnegative(),
+  lastErrorCode: z
+    .enum(['channel_unconfigured', 'transport_unavailable', 'provider_rejected'])
+    .nullable(),
+  sentAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type NotificationPublishInput = z.infer<typeof notificationPublishInputSchema>;
+export type NotificationPublishResult = z.infer<typeof notificationPublishResultSchema>;
+export type NotificationCancelResult = z.infer<typeof notificationCancelResultSchema>;
+export type NotificationChangeInput = z.infer<typeof notificationChangeInputSchema>;
+export type NotificationChangeResult = z.infer<typeof notificationChangeResultSchema>;
+export type NotificationInstance = z.infer<typeof notificationInstanceSchema>;
+export type NotificationDelivery = z.infer<typeof notificationDeliverySchema>;

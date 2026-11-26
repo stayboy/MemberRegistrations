@@ -11,6 +11,11 @@ import type { FlierStore } from '../../src/storage/flier-store.js';
 import { migrate } from '../../src/db/migrate.js';
 import { createPgliteDb } from '../../src/db/pglite.js';
 import type { Db } from '../../src/db/sql.js';
+import type { Queue } from '../../src/queue/port.js';
+
+// The config schema has no in-code default (N-8): a suite that boots the app
+// must name the deployed cadence, and tests run the continuous local value.
+process.env.NOTIFICATION_TRIGGER_MINUTES ??= '0';
 
 export const TOKEN = 'test-token-please-change';
 
@@ -46,6 +51,10 @@ export interface TestAppOptions {
   };
   /** The flier store (N-9); the default app keeps the bytes in the register. */
   flierStore?: FlierStore;
+  /** The queue publish and retry enqueue into; tests inject a double. */
+  notificationQueue?: Queue;
+  /** The deployed cadence; tests default to continuous. */
+  notificationTriggerMinutes?: number;
 }
 
 /** A message one of the capturing senders received; the code is in `body`. */
@@ -113,6 +122,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     // the disabled wiring.
     ussd: { enabled: true, ...ussd },
     paymentsEnabled: paymentsEnabled ?? true,
+    notificationQueue: options.notificationQueue,
+    notificationTriggerMinutes: options.notificationTriggerMinutes ?? 0,
   });
   return { app, db, close: () => db.close() };
 }
@@ -157,3 +168,58 @@ export const writeHeaders = {
 export const readHeaders = {
   Authorization: `Bearer ${TOKEN}`,
 };
+
+export interface MemoryJob {
+  id: string;
+  kind: string;
+  payload: unknown;
+  options?: { singletonKey?: string; startAfter?: Date };
+}
+
+/** A queue double: it records enqueues and can drain a kind through its handler. */
+export class MemoryQueue implements Queue {
+  readonly jobs: MemoryJob[] = [];
+  private readonly handlers = new Map<
+    string,
+    (job: { id: string; kind: string; payload: unknown }) => Promise<void>
+  >();
+  private sequence = 0;
+
+  async enqueue(
+    kind: string,
+    payload: unknown,
+    options?: { singletonKey?: string; startAfter?: Date },
+  ): Promise<string | null> {
+    this.sequence += 1;
+    const id = `job-${this.sequence}`;
+    this.jobs.push({ id, kind, payload, options });
+    return id;
+  }
+
+  work<T = unknown>(
+    kind: string,
+    handler: (job: { id: string; kind: string; payload: T }) => Promise<void>,
+  ): void {
+    this.handlers.set(
+      kind,
+      handler as (job: { id: string; kind: string; payload: unknown }) => Promise<void>,
+    );
+  }
+
+  async start(): Promise<void> {}
+  async stop(): Promise<void> {}
+
+  /** Run every recorded job of a kind, in order, through its handler. */
+  async drain(kind: string): Promise<void> {
+    const handler = this.handlers.get(kind);
+    if (!handler) throw new Error(`MemoryQueue has no handler for ${kind}`);
+    const matching = this.jobs.filter((job) => job.kind === kind);
+    for (const job of matching) {
+      await handler({ id: job.id, kind, payload: job.payload });
+    }
+  }
+
+  ofKind(kind: string): MemoryJob[] {
+    return this.jobs.filter((job) => job.kind === kind);
+  }
+}

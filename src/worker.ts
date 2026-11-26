@@ -5,6 +5,13 @@ import { createPgDb } from './db/pg.js';
 import type { Db } from './db/sql.js';
 import { createPgBossQueue, type QueueConnection } from './queue/pgboss.js';
 import { enqueueProbe, probeEnqueueEnabled, registerProbeHandlers } from './queue/probe.js';
+import { createNotificationSenders } from './messaging/notification-sender.js';
+import { EventRepository } from './repos/events.js';
+import {
+  registerNotificationHandlers,
+  runMaintenance,
+  runNotificationTick,
+} from './queue/handlers.js';
 
 /**
  * The long-lived worker (notification spec N-8, FR-20, FR-42).
@@ -41,7 +48,41 @@ async function main(): Promise<void> {
   const queue = createPgBossQueue({ db, connection, log: (line) => log.info(line) });
   registerProbeHandlers(queue, (line) => log.info(line));
 
+  // Only the worker builds real senders (N-8); the API never holds one.
+  const senders = createNotificationSenders({
+    NODE_ENV: env.NODE_ENV,
+    RESEND_API_KEY: env.RESEND_API_KEY,
+    MAGIC_LINK_FROM: env.MAGIC_LINK_FROM,
+    NOTIFICATIONS_EMAIL_FROM: env.NOTIFICATIONS_EMAIL_FROM,
+    WHATSAPP_SEND_URL: env.WHATSAPP_SEND_URL,
+    SMS_SEND_URL: env.SMS_SEND_URL,
+    MESSAGE_SEND_TOKEN: env.MESSAGE_SEND_TOKEN,
+  });
+  const events = new EventRepository(db);
+  registerNotificationHandlers(queue, { db, queue, senders, events });
+
   await queue.start();
+
+  // Local Compose polls continuously (`0`); a hosted deployment sets `15`.
+  // The cadence is deploy-time, so the loop reads it once.
+  const tickMs =
+    env.NOTIFICATION_TRIGGER_MINUTES === 0 ? 1000 : env.NOTIFICATION_TRIGGER_MINUTES * 60_000;
+  const tick = setInterval(() => {
+    void runNotificationTick(db, queue).catch((error: Error) =>
+      log.error(`worker: notification tick failed: ${error.message}`),
+    );
+  }, tickMs);
+  tick.unref();
+
+  const maintenance = setInterval(
+    () => {
+      void runMaintenance({ db, queue, events }).catch((error: Error) =>
+        log.error(`worker: notification maintenance failed: ${error.message}`),
+      );
+    },
+    24 * 60 * 60 * 1000,
+  );
+  maintenance.unref();
 
   if (probeEnqueueEnabled()) {
     const id = await enqueueProbe(queue);
@@ -52,6 +93,8 @@ async function main(): Promise<void> {
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    clearInterval(tick);
+    clearInterval(maintenance);
     log.info(`worker: ${signal} received; draining for up to ${STOP_BUDGET_MS}ms`);
 
     let timedOut = false;
