@@ -3,7 +3,7 @@
 |                        |                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
 | Status                 | CLOSED — spec approved, three review passes, committed by this round                                |
-| Tier                   | 1 - Plan                                                                                            |
+| Tier                   | 2 - Reviewed                                                                                        |
 | Mode                   | `attended`                                                                                          |
 | Base                   | `997b245`                                                                                           |
 | Review rounds          | 3                                                                                                   |
@@ -173,7 +173,10 @@ the owner's explicit approval and the reviewer seat's pass.
 
 ## Review
 
-**Round 1 — `reviewer-pro` / `ollama-cloud/mimo-v2.6-pro`, 2026-11-25. `Seat: consistent`. Verdict: REWORK.**
+Seat: consistent - the `Implementer` row names the parent in-session, and every review pass below ran on a separate
+`reviewer-pro` seat, so the split AGENTS.md §3 asks for holds.
+
+**Round 1 - `reviewer-pro` / `ollama-cloud/mimo-v2.6-pro`, 2026-11-25. `Seat: consistent`. Verdict: REWORK.**
 
 Ten P1s, fifteen P2s and five nits. The P1s were substantive: three schema clauses could not be built as written (a
 guardian-routed delivery with no message id against a `not null` column; a block-confirmation notice with no instance
@@ -321,6 +324,24 @@ Docs-only round: no migration, wire contract, auth or cross-cutting code changed
 
 gate-run 2026-11-25T19:15:48.983Z profile=fast steps=4/4 lines=4 bytes=700
 
+### Post-merge correction (2026-11-26)
+
+CI's `verify` failed on this round doc, not on the code: `check-round` runs in diff mode there and floors every round
+doc in a change touching `src/db/migrations.ts` at Tier 2, which this branch does through R1 and R2. The Tier row now
+says 2, with the parent-authored deviation stated above, and the change is re-gated:
+
+gate-run 2026-11-26T07:05:41.782Z profile=fast steps=4/4 lines=4 bytes=852
+
+That gate took three attempts on this machine and passed on the third, which is the round's second and last permitted
+re-run. The two failures were `Test timed out in 15000ms`, never an assertion: first
+`tests/db/event-audiences-migration.test.ts` and `tests/db/event-parent-migration.test.ts` (2 files, 2 failed, 1,329
+passed), then `tests/api/{audience-predicate,events-write,members-crud,subscription-claims}.test.ts` (4 files, 4 failed,
+1,327 passed). Every failing file passes in isolation - 12/12 in 4.25s and 55/55 in 8.27s - and the same tree passed 4/4
+at `06:14:22.162Z` before the load built up, so the cause is suite-wide PGlite contention at 102 files on a 16-core,
+15.4 GB machine, not a defect in this change. Stopping a scratch Postgres left over from an earlier probe freed enough
+for the third run. The lesson is the one R1 already recorded: this suite's wall clock is a function of what else the
+machine is doing.
+
 ## Git writes
 
 | Brief                                  | Actor                                                     | Verb     | Variant                                                                                                            | Reason                                                           |
@@ -349,6 +370,15 @@ n/a — no mock.
 | 8. No code, migration, wire or mock change                       | yes | `git status --short`                                        | pending review |
 
 ## Deviations
+
+- **The tier was raised from 1 to 2 when the round landed beside a migration.** The round itself wrote only
+  documentation, but `check-round` floors every round doc in a change that touches `src/db/migrations.ts` at Tier 2, and
+  this branch adds R1's and R2's migrations. Three review passes is the work Tier 2 asks for, so the row now says so
+  rather than leaving the change unmergeable.
+
+- Tier 2 parent-authored: the spec was written by the parent in-session at the owner's direction ("keep to current
+  session model"), not by a dispatched worker seat; the review split is unchanged, with all three passes on separate
+  reviewer seats.
 
 - **The frontier is authored in-session, not by a dispatched seat** (owner, 2026-11-25: "keep to current session
   model"). A `grill-flash` dispatch had already launched on `ollama-cloud/deepseek-v4.1-flash:1017` before that
