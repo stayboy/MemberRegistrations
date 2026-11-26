@@ -172,6 +172,17 @@ import {
   rosterSchema,
 } from './schemas/shepherding.js';
 import {
+  notificationDefaultsSchema,
+  notificationDefaultsWriteSchema,
+  notificationFlierSchema,
+  notificationPlanSchema,
+  notificationPlanWriteSchema,
+  notificationPreviewSchema,
+  notificationSlotSchema,
+  notificationTemplateInputSchema,
+  notificationTemplateSchema,
+} from './schemas/notifications.js';
+import {
   createSubscriptionProductSchema,
   subscriptionProductListSchema,
   subscriptionProductSchema,
@@ -568,6 +579,130 @@ const editedYoungAdultsAudienceExample = {
 /** The served catalogue itself, so the contract example cannot drift from it. */
 const eventPeriodListExample = { items: EVENT_PERIODS };
 
+const notificationPlanExample = {
+  planId: '6a1d2f5e-0c3b-4a7e-9a4f-2f1f7b8c0d11',
+  eventId: '0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e',
+  revision: 2,
+  status: 'draft',
+  etag: '"r2"',
+  slots: [
+    {
+      id: 'b0c1d2e3-f4a5-4b6c-8d7e-9f0a1b2c3d4e',
+      kind: 'announce',
+      anchor: 'publish',
+      offsetMinutes: 0,
+      sortOrder: 0,
+    },
+    {
+      id: 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f',
+      kind: 'last',
+      anchor: 'occurrence_end',
+      offsetMinutes: -1440,
+      sortOrder: 1,
+    },
+  ],
+  templates: [
+    {
+      channel: 'ussd',
+      subject: null,
+      body: null,
+      bodyText: '{{eventName}} is on {{eventDate}} at {{startTime}}, {{venue}}.',
+      templateName: null,
+      parameterMap: null,
+    },
+    {
+      channel: 'sms',
+      subject: null,
+      body: null,
+      bodyText: '{{firstName}}, {{eventName}} starts {{eventDate}} {{startTime}} at {{venue}}.',
+      templateName: null,
+      parameterMap: null,
+    },
+  ],
+  flier: null,
+  revisions: [
+    {
+      revision: 1,
+      status: 'published',
+      publishedAt: '2026-11-20T09:15:00.000Z',
+      cancelledAt: null,
+    },
+    { revision: 2, status: 'draft', publishedAt: null, cancelledAt: null },
+  ],
+  publish: {
+    enabled: false,
+    reason: 'Publishing, instances and deliveries ship with the send path in R3.',
+  },
+};
+
+const notificationPreviewExample = {
+  revision: 2,
+  at: '2026-12-06',
+  renders: {
+    email: {
+      subject: 'The Convention starts on 6 December',
+      html: '<div style="font-family:Arial,Helvetica,sans-serif"><p>Ada, the Convention starts on 6 December at 09:00 at the Auditorium.</p></div>',
+      text: 'Ada, the Convention starts on 6 December at 09:00 at the Auditorium.',
+      attachments: [],
+    },
+    whatsapp: {
+      templateName: 'event_announce',
+      parameters: [
+        { name: 'firstName', slot: 1, value: 'Ada' },
+        { name: 'eventName', slot: 2, value: 'The Convention' },
+      ],
+      body: 'Ada · The Convention',
+      headerMediaUrl: '/fliers/7c1f2a3b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8',
+    },
+    sms: {
+      body: 'Ada, The Convention starts 2026-12-06 09:00 at the Auditorium.',
+      encoding: 'gsm7',
+      length: 63,
+      segments: 1,
+    },
+    ussd: {
+      body: 'The Convention is on 2026-12-06 at 09:00, Auditorium.',
+      screens: ['The Convention is on 2026-12-06 at 09:00, Auditorium.'],
+      budget: 120,
+    },
+  },
+  counts: { audience: 120, email: 64, whatsapp: 88, sms: 120, ussd: 118 },
+  sample: { memberNo: 'M-1042', displayName: 'Ada Mensah' },
+};
+
+const notificationDefaultsExample = {
+  slots: [
+    { kind: 'announce', anchor: 'publish', offsetMinutes: 0 },
+    { kind: 'reminder', anchor: 'event_start', offsetMinutes: -1440 },
+    { kind: 'starts', anchor: 'occurrence_start', offsetMinutes: 0 },
+    { kind: 'last', anchor: 'occurrence_end', offsetMinutes: -1440 },
+  ],
+  churchName: 'Grace Assembly',
+  emailSignature: 'Grace Assembly · Events Desk',
+  emailReplyTo: 'events@example.org',
+  smsConfirmThreshold: 250,
+  whatsappTemplates: { announce: 'event_announce', last: 'event_last_call' },
+  sendMode: 'window',
+  sendFrom: '08:00',
+  sendTo: '20:00',
+  sendHour: '14:00',
+  churchTimezone: 'Africa/Lagos',
+  digestHour: '09:00',
+  failureDigestTo: 'office@example.org',
+  failureDigestEnabled: true,
+  updatedAt: '2026-11-24T10:00:00.000Z',
+  updatedBy: 'test-admin',
+};
+
+const notificationFlierExample = {
+  token: '7c1f2a3b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8',
+  contentType: 'image/webp',
+  byteSize: 184320,
+  sha256: '1b3c6e0b0ff6a0c3a3f6f9c7d1c2b4a5e6f708192a3b4c5d6e7f8091a2b3c4d5e',
+  url: '/fliers/7c1f2a3b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8',
+  uploadedAt: '2026-11-24T11:20:00.000Z',
+};
+
 /** A period preview: the resolved dates and both counts, nothing persisted. */
 const eventPeriodPreviewExample = {
   occurrences: [
@@ -888,6 +1023,15 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         OfficerList: toSchema(officerListSchema, 'output'),
         MemberShepherding: toSchema(memberShepherdingSchema, 'output'),
         ShepherdingReport: toSchema(reportSchema, 'output'),
+        NotificationSlot: toSchema(notificationSlotSchema, 'output'),
+        NotificationTemplate: toSchema(notificationTemplateSchema, 'output'),
+        NotificationPlan: toSchema(notificationPlanSchema, 'output'),
+        NotificationPlanWrite: toSchema(notificationPlanWriteSchema, 'input'),
+        NotificationTemplateInput: toSchema(notificationTemplateInputSchema, 'input'),
+        NotificationPreview: toSchema(notificationPreviewSchema, 'output'),
+        NotificationFlier: toSchema(notificationFlierSchema, 'output'),
+        NotificationDefaults: toSchema(notificationDefaultsSchema, 'output'),
+        NotificationDefaultsWrite: toSchema(notificationDefaultsWriteSchema, 'input'),
       },
     },
     paths: {
@@ -3985,6 +4129,225 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             200: json('The profile aggregate.', 'MemberProfile'),
             401: unauthorized,
             404: notFound,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan': {
+        parameters: [idParam('eventId')],
+        get: {
+          summary: 'Read the event’s notification plan',
+          description:
+            'The plan an event has or would have: its latest revision, that revision’s slots and per-channel templates, the flier metadata and the revision history. An event with no plan yet reads an empty revision 1 rather than a 404; a missing event is a 404. `publish` states that the verb is not part of this round (R2 authors and previews; R3 sends), with its reason. The response carries `Cache-Control: no-store` and an `ETag` naming the revision for `If-Match`.',
+          responses: {
+            200: {
+              description: 'The plan, its latest revision and its history.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPlan'),
+                  examples: {
+                    draft: {
+                      summary: 'A published revision with an edited draft',
+                      value: notificationPlanExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        put: {
+          summary: 'Create or edit the draft revision',
+          description:
+            'One PUT carries the whole revision: its slot set (1–12 slots; `announce|reminder|starts|last` with an allowed anchor and an offset in [-10080, 10080]) and its templates. A draft edits in place; a published or cancelled revision is frozen, so the write lands on revision + 1 with its own slots and templates and the old revision keeps its own. When `slots` is omitted, a first revision copies the church defaults’ standard template and a later one copies the revision it edits. Two slots resolving to the same instant for one occurrence answer `422 duplicate_slot_time`. A stale `If-Match` answers `412`.',
+          parameters: [actorHeader, ifMatchHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('NotificationPlanWrite') } },
+          },
+          responses: {
+            200: {
+              description: 'The revision as stored after the write.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPlan'),
+                  examples: {
+                    edited: {
+                      summary: 'An edit written as revision 2',
+                      value: notificationPlanExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            412: problem('The plan has moved past the revision the `If-Match` names.'),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/notification-plan/preview': {
+        parameters: [idParam('eventId')],
+        post: {
+          summary: 'Preview the four renders, the counts and the SMS segments',
+          description:
+            'Renders email (HTML plus the stored plain-text alternative and the flier as an inline attachment), WhatsApp (its approved template name with ordered parameter values and the flier as header media), SMS (with its GSM-7/UCS-2 encoding and 160/153 or 70/67 segmentation) and USSD (the inbox body paginated into screens under the adapter budget). When a body is supplied the preview renders that body, so an officer can check a draft edit; otherwise it renders the stored revision. Per-channel counts apply the destination resolution to the event’s audience intersection at the preview date. It writes nothing and calls no provider. The exclusion sample is R3’s: it needs the preference tables.',
+          responses: {
+            200: {
+              description: 'The four renders, the per-channel counts and the sample recipient.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPreview'),
+                  examples: {
+                    preview: {
+                      summary: 'A single-occurrence announce',
+                      value: notificationPreviewExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/events/{eventId}/flier': {
+        parameters: [idParam('eventId')],
+        put: {
+          summary: 'Upload the draft revision’s flier',
+          description:
+            'One image of `image/webp`, `image/jpeg` or `image/png`, at most 2 MiB, sniffed by its magic bytes (a content type that disagrees with the bytes is refused). It is stored in the configured `FlierStore` (`db` in the register, or `s3` such as MinIO locally and R2 hosted) and the row records the store, the storage key, the media type, the size, the sha256 and a 32-byte token. Uploading on a published revision writes a new revision with a new token, so a sent URL keeps resolving to the image it was sent with.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'image/webp': { schema: { type: 'string', format: 'binary' } },
+              'image/jpeg': { schema: { type: 'string', format: 'binary' } },
+              'image/png': { schema: { type: 'string', format: 'binary' } },
+            },
+          },
+          responses: {
+            200: {
+              description: 'The stored flier’s metadata and its public URL.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationFlier'),
+                  examples: {
+                    uploaded: { summary: 'A WebP poster', value: notificationFlierExample },
+                  },
+                },
+              },
+            },
+            400: badRequest,
+            401: unauthorized,
+            404: notFound,
+            409: conflict,
+            413: problem('The flier exceeds the 2 MiB limit.'),
+          },
+        },
+        get: {
+          summary: 'Read the flier’s metadata',
+          description:
+            'The type, size, hash, upload time and public URL; `404 flier_not_found` when the revision has none.',
+          responses: {
+            200: {
+              description: 'The stored flier’s metadata.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationFlier'),
+                  examples: {
+                    stored: { summary: 'A stored flier', value: notificationFlierExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+        delete: {
+          summary: 'Remove the revision’s flier',
+          description:
+            'Removes the object and its row; removing one that is already absent is still 204.',
+          parameters: [actorHeader],
+          responses: { 204: noContent('The flier is gone.'), 401: unauthorized, 404: notFound },
+        },
+      },
+
+      '/fliers/{token}': {
+        parameters: [idParam('token')],
+        get: {
+          summary: 'The public flier image (no bearer)',
+          description:
+            'Public by design and outside `/v1`: the 32-byte token is the whole credential and the URL is forwarded with every email and shown as the WhatsApp template’s header media. The app streams the object from the configured store, so no bucket is ever exposed directly. Immutable for a year, because a token names one object for ever.',
+          security: [],
+          responses: {
+            200: {
+              description: 'The image bytes.',
+              content: {
+                'image/webp': { schema: { type: 'string', format: 'binary' } },
+                'image/jpeg': { schema: { type: 'string', format: 'binary' } },
+                'image/png': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/notification-defaults': {
+        get: {
+          summary: 'Read the church notification defaults',
+          description:
+            'The standard slot template a new plan copies, the church name, the email signature and reply-to, the SMS confirmation threshold, the approved WhatsApp template names and the send-time policy fields. A deployment with no stored row answers the built-in defaults rather than a 404.',
+          responses: {
+            200: {
+              description: 'The stored defaults, or the built-in ones when none is stored.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDefaults'),
+                  examples: {
+                    stored: { summary: 'The church row', value: notificationDefaultsExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+          },
+        },
+        put: {
+          summary: 'Edit the church notification defaults',
+          description:
+            'A partial write; every omitted field keeps its stored value. The standard slot template is validated against the same kind/anchor pairing a plan uses. The deployed trigger cadence is configuration, not a default, and is not writable here.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('NotificationDefaultsWrite') } },
+          },
+          responses: {
+            200: {
+              description: 'The defaults after the write.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDefaults'),
+                  examples: {
+                    edited: {
+                      summary: 'The row after an edit',
+                      value: notificationDefaultsExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            422: validation,
           },
         },
       },

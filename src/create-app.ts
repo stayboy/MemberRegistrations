@@ -66,6 +66,13 @@ import { subscriptionsRouter } from './routes/subscriptions.js';
 import { verificationRouter, publicVerificationRouter } from './routes/verification.js';
 import { devUssdRouter } from './routes/dev-ussd.js';
 import { ussdRouter } from './routes/ussd.js';
+import { notificationPlansRouter } from './routes/notification-plans.js';
+import { notificationFliersRouter, publicFliersRouter } from './routes/notification-fliers.js';
+import { notificationDefaultsRouter } from './routes/notification-defaults.js';
+import { NotificationPlanRepository } from './repos/notification-plans.js';
+import { createDbFlierStore } from './storage/db.js';
+import { createS3FlierStore } from './storage/s3.js';
+import type { FlierStore } from './storage/flier-store.js';
 import { buildUssdAdapters } from './ussd/adapters.js';
 import { createUssdServices } from './ussd/services.js';
 import { VerificationService } from './verification/service.js';
@@ -106,6 +113,8 @@ export interface AppOptions {
     naloUserId?: string;
     naloMaxMsgChars?: number;
   };
+  /** The flier store (N-9); the default follows `FLIER_STORE`, then the register. */
+  flierStore?: FlierStore;
 }
 
 /**
@@ -149,6 +158,28 @@ export function createApp(options: AppOptions): Express {
   const ussdRepository = new UssdRepository(options.db);
   const subscriptionProducts = new SubscriptionProductRepository(options.db);
   const subscriptions = new SubscriptionRepository(options.db);
+
+  /**
+   * The flier store follows the deployment's configuration (N-9): `s3` when it
+   * names an endpoint and a bucket, the register otherwise, so a clone with no
+   * bucket still runs and tests inject either.
+   */
+  const flierStore: FlierStore =
+    options.flierStore ??
+    (process.env.FLIER_STORE === 's3' &&
+    process.env.S3_ENDPOINT &&
+    process.env.S3_BUCKET &&
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY
+      ? createS3FlierStore({
+          endpoint: process.env.S3_ENDPOINT,
+          bucket: process.env.S3_BUCKET,
+          region: process.env.S3_REGION ?? 'us-east-1',
+          accessKeyId: process.env.S3_ACCESS_KEY_ID,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+        })
+      : createDbFlierStore(options.db));
+  const notificationPlans = new NotificationPlanRepository(options.db, flierStore);
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -346,6 +377,12 @@ export function createApp(options: AppOptions): Express {
   v1.use('/audiences', audiencesRouter(audiences));
   v1.use('/series', seriesRouter(series, events));
   v1.use('/imports', importsRouter(imports));
+  // The notification plan, its flier and the church defaults. Registered before
+  // /events so `/events/{eventId}/notification-plan` never reaches the event
+  // router's `/:id` neighbours.
+  v1.use('/events', notificationPlansRouter(notificationPlans));
+  v1.use('/events', notificationFliersRouter(notificationPlans));
+  v1.use('/notification-defaults', notificationDefaultsRouter(notificationPlans));
   // Registered before /events so /events/:eventId/codes reaches this router.
   v1.use(attendanceCodesRouter(attendanceCodes));
   v1.use('/events', eventsRouter(events, clocking, headcounts, offeringCounts));
@@ -358,6 +395,11 @@ export function createApp(options: AppOptions): Express {
   // and the code are its credential, it answers no member data, and the browser
   // reaches it from the UI origin, so the same allowlist applies.
   app.use('/portal', corsMiddleware(corsOrigins), publicVerificationRouter(verification));
+
+  // A flier is public by design (N-9): the 32-byte token is its only credential
+  // and the URL is forwarded with every email. It sits outside `/v1` beside
+  // `/ussd/*`, so no bearer is ever required for an image a mail client fetches.
+  app.use('/fliers', publicFliersRouter(notificationPlans));
 
   // Browser routes: CORS first, so OPTIONS never reaches a session check.
   app.use('/auth', corsMiddleware(corsOrigins), authRouter(auth, mailer, logger));

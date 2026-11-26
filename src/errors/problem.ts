@@ -5,10 +5,12 @@ import {
   BadRequestError,
   ConflictError,
   DeliveryUnavailableError,
+  FlierTooLargeError,
   ImportError,
   NotFoundError,
   PaymentFailedError,
   PhotoTooLargeError,
+  PreconditionFailedError,
   RateLimitedError,
   ReassignmentRequiredError,
   RecurrenceLockedError,
@@ -128,6 +130,16 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 
   if (error instanceof PhotoTooLargeError) {
     sendProblem(res, 413, 'Payload too large', error.message, error.code);
+    return;
+  }
+
+  if (error instanceof FlierTooLargeError) {
+    sendProblem(res, 413, 'Payload too large', error.message, error.code);
+    return;
+  }
+
+  if (error instanceof PreconditionFailedError) {
+    sendProblem(res, 412, 'Precondition failed', error.message, error.code);
     return;
   }
 

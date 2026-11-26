@@ -13,7 +13,12 @@ import { parseTextArray } from './row-values.js';
  * history. Both dates are read as text, so each driver hands back `YYYY-MM-DD`.
  */
 const REGISTER_COLUMNS = `
-  select coalesce(m.joined_on, m.created_at::date)::text as joined_on,
+  select m.id,
+         m.member_no,
+         m.first_name,
+         m.last_name,
+         m.other_names,
+         coalesce(m.joined_on, m.created_at::date)::text as joined_on,
          m.dob::text as dob,
          m.gender,
          m.is_presbyter,
@@ -64,10 +69,56 @@ function toMember(row: AudienceMemberRow): AudienceMember {
   };
 }
 
+export interface RegisterMember extends AudienceMember {
+  id: string;
+  memberNo: string;
+  firstName: string | null;
+  lastName: string | null;
+  otherNames: string | null;
+}
+
+interface RegisterRow extends Row {
+  id: string;
+  member_no: string;
+  first_name: string | null;
+  last_name: string | null;
+  other_names: string | null;
+  joined_on: string;
+  dob: string | null;
+  gender: string;
+  is_presbyter: boolean;
+  membership_status: string;
+  ministry_codes: unknown;
+}
+
+function toRegisterMember(row: RegisterRow): RegisterMember {
+  return {
+    ...toMember(row),
+    id: row.id,
+    memberNo: row.member_no,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    otherNames: row.other_names,
+  };
+}
+
 /** The evaluated members' register, as of `onOrBefore` and no later. */
 export async function audienceMembers(db: DbClient, onOrBefore: string): Promise<AudienceMember[]> {
-  const rows = await db.query<AudienceMemberRow>(AUDIENCE_MEMBERS_SQL, [onOrBefore]);
+  const rows = await db.query<RegisterRow>(AUDIENCE_MEMBERS_SQL, [onOrBefore]);
   return rows.map(toMember);
+}
+
+/**
+ * The same register with the identity a caller needs beside the predicate's
+ * inputs: a notification preview renders a sample member's name and member
+ * number. The audience rule is still the one in `audience-evaluator.ts`.
+ */
+export async function audienceRegister(
+  db: DbClient,
+  onOrBefore: string,
+): Promise<RegisterMember[]> {
+  const rows = await db.query<RegisterRow>(AUDIENCE_MEMBERS_SQL, [onOrBefore]);
+  return rows.map(toRegisterMember);
 }
 
 /**

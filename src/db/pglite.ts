@@ -3,12 +3,22 @@ import { drizzle } from 'drizzle-orm/pglite';
 import * as schema from './schema.js';
 import type { Db, DbClient, Row } from './sql.js';
 
+/** The embedded engine and its `Db` port, sharing one instance. */
+export interface PgliteHandle {
+  engine: PGlite;
+  db: Db;
+}
+
 /**
  * Test adapter: a real Postgres engine compiled to WASM, in-process.
  * `generate_series`, date arithmetic and constraints behave as in production.
  * The Drizzle handle is bound to the same engine (or transaction) as the client.
+ *
+ * The engine is exposed beside the port because a second consumer needs the
+ * same instance, not a second database: pg-boss runs inside this engine in
+ * tests and in the zero-setup local path.
  */
-export async function createPgliteDb(): Promise<Db> {
+export async function createPglite(): Promise<PgliteHandle> {
   const pglite = new PGlite();
   await pglite.waitReady;
 
@@ -25,10 +35,17 @@ export async function createPgliteDb(): Promise<Db> {
   });
 
   return {
-    ...client(pglite),
-    async transaction<T>(fn: (tx: DbClient) => Promise<T>): Promise<T> {
-      return pglite.transaction(async (tx) => fn(client(tx as unknown as PGlite)));
+    engine: pglite,
+    db: {
+      ...client(pglite),
+      async transaction<T>(fn: (tx: DbClient) => Promise<T>): Promise<T> {
+        return pglite.transaction(async (tx) => fn(client(tx as unknown as PGlite)));
+      },
+      close: () => pglite.close(),
     },
-    close: () => pglite.close(),
   };
+}
+
+export async function createPgliteDb(): Promise<Db> {
+  return (await createPglite()).db;
 }
