@@ -25,6 +25,7 @@ const child = spawn(process.execPath, ['dist/index.js'], {
     API_BEARER_TOKEN: TOKEN,
     LOG_LEVEL: 'silent',
     USSD_ENABLED: 'true',
+    NOTIFICATION_TRIGGER_MINUTES: '0',
     // The scenario drives the HMAC-only payment callback, which is unmounted
     // unless payments are explicitly enabled (production defaults it to false).
     PAYMENTS_ENABLED: 'true',
@@ -1233,7 +1234,12 @@ async function checkQueueDrain() {
 
   if (databaseUrl) {
     execFileSync(process.execPath, ['dist/db/migrate-cli.js'], {
-      env: { ...process.env, NODE_ENV: 'development', DATABASE_URL: databaseUrl },
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        DATABASE_URL: databaseUrl,
+        NOTIFICATION_TRIGGER_MINUTES: '0',
+      },
       stdio: 'pipe',
     });
   }
@@ -1246,6 +1252,7 @@ async function checkQueueDrain() {
       LOG_LEVEL: 'info',
       // The probe is opt-in; a deployed worker must never enqueue one.
       PGBOSS_PROBE: '1',
+      NOTIFICATION_TRIGGER_MINUTES: '0',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -1311,6 +1318,7 @@ async function checkDisabledSwitch() {
       API_BEARER_TOKEN: TOKEN,
       LOG_LEVEL: 'silent',
       USSD_ENABLED: 'false',
+      NOTIFICATION_TRIGGER_MINUTES: '0',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

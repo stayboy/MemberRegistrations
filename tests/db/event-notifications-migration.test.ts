@@ -29,17 +29,6 @@ const PLAN_TABLES = [
   'notification_defaults',
 ];
 
-const SEND_TABLES = [
-  'notification_slot_instances',
-  'notification_messages',
-  'notification_deliveries',
-  'notification_change_notices',
-  'member_notification_settings',
-  'member_channel_blocks',
-  'notification_mutes',
-  'notification_preference_events',
-];
-
 let db: Db;
 
 beforeAll(async () => {
@@ -90,10 +79,9 @@ async function seedPlan(): Promise<{ planId: string; eventId: string }> {
 }
 
 describe('0030_event_notifications', () => {
-  it('creates the six plan-side tables and none of the send-side ones', async () => {
+  it('creates the six plan-side tables', async () => {
     const present = await tables();
     for (const name of PLAN_TABLES) expect(present).toContain(name);
-    for (const name of SEND_TABLES) expect(present).not.toContain(name);
   });
 
   it('keeps one published revision per plan with a partial unique index', async () => {
@@ -354,14 +342,13 @@ describe.skipIf(!testDatabaseUrl)('0030 on the pooled pg driver', () => {
     await drop?.();
   });
 
-  it('creates the six plan-side tables and none of the send-side ones', async () => {
+  it('creates the six plan-side tables', async () => {
     const rows = await db.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public'",
     );
     const names = rows.map((row) => row.table_name);
 
     for (const table of PLAN_TABLES) expect(names).toContain(table);
-    for (const table of SEND_TABLES) expect(names).not.toContain(table);
   });
 
   it('keeps one published revision per plan', async () => {

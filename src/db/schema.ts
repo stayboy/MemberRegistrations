@@ -906,7 +906,7 @@ export const notificationPlanRevisions = pgTable(
     ),
     check(
       'notification_plan_revisions_published_check',
-      sql`(${table.status} = 'published') = (${table.publishedAt} is not null)`,
+      sql`${table.status} <> 'published' or ${table.publishedAt} is not null`,
     ),
     uniqueIndex('notification_plan_one_published')
       .on(table.planId)
@@ -1070,5 +1070,349 @@ export const notificationDefaults = pgTable(
       'notification_defaults_send_mode_check',
       sql`${table.sendMode} in ('always', 'window', 'daily')`,
     ),
+  ],
+);
+
+/**
+ * The send side of N-14 (`0032_notification_send`, R3). One instance per slot
+ * and occurrence, one inbox message per eligible recipient, one delivery per
+ * channel, and the member's settings, blocks, mutes and audit. The SQL
+ * migration is the owner; `tests/db/notification-send-migration.test.ts`
+ * compares every column, check and index by name.
+ */
+export const notificationChangeNotices = pgTable(
+  'notification_change_notices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id').notNull(),
+    title: text('title').notNull(),
+    bodyText: text('body_text').notNull(),
+    /** The approved WhatsApp template and its ordered parameters (N-7). */
+    whatsappTemplate: text('whatsapp_template'),
+    whatsappParameters: jsonb('whatsapp_parameters').notNull().default([]),
+    emailSubject: text('email_subject'),
+    emailBodyText: text('email_body_text'),
+    publishedBy: text('published_by').notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_change_notices_plan_id_fkey',
+      columns: [table.planId],
+      foreignColumns: [notificationPlans.id],
+    }),
+  ],
+);
+
+export const notificationSlotInstances = pgTable(
+  'notification_slot_instances',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id').notNull(),
+    slotId: uuid('slot_id'),
+    changeNoticeId: uuid('change_notice_id'),
+    kind: text('kind').notNull(),
+    revision: integer('revision').notNull(),
+    occurrenceId: uuid('occurrence_id'),
+    occurrenceDate: date('occurrence_date'),
+    /** The resolved instant, before the send policy. */
+    sendAt: timestamp('send_at', { withTimezone: true }).notNull(),
+    /** What the enqueued job holds; null until enqueued (N-8). */
+    deliveryAt: timestamp('delivery_at', { withTimezone: true }),
+    status: text('status').notNull().default('scheduled'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    recipientCount: integer('recipient_count').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(0),
+    skippedCount: integer('skipped_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_slot_instances_plan_id_fkey',
+      columns: [table.planId],
+      foreignColumns: [notificationPlans.id],
+    }),
+    foreignKey({
+      name: 'notification_slot_instances_slot_id_fkey',
+      columns: [table.slotId],
+      foreignColumns: [notificationPlanSlots.id],
+    }),
+    foreignKey({
+      name: 'notification_slot_instances_change_notice_id_fkey',
+      columns: [table.changeNoticeId],
+      foreignColumns: [notificationChangeNotices.id],
+    }),
+    foreignKey({
+      name: 'notification_slot_instances_occurrence_id_fkey',
+      columns: [table.occurrenceId],
+      foreignColumns: [eventOccurrences.id],
+    }),
+    check(
+      'notification_slot_instances_kind_check',
+      sql`${table.kind} in ('announce', 'reminder', 'starts', 'last', 'change')`,
+    ),
+    check(
+      'notification_slot_instances_status_check',
+      sql`${table.status} in ('scheduled', 'fanning_out', 'sent', 'cancelled', 'failed')`,
+    ),
+    check(
+      'notification_slot_instances_slot_or_notice_check',
+      sql`(${table.slotId} is not null) <> (${table.changeNoticeId} is not null)`,
+    ),
+    check(
+      'notification_slot_instances_change_kind_check',
+      sql`(${table.kind} = 'change') = (${table.changeNoticeId} is not null)`,
+    ),
+    uniqueIndex('notification_slot_instances_key')
+      .on(table.planId, sql`coalesce(${table.occurrenceDate}, '0001-01-01'::date)`, table.sendAt)
+      .where(sql`${table.status} <> 'cancelled'`),
+    index('notification_slot_instances_due')
+      .on(table.status, table.sendAt)
+      .where(sql`${table.status} = 'scheduled'`),
+  ],
+);
+
+export const notificationMessages = pgTable(
+  'notification_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: text('kind').notNull(),
+    instanceId: uuid('instance_id'),
+    eventId: uuid('event_id'),
+    memberId: uuid('member_id').notNull(),
+    title: text('title').notNull(),
+    bodyText: text('body_text').notNull(),
+    flierId: uuid('flier_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_messages_instance_fkey',
+      columns: [table.instanceId],
+      foreignColumns: [notificationSlotInstances.id],
+    }),
+    foreignKey({
+      name: 'notification_messages_event_fkey',
+      columns: [table.eventId],
+      foreignColumns: [events.id],
+    }),
+    foreignKey({
+      name: 'notification_messages_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    foreignKey({
+      name: 'notification_messages_flier_fkey',
+      columns: [table.flierId],
+      foreignColumns: [eventFliers.id],
+    }),
+    check('notification_messages_kind_check', sql`${table.kind} in ('event', 'system')`),
+    check(
+      'notification_messages_event_shape_check',
+      sql`${table.kind} <> 'event' or (${table.instanceId} is not null and ${table.eventId} is not null)`,
+    ),
+    check(
+      'notification_messages_system_shape_check',
+      sql`${table.kind} <> 'system' or (${table.instanceId} is null and ${table.eventId} is null)`,
+    ),
+    uniqueIndex('notification_messages_instance_member')
+      .on(table.instanceId, table.memberId)
+      .where(sql`${table.instanceId} is not null`),
+    index('notification_messages_inbox').on(
+      table.memberId,
+      sql`(${table.readAt} is not null)`,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
+
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    instanceId: uuid('instance_id').notNull(),
+    memberId: uuid('member_id').notNull(),
+    messageId: uuid('message_id'),
+    channel: text('channel').notNull(),
+    routedVia: text('routed_via').notNull().default('own'),
+    contactId: uuid('contact_id'),
+    destinationMasked: text('destination_masked'),
+    anonymisedAt: timestamp('anonymised_at', { withTimezone: true }),
+    status: text('status').notNull().default('pending'),
+    skipReason: text('skip_reason'),
+    attempts: integer('attempts').notNull().default(0),
+    lastErrorCode: text('last_error_code'),
+    providerRef: text('provider_ref'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_deliveries_instance_fkey',
+      columns: [table.instanceId],
+      foreignColumns: [notificationSlotInstances.id],
+    }),
+    foreignKey({
+      name: 'notification_deliveries_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    foreignKey({
+      name: 'notification_deliveries_message_fkey',
+      columns: [table.messageId],
+      foreignColumns: [notificationMessages.id],
+    }),
+    foreignKey({
+      name: 'notification_deliveries_contact_fkey',
+      columns: [table.contactId],
+      foreignColumns: [memberContacts.id],
+    }),
+    check(
+      'notification_deliveries_channel_check',
+      sql`${table.channel} in ('email', 'sms', 'whatsapp')`,
+    ),
+    check(
+      'notification_deliveries_routed_via_check',
+      sql`${table.routedVia} in ('own', 'guardian')`,
+    ),
+    check(
+      'notification_deliveries_status_check',
+      sql`${table.status} in ('pending', 'sending', 'sent', 'failed', 'skipped')`,
+    ),
+    check(
+      'notification_deliveries_skip_reason_check',
+      sql`${table.skipReason} in ('channel_blocked', 'event_muted', 'period_muted', 'cadence_filtered', 'no_contact')`,
+    ),
+    check(
+      'notification_deliveries_last_error_code_check',
+      sql`${table.lastErrorCode} in ('channel_unconfigured', 'transport_unavailable', 'provider_rejected')`,
+    ),
+    uniqueIndex('notification_deliveries_unit_key').on(
+      table.instanceId,
+      table.memberId,
+      table.channel,
+    ),
+    check(
+      'notification_deliveries_own_message_check',
+      sql`${table.routedVia} <> 'own' or ${table.messageId} is not null or ${table.anonymisedAt} is not null`,
+    ),
+    index('notification_deliveries_failed')
+      .on(table.createdAt.desc())
+      .where(sql`${table.status} = 'failed'`),
+  ],
+);
+
+export const memberNotificationSettings = pgTable(
+  'member_notification_settings',
+  {
+    memberId: uuid('member_id').primaryKey(),
+    cadence: text('cadence').notNull().default('all'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+    updatedSource: text('updated_source').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'member_notification_settings_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    check(
+      'member_notification_settings_cadence_check',
+      sql`${table.cadence} in ('all', 'essential', 'minimal')`,
+    ),
+    check(
+      'member_notification_settings_source_check',
+      sql`${table.updatedSource} in ('ussd', 'admin')`,
+    ),
+  ],
+);
+
+export const memberChannelBlocks = pgTable(
+  'member_channel_blocks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id').notNull(),
+    channel: text('channel').notNull(),
+    reason: text('reason'),
+    durationDays: integer('duration_days').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text('created_by').notNull(),
+    source: text('source').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedBy: text('revoked_by'),
+  },
+  (table) => [
+    foreignKey({
+      name: 'member_channel_blocks_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    check(
+      'member_channel_blocks_channel_check',
+      sql`${table.channel} in ('email', 'sms', 'whatsapp')`,
+    ),
+    check('member_channel_blocks_duration_check', sql`${table.durationDays} in (30, 90, 365)`),
+    check('member_channel_blocks_source_check', sql`${table.source} in ('ussd', 'admin')`),
+    uniqueIndex('member_channel_blocks_live')
+      .on(table.memberId, table.channel)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+export const notificationMutes = pgTable(
+  'notification_mutes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id').notNull(),
+    scopeType: text('scope_type').notNull(),
+    scopeId: text('scope_id').notNull(),
+    scopeName: text('scope_name').notNull(),
+    durationDays: integer('duration_days').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: text('created_by').notNull(),
+    source: text('source').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedBy: text('revoked_by'),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_mutes_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    check('notification_mutes_scope_type_check', sql`${table.scopeType} in ('event', 'period')`),
+    check('notification_mutes_duration_check', sql`${table.durationDays} in (30, 90, 365)`),
+    check('notification_mutes_source_check', sql`${table.source} in ('ussd', 'admin')`),
+    uniqueIndex('notification_mutes_live')
+      .on(table.memberId, table.scopeType, table.scopeId)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+export const notificationPreferenceEvents = pgTable(
+  'notification_preference_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id'),
+    field: text('field').notNull(),
+    fromValue: text('from_value'),
+    toValue: text('to_value'),
+    source: text('source').notNull(),
+    actor: text('actor').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'notification_preference_events_member_fkey',
+      columns: [table.memberId],
+      foreignColumns: [members.id],
+    }),
+    check('notification_preference_events_source_check', sql`${table.source} in ('ussd', 'admin')`),
   ],
 );

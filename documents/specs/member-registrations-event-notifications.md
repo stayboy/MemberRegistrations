@@ -580,7 +580,10 @@ create table notification_plan_revisions (
   created_by text not null, created_at timestamptz not null default now(),
   updated_by text not null, updated_at timestamptz not null default now(),
   primary key (plan_id, revision),
-  check ((status = 'published') = (published_at is not null))
+  constraint notification_plan_revisions_published_check
+    -- A superseded or cancelled revision keeps the time it was published, so the
+    -- check is one-way: a published row must carry a stamp, the others need not.
+    check (status <> 'published' or published_at is not null)
 );
 create unique index notification_plan_one_published
   on notification_plan_revisions (plan_id) where status = 'published';
@@ -663,7 +666,7 @@ create table notification_slot_instances (
   occurrence_id uuid references event_occurrences(id) on delete set null,
   occurrence_date date,             -- snapshot: survives the occurrence row
   send_at timestamptz not null,     -- the resolved instant, before the send policy
-  delivery_at timestamptz,          -- what the enqueued job holds; null until enqueued
+  delivery_at timestamptz,          -- computed at materialisation; the job is enqueued here
   status text not null default 'scheduled'
     check (status in ('scheduled', 'fanning_out', 'sent', 'cancelled', 'failed')),
   check ((slot_id is not null) <> (change_notice_id is not null)),
@@ -1455,3 +1458,9 @@ migration and API rounds and are exempt, because none of them alters a screen.
   (7) `NOTIFICATION_TRIGGER_MINUTES` has no in-code default and the config refuses to boot without it, because a
   default of 15 made the local read disagree with the locally continuous stack. FR-7's inbox rule is restated as
   "owns at least one contact" so an email-only member has a row the USSD read cannot yet show them.
+- **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
+  (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
+  published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to
+  cancel would have been to erase when the plan was published. `delivery_at` is written at materialisation rather than
+  left null until enqueue, so the plan detail can show the instant immediately after publish and the sweep enqueues at
+  the stored value.

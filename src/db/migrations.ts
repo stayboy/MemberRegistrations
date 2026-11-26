@@ -2376,4 +2376,236 @@ create table notification_defaults (
     version: '0031_pgboss_schema',
     sql: PGBOSS_SCHEMA_SQL,
   },
+  {
+    // The send side of the notification schema
+    // (member-registrations-event-notifications.md N-14, R3): instances,
+    // messages, deliveries, the change notice, member settings, blocks, mutes
+    // and the preference audit. Eight tables, no more; every constraint is
+    // named so the Drizzle mirror can be compared by name.
+    version: '0032_notification_send',
+    sql: `
+create table notification_change_notices (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null,
+  title text not null,
+  body_text text not null,
+  -- The notice's own channel bodies. N-7 forbids free-form WhatsApp, so the
+  -- template name and its ordered parameters are chosen per notice; email needs a
+  -- subject and a body of its own, because a published revision's templates are
+  -- frozen and cannot be expected to carry content authored after them.
+  whatsapp_template text,
+  whatsapp_parameters jsonb not null default '[]'::jsonb,
+  email_subject text,
+  email_body_text text,
+  published_by text not null,
+  published_at timestamptz not null default now(),
+  constraint notification_change_notices_plan_id_fkey
+    foreign key (plan_id) references notification_plans(id)
+);
+
+create table notification_slot_instances (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null,
+  slot_id uuid,
+  change_notice_id uuid,
+  kind text not null,
+  revision int not null,
+  occurrence_id uuid,
+  occurrence_date date,             -- snapshot: survives the occurrence row
+  send_at timestamptz not null,     -- the resolved instant, before the send policy
+  delivery_at timestamptz,          -- computed at materialisation; the job is enqueued here
+  status text not null default 'scheduled',
+  started_at timestamptz, finished_at timestamptz,
+  recipient_count int not null default 0,
+  sent_count int not null default 0,
+  skipped_count int not null default 0,
+  failed_count int not null default 0,
+  constraint notification_slot_instances_plan_id_fkey
+    foreign key (plan_id) references notification_plans(id),
+  constraint notification_slot_instances_slot_id_fkey
+    foreign key (slot_id) references notification_plan_slots(id),
+  constraint notification_slot_instances_change_notice_id_fkey
+    foreign key (change_notice_id) references notification_change_notices(id),
+  constraint notification_slot_instances_occurrence_id_fkey
+    foreign key (occurrence_id) references event_occurrences(id) on delete set null,
+  constraint notification_slot_instances_kind_check
+    check (kind in ('announce', 'reminder', 'starts', 'last', 'change')),
+  constraint notification_slot_instances_status_check
+    check (status in ('scheduled', 'fanning_out', 'sent', 'cancelled', 'failed')),
+  constraint notification_slot_instances_slot_or_notice_check
+    check ((slot_id is not null) <> (change_notice_id is not null)),
+  constraint notification_slot_instances_change_kind_check
+    check ((kind = 'change') = (change_notice_id is not null))
+);
+-- Keyed on the date and the resolved instant, NOT on the slot: a revision bump or a
+-- re-materialised slot must not create a second instance for the same moment. A
+-- cancelled instance is exempt, or a plan cancelled and later republished could never
+-- claim the same moment again (AC-26's return-to-draft depends on it).
+create unique index notification_slot_instances_key
+  on notification_slot_instances (plan_id, coalesce(occurrence_date, '0001-01-01'::date), send_at)
+  where status <> 'cancelled';
+create index notification_slot_instances_due
+  on notification_slot_instances (status, send_at) where status = 'scheduled';
+
+create table notification_messages (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  instance_id uuid references notification_slot_instances(id) on delete cascade,
+  event_id uuid references events(id),
+  member_id uuid not null references members(id),
+  title text not null,              -- derived: the event name and slot kind, or the system notice title
+  body_text text not null,
+  flier_id uuid references event_fliers(id),
+  created_at timestamptz not null default now(),
+  read_at timestamptz,
+  constraint notification_messages_kind_check
+    check (kind in ('event', 'system')),
+  constraint notification_messages_instance_fkey
+    foreign key (instance_id) references notification_slot_instances(id) on delete cascade,
+  constraint notification_messages_event_fkey
+    foreign key (event_id) references events(id),
+  constraint notification_messages_member_fkey
+    foreign key (member_id) references members(id),
+  constraint notification_messages_flier_fkey
+    foreign key (flier_id) references event_fliers(id),
+  constraint notification_messages_event_shape_check
+    check (kind <> 'event' or (instance_id is not null and event_id is not null)),
+  constraint notification_messages_system_shape_check
+    check (kind <> 'system' or (instance_id is null and event_id is null))
+);
+create unique index notification_messages_instance_member
+  on notification_messages (instance_id, member_id) where instance_id is not null;
+create index notification_messages_inbox
+  on notification_messages (member_id, (read_at is not null), created_at desc, id desc);
+
+create table notification_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  instance_id uuid not null,
+  member_id uuid not null,
+  message_id uuid,
+  channel text not null,
+  routed_via text not null default 'own',
+  contact_id uuid,
+  destination_masked text,
+  anonymised_at timestamptz,
+  status text not null default 'pending',
+  skip_reason text,
+  attempts int not null default 0,
+  last_error_code text,
+  provider_ref text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint notification_deliveries_instance_fkey
+    foreign key (instance_id) references notification_slot_instances(id) on delete cascade,
+  constraint notification_deliveries_member_fkey
+    foreign key (member_id) references members(id),
+  constraint notification_deliveries_message_fkey
+    foreign key (message_id) references notification_messages(id) on delete set null,
+  constraint notification_deliveries_contact_fkey
+    foreign key (contact_id) references member_contacts(id) on delete set null,
+  constraint notification_deliveries_channel_check
+    check (channel in ('email', 'sms', 'whatsapp')),
+  constraint notification_deliveries_routed_via_check
+    check (routed_via in ('own', 'guardian')),
+  constraint notification_deliveries_status_check
+    check (status in ('pending', 'sending', 'sent', 'failed', 'skipped')),
+  constraint notification_deliveries_skip_reason_check
+    check (skip_reason in
+      ('channel_blocked', 'event_muted', 'period_muted', 'cadence_filtered', 'no_contact')),
+  constraint notification_deliveries_last_error_code_check
+    check (last_error_code in ('channel_unconfigured', 'transport_unavailable', 'provider_rejected')),
+  constraint notification_deliveries_own_message_check
+    check (routed_via <> 'own' or message_id is not null or anonymised_at is not null)
+);
+create unique index notification_deliveries_unit_key
+  on notification_deliveries (instance_id, member_id, channel);
+create index notification_deliveries_failed
+  on notification_deliveries (created_at desc) where status = 'failed';
+
+create table member_notification_settings (
+  member_id uuid primary key,
+  cadence text not null default 'all',
+  updated_at timestamptz not null default now(),
+  updated_by text not null,
+  updated_source text not null,
+  constraint member_notification_settings_member_fkey
+    foreign key (member_id) references members(id),
+  constraint member_notification_settings_cadence_check
+    check (cadence in ('all', 'essential', 'minimal')),
+  constraint member_notification_settings_source_check
+    check (updated_source in ('ussd', 'admin'))
+);
+
+create table member_channel_blocks (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null,
+  channel text not null,
+  reason text,
+  duration_days int not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  source text not null,
+  revoked_at timestamptz, revoked_by text,
+  constraint member_channel_blocks_member_fkey
+    foreign key (member_id) references members(id),
+  constraint member_channel_blocks_channel_check
+    check (channel in ('email', 'sms', 'whatsapp')),
+  constraint member_channel_blocks_duration_check
+    check (duration_days in (30, 90, 365)),
+  constraint member_channel_blocks_source_check
+    check (source in ('ussd', 'admin'))
+);
+create unique index member_channel_blocks_live
+  on member_channel_blocks (member_id, channel) where revoked_at is null;
+
+create table notification_mutes (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null,
+  scope_type text not null,
+  scope_id text not null,
+  scope_name text not null,
+  duration_days int not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  source text not null,
+  revoked_at timestamptz, revoked_by text,
+  constraint notification_mutes_member_fkey
+    foreign key (member_id) references members(id),
+  constraint notification_mutes_scope_type_check
+    check (scope_type in ('event', 'period')),
+  constraint notification_mutes_duration_check
+    check (duration_days in (30, 90, 365)),
+  constraint notification_mutes_source_check
+    check (source in ('ussd', 'admin'))
+);
+create unique index notification_mutes_live
+  on notification_mutes (member_id, scope_type, scope_id) where revoked_at is null;
+
+create table notification_preference_events (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid,   -- nulled on purge
+  field text not null,
+  from_value text, to_value text,
+  source text not null,
+  actor text not null,
+  at timestamptz not null default now(),
+  constraint notification_preference_events_member_fkey
+    foreign key (member_id) references members(id),
+  constraint notification_preference_events_source_check
+    check (source in ('ussd', 'admin'))
+);
+
+-- N-1's cancel keeps the publish stamp and adds the cancel stamp, so the
+-- original biconditional in 0030 would make cancelling a published revision
+-- impossible. The direction FR-2 needs is "published implies a publish stamp";
+-- a superseded or cancelled revision keeps the time it was published.
+alter table notification_plan_revisions
+  drop constraint notification_plan_revisions_published_check;
+alter table notification_plan_revisions
+  add constraint notification_plan_revisions_published_check
+  check (status <> 'published' or published_at is not null);
+`,
+  },
 ];

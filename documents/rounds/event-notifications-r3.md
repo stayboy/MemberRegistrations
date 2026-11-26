@@ -2,12 +2,12 @@
 
 |                        |                                                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status                 | OPEN - the send path                                                                                                                                |
+| Status                 | CLOSED - implemented, gates green, reviewed REWORK then fixed                                                                                       |
 | Tier                   | 2 - Reviewed                                                                                                                                        |
-| Mode                   | `attended`                                                                                                                                          |
+| Mode                   | `unattended (auto-accept recommendations)` from 2026-11-26; opened attended                                                                         |
 | Base                   | `9845be1`                                                                                                                                           |
-| Review rounds          | 0                                                                                                                                                   |
-| Gate runs in parent    | 0                                                                                                                                                   |
+| Review rounds          | 1                                                                                                                                                   |
+| Gate runs in parent    | 6                                                                                                                                                   |
 | Spec                   | `documents/specs/member-registrations-event-notifications.md`                                                                                       |
 | Workers                | `single`                                                                                                                                            |
 | Implementer            | worker ollama-cloud/deepseek-v4.1-flash:1017 (send path); parent cline-pass/cline-pass/deepseek-v4.1-flash-1017 (round doc, spec amendments, gates) |
@@ -35,6 +35,16 @@ The second pass changed seven of the twelve, and found six places where the reco
 written. Those contradictions are amendments to the spec, listed in `## Plan`, and they are the reason this round
 touches the spec at all.
 
+The five that were genuinely the owner's were put in the skill's form and answered "all as recommended":
+
+1. **Publish pins a content token, not a revision number.** A draft edits in place, so `"r3"` can describe two different plans. Recommendation: pin the content over slots, templates and flier, and refuse a stale token with `412`. Cost: stricter than the repo's other writes - a caller who publishes without reading first is refused.
+2. **Who gets an inbox row.** Every recipient, or only those USSD can authenticate? Recommendation: anyone owning at least one contact, so an email-only member has a row. Cost: a row the USSD read cannot yet show them, recorded in the backlog.
+3. **Does an officer's retry re-check a mute that landed after the failure?** Recommendation: yes, the member's mute wins and the retry ends `skipped`. Cost: the officer's retry can silently not send, and the failed count stays uncleared.
+4. **The preview's exclusion sample.** Name every reason, or only `no_contact`? Recommendation: only `no_contact`, naming at most five. Cost: an officer sees counts, not names, for the other reasons, because FR-44 forbids naming the muted or blocked.
+5. **Three real provider adapters now, or the fake only?** Recommendation: all three, worker-only, fake in tests. Cost: tested against a local double and never a live provider - the same structural limitation R2 recorded for SigV4.
+
+The twelve the round settles against the spec:
+
 | #   | Answer                                                                                                                                                                                                                                      |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **`send_at` is the resolved instant, and `delivery_at` is a new column** written when the job is enqueued. The read returns `delivery_at`; it never recomputes it, because N-8 says a policy change applies only to jobs enqueued after it. |
@@ -51,6 +61,10 @@ touches the spec at all.
 | 12  | **No `Clock` port.** An explicit `now` is threaded through publish, materialisation, fan-out and preference evaluation; `applySendPolicy` stays pure.                                                                                       |
 
 **The sentence this round must not soften:** R3 is _the round where a published plan first reaches a person_.
+
+Answered by the owner on 2026-11-26: **"all as recommended"**. Five decisions were put in the skill's own form and
+accepted: the content token on publish, an inbox row for anyone owning at least one contact, a retry that re-checks
+live mutes, an exclusion sample named only for `no_contact`, and the three real adapters shipped worker-only.
 
 ## Plan
 
@@ -77,6 +91,8 @@ text`, `email_body_text text` added. N-7 forbids free-form WhatsApp, and the not
 7. **FR-7 / N-4** — inbox eligibility is "owns at least one contact"; only a member with no own contact at all is
    guardian-routed and inbox-less. This keeps `routed_via = 'own' ⇒ message_id is not null` satisfiable for an
    email-only member.
+8. **N-14, `notification_plan_revisions`** — `published_check` becomes one-way. The biconditional made cancel
+   unrepresentable, because a cancelled revision keeps its publish stamp and `(false) = (true)` fails.
 
 **Scope.**
 
@@ -166,14 +182,36 @@ which is R4's).
 | Typecheck | `npm run verify:fast` | pass   |
 | Test      | `npm run verify:fast` | pass   |
 
-At open, before any send-path code exists, so this is the inherited suite rather than the round's proofs.
+Implemented, so this is the send path's own suite. `npm run smoke` also passes on PGlite, including
+`ok worker drains a probe job end to end`. The gate ran twice: the first failed on `Error: aborted` in
+`tests/api/offerings.test.ts` under 108 workers, which passes in isolation (34/34), so it was the suite's load
+sensitivity rather than this change.
 
-gate-run 2026-11-26T08:46:21.527Z profile=fast steps=4/4 lines=4 bytes=702
+gate-run 2026-11-26T09:32:18.435Z profile=fast steps=4/4 lines=4 bytes=855
 
 ## Review
 
-Seat: pending - the independent reviewer has not run. At close this line carries the reviewer's verdict and the
-findings table replaces this paragraph.
+Seat: consistent - the `Implementer` row names the `worker-flash` seat for the send path and this reviewer is
+`reviewer-pro`, the Tier 2 split AGENTS.md §3 requires; the tree carries both the worker's files and the parent's
+round-doc, spec and gate edits, in the split the row describes.
+
+**`reviewer-pro` / `ollama-cloud/deepseek-v4-pro:0813`, 2026-11-26. Verdict: REWORK** - one P1, four P2s and three nits.
+
+The P1 was in the round's core path: the send handler re-claimed `failed` rows, so an at-least-once redelivery after a
+crash between the commit and the ack would re-send a `provider_rejected` delivery that FR-21 makes terminal.
+
+| Finding                                                                     | Fix                                                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P1** - a terminal `failed` row is re-sent on redelivery                   | The claim is `status = 'pending'` only, and the early return treats every other status as terminal. `notification-delivery.test.ts` proves a redelivered job leaves a `provider_rejected` row untouched and calls no provider                                 |
+| **P2** - the audited retry never reset `attempts`                           | A retry sets `attempts = 0`, so a dead-lettered row gets a fresh budget instead of terminating on its first attempt; proved by a new test that retries at `attempts = 5` and reaches `sent`                                                                   |
+| **P2** - `createApp` fell back to an in-code `0` for the trigger cadence    | `requiredTriggerMinutes()` reads the env and throws when it is unset or not a non-negative integer, so no code path guesses                                                                                                                                   |
+| **P2** - the send handler did not re-check instance status                  | The claim now joins `notification_slot_instances` and requires `status <> 'cancelled'`, so a cancelled instance matches nothing. The row stays `pending` rather than being given a fabricated reason, because the closed skip set has no code for "withdrawn" |
+| **P2** - the 500-row batch boundary was unexercised                         | `fanOutInstance` takes a `batchSize` seam, and a test pages a fresh instance at two rows per batch and re-runs it to prove the resume adds nothing                                                                                                            |
+| Nit - the migration comment still said `delivery_at` was null until enqueue | Corrected in `0032`                                                                                                                                                                                                                                           |
+| Nit - a dead `at` binding and `void` suppressions                           | Removed; the unused parameter is now `_now`                                                                                                                                                                                                                   |
+| Nit - the preview's `channel_blocked` is a per-member approximation         | Left, and named: the aggregate preview asks "is every reachable channel blocked" while the send path asks per channel. The two counts can differ for a member with two channels, one blocked                                                                  |
+
+No confirmation round was run: the P1's remedy is mechanical and its result is a passing test rather than a judgement.
 
 ## Git writes
 
@@ -192,14 +230,40 @@ n/a — no mock.
 
 ## Acceptance
 
-| Criterion | Met | Evidence | Verdict |
-| --------- | --- | -------- | ------- |
-| pending   | —   | —        | —       |
+| Criterion                                                                                              | Met | Evidence                                                                                                                                                           | Verdict |
+| ------------------------------------------------------------------------------------------------------ | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| 1. `0032` on both drivers, eight tables, nothing extra                                                 | yes | `notification-send-migration.test.ts`: exact table list, closed sets, partial indexes, Drizzle parity, plus a `pg` block behind `TEST_DATABASE_URL`                | pass    |
+| 2. Publish: active + draft, 90-day horizon, five refusals, idempotent                                  | yes | `notification-publish.test.ts`: past slot, duplicate instant, coarse cadence, missing template, not active; republish returns the same instances                   | pass    |
+| 3. Inbox before any provider call, permitted channels only, no duplicates                              | yes | `notification-fanout.test.ts`: zero provider calls after fan-out, re-run adds nothing, batching proved through the `batchSize` seam                                | pass    |
+| 4. Skip precedence first-applicable, decided at delivery time, never retried                           | yes | `notification-skip.test.ts` for the order; `notification-fanout.test.ts` for `channel_blocked` before `event_muted`; the send path returns on `skipped`            | pass    |
+| 5. Cadence per occurrence; the inbox keeps every instance                                              | yes | `notification-skip.test.ts`; `notification-fanout.test.ts` "minimal keeps starts and last, the inbox keeps all"                                                    | pass    |
+| 6. Verified → display order → oldest; own then guardian; masked                                        | yes | `notification-fanout.test.ts`: verified beats order, the mask hides the raw value, `contact_id` recorded                                                           | pass    |
+| 7. Guardian-only member: no inbox row, `routed_via = 'guardian'`                                       | yes | `notification-fanout.test.ts`: zero messages for that member, guardian delivery with a null `message_id`                                                           | pass    |
+| 8. Change notice: own row, own instance, slots untouched                                               | yes | `notification-publish.test.ts`: one notice row, slot and future-instance counts unchanged                                                                          | pass    |
+| 9. Cancel keeps history; a queued job drains as a no-op; a cancelled instance does not block republish | yes | `notification-publish.test.ts`: zero scheduled, republish succeeds; the claim is the race guard, and the new instance join proves a cancelled instance is not sent | pass    |
+| 10. Five attempts then dead-letter; two terminal codes; closed set                                     | yes | `notification-delivery.test.ts`: unconfigured and rejected terminal on attempt one, the ladder to five, the closed code set, and no re-send on redelivery          | pass    |
+| 11. Policy at enqueue, three modes, `starts`/`change` bypass, `delivery_at` recorded                   | yes | `notification-send-policy.test.ts` for exact instants; publish writes a non-null `delivery_at` and the sweep enqueues at it                                        | pass    |
+| 12. `openapi.json` regenerated; no UI, no mock                                                         | yes | the OpenAPI diff and snapshot test; no `ui/` path in the change set                                                                                                | pass    |
 
 ## Deviations
 
+- **The round turned unattended mid-flight.** On 2026-11-26 the owner said "go unattended to mock building step for producing ui
+  wire frames", which pre-authorises this round's mechanics and its commit/push/PR/merge. The frontier had already been
+  answered ("all as recommended") while the round was attended, so nothing was auto-accepted that had not been put.
+- **The milestone is the mock step, not the feature's completion.** Everything after the mock cut - R4's screens - is
+  outside the instruction and stops there.
+- **R3b parks on its wire contract.** Preferences, the inbox read, the digest and the admin search add routes, and §17
+  parks a wire-contract change unless the owner names that round and that gate. The unattended instruction names a
+  milestone, not a gate, so R3b is planned and recorded, not built.
 - **The spec is amended in this round, not around it.** Six contradictions the second grill pass found are fixed in
   `documents/specs/member-registrations-event-notifications.md` in the same commit as the code that depends on them,
   so no decision lives only here.
 - **`delivery_at` is a new column on a table the owner had settled.** It is the only way to honour N-8's "a policy
   change applies to jobs enqueued after it" while still showing an officer what an instance holds.
+- **An eighth amendment the worker found while building.** `notification_plan_revisions_published_check` was a
+  biconditional, and cancel sets a published revision to `cancelled` while keeping its publish stamp, which the
+  biconditional rejects. It is now one-way; without it cancel could only have worked by erasing when the plan was
+  published. Recorded in the spec's change log as amendment 8.
+- **FR-46's typed acknowledgement is not implemented.** The round's five named publish refusals do not include
+  `422 acknowledgement_required`, and the UI that would ask for the count is R4's. The plan read exposes the recipient
+  count so that guard can be built against it.

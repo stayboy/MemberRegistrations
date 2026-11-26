@@ -69,7 +69,12 @@ import { ussdRouter } from './routes/ussd.js';
 import { notificationPlansRouter } from './routes/notification-plans.js';
 import { notificationFliersRouter, publicFliersRouter } from './routes/notification-fliers.js';
 import { notificationDefaultsRouter } from './routes/notification-defaults.js';
+import { notificationPublishRouter } from './routes/notification-publish.js';
+import { notificationDeliveriesRouter } from './routes/notification-deliveries.js';
 import { NotificationPlanRepository } from './repos/notification-plans.js';
+import { NotificationInstanceRepository } from './repos/notification-instances.js';
+import { NotificationDeliveryRepository } from './repos/notification-deliveries.js';
+import type { Queue } from './queue/port.js';
 import { createDbFlierStore } from './storage/db.js';
 import { createS3FlierStore } from './storage/s3.js';
 import type { FlierStore } from './storage/flier-store.js';
@@ -115,6 +120,33 @@ export interface AppOptions {
   };
   /** The flier store (N-9); the default follows `FLIER_STORE`, then the register. */
   flierStore?: FlierStore;
+  /**
+   * The queue publish and retry enqueue into (N-8). The API never starts
+   * pg-boss itself; a test injects a double, and the worker's tick is the
+   * crash repair when this is absent.
+   */
+  notificationQueue?: Queue;
+  /** The deployed trigger cadence in minutes; `0` is continuous (FR-42). */
+  notificationTriggerMinutes?: number;
+}
+
+/**
+ * The deployed trigger cadence, with no in-code default (N-8, answer 7). `0` means continuous;
+ * an unset value is a configuration error rather than a guessed 15, because a guess would make
+ * the read-only display and the `cadence_too_coarse` refusal disagree with what is deployed.
+ */
+function requiredTriggerMinutes(): number {
+  const raw = process.env.NOTIFICATION_TRIGGER_MINUTES;
+  if (raw === undefined || raw.trim() === '') {
+    throw new Error(
+      'NOTIFICATION_TRIGGER_MINUTES is required (0 means continuous, 15 for the hosted timer)',
+    );
+  }
+  const minutes = Number(raw);
+  if (!Number.isInteger(minutes) || minutes < 0) {
+    throw new Error(`NOTIFICATION_TRIGGER_MINUTES must be a non-negative integer, got "${raw}"`);
+  }
+  return minutes;
 }
 
 /**
@@ -124,6 +156,7 @@ export interface AppOptions {
 export function createApp(options: AppOptions): Express {
   const logger = options.logger ?? pino({ level: options.logLevel ?? 'info' });
   const app = express();
+  const triggerMinutes = options.notificationTriggerMinutes ?? requiredTriggerMinutes();
 
   const ussdPhonePepper =
     options.ussd?.phonePepper ?? process.env.USSD_PHONE_PEPPER ?? DEFAULT_USSD_PHONE_PEPPER;
@@ -179,7 +212,15 @@ export function createApp(options: AppOptions): Express {
           secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
         })
       : createDbFlierStore(options.db));
-  const notificationPlans = new NotificationPlanRepository(options.db, flierStore);
+  const notificationPlans = new NotificationPlanRepository(options.db, flierStore, triggerMinutes);
+  const notificationInstances = new NotificationInstanceRepository(options.db, {
+    queue: options.notificationQueue,
+    triggerMinutes,
+  });
+  const notificationDeliveries = new NotificationDeliveryRepository(
+    options.db,
+    options.notificationQueue,
+  );
 
   const authConfig: AuthConfig = { ...DEFAULT_AUTH_CONFIG, ...options.authConfig };
   const auth = new AuthService(new AuthRepository(options.db), authConfig);
@@ -380,9 +421,11 @@ export function createApp(options: AppOptions): Express {
   // The notification plan, its flier and the church defaults. Registered before
   // /events so `/events/{eventId}/notification-plan` never reaches the event
   // router's `/:id` neighbours.
+  v1.use('/events', notificationPublishRouter(notificationInstances));
   v1.use('/events', notificationPlansRouter(notificationPlans));
   v1.use('/events', notificationFliersRouter(notificationPlans));
   v1.use('/notification-defaults', notificationDefaultsRouter(notificationPlans));
+  v1.use('/notification-deliveries', notificationDeliveriesRouter(notificationDeliveries));
   // Registered before /events so /events/:eventId/codes reaches this router.
   v1.use(attendanceCodesRouter(attendanceCodes));
   v1.use('/events', eventsRouter(events, clocking, headcounts, offeringCounts));
