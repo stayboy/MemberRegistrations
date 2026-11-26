@@ -9,13 +9,12 @@ import {
   Spinner,
   Text,
   ToggleButton,
-  Tooltip,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import { InfoRegular } from '@fluentui/react-icons';
 import type { ReactNode } from 'react';
 import { type EventPeriodItem } from '../api/events';
+import { InfoTooltip } from './InfoTooltip';
 import {
   defaultCycleMonth,
   periodShapeOf,
@@ -53,6 +52,17 @@ const PERIOD_DAY_EXPLANATION =
 
 /** The day glyph's accessible name; its tooltip is {@link PERIOD_DAY_EXPLANATION}. */
 const PERIOD_DAY_INFO_LABEL = 'What the day inside the period means';
+
+/**
+ * The named-period select's explanation likewise rides an info glyph's tooltip
+ * rather than a hint line under the select (owner, 2026-11-26). The copy is the
+ * form's own: it says what picking a period does to the arm, not what a period is.
+ */
+const NAMED_PERIOD_EXPLANATION =
+  'A named period replaces the cadence. The API resolves its dates, not this form.';
+
+/** The period glyph's accessible name; its tooltip is {@link NAMED_PERIOD_EXPLANATION}. */
+const NAMED_PERIOD_INFO_LABEL = 'What a named period means';
 
 const useStyles = makeStyles({
   stack: {
@@ -100,22 +110,6 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalXS,
-  },
-  infoTrigger: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    color: tokens.colorNeutralForeground3,
-    borderRadius: tokens.borderRadiusCircular,
-    cursor: 'help',
-    ':focus-visible': {
-      outlineStyle: 'solid',
-      outlineWidth: tokens.strokeWidthThick,
-      outlineColor: tokens.colorStrokeFocus2,
-      outlineOffset: tokens.strokeWidthThin,
-    },
-  },
-  infoIcon: {
-    fontSize: tokens.fontSizeBase400,
   },
   days: {
     display: 'flex',
@@ -312,23 +306,6 @@ export function ScheduleBuilder({
 }
 
 /**
- * A field's info glyph: the explanation rides its tooltip instead of a hint line
- * under the control, so the row stays one line per field. It is focusable because
- * a tooltip must be reachable without a mouse.
- */
-function FieldInfo({ name, explanation }: { readonly name: string; readonly explanation: string }) {
-  const styles = useStyles();
-
-  return (
-    <Tooltip content={explanation} relationship="description" withArrow>
-      <span className={styles.infoTrigger} tabIndex={0} aria-label={name}>
-        <InfoRegular aria-hidden className={styles.infoIcon} />
-      </span>
-    </Tooltip>
-  );
-}
-
-/**
  * The one named-period select (FR-42f). Both arms render it — the rule mode's
  * grid and the period mode's own row — but only one is ever mounted. Picking
  * "None" hands the form back to the rule arm.
@@ -351,6 +328,7 @@ function NamedPeriodField({
   readonly readOnly: boolean;
   readonly error: string | undefined;
 }) {
+  const styles = useStyles();
   const selectedPeriod = periods.find((period) => period.id === value.periodId);
 
   function choosePeriod(periodId: string): void {
@@ -375,8 +353,12 @@ function NamedPeriodField({
 
   return (
     <Field
-      label="Named period"
-      hint="A named period replaces the cadence. The API resolves its dates, not this form."
+      label={
+        <span className={styles.labelWithInfo}>
+          Named period
+          <InfoTooltip name={NAMED_PERIOD_INFO_LABEL} explanation={NAMED_PERIOD_EXPLANATION} />
+        </span>
+      }
       validationMessage={error}
       validationState={error ? 'error' : 'none'}
     >
@@ -464,7 +446,7 @@ function PeriodControls({
             label={
               <span className={styles.labelWithInfo}>
                 Day inside the period (optional)
-                <FieldInfo name={PERIOD_DAY_INFO_LABEL} explanation={PERIOD_DAY_EXPLANATION} />
+                <InfoTooltip name={PERIOD_DAY_INFO_LABEL} explanation={PERIOD_DAY_EXPLANATION} />
               </span>
             }
             validationState={errors.periodDay ? 'error' : 'none'}
@@ -501,7 +483,7 @@ function PeriodControls({
             The info glyph is the row's only explanation: it carries the sentence
             on both frequencies, so the radios never repeat it as sub-labels.
           */}
-          <FieldInfo name={FREQUENCY_INFO_LABEL} explanation={FREQUENCY_EXPLANATION} />
+          <InfoTooltip name={FREQUENCY_INFO_LABEL} explanation={FREQUENCY_EXPLANATION} />
         </span>
 
         {frequencyLocked ? (

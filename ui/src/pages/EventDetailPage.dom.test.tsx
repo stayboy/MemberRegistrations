@@ -9,8 +9,10 @@ import {
   archiveEventParent,
   cancelEventOccurrence,
   getEventParent,
+  listEventPeriods,
   removeEventRecurrenceException,
   updateEventParent,
+  type EventOfferingItem,
   type EventParentItem,
   type EventWindowSummary,
 } from '../api/events';
@@ -129,6 +131,45 @@ const PARENT: EventParentItem = {
   summary: SUMMARY,
 };
 
+/**
+ * One attached offering. The summary prints **names only** (owner, 2026-11-26),
+ * so the terms are deliberately uninteresting - no currency, amount or status is
+ * allowed to reach the line, and this fixture would show it if one did.
+ */
+function offering(name: string): EventOfferingItem {
+  return {
+    offeringId: `offering-${name.toLowerCase().replace(/\s+/g, '-')}`,
+    name,
+    availableUntil: null,
+    expired: false,
+    terms: {
+      version: 1,
+      name,
+      purpose: name,
+      kind: 'other',
+      currency: 'GHS',
+      targetMinor: null,
+      defaultAmountMinor: null,
+      startsOn: null,
+      endsOn: null,
+      availableUntil: null,
+      scripture: null,
+      gatewayAccount: null,
+      gatewayMetadata: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      createdBy: 'officer-1',
+      reason: null,
+    },
+    exceptions: [],
+    stats: PARENT.stats,
+  };
+}
+
+/**
+ * The detail's period line needs the catalogue's `dates` for one shape only - a
+ * monthly period with no day, which the read cannot tell from a single-date
+ * period. Every other test answers with no rows, so an unexpected read shows up.
+ */
 vi.mock('../api/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/events')>();
   return {
@@ -140,6 +181,7 @@ vi.mock('../api/events', async (importOriginal) => {
     addEventScheduleVersion: vi.fn(),
     addEventRecurrenceException: vi.fn(),
     removeEventRecurrenceException: vi.fn(),
+    listEventPeriods: vi.fn(async () => []),
   };
 });
 
@@ -201,6 +243,7 @@ const cancelOccurrenceMock = vi.mocked(cancelEventOccurrence);
 const addScheduleVersionMock = vi.mocked(addEventScheduleVersion);
 const addExceptionMock = vi.mocked(addEventRecurrenceException);
 const removeExceptionMock = vi.mocked(removeEventRecurrenceException);
+const listPeriodsMock = vi.mocked(listEventPeriods);
 
 beforeEach(() => {
   getEventParentMock.mockReset();
@@ -221,6 +264,8 @@ beforeEach(() => {
   addExceptionMock.mockResolvedValue(PARENT.recurrence!);
   removeExceptionMock.mockReset();
   removeExceptionMock.mockResolvedValue({ schedules: [], exceptions: [] });
+  listPeriodsMock.mockReset();
+  listPeriodsMock.mockResolvedValue([]);
 });
 
 function renderDetail(importDate?: string): void {
@@ -259,7 +304,53 @@ describe('EventDetailPage parent read', () => {
     expect(within(tiles).getByText('in this window')).toBeVisible();
     expect(within(tiles).getByText('75%')).toBeVisible();
     expect(within(tiles).getByText('86 present · Roster 120 on Oct 13, 2026')).toBeVisible();
-    expect(within(tiles).getByText('No offerings attached')).toBeVisible();
+    // The offerings tile is a count with a caption that implies no money.
+    expect(within(tiles).getByText('attached to this event')).toBeVisible();
+  });
+
+  it('summarises no offerings as None and draws no offerings grid', async () => {
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    expect(within(identity).getByText('Offerings')).toBeVisible();
+    expect(within(identity).getByTestId('event-offerings')).toHaveTextContent(/^None$/);
+    // The grid retired: its table and its View terms control are gone.
+    expect(screen.queryByRole('table', { name: 'Active offerings' })).toBeNull();
+    expect(screen.queryByText('View terms')).toBeNull();
+  });
+
+  it('summarises one offering as its count, then its name as an anchor', async () => {
+    getEventParentMock.mockResolvedValue({ ...PARENT, offerings: [offering('Sunday offering')] });
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    // Count first, then the bracketed name - inline, names only (drawing v16).
+    expect(within(identity).getByTestId('event-offerings')).toHaveTextContent(
+      /^1 \(Sunday offering\)$/,
+    );
+    // The name is a Fluent link (an anchor). It has no destination in this build,
+    // so it is an `<a>` with no href - inert, and never a button.
+    const anchor = within(identity).getByText('Sunday offering');
+    expect(anchor.tagName).toBe('A');
+    expect(anchor).not.toHaveAttribute('href');
+    expect(within(identity).queryByText(/GHS/)).toBeNull();
+  });
+
+  it('brackets two offering names, each an anchor, middle-dot separated', async () => {
+    getEventParentMock.mockResolvedValue({
+      ...PARENT,
+      offerings: [offering('Sunday offering'), offering('Building fund')],
+    });
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    expect(within(identity).getByTestId('event-offerings')).toHaveTextContent(
+      /^2 \(Sunday offering · Building fund\)$/,
+    );
+    expect(within(identity).getByText('Sunday offering').closest('a')).not.toBeNull();
+    expect(within(identity).getByText('Building fund').closest('a')).not.toBeNull();
+    // Names only: no currency, no money, no terms in the summary line.
+    expect(within(identity).queryByText(/GHS|paid|terms/)).toBeNull();
   });
 
   it('shows the server-rendered audience summary and the Draft badge on a draft parent', async () => {
@@ -586,5 +677,205 @@ describe('EventDetailPage write verbs', () => {
     expect(token).toBe('dom-lane-session');
     expect(eventId).toBe('evt-1');
     expect(date).toBe('2026-10-14');
+  });
+});
+
+/**
+ * The period's provenance line and the stored-rule preview (spec: named periods -
+ * "the detail shows one line"; UI FR-42b/FR-42e, AC-63a). The four shapes are the
+ * spec's own; the ambiguous one - a monthly period with no day - is settled by the
+ * catalogue's `dates`, never by the period's name.
+ */
+describe('EventDetailPage period block', () => {
+  const ONE_OFF: EventParentItem = {
+    ...PARENT,
+    period: {
+      id: 'communion-week',
+      name: 'Communion Week',
+      cycle: '2026-12',
+      frequency: null,
+      day: null,
+    },
+    recurrence: null,
+    startDate: '2026-11-29',
+    endDate: '2026-12-05',
+  };
+
+  const MONTHLY_WITH_DAY: EventParentItem = {
+    ...PARENT,
+    period: {
+      id: 'communion-week',
+      name: 'Communion Week',
+      cycle: null,
+      frequency: 'monthly',
+      day: 'SUN',
+    },
+    recurrence: null,
+  };
+
+  const MONTHLY_WHOLE_WEEK: EventParentItem = {
+    ...PARENT,
+    period: {
+      id: 'communion-week',
+      name: 'Communion Week',
+      cycle: null,
+      frequency: 'monthly',
+      day: null,
+    },
+    recurrence: null,
+  };
+
+  const MONTHLY_SINGLE_DATE: EventParentItem = {
+    ...PARENT,
+    period: {
+      id: 'home-cells',
+      name: 'Home Cells',
+      cycle: null,
+      frequency: 'monthly',
+      day: null,
+    },
+    recurrence: null,
+  };
+
+  const COMMUNION_DEFINITION =
+    "The month's first week, Monday to Sunday, closing on the first Sunday - the day the service is held.";
+
+  const HOME_CELLS_DEFINITION =
+    'The Monday of week 1 of the cycle month - the Monday of Communion Week.';
+
+  /** The catalogue's Communion Week row, as `GET /v1/events/periods` serves it. */
+  const COMMUNION_ROW = {
+    id: 'communion-week',
+    name: 'Communion Week',
+    definition: COMMUNION_DEFINITION,
+    dates: 'week' as const,
+  };
+
+  /** Opens the period glyph's tooltip and returns it once it is on screen. */
+  async function periodTooltip(): Promise<HTMLElement> {
+    const user = userEvent.setup();
+    await user.hover(screen.getByLabelText('What the named period means'));
+    const tooltip = await screen.findByRole('tooltip');
+    await waitFor(() => expect(tooltip).toBeVisible());
+    return tooltip;
+  }
+
+  it('prints the period name only, and its held range in the tooltip, for a one-off', async () => {
+    getEventParentMock.mockResolvedValue(ONE_OFF);
+    renderDetail();
+
+    // v16: the block prints the name; the grammar is the glyph's tooltip.
+    expect(await screen.findByTestId('event-period-provenance')).toHaveTextContent(
+      /^Communion Week$/,
+    );
+    expect(await periodTooltip()).toHaveTextContent('Communion Week · Nov 29, 2026 – Dec 5, 2026');
+    // The catalogue is read for the definition even on a one-off; with no row the
+    // block prints no definition rather than inventing one.
+    await waitFor(() => expect(listPeriodsMock).toHaveBeenCalled());
+    expect(screen.queryByTestId('event-period-definition')).toBeNull();
+  });
+
+  it('prints the catalogue definition beneath the name, the day in the tooltip', async () => {
+    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
+    getEventParentMock.mockResolvedValue(MONTHLY_WITH_DAY);
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    expect(within(identity).getByTestId('event-period-provenance')).toHaveTextContent(
+      /^Communion Week$/,
+    );
+    expect(await within(identity).findByTestId('event-period-definition')).toHaveTextContent(
+      COMMUNION_DEFINITION,
+    );
+    expect(await periodTooltip()).toHaveTextContent('Communion Week · Sundays · monthly');
+    expect(listPeriodsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('says whole week in the tooltip when a monthly period names no day', async () => {
+    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
+    getEventParentMock.mockResolvedValue(MONTHLY_WHOLE_WEEK);
+    renderDetail();
+
+    expect(await screen.findByTestId('event-period-provenance')).toHaveTextContent(
+      /^Communion Week$/,
+    );
+    expect(await periodTooltip()).toHaveTextContent('Communion Week · whole week · monthly');
+  });
+
+  it('names only the period and the frequency in the tooltip for a single-date period', async () => {
+    listPeriodsMock.mockResolvedValue([
+      {
+        id: 'home-cells',
+        name: 'Home Cells',
+        definition: HOME_CELLS_DEFINITION,
+        dates: 'date',
+      },
+    ]);
+    getEventParentMock.mockResolvedValue(MONTHLY_SINGLE_DATE);
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    await waitFor(() =>
+      expect(within(identity).getByTestId('event-period-definition')).toHaveTextContent(
+        HOME_CELLS_DEFINITION,
+      ),
+    );
+    const tooltip = await periodTooltip();
+    expect(tooltip).toHaveTextContent('Home Cells · monthly');
+    expect(tooltip).not.toHaveTextContent('whole week');
+  });
+
+  it('draws no period block when the event was not created from a period', async () => {
+    renderDetail();
+    await screen.findByRole('table', { name: 'Event occurrences' });
+
+    expect(screen.queryByTestId('event-period-provenance')).toBeNull();
+    expect(screen.queryByLabelText('What the named period means')).toBeNull();
+    expect(screen.queryByTestId('event-period-definition')).toBeNull();
+  });
+
+  it('keeps the block on a draft', async () => {
+    getEventParentMock.mockResolvedValue({ ...MONTHLY_WITH_DAY, status: 'draft' });
+    renderDetail();
+    expect(await screen.findByTestId('event-period-provenance')).toHaveTextContent(
+      /^Communion Week$/,
+    );
+  });
+
+  it('keeps the block on an archived event', async () => {
+    getEventParentMock.mockResolvedValue({ ...MONTHLY_WITH_DAY, status: 'archived' });
+    renderDetail();
+    expect(await screen.findByText('This event is archived')).toBeVisible();
+    expect(screen.getByTestId('event-period-provenance')).toHaveTextContent(/^Communion Week$/);
+  });
+
+  it('keeps the explanation off the page, on the glyph, with no recurrence panel', async () => {
+    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
+    getEventParentMock.mockResolvedValue(MONTHLY_WITH_DAY);
+    renderDetail();
+
+    const identity = await screen.findByTestId('event-identity');
+    // Nothing prints the mechanics: they exist only inside the tooltip.
+    expect(screen.queryByText(/rather than an rrule/, { ignore: '[role="tooltip"]' })).toBeNull();
+    // A period event has no recurrence panel left to explain away.
+    expect(screen.queryByRole('region', { name: 'Recurrence' })).toBeNull();
+    // The glyph is a named, focusable tab stop (reachable without a mouse).
+    const glyph = within(identity).getByLabelText('What the named period means');
+    expect(glyph).toHaveAttribute('tabindex', '0');
+    expect(await periodTooltip()).toHaveTextContent(/stored on the event/);
+  });
+
+  it('makes no span claim and invents no definition when the catalogue row is missing', async () => {
+    listPeriodsMock.mockResolvedValue([]);
+    getEventParentMock.mockResolvedValue(MONTHLY_WHOLE_WEEK);
+    renderDetail();
+
+    expect(await screen.findByTestId('event-period-provenance')).toHaveTextContent(
+      /^Communion Week$/,
+    );
+    expect(screen.queryByTestId('event-period-definition')).toBeNull();
+    const tooltip = await periodTooltip();
+    expect(tooltip).toHaveTextContent('Communion Week · monthly');
+    expect(tooltip).not.toHaveTextContent('whole week');
   });
 });

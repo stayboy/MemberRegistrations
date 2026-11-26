@@ -95,11 +95,6 @@ export function ministryLabel(
   return ministry ? `${ministry.code} — ${ministry.name}` : '—';
 }
 
-/** `1 offering` / `3 offerings`; the count is the API's array length. */
-export function offeringsLabel(count: number): string {
-  return count === 1 ? '1 offering' : `${count} offerings`;
-}
-
 /** The per-session attendance cell: pairs in session order, never summed. */
 export function sessionAttendanceLabels(sessions: readonly EventSessionItem[]): string {
   return sessions.map((session) => formatPresentExpected(session)).join(' · ');

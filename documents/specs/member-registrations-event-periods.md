@@ -329,7 +329,9 @@ stops describing its rule is renamed with it.
     a period that sends both `cycleMonth` and `frequency`. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
   - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
-    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows one line directly under its **identity** (not beside when and where): for a one-off period
+    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows the period under its **identity** (not beside when and where) as the period’s **name and its
+    definition**, with the resolution mechanics - week start, resolved at save, no rrule - in a tooltip after it (owner,
+    2026-11-26): for a one-off period
     event it is "Communion Week - 29 Nov - 5 Dec 2026", and for a recurring period event it is the **period - day or span - frequency**: "Communion Week - Sundays - monthly" when
     `day` is given, "Communion Week - whole week - monthly" when it is not, and "Home Cells - monthly" for a
     single-date period (which cannot take a day). A recurring period event names no single cycle. **The line never

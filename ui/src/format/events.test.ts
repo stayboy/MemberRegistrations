@@ -8,7 +8,6 @@ import {
   eventStatusLabel,
   formatPresentExpected,
   ministryLabel,
-  offeringsLabel,
   seriesColumnLabel,
   seriesLabel,
   sessionCaptureLine,
@@ -98,12 +97,6 @@ describe('event formatting', () => {
       ]),
     ).toBe('86/120 · 92/120');
     expect(sessionAttendanceLabels([])).toBe('');
-  });
-
-  it('labels offering counts', () => {
-    expect(offeringsLabel(0)).toBe('0 offerings');
-    expect(offeringsLabel(1)).toBe('1 offering');
-    expect(offeringsLabel(3)).toBe('3 offerings');
   });
 });
 

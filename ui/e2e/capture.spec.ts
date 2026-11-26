@@ -269,6 +269,36 @@ test('import panel', async ({ page }) => {
   await capture(page, 'event-import-panel');
 });
 
+test('event detail period', async ({ page }) => {
+  // The seeded period event (round `detail-grammar`): the named-period block sits
+  // at the foot of the identity card with the period's name and the catalogue's
+  // definition, and the occurrence table is the stored record - the detail draws no
+  // preview (Q1). The window is explicit because the page's default ends today and
+  // this event's dates are the three Sundays ahead of it.
+  await openScreen(page, '/events/event-period?from=2026-01-01&to=2026-04-30', {
+    width: 1440,
+    height: 900,
+  });
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Miracle Sunday choir ministration' }),
+  ).toBeVisible();
+  const identity = page.getByTestId('event-identity');
+  // The name only; the day and frequency ride the glyph's tooltip (drawing v16).
+  await expect(identity.getByTestId('event-period-provenance')).toHaveText('Communion Week');
+  await expect(identity.getByTestId('event-period-definition')).toContainText(
+    'week of the monthly communion service',
+  );
+  // The offerings summary is the count and the bracketed names, each an anchor,
+  // with no grid below it (owner, 2026-11-26).
+  await expect(identity.getByTestId('event-offerings')).toHaveText(
+    '2 (Sunday offering · Building fund)',
+  );
+  await expect(identity.locator('a')).toHaveCount(2);
+  await expect(page.getByRole('table', { name: 'Active offerings' })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Event occurrences' })).toBeVisible();
+  await capture(page, 'event-detail-period');
+});
+
 test('series detail', async ({ page }) => {
   // The series detail retired; the series id is the event parent, so this is the
   // event detail under the same baseline name (AC-51).

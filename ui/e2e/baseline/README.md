@@ -28,6 +28,7 @@ Playwright config (`ui/playwright.capture.config.ts`) so `npm run ui:e2e` never 
 | `events-new-period-monthly.png`     | The same form, period recurrence, monthly on Sunday                    | 1440 × 1123 | `v2-events/21-event-create-period-recurring.png` |
 | `event-edit.png`                    | The same form in edit mode, read-only fields                           | 1440 × 1123 | none (no edit-state drawing)                     |
 | `event-detail.png`                  | Event detail, sessions table                                           | 1440 × 900  | `v2-events/02-event-detail.png`                  |
+| `event-detail-period.png`           | Event detail of a period event, the line inside the identity card      | 1440 x 900  | `v2-events/22-event-detail-period.png` (target)  |
 | `event-headcount-dialog.png`        | Event detail, the headcount capture dialog                             | 1440 x 900  | `v2-events/06-record-headcount-dialog.png`       |
 | `event-import-panel.png`            | Event detail, the attendance import panel                              | 1440 x 900  | `v2-events/07-import-attendance-panel.png`       |
 | `event-attendance-dialog.png`       | Attendance dialog for the first session                                | 1440 × 900  | `v2-events/06-attendance-rows.png`               |

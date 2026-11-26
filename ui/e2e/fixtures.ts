@@ -1560,6 +1560,95 @@ const FOUNDATION_OCCURRENCES: readonly EventOccurrenceItem[] = [
   }),
 ];
 
+/**
+ * "Miracle Sunday": the seeded period event the detail capture opens. It was
+ * created from Communion Week + monthly + the Sunday inside it, so its read
+ * carries the one provenance shape that names a day. Its three dates are the
+ * period's first Sundays after the capture's pinned today (5 January 2026):
+ * 1 February, 1 March and 5 April.
+ */
+const PERIOD_OCCURRENCES: readonly EventOccurrenceItem[] = [
+  occurrence('event-period', {
+    date: '2026-02-01',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'scheduled',
+    present: 0,
+    expected: 12,
+    importedRows: 0,
+    source: 'none',
+  }),
+  occurrence('event-period', {
+    date: '2026-03-01',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'scheduled',
+    present: 0,
+    expected: 12,
+    importedRows: 0,
+    source: 'none',
+  }),
+  occurrence('event-period', {
+    date: '2026-04-05',
+    startTime: '09:00',
+    endTime: '11:00',
+    status: 'scheduled',
+    present: 0,
+    expected: 12,
+    importedRows: 0,
+    source: 'none',
+  }),
+];
+
+/**
+ * The two offerings the drawing `22` shows in the identity card's summary row.
+ * Two is the parish's realistic ceiling (owner, 2026-11-26), which is why the
+ * detail carries a bracket list and no grid.
+ */
+const PERIOD_OFFERINGS: readonly EventOfferingItem[] = [
+  eventOffering('offering-1', 'Sunday offering'),
+  eventOffering('offering-3', 'Building fund'),
+];
+
+/**
+ * The legacy identity row behind the period parent. It is deliberately **not**
+ * part of `EVENTS`: the legacy list serves the seeded instances, and adding a row
+ * there would move the USSD and picker baselines for no reason.
+ */
+const PERIOD_EVENT: EventItem = {
+  id: 'event-period',
+  eventNo: 'EVT-2026-042',
+  name: 'Miracle Sunday choir ministration',
+  seriesId: null,
+  ministry: CHOIR,
+  timezone: 'UTC',
+  startDate: '2026-02-01',
+  endDate: '2026-04-05',
+  startTime: '09:00',
+  endTime: '11:00',
+  venueType: 'auditorium',
+  venueName: 'Main auditorium',
+  description: null,
+  status: 'scheduled',
+  source: 'manual',
+  tracksMembers: true,
+  presbyterOnly: false,
+  sessions: PERIOD_OCCURRENCES.map((row) => ({
+    date: row.date,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    status: row.status,
+    capture: row.capture,
+    note: row.note,
+    present: row.present,
+    expected: row.expected,
+    importedRows: row.importedRows,
+    source: row.source,
+  })),
+  offerings: PERIOD_OFFERINGS,
+  stats: EMPTY_OFFERING_STATS,
+};
+
 interface ParentSeed {
   readonly id: string;
   /** The legacy read the identity fields come from; the parent adds its own shape. */
@@ -1569,6 +1658,8 @@ interface ParentSeed {
   readonly startDate: string;
   readonly endDate: string | null;
   readonly recurrence: EventParentItem['recurrence'];
+  /** The named-period provenance; every seed but the period event was not created from one. */
+  readonly period?: EventParentItem['period'];
   readonly occurrences: readonly EventOccurrenceItem[];
   readonly offerings: readonly EventOfferingItem[];
   readonly summaryOfferings: SeriesSummaryDto['offerings'];
@@ -1650,6 +1741,28 @@ const PARENT_SEEDS: Readonly<Record<string, ParentSeed>> = {
     summaryOfferings: { ...EMPTY_SUMMARY.offerings, attachedCount: PREVIEW_OFFERINGS.length },
     nextOccurrence: '2999-01-10',
   },
+  // The detail capture's period event. It is seeded here and **not** listed in
+  // `PARENT_LIST_IDS`, so no other baseline gains a row.
+  'event-period': {
+    id: 'event-period',
+    event: PERIOD_EVENT,
+    status: 'active',
+    audience: AUDIENCE_CHOIR,
+    startDate: '2026-02-01',
+    endDate: '2026-04-05',
+    recurrence: null,
+    period: {
+      id: 'communion-week',
+      name: 'Communion Week',
+      cycle: null,
+      frequency: 'monthly',
+      day: 'SUN',
+    },
+    occurrences: PERIOD_OCCURRENCES,
+    offerings: PERIOD_OFFERINGS,
+    summaryOfferings: { ...EMPTY_SUMMARY.offerings, attachedCount: PERIOD_OFFERINGS.length },
+    nextOccurrence: '2026-02-01',
+  },
 };
 
 /** The list is one row per parent; the legacy instance id is served on the detail only. */
@@ -1665,7 +1778,7 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
     audiences: [seed.audience],
     audienceId: seed.audience.id,
     audience: seed.audience,
-    period: null,
+    period: seed.period ?? null,
     ministry: event.ministry,
     presbyterOnly: event.presbyterOnly,
     timezone: event.timezone,

@@ -2,7 +2,7 @@
 
 |                        |                                                                                               |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
-| Status                 | OPEN                                                                                          |
+| Status                 | CLOSED                                                                                        |
 | Tier                   | 2                                                                                             |
 | Mode                   | `attended` (the owner accepted the twelve detail questions "all as recommended")              |
 | Base                   | `724679d`                                                                                     |
@@ -83,18 +83,27 @@ gate-run 2026-11-26T07:22:05.961Z profile=fast steps=4/4 lines=4 bytes=717
 
 ## Mock sign-off
 
-| Surface | Mock | Capture | sha256 | Signer | Date | Verdict |
-| ------- | ---- | ------- | ------ | ------ | ---- | ------- |
+| Surface                    | Mock                                           | Capture                                   | sha256     | Signer | Date       | Verdict |
+| -------------------------- | ---------------------------------------------- | ----------------------------------------- | ---------- | ------ | ---------- | ------- |
+| event detail, period event | `mockups/v2-events/22-event-detail-period.png` | `ui/e2e/baseline/event-detail-period.png` | `185c79d9` | owner  | 2026-11-26 | signed  |
 
 ## Mock parity
 
-| Claim | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
-| ----- | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
+| Claim                   | Type          | State                    | Answer (max prob) | Threshold | Confirmed by   | Disposition      |
+| ----------------------- | ------------- | ------------------------ | ----------------- | --------- | -------------- | ---------------- |
+| `EVP-DETAIL-NO-PREVIEW` | spec-required | `22-event-detail-period` | -                 | -         | parent (image) | absent, as drawn |
+
+Mock coverage: claimed 6 · e2e-only 0 · deferred 0 · prose 0
 
 ## Acceptance
 
-| Criterion | Met | Evidence | Verdict |
-| --------- | --- | -------- | ------- |
+| Criterion                                                                                          | Met | Evidence                                                                                                | Verdict  |
+| -------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------- | -------- |
+| The detail renders the period in its four shapes and no preview control                            | yes | DOM tests per shape; `EVP-DETAIL-NO-PREVIEW`                                                            | ACCEPTED |
+| One grammar produces the form’s and the detail’s line; the form no longer says "whole period"      | yes | `periodProvenanceLine` at four call sites; unit and DOM tests                                           | ACCEPTED |
+| `22` is `02`’s grammar with the line, the definition and the anchors, and has claims; `23` retired | yes | the re-cut at `185c79d9`, signed; `23`’s state, entries and images gone, the builder no longer emits it | ACCEPTED |
+| A capture of a seeded period event shows the block                                                 | yes | `event-detail-period.png`, `ec651da2`                                                                   | ACCEPTED |
+| Gates green; touched states signed or target with a reason                                         | yes | `verify:fast` 4/4, 571 / 274 / 93; `22` signed, five targets stated                                     | ACCEPTED |
 
 ## Deviations
 
