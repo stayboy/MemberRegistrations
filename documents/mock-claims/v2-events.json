@@ -304,6 +304,86 @@
         "at": "2026-11-26",
         "sha256": "185c79d91de99bd3f1ad5c5eea87786140db5f42f1bba40d0fb774f02ee39fcd"
       }
+    },
+    "27-event-detail-notifications": {
+      "mock": {
+        "path": "mockups/v2-events/27-event-detail-notifications.png",
+        "sha256": "0b5e595831f83bf45694c3f7e0b943d26417b74a00e1b206a2990d73e7bbd1a5",
+        "source": "mockups/v2-events/27-event-detail-notifications.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "autoSigned": {
+        "by": "unattended",
+        "at": "2026-11-26",
+        "sha256": "0b5e595831f83bf45694c3f7e0b943d26417b74a00e1b206a2990d73e7bbd1a5",
+        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
+        "note": "the Notifications panel on an active published event"
+      }
+    },
+    "28-notification-plan-form": {
+      "mock": {
+        "path": "mockups/v2-events/28-notification-plan-form.png",
+        "sha256": "247939aa0739f77f73079685c4dc40433339be9b45536252d1234ed57f485a72",
+        "source": "mockups/v2-events/28-notification-plan-form.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "autoSigned": {
+        "by": "unattended",
+        "at": "2026-11-26",
+        "sha256": "247939aa0739f77f73079685c4dc40433339be9b45536252d1234ed57f485a72",
+        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
+        "note": "the plan form: slots and the four channel editors"
+      }
+    },
+    "29-notification-preview": {
+      "mock": {
+        "path": "mockups/v2-events/29-notification-preview.png",
+        "sha256": "3bbf8aacbcadb9f3f17dc512d2646bd9e596633c3b07505eb8ee06f7d7fa07a2",
+        "source": "mockups/v2-events/29-notification-preview.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "autoSigned": {
+        "by": "unattended",
+        "at": "2026-11-26",
+        "sha256": "3bbf8aacbcadb9f3f17dc512d2646bd9e596633c3b07505eb8ee06f7d7fa07a2",
+        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
+        "note": "the preview: four rendered bodies, counts and exclusions"
+      }
+    },
+    "30-notification-publish-dialog": {
+      "mock": {
+        "path": "mockups/v2-events/30-notification-publish-dialog.png",
+        "sha256": "4e10817af83ea0a50109763cd2e57d21d78d97441c8e73e771c496bd1a90399a",
+        "source": "mockups/v2-events/30-notification-publish-dialog.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "autoSigned": {
+        "by": "unattended",
+        "at": "2026-11-26",
+        "sha256": "4e10817af83ea0a50109763cd2e57d21d78d97441c8e73e771c496bd1a90399a",
+        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
+        "note": "the publish dialog with the deferral list and the acknowledgement"
+      }
+    },
+    "31-notification-change-notice": {
+      "mock": {
+        "path": "mockups/v2-events/31-notification-change-notice.png",
+        "sha256": "bb3d15606487a34462a47453c6c55408bacf49c951ec7d1ba861042fae3ba1a8",
+        "source": "mockups/v2-events/31-notification-change-notice.html"
+      },
+      "baseline": null,
+      "coverage": "auto-signed",
+      "autoSigned": {
+        "by": "unattended",
+        "at": "2026-11-26",
+        "sha256": "bb3d15606487a34462a47453c6c55408bacf49c951ec7d1ba861042fae3ba1a8",
+        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
+        "note": "the change notice as its own body per channel"
+      }
     }
   },
   "inventory": [
