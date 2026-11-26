@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "8947b87b2c5e7a1369b4405b47f0b20bdbb0cc092be325c50600f9d1d60f4c97",
+      "sha256": "3c7ea0f7b066ee7bb54269ae2ba31b0026780499e224dbe245ba3f1af683fb33",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: round detail-grammar - 22-event-detail-period is signed by the owner at its re-cut (185c79d9): the detail as a 02 variant, the period’s name and definition in the identity card with the resolution mechanics in a tooltip, the offerings as inline anchors, and the occurrence table with its verbs. 23-event-detail-period-preview retires with the preview block the owner dropped - its state and entries are gone and its images are archived - and the builder no longer emits it. The state gains EVP-DETAIL-NO-PREVIEW, spec-required and ABSENT, anchored to AC-63a’s “no preview is drawn on it”; a provenance-line claim was dropped because a prose claim needs an inventory row on a detail surface no longer declared. why: the preview resolved from the earliest stored rule version while the table shows the 90 days ending today, so the two shared no dates. rejected: converting 23 into a stored-dates view the round did not design, inventing a detail surface to hang one prose claim on, and signing the drawing before the owner had seen the re-cut.",
+      "reason": "changes: five notification states appended to v2-events - 27-event-detail-notifications, 28-notification-plan-form, 29-notification-preview, 30-notification-publish-dialog and 31-notification-change-notice - each coverage \"auto-signed\" with an autoSigned block naming by \"unattended\", the date, the image hash and the basis. why: the owner named the mock step as the unattended milestone, the five states are cut from the notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, and each passes shell-check before capture. rejected: cutting the USSD inbox, item, settings and muted list and the admin defaults, delivery log and member notifications, because their payloads belong to R3b, which parks on its wire-contract gate - a signed mock for an API that does not exist is the drift the backlog already carries rows about; and declaring surfaces and AC slices now, because a surface needs a baseline and these screens have no build to pair against.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent on two passes - the signature shape, the retirement, the ABSENT claim and the absence of dangling references; then the delta after both P2s, which fixed the story so it is covered by the one claim it carries and removed the retired state from the builder so a rebuild cannot resurrect it. The hash-to-image check is the parent’s gate and was run.",
-      "at": "2026-11-26T09:03:08Z"
+      "attestation": "Reviewed the five appended states: coverage \"auto-signed\" with by \"unattended\" and a stated basis, no owner signature carried and no signed state rewritten, and the round record delimits the uncut USSD and admin surfaces rather than implying the whole surface is drawn. The hash-to-image check is the parent’s gate and was run: all five recorded sha256 values equal the computed digest of the named PNG bytes.",
+      "at": "2026-11-26T09:47:36Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
