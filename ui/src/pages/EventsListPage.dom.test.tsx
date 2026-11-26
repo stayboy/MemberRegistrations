@@ -75,6 +75,7 @@ function parent(overrides: Partial<EventParentItem> = {}): EventParentItem {
     endTime: '20:30',
     tracksMembers: true,
     status: 'draft',
+    schedule: { locked: false, reasons: [] },
     recurrence: {
       schedules: [{ effectiveFrom: '2026-10-13', rrule: 'FREQ=DAILY', endsOn: null }],
       exceptions: [],

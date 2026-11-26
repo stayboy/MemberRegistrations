@@ -127,3 +127,61 @@ describe('the un-claimables register', () => {
     expect(lower, 'the register must call that assertion flaky').toContain('flaky');
   });
 });
+
+/**
+ * Q9 of the parity grill: a row's hash is evidence, so it must be the hash the **catalogue** records for that
+ * drawing. The images are git-ignored, so CI cannot hash them; the catalogue is committed, which makes this the
+ * check that survives a clean checkout. A row whose drawing moved says **stale** instead, and retired rows carry
+ * no hash.
+ */
+function packCells(row: string): string[] {
+  return row
+    .split('|')
+    .map((cell) => cell.trim())
+    .slice(1, -1);
+}
+
+const catalogues = new Map<
+  string,
+  { states: Record<string, { mock?: { path?: string; sha256?: string } }> }
+>();
+function catalogueFor(set: string) {
+  if (!catalogues.has(set)) {
+    const file = join(repoRoot, 'documents', 'mock-claims', `${set}.json`);
+    catalogues.set(set, JSON.parse(readFileSync(file, 'utf8')));
+  }
+  return catalogues.get(set)!;
+}
+
+describe('the parity pack\u2019s hashes match the catalogue', () => {
+  const text = readFileSync(packPath, 'utf8');
+
+  it('every claimed hash is the catalogue\u2019s hash for that drawing, unless the row says stale', () => {
+    const problems: string[] = [];
+    for (const row of topTableRows(text)) {
+      const cells = packCells(row);
+      const [number, surface, , mock, hash, ...rest] = cells;
+      const verdict = rest.join(' ').toLowerCase();
+      if (!mock || !mock.includes('.png') || !hash || hash === '-') continue;
+      if (verdict.includes('retired') || verdict.includes('stale')) continue;
+      const expected = hash.replace(/[^0-9a-f]/gi, '').toLowerCase();
+      if (expected.length < 8) continue;
+
+      const path = mock.replaceAll('`', '').trim();
+      const [set] = path.split('/');
+      const state = Object.values(catalogueFor(set).states).find(
+        (s) => s.mock?.path?.replaceAll('\\', '/') === `mockups/${path}`,
+      );
+      if (!state?.mock?.sha256) {
+        problems.push(`row ${number} (${surface}) names ${path}, which no catalogue state claims`);
+        continue;
+      }
+      if (!state.mock.sha256.startsWith(expected)) {
+        problems.push(
+          `row ${number} (${surface}) claims ${expected} for ${path} but the catalogue records ${state.mock.sha256.slice(0, 8)}`,
+        );
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+});

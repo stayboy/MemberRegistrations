@@ -674,8 +674,8 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
 - FR-42: An event MUST be one row in the events list, and MUST be creatable, editable and archivable,
   including adding a schedule version and adding/removing exceptions from its detail. `Events` owns
   event management; `Admin` owns ministries, audiences and other reference data. The retired `Attendance`
-  screens MUST NOT be duplicated. The events list MUST offer **New event** in its `Actions` menu
-  (FR-9a), opening `#/events/new`. The **New event** form MUST carry one **Audience** picker (required,
+  screens MUST NOT be duplicated. The events list MUST render **New event** as a visible control in its action row - one verb, no `Actions` menu
+  (FR-9a, AC-50; owner, 2026-11-25) - opening `#/events/new`. The **New event** form MUST carry one **Audience** picker (required,
   default `Everyone`) and a **Repeats** section: with Repeats off the event is standalone and its date
   rows are its occurrences; with Repeats on the form carries the first schedule version
   (`effectiveFrom`, `rrule`, optional `endsOn`), as `mockups/v2-events/11-series-create.png` shows. The
@@ -688,7 +688,8 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   terminal: the detail is read-only and offers no **Restore**, because the API narrows status forward and its
   archive route is the only path to `archived` (FR-42e). The events list MUST NOT carry per-row write verbs;
   the write verbs live on the detail (FR-42e).
-- FR-42a: The events list MUST offer **New event** in the same `Actions` menu, opening `#/events/new`.
+- FR-42a: The events list MUST render **New event** as a visible control in its action row - AC-50’s one-verb rule,
+  so no `Actions` menu is rendered (owner, 2026-11-25) - opening `#/events/new`.
   The form MUST carry `eventNo`, `name`, `audienceId`, optional `description`, `startTime`, optional
   `endTime`, `venueType` (`auditorium`, `virtual` or `hybrid`), optional `venueName`, `tracksMembers`
   (default `true`), and either one or more occurrence dates (standalone) or a first recurrence version
@@ -713,7 +714,8 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   unique; a blank time inherits the event's time. With **Repeats** on, the date rows are replaced by the
   recurrence fields (FR-42f) and the API generates the first window - **on the create only**. **Repeats chooses the
   event's type**, so the edit form offers no switch at all (not disabled, not inert, absent): a standalone event's edit
-  form edits its date rows, a recurring one edits its rule. **On the edit form the rule is editable only while the
+  form shows its date rows **read-only** - the edit form carries no occurrence write, and a date is changed from the
+  event detail (owner, 2026-11-25) - and a recurring one edits its rule. **On the edit form the rule is editable only while the
   event has no history** - no occurrence dated today or earlier, no offering attached or counted, and no headcount,
   attendance row or import suppression - and saving it is a **rewrite** (a version whose `effectiveFrom` is on or
   before the last generated occurrence) that replaces the future dates the old rule generated; otherwise the builder
@@ -1095,7 +1097,7 @@ Each criterion is testable and references at least one requirement.
 
 ### AC-20a: **Given** a standalone event's occurrence row, **When** the operator chooses the import action, **Then** the panel opens with that event and date, the batch is accepted like a recurring occurrence's, and only a `tracksMembers = false` event refuses with `422 headcount_only`. (FR-36a)
 
-### AC-61: **Given** a session with first-time visitors, **When** the operator records the headcount from the session row, **Then** **Visitor Mode** offers visitor men, visitor women and visitor children, the first-time visitors are counted there, a registered visitor may also appear in a named attendance row, and the screen never presents the headcount as the sum of the attendance rows. (2.5, A-5a)
+### AC-61: **Given** a session with first-time visitors, **When** the operator records the headcount from the session row, **Then** a **Visitors** mode offers visitor men, visitor women and visitor children, the first-time visitors are counted there, a registered visitor may also appear in a named attendance row, and the screen never presents the headcount as the sum of the attendance rows. The mode is the shared headcount dialog's **Mode** control, not a chip row: the dialog is also the USSD console's entry surface, and forking it for a chip row would split one control across two surfaces (owner, 2026-11-25). (2.5, A-5a)
 
 ### AC-21: **Given** a previous import in this tab, **When** `Batch lookup` is opened, **Then** the batch appears in the session list and its id resolves through `GET /v1/imports/:batchId`. (FR-38)
 
@@ -1180,9 +1182,9 @@ exist yet. (FR-1, FR-9)
 
 ### AC-54: **Given** a failed add whose `409` names a value owned by another member, **When** the dialog resolves the owner, **Then** it names that member and offers `Link the household's value`; confirming links the value so the row renders as linked with `Unlink`, and `Unlink` reverses it. No value from the owner's record other than the chosen one is rendered, cached, logged or persisted, and when no owner or more than one resolves the inline error stands with no offer shown. (FR-78, NFR-4)
 
-### AC-55: **Given** the events list, **When** it renders against the API, **Then** `Refresh` is a bare icon and one `Actions` menu holds **New event**; selecting it opens the event form. The list holds one row per event, and a recurring event's row carries its schedule and next occurrence. (FR-9a, FR-42, FR-42a) **Superseded clause:** the earlier requirement that the same menu also hold **New series** is retired with the series form (AC-51, 2026-11-22).
+### AC-55: **Given** the events list, **When** it renders against the API, **Then** `Refresh` is a bare icon and the page's one verb, **New event**, is a **visible control in the action row** - no `Actions` menu is rendered, by the one-verb rule at AC 50 (owner, 2026-11-25); selecting it opens the event form. The list holds one row per event, and a recurring event's row carries its schedule and next occurrence. (FR-9a, FR-42, FR-42a) **Superseded clauses:** the earlier requirement that the same menu also hold **New series** is retired with the series form (AC-51, 2026-11-22), and the earlier requirement that an `Actions` menu hold **New event** is retired by the one-verb rule at AC 50 (owner, 2026-11-25) - the two clauses contradicted each other and the drawn menu was never buildable at one verb.
 
-### AC-56: **Given** the New event form, **When** a valid standalone event is submitted with **Save draft**, **Then** the request carries the FR-42a fields (including the **Audience** set as `audienceIds`) and one or more occurrences, and never the parent's `status`, the retired `ministry`/`presbyterOnly` or an occurrence's `source`, and the parent is created as `draft`; **When** it is submitted with **Save and activate**, **Then** the same create runs and a `PATCH` carrying only `status: active` follows it. **Given** that `PATCH` fails, **Then** the form stays on the created draft, says it was saved but not activated, re-offers **Activate**, and does not report the registration as failed. **Given** the create form, **Then** it carries no **Event number** control at all - the server mints the number (AC 8) - the request omits `eventNo`, the minted number is what the detail shows, and any create `409` (a duplicate number) appears as a **banner** on the form. **Given** **Repeats** is on, **Then** the request carries the first recurrence version and the API generates the first window. **Given** the form is opened at `#/events/:id/edit`, **Then** **Event number** and **Members tracking** are read-only and the update carries neither. Success opens the event detail. (FR-42a, FR-42b)
+### AC-56: **Given** the New event form, **When** a valid standalone event is submitted with **Save draft**, **Then** the request carries the FR-42a fields (including the **Audience** set as `audienceIds`) and one or more occurrences, and never the parent's `status`, the retired `ministry`/`presbyterOnly` or an occurrence's `source`, and the parent is created as `draft`; **When** it is submitted with **Save and activate**, **Then** the same create runs and a `PATCH` carrying only `status: active` follows it. **Given** that `PATCH` fails, **Then** the form stays on the created draft, says it was saved but not activated, re-offers **Activate**, and does not report the registration as failed. **Given** the create form, **Then** it carries no **Event number** control at all - the server mints the number (AC 8) - the request omits `eventNo`, the minted number is what the detail shows, and any create `409` (a duplicate number) appears as a **banner** on the form. **Given** **Repeats** is on, **Then** the request carries the first recurrence version and the API generates the first window. **Given** the form is opened at `#/events/:id/edit`, **Then** **Event number** and **Members tracking** are read-only, a standalone event’s **date rows** are read-only (its dates are changed from the detail, owner 2026-11-25), and the update carries none of them. Success opens the event detail. (FR-42a, FR-42b)
 
 ### AC-57: **Given** the New event form, **When** the **Audience** picker is opened, **Then** it offers the active audiences with their server-rendered summaries, the Ministry select and the Presbyter-only toggle are absent as controls, and choosing the seeded ministry group or `Presbyters` sends that `audienceId`; **Given** a legacy ministry + presbyter event, **Then** its combination audience is selected. **Superseded clause:** the series form and its **Presbyter only** toggle are retired; there is no **New series** route. (FR-42, FR-42c)
 

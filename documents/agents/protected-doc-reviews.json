@@ -10,14 +10,14 @@
   "reviews": [
     {
       "path": "AGENTS.md",
-      "sha256": "35a71354b7388e217b6d7be4e7ff3dd7826a7f33fb0acab1f2ae8c41ff67ac67",
-      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
-      "model": "mimo-v2.6-pro",
+      "sha256": "a69f13d4a76f781e8065a795ddf50da101103a86d937abd07f0429b11bdd622c",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
+      "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: section 10a adds documents/agents/parallel-ui-api.md to the protected set, dated 2026-11-24, so editing the design-first workflow now needs the reviewer seat and a hash record. why: the document owns a non-negotiable (the wire design precedes UI code and shapes the contract) and was amended twice in a day without that gate. rejected: leaving protection to the backlog row alone, which is what allowed the two amendments to land ahead of a review.",
+      "reason": "changes: section 14 gains one bullet - a signature request names the folder that holds the image (mockups/<set>/, absolute in a worktree) as well as the state, its hash and what changed. why: the previous round asked the owner to sign two designs by state name and hash only, while the images live in a git-ignored folder that exists per worktree, and that folder had already had to be reconstructed from another worktree once; a signature is given against a file the owner can open. rejected: putting the directory only in the round doc (ephemeral) or only in the mock-build skill (a second place to drift), and naming a versioned path (the folder is git-ignored, so its path is a working location, not a repository one).",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
-      "at": "2026-11-24T17:45:00Z",
+      "attestation": "Seat: consistent - the bullet agrees with the other section 14 rules (the folder is git-ignored and never committed), the directory is knowable at request time even when mocks were copied between worktrees, and \"names the directory\" was judged unambiguous about the set folder rather than the repository root. A P2 asked that the durable record carry the location too, which the rounds README note closes in the same change.",
+      "at": "2026-11-25T11:27:09Z",
       "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813."
     },
     {
@@ -56,14 +56,14 @@
     },
     {
       "path": "documents/rounds/README.md",
-      "sha256": "5dc8caeadd61b60ceb57c632be934481a497df0d6cd938a72d29cf44b740741b",
-      "reviewedBy": "ollama-cloud/deepseek-v4-pro",
+      "sha256": "41a07cc12ced45cba60fa840b1c7413618e73000ce752bc6e49c3f0281d94cc7",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the git-seat rules gain one owner each, on five grill-me decisions of 2026-11-17 answered \"all as recommended\" about a duplication the day exposed. The policy carries a five-row ownership table (a verb's meaning, a brief's shape, a round's budget amount, the default/0-parks/retry/actor/probe/replacement mechanics, and the model ids) naming per rule the files that must not restate it; the budget default is now written by the parent into the round doc's `git-seat-budget:` line at open rather than inferred by anyone; a drift is asymmetric (widening blocks the next git verb until fixed and re-reviewed, narrowing is a note for the next touch); detection is the authoring round's Verification row plus tests/meta/seat-rule-agreement.test.ts; and the merge policy gained `sync`/`tag` verb rows and a pointer block, while AGENTS.md section 9 lost its restatement of the number. why: three refusals in one day came from the same shape - the policy made the default apply with no line while the fallback seat file demanded a literal amount, and two briefs died on a self-imposed pre-check - and the hash tripwire can never prove two files agree, so a rule stated twice is a rule that drifts until a commit stops. rejected: moving all seat mechanics into .github/merge-policy.md (every probe tweak would become a protected pass); accepting the duplication with a test alone (a test over contradictory text still leaves the contradiction); asking the pro reviewer to certify the operational seat files (that would smuggle them into section 10a's protected set); keeping AGENTS.md's \"defaults to 12 briefs (a line may only lower or raise it)\" (the pro review caught it as the second statement the change exists to remove).",
-      "verdict": "REWORK then ACCEPT",
-      "attestation": "The pro seat (ollama-cloud/deepseek-v4-pro:0813, outside the 12:00-18:00 window on 2026-11-17) read the exact landing text twice. The first pass returned REWORK with three P1s and one P2: the ownership table named no AGENTS.md cell although section 9 restated the default and the 0-parks rule; section 9 still encoded the old optional-line model, contradicting the new parent-writes-the-default rule; the agreement test never read AGENTS.md and never asserted the table's rows, so it false-passed while the drift it exists to catch was present; and row 4's \"the seat files implement only the refusal\" was false because both seat files carry the retry rule. Four nits were also raised (a universal \"a brief without an amount is refused\" when rung 1 has no budget section, an ambiguous README \"adds a row here\", the table's width, and the round doc's \"declared here\" against parent-writes). All findings were fixed: section 9 now points at the policy for the budget/default/retry/probe/ranking and at seats.json for the ids, the table names AGENTS.md in three cells, row 4 says the seat files carry only the refusal and the retry mechanics, the test reads four files and asserts the five table cells (6/6 passing), and the three nits were reworded. The confirmation pass closed every finding and returned ACCEPT, with one non-blocking residue recorded as a narrowing note: .github/merge-policy.md's closing \"this section owns what a brief contains and who is accountable for it\" is descriptive against the single-home table and is to be aligned the next time that file is touched, which is the policy's own narrowing-drift rule. The template gains a verification row for a round that changes a seat rule, because the hash tripwire never proves two files agree.",
-      "at": "2026-11-17"
+      "reason": "changes: the round-doc template gains a Parity section - a per-state table (State, mock.sha256, Capture, Capture hash, Mechanism, Verdict) - with never compared as a legal verdict, scoped as a finding that names what was not compared and leaves the state open rather than a resting state, and a note that the table verdict is the comparison while the Mock sign-off verdict is the signature. why: the parity grill found 21 signed states with 6 captures paired, 10 with none and 11 with no claims, so a signature had come to mean approved rather than compared. rejected: a Capture hash column verified against the catalogue (it records a baseline path, not a digest, so the round records the hash), an ambiguous single Catalogue hash column (it now names mock.sha256 and distinguishes signed.sha256), and restating R6 capture rule as policy prose in this file.",
+      "verdict": "accepted",
+      "attestation": "Seat: consistent - the table asks for fields a round can fill, the section does not contradict the sign-off template or the claim guard, and never compared is better than borrowing matches. Its four sharpenings are applied: the hash column names mock.sha256, the capture hash is marked as round-recorded, Mechanism is defined as - for an uncompared row, and the guard-policy sentence was trimmed so the file keeps its shape.",
+      "at": "2026-11-25T22:16:35Z"
     },
     {
       "path": ".github/merge-policy.md",
@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "0d0a25e3844c27dea13d9ba8ddbf54062f8aabfc1ebff4bf4291e0abd07a4699",
+      "sha256": "93ff56a2cdde7cddca6eaeee32271baed041107897c43358603d23e2997f0802",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: 10-event-create is paired with the build's existing capture - baseline null becomes events-new.png - because the create form commits against that design and R6 needs a paired state the coverage probe can score; ui/e2e/baseline/events-new.png was captured from #/events/new on 2026-11-24 by capture.spec.ts:187 and the baseline README maps it to this state, so the catalogue recorded a null beside an existing capture. why: the pairing lets mock-claims.mjs score the state (it pairs only on a non-null baseline) and touches no signature, no mock hash and no coverage class. rejected: naming a create variant that has no capture, writing the coverage line without a paired state, and pairing the design with a capture of a different surface.",
+      "reason": "changes: round parity-audit reconciles the signed drawings with the specs, and the catalogue follows - EVA-ACTIONS reworded to the one-verb rule and re-anchored to AC-50; EVA-ROW-MENU withdrawn (the list carries no row menu); AD-HC-DIALOG withdrawn and AD-HC-VISITOR reworded to the shared headcount dialog Mode control, because the chip row was never the control the console shares; the three activity-detail states pruned with their surface slice and inventory row (the series screens are retired); 19-event-edit-standalone dropped to target, since it draws editable date rows the edit form cannot carry. why: the signatures named drawings the spec contradicted, and a claim that asserts a withdrawn control is drift with a signature on it. rejected: keeping EVA-ROW-MENU because the drawing shows a menu (drawing superseded by AC-50), amending AC-61 to justify the chip row (it would fork a dialog the USSD console shares), and signing 19 against a control no route accepts.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - the reviewer checked the surface route (/events/new), the capture spec and the baseline README, confirmed the entry's other fields are unchanged, that the pairing enables the probe without weakening a guard, and that baseline is the field the tool reads.",
-      "at": "2026-11-25T06:51:41Z"
+      "attestation": "Seat: contradicted twice, then consistent - the first pass caught the unpropagated FR-42/FR-42a and EVA-ACTIONS; the second caught AD-HC-DIALOG still asserting the chip. Both fixed, the prune left no dangling surface, inventory, story or baseline reference, and the orphaned series-detail baseline was removed with its README row. The seat accepted AC 50 as a deliberate wording around the USSD catalogue unanchored AC-50 pattern, noting the root fix is to anchor that pattern.",
+      "at": "2026-11-25T20:12:32Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

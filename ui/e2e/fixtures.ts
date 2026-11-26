@@ -13,6 +13,7 @@ import type {
   EventSessionStatus,
   EventVenueType,
   OfferingTermsItem,
+  PeriodDay,
   SessionSource,
 } from '../src/api/events';
 import type { ChurchOfferingSummary, PledgeItem } from '../src/api/offerings';
@@ -1677,6 +1678,7 @@ function parentOf(seed: ParentSeed, from: string, to: string): EventParentItem {
     endTime: event.endTime,
     tracksMembers: event.tracksMembers,
     status: seed.status,
+    schedule: { locked: false, reasons: [] },
     recurrence: seed.recurrence,
     occurrences: seed.occurrences,
     offerings: seed.offerings,
@@ -1845,6 +1847,7 @@ function createdEventParent(body: unknown, eventNo: string): EventParentItem {
     endTime,
     tracksMembers: record.tracksMembers !== false,
     status: 'draft',
+    schedule: { locked: false, reasons: [] },
     recurrence: schedules.length > 0 ? { schedules, exceptions: [] } : null,
     occurrences,
     offerings: [],
@@ -2058,7 +2061,8 @@ interface GatewayCall {
 }
 
 /** FR-42e: the event writes a test can assert, recorded by kind. */
-export type EventWriteKind = 'archive' | 'cancel' | 'version' | 'exception' | 'exceptionDelete';
+export type EventWriteKind =
+  'archive' | 'cancel' | 'version' | 'schedule' | 'exception' | 'exceptionDelete';
 
 export interface EventWrite {
   readonly eventId: string;
@@ -2795,6 +2799,114 @@ function buildRoutes(
       },
     },
     {
+      method: 'PUT',
+      // FR-42h: the edit form's guarded rule save. One arm only; the arm that
+      // does not match the event's type is a 422, and a closed guard is the
+      // `409 recurrence_locked` body carrying the read's own reasons.
+      pattern: /^\/gateway\/v1\/events\/([^/]+)\/schedule$/,
+      handle: (call, [eventId]) => {
+        recordWrite('schedule', { eventId: eventId!, body: call.body });
+        const current = currentParent(eventId!);
+        if (!current) return problem(404, `Event ${eventId} was not found`);
+        if (current.status === 'archived') {
+          return codedProblem(409, 'status', 'An archived event is read-only');
+        }
+        if (current.schedule.locked) {
+          return reply(
+            {
+              type: 'about:blank',
+              title: 'Conflict',
+              status: 409,
+              code: 'recurrence_locked',
+              detail: 'The event has history; its schedule cannot be rewritten',
+              reasons: current.schedule.reasons,
+            },
+            409,
+          );
+        }
+
+        const body = asRecord(call.body);
+        const hasRecurrence = body.recurrence !== undefined;
+        const hasPeriod = body.period !== undefined;
+        if (hasRecurrence === hasPeriod) {
+          return codedProblem(
+            422,
+            'validation_error',
+            'supply exactly one of recurrence or period',
+          );
+        }
+
+        if (hasRecurrence) {
+          if (!current.recurrence) {
+            return codedProblem(
+              422,
+              'validation_error',
+              'recurrence: this event has no schedule version; only a recurring event’s rule can be rewritten',
+            );
+          }
+          const arm = asRecord(body.recurrence);
+          const rrule = text(arm.rrule).trim();
+          const endsOn = optionalText(arm.endsOn);
+          if (rrule.length < 6) {
+            return codedProblem(422, 'validation_error', 'rrule must be an RFC 5545 body');
+          }
+          if (/(?:^|;)(COUNT|UNTIL)=/i.test(rrule)) {
+            return codedProblem(422, 'validation_error', 'rrule must not carry COUNT or UNTIL');
+          }
+
+          const inForce = [...current.recurrence.schedules].sort((left, right) =>
+            right.effectiveFrom.localeCompare(left.effectiveFrom),
+          )[0];
+          if (!inForce) {
+            return codedProblem(409, 'recurrence', 'The event has no schedule version to replace');
+          }
+          if (endsOn && endsOn < inForce.effectiveFrom) {
+            return codedProblem(422, 'validation_error', 'endsOn must not be before effectiveFrom');
+          }
+
+          const recurrence: EventRecurrence = {
+            schedules: [
+              ...current.recurrence.schedules.filter((row) => row !== inForce),
+              { effectiveFrom: inForce.effectiveFrom, rrule, endsOn },
+            ].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom)),
+            exceptions: [...current.recurrence.exceptions],
+          };
+          storeParent({ ...current, recurrence });
+          return reply({
+            recurrence,
+            period: null,
+            occurrences: current.occurrences,
+            generated: true,
+          });
+        }
+
+        if (!current.period || current.period.frequency !== 'monthly') {
+          return codedProblem(
+            422,
+            'validation_error',
+            'period: this event has no stored period rule; only a recurring period event’s rule can be rewritten',
+          );
+        }
+
+        const arm = asRecord(body.period);
+        const requestedDay = optionalText(arm.day);
+        const day: PeriodDay | null = requestedDay === null ? null : (requestedDay as PeriodDay);
+        const period = { ...current.period, cycle: null, frequency: 'monthly' as const, day };
+        storeParent({ ...current, period });
+        return reply({
+          recurrence: null,
+          period: {
+            id: period.id,
+            name: period.name,
+            frequency: period.frequency,
+            day: period.day,
+          },
+          occurrences: current.occurrences,
+          generated: true,
+        });
+      },
+    },
+    {
       method: 'POST',
       pattern: /^\/gateway\/v1\/events\/([^/]+)\/archive$/,
       handle: (_call, [eventId]) => {
@@ -3413,6 +3525,8 @@ class GatewayStub {
   lastEventArchive: EventWrite | null = null;
   lastOccurrenceCancel: EventWrite | null = null;
   lastScheduleVersion: EventWrite | null = null;
+  /** FR-42h: the edit form's rule save, recorded only when the form sent one. */
+  lastScheduleWrite: EventWrite | null = null;
   lastException: EventWrite | null = null;
   lastExceptionDelete: EventWrite | null = null;
   /**
@@ -3444,6 +3558,7 @@ class GatewayStub {
       if (kind === 'archive') this.lastEventArchive = write;
       else if (kind === 'cancel') this.lastOccurrenceCancel = write;
       else if (kind === 'version') this.lastScheduleVersion = write;
+      else if (kind === 'schedule') this.lastScheduleWrite = write;
       else if (kind === 'exception') this.lastException = write;
       else this.lastExceptionDelete = write;
     },

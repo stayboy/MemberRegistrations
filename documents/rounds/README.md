@@ -74,10 +74,32 @@ not run that verb, and a variant switch carries its `fallbackReason`.
 | Surface | Mock | Capture | sha256 | Signer | Date | Verdict |
 | ------- | ---- | ------- | ------ | ------ | ---- | ------- |
 
+The **Mock** cell names the design as mockups/<set>/<file>.png - the set folder is part of the record. A signature
+request additionally names the **absolute folder on the owner’s machine**, which is a working location (the folder is
+git-ignored and per-worktree) and does not belong in this record; the state, its hash and what changed do (AGENTS.md
+section 14).
+
 ## Mock parity
 
 | Claim | Type | State | Answer (max prob) | Threshold | Confirmed by | Disposition |
 | ----- | ---- | ----- | ----------------- | --------- | ------------ | ----------- |
+
+## Parity
+
+| State | mock.sha256 | Capture (baseline path) | Capture hash | Mechanism | Verdict |
+| ----- | ----------- | ----------------------- | ------------ | --------- | ------- |
+
+One row per state the round touched. **mock.sha256** is the catalogue's hash for the drawing - not
+**signed.sha256**, which records a signature. **Capture** is the committed baseline under `ui/e2e/baseline/`; its
+hash is recorded by the round, because the catalogue stores the baseline as a path and not a digest.
+
+**Verdict** is **matches**, **drifts** (naming the atom or control that differs) or **never compared**. The last is a
+**finding, not a resting state**: the row says what was not compared and why - a missing capture, a drawing with no
+build, a surface retired - and the state stays open. **Mechanism** is probe, dom, e2e or read, or `-` when nothing
+compared it.
+
+The table's verdict is the _comparison_; the **Mock sign-off** row's verdict is the _signature_. A row may be
+`signed` and `never compared` at once, and saying so is the point of the column.
 
 ## Acceptance
 

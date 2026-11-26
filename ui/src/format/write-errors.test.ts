@@ -18,6 +18,12 @@ describe('writeFailure', () => {
     expect(
       writeFailure(new ApiError(409, 'Anything at all', { code: 'status' }), 'Fallback'),
     ).toEqual({ title: 'The API refused this status change', message: 'Anything at all' });
+    expect(
+      writeFailure(
+        new ApiError(409, 'The event has history', { code: 'recurrence_locked' }),
+        'Fallback',
+      ),
+    ).toEqual({ title: 'The schedule cannot change', message: 'The event has history' });
   });
 
   it('keeps the surface title for an uncoded or unrecognised failure', () => {
