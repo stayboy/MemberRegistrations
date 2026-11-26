@@ -231,16 +231,20 @@ Make the **inbox** the system of record, and treat every channel as a delivery o
 - Two slots that resolve to the same instant for the same occurrence are `422 duplicate_slot_time`.
 - A plan may have at most **12 slots**.
 - The plan's horizon is the event's occurrences from the publish instant to the event's end, capped at **90 days**;
-  the queue extends the horizon as time moves, through a daily `horizon` job per published plan: it calls the same
-  occurrence generation the events API uses (`POST /v1/events/generate`) for the plan's event over the next window, then
-  materialises instances for any occurrence that has none. Without that job a weekly series would fall silent after 90
-  days, which is why it is part of the queue rather than the publish.
+  the queue extends the horizon as time moves, through a daily `horizon` job: it calls the occurrence generation the
+  events API uses (`POST /v1/events/generate`) **once for the whole register** - that call takes no event id and
+  expands every active recurring event - then materialises instances for any occurrence that has none, per published
+  plan. Without that job a weekly series would fall silent after 90 days, which is why it is part of the queue rather
+  than the publish.
 
 ### N-3. Revisions
 
 - A plan has a monotonically increasing `revision`. The first publish is revision 1.
 - A draft revision is editable in place. A published revision is **frozen**: any edit writes `revision + 1` with its
   own slots and templates.
+- **The ETag a draft carries is a content token, not its revision number.** A draft edits in place, so two different
+  drafts share one revision and a revision-shaped ETag cannot tell them apart; publish pins the content token it was
+  asked to publish, which is what makes "publish what you previewed" true.
 - **Slots are revision-keyed** (`notification_plan_slots.revision`, unique `(plan_id, revision, sort_order)`), so a
   new revision carries a complete slot set and an old one keeps its own. Templates already carry `revision`.
 - Every slot instance pins the revision it was created from. An instance already created keeps its revision; future
@@ -269,8 +273,10 @@ Make the **inbox** the system of record, and treat every channel as a delivery o
   but keyed to that member and that instance. The delivery row therefore hangs off `(instance_id, member_id)` rather
   than off a message, which is the schema's shape in N-14. A guardian who is themselves in the audience receives their
   own message and their own deliveries independently.
-- FR-7's "inbox always written" therefore means _every otherwise-eligible member who can authenticate_. The exception
-  is exactly the guardian-routed case, and it is the only one.
+- FR-7's "inbox always written" therefore means _every otherwise-eligible member who owns at least one contact_. A
+  member who owns no contact at all is reachable only through their guardian and is the single inbox-less case. An
+  email-only member does own a contact and therefore has a row, even though USSD cannot yet authenticate them to read
+  it - a read-path gap, not a row that should be withheld (`documents/backlog.md`).
 - The recipient count is computed at preview and recomputed at each instance. A member who joins between preview and
   instance receives it; a member who leaves does not.
 
@@ -360,9 +366,11 @@ Three values, all evaluated **per occurrence**:
 - **The worker** is `src/worker.ts`: it starts pg-boss and registers the two handlers. Compose runs it as the
   `worker` service; the local MVP is a long-lived process, which is what "local first" buys. The Vercel path is a
   later adapter that runs the same handlers inside a bounded `/internal/notifications/tick` call, so the domain code
-  never learns which trigger it runs under. The hosted cadence is the deployment value `NOTIFICATION_TRIGGER_MINUTES`
-  (default 15), surfaced read-only on the Admin page through `GET /v1/notification-defaults` so the coarse-cadence
-  refusal and the UI cannot disagree.
+  never learns which trigger it runs under. The cadence is the deployment value `NOTIFICATION_TRIGGER_MINUTES`, which
+  has **no default in code**: `0` means continuous, Compose sets `0`, the hosted deployment sets `15`, and the config
+  schema refuses to boot when it is unset. It is surfaced read-only on the Admin page through
+  `GET /v1/notification-defaults` as a decoded `{ kind, minutes }`, so the coarse-cadence refusal and the UI cannot
+  disagree.
 - **The cadence is a hosting fact, not a rule.** The local stack polls **continuously** because its Postgres is a
   container in the same Compose file: always on, no per-hour meter, so cadence buys nothing there (owner,
   2026-11-25). The **hosted** trigger runs **every 15 minutes**, because a managed Postgres sleeps after five idle
@@ -633,6 +641,14 @@ create table notification_change_notices (
   plan_id uuid not null references notification_plans(id),
   title text not null,
   body_text text not null,
+  -- The notice's own channel bodies. N-7 forbids free-form WhatsApp, so the
+  -- template name and its ordered parameters are chosen per notice; email needs a
+  -- subject and a body of its own, because a published revision's templates are
+  -- frozen and cannot be expected to carry content authored after them.
+  whatsapp_template text,
+  whatsapp_parameters jsonb not null default '[]'::jsonb,
+  email_subject text,
+  email_body_text text,
   published_by text not null,
   published_at timestamptz not null default now()
 );
@@ -646,7 +662,8 @@ create table notification_slot_instances (
   revision int not null,
   occurrence_id uuid references event_occurrences(id) on delete set null,
   occurrence_date date,             -- snapshot: survives the occurrence row
-  send_at timestamptz not null,
+  send_at timestamptz not null,     -- the resolved instant, before the send policy
+  delivery_at timestamptz,          -- what the enqueued job holds; null until enqueued
   status text not null default 'scheduled'
     check (status in ('scheduled', 'fanning_out', 'sent', 'cancelled', 'failed')),
   check ((slot_id is not null) <> (change_notice_id is not null)),
@@ -658,9 +675,12 @@ create table notification_slot_instances (
   failed_count int not null default 0
 );
 -- Keyed on the date and the resolved instant, NOT on the slot: a revision bump or a
--- re-materialised slot must not create a second instance for the same moment.
+-- re-materialised slot must not create a second instance for the same moment. A
+-- cancelled instance is exempt, or a plan cancelled and later republished could never
+-- claim the same moment again (AC-26's return-to-draft depends on it).
 create unique index notification_slot_instances_key
-  on notification_slot_instances (plan_id, coalesce(occurrence_date, '0001-01-01'::date), send_at);
+  on notification_slot_instances (plan_id, coalesce(occurrence_date, '0001-01-01'::date), send_at)
+  where status <> 'cancelled';
 create index notification_slot_instances_due
   on notification_slot_instances (status, send_at) where status = 'scheduled';
 
@@ -835,9 +855,9 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
 - **FR-6 (recipients).** Recipients MUST be the members the event's audience intersection covers at the instance's
   date, deduplicated, excluding purged and archived members and members who had not joined. A `tracksMembers = false`
   event MUST use the visibility predicate, not a roster. A first-time visitor MUST NOT receive an inbox message.
-- **FR-7 (inbox).** Every eligible recipient who can authenticate MUST receive exactly one inbox message per
-  instance, written before any delivery, regardless of blocks, mutes or cadence. A member reachable only through a
-  guardian MUST NOT receive an inbox row (N-4).
+- **FR-7 (inbox).** Every eligible recipient who owns at least one contact MUST receive exactly one inbox message per
+  instance, written before any delivery, regardless of blocks, mutes or cadence. A member who owns no contact at all is
+  reachable only through a guardian and MUST NOT receive an inbox row (N-4).
 - **FR-8 (deliveries).** A delivery row MUST exist for every inbox message and every channel, with status
   `pending | sending | sent | failed | skipped`; every `skipped` row MUST carry a `skipReason` from the closed set.
 - **FR-9 (precedence).** The skip reason MUST be the first applicable of `channel_blocked`, `event_muted`,
@@ -860,8 +880,10 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
 - **FR-15 (no client HTML).** The browser MUST send structured JSON or plain text, never HTML; the server MUST
   validate and render.
 - **FR-16 (preview).** A preview MUST return the four rendered bodies, the per-channel recipient count, the SMS
-  segment count and a sample of excluded members with reasons, and MUST write nothing and call no provider.
-- **FR-17 (publish).** Publishing MUST require an active event and a valid plan, and MUST be idempotent per revision.
+  segment count, the excluded counts **by reason**, and a named sample **only of the `no_contact` exclusions** - FR-44
+  forbids naming the members who muted or blocked - and MUST write nothing and call no provider.
+- **FR-17 (publish).** Publishing MUST require an active event and a valid plan, MUST pin the draft's content token so
+  a stale preview cannot be published, and MUST be idempotent per revision.
 - **FR-18 (cancel).** Cancelling MUST cancel future instances; created inbox messages and sent deliveries MUST remain.
 - **FR-19 (change notice).** An officer MUST be able to publish a one-off `change` notice to an already-published
   plan's audience without editing the slots.
@@ -1420,3 +1442,16 @@ migration and API rounds and are exempt, because none of them alters a screen.
   change notices are their own table with `kind` on the instance, email stores `body_text` as its alternative,
   activation stays the PATCH, the lock and the periods guard have a stated precedence, and the horizon, fan-out
   granularity, purge order, USSD `pageSize`, expiry sweep and flier-PII rules are now written down.
+- **2026-11-26 (R3 amendments).** Seven contradictions found while scoping the send path, each fixed where it lives:
+  (1) `notification_slot_instances` gains `delivery_at`, because N-8 says a policy change applies only to jobs
+  enqueued after it and a recomputed read would apply it to all of them; (2) its unique index gains
+  `where status <> 'cancelled'`, because a cancelled instance otherwise blocks the same moment for ever and AC-26's
+  return-to-draft could never republish; (3) `notification_change_notices` gains its own WhatsApp template and
+  parameters, and its own email subject and body, because N-7 forbids free-form WhatsApp and a frozen revision's
+  templates cannot carry content authored after them; (4) FR-17 pins the draft's **content** token rather than its
+  revision, because a draft edits in place and the revision does not move when the content does; (5) FR-16 names an
+  exclusion sample only for `no_contact`, because FR-44 forbids naming the members who muted or blocked; (6) N-2's
+  horizon job calls the global generation once and then materialises per plan, because that call takes no event id;
+  (7) `NOTIFICATION_TRIGGER_MINUTES` has no in-code default and the config refuses to boot without it, because a
+  default of 15 made the local read disagree with the locally continuous stack. FR-7's inbox rule is restated as
+  "owns at least one contact" so an email-only member has a row the USSD read cannot yet show them.
