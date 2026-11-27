@@ -207,6 +207,23 @@ export interface EventPeriodProvenance {
 }
 
 /**
+ * The **single event read's** period: the provenance plus the two facts only the
+ * detail draws (owner, 2026-11-27). Both are projected from the same code
+ * catalogue `GET /v1/events/periods` serves, so the detail and the catalogue
+ * cannot disagree. The list carries the provenance alone.
+ */
+export interface EventPeriodDetail extends EventPeriodProvenance {
+  /**
+   * The resolver's shape, projected: `week` resolves to seven dates, `date` to
+   * one. Null only for a period id the catalogue no longer holds, which the
+   * closed id set makes unreachable today; the line then makes no span claim.
+   */
+  readonly dates: 'week' | 'date' | null;
+  /** The catalogue's prose for the period, read live; empty when it has no row. */
+  readonly definition: string;
+}
+
+/**
  * The create's period arm, exactly as the contract reads it: `{ id, cycleMonth }`
  * resolves one cycle once, on the server, into that month's dates;
  * `{ id, frequency: 'monthly', day?, effectiveFrom? }` stores a period rule that
@@ -298,6 +315,15 @@ export interface EventParentItem {
   readonly offerings: readonly EventOfferingItem[];
   readonly stats: EventOfferingStatsItem;
   readonly summary: EventWindowSummary;
+}
+
+/**
+ * Mirrors `eventParentDetailSchema`: the **single event read**. The same parent,
+ * with the period's catalogue shape and prose; the list carries the provenance
+ * alone, so this is the only shape with `period.dates` and `period.definition`.
+ */
+export interface EventParentDetailItem extends EventParentItem {
+  readonly period: EventPeriodDetail | null;
 }
 
 export interface EventListItem {
@@ -558,8 +584,9 @@ export async function getEvent(
 }
 
 /**
- * `GET /v1/events/:id?view=parent&from&to`: the event parent and its window
- * occurrences and summary (FR-4/FR-6a). This is a plain parent body, not the
+ * `GET /v1/events/:id?view=parent&from&to`: the single event read - the parent,
+ * its window occurrences and summary, and, for a period event, the period's
+ * catalogue shape and prose (FR-4/FR-6a). This is a plain parent body, not the
  * legacy `{ event, etag? }` wrapper.
  */
 export async function getEventParent(
@@ -567,8 +594,8 @@ export async function getEventParent(
   sessionToken: string,
   eventId: string,
   options: { readonly from: string; readonly to: string; readonly signal?: AbortSignal },
-): Promise<EventParentItem> {
-  const result = await gatewayRequest<EventParentItem>(
+): Promise<EventParentDetailItem> {
+  const result = await gatewayRequest<EventParentDetailItem>(
     baseUrl,
     eventDetailPath(eventId, { view: 'parent', from: options.from, to: options.to }),
     { sessionToken, signal: options.signal },

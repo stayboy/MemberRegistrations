@@ -305,7 +305,7 @@ export function eventsRouter(
     if (view === 'parent') {
       const query = eventParentDetailQuerySchema.parse(req.query);
       assertWindow(query.from, query.to);
-      const parent = await repo.getParent(id, query.from, query.to);
+      const parent = await repo.getParentDetail(id, query.from, query.to);
       if (!parent) throw new NotFoundError(`Event ${id} was not found`);
       const etag = await repo.parentEtag(id);
       if (etag) res.setHeader('ETag', etag);

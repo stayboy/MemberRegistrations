@@ -2608,4 +2608,32 @@ alter table notification_plan_revisions
   check (status <> 'published' or published_at is not null);
 `,
   },
+  {
+    version: '0033_event_period_definition',
+    sql: `
+-- The definition snapshot beside the name snapshot (member-registrations-event-periods.md,
+-- "Named periods"; owner, 2026-11-27). A period's name is recorded as it was written, so
+-- the prose that explains it is the same kind of record: the detail read returns what the
+-- row stored, never today's catalogue, and a renamed definition never rewrites an event.
+alter table events
+  add column if not exists period_definition text;
+
+-- Backfill basis: the seeded prose last changed with Home Cells on 2026-11-24 (86ec2d5),
+-- and period creation landed the following day (2026-11-25, 748f6d2), so every row that
+-- carries a period id was written after that change and today's prose *is* that row's
+-- prose. One statement per seeded id; the wire id set is closed, so no other value can
+-- exist, and a period-less row keeps null.
+update events
+   set period_definition = 'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.'
+ where period_id = 'communion-week' and period_definition is null;
+
+update events
+   set period_definition = 'The last week of the month before, when ministries hold their meetings: the week before Communion Week.'
+ where period_id = 'gospel-week' and period_definition is null;
+
+update events
+   set period_definition = 'The Monday of week 1 of the cycle month - the Monday of Communion Week, one date.'
+ where period_id = 'home-cells' and period_definition is null;
+`,
+  },
 ];

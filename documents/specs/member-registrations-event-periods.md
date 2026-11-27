@@ -328,16 +328,23 @@ stops describing its rule is renamed with it.
     diverge; a create that sends a `period` alongside `occurrences` **or** a `recurrence` is refused (AC 18), and so is
     a period that sends both `cycleMonth` and `frequency`. `POST /v1/events/preview` keeps taking
     the same shape, so the form previews exactly what the create will store.
-  - **The read and the list carry it.** The event read gains `period: { id, name, cycle?, frequency?, day? }` (null for events not
-    created from one), `GET /v1/events?period=<id>` filters on it, and the event detail shows the period under its **identity** (not beside when and where) as the period’s **name and its
+  - **The detail read carries it, and only the detail.** The single event read gains
+    `period: { id, name, cycle?, frequency?, day?, dates, definition }` (null for events not
+    created from one): **`dates`** is `week`, `date` or null, **derived from the event’s own stored dates** - the first
+    two dates fall inside one week (`week`) or a month apart (`date`), and null only when the event holds no occurrence at
+    all - so it describes _this event’s spacing_, never today’s catalogue. A week period carrying a `day` stores one
+    date per cycle, so it derives `date`; the detail still names the day from `day`, and a client reading `dates` alone
+    must treat `date` as "one date per cycle", not as "Home Cells" (owner, 2026-11-27); **`definition`** is the **snapshot** taken at save beside the name, so a renamed or redefined period leaves
+    the event reading as it did (owner, 2026-11-27). **The list read carries neither**: it reuses the same parent schema, so a field
+    there would be paid on every row for a fact only the detail draws (owner, 2026-11-27). `GET /v1/events?period=<id>`
+    filters on it, and the event detail shows the period under its **identity** (not beside when and where) as the period’s **name and its
     definition**, with the resolution mechanics - week start, resolved at save, no rrule - in a tooltip after it (owner,
     2026-11-26): for a one-off period
     event it is "Communion Week - 29 Nov - 5 Dec 2026", and for a recurring period event it is the **period - day or span - frequency**: "Communion Week - Sundays - monthly" when
     `day` is given, "Communion Week - whole week - monthly" when it is not, and "Home Cells - monthly" for a
     single-date period (which cannot take a day). A recurring period event names no single cycle. **The line never
-    claims a span the read cannot support**: when the period's shape is unknown - the read carries `day: null` for both
-    a whole-week and a single-date period until `period.dates` lands - it names the period and the frequency only
-    ("Communion Week - monthly"), because a sentence true of both shapes beats one true of one (owner, 2026-11-26).
+    claims a span the read cannot support**: when `dates` is null - the event holds no occurrence - it names the period
+    and the frequency only, because a sentence true of both shapes beats one true of one (owner, 2026-11-26).
   - **A period can recur, not only resolve once** (owner, 2026-11-24): an event may be scheduled **by period** instead of
     on literal dates — the create's period arm takes either `{ id, cycleMonth }` (one cycle, resolved once, as above) or
     `{ id, frequency: 'monthly', day?, effectiveFrom? }`, which **generates** one date per cycle. The optional

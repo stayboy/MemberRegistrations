@@ -210,6 +210,8 @@ export const events = pgTable(
     periodId: text('period_id'),
     periodCycle: text('period_cycle'),
     periodName: text('period_name'),
+    /** The catalogue prose as it was written at save (`0033_event_period_definition`). */
+    periodDefinition: text('period_definition'),
     periodFrequency: text('period_frequency'),
     periodDay: text('period_day'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
