@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "f3e494e16afea97958582fc3ffb639f9cf22e64a073bcff8a6f2a988ad0c29d5",
+      "sha256": "01024864ed93d42da41719dc75b273980a3fc0e83f174618fd41b354852484d4",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: one hash - states[\"27-notifications-landing\"].mock.sha256 moves to 08ea6f21 after the owner rejected the first drawing as drifting from the set patterns and asked for the overall counts across the top and the per-media stats in an accordion on the right. why: the drawing must agree with the page the spec now describes, and the state is target so no signature is voided. rejected: keeping the invented stat row and failure banner, which the owner called out; and leaving the catalogue pinning an image the owner rejected.",
+      "reason": "changes: 27-notifications-landing is redrawn with the member landing page’s tinted stat cards, a tidier grid head, a Member column and a live mutes-and-blocks panel; 33-notifications-unmute is added for the dialog that lifts one. why: the owner asked for the tinted cards, the member on each delivery row, the muted members with their reason, and an unmute that needs the member’s authorisation - and asked themselves whether the delivery report should show the member. FR-44 gains its one carve-out for the Notifications page, FR-50 is added to record how authorisation was given, and FR-49 and AC-53/AC-54 carry the member column and the list. rejected: leaving FR-44 as a blanket prohibition and naming members on an event surface; and treating the officer’s click as authorisation without recording the method.",
       "verdict": "accepted",
-      "attestation": "Reviewed the change: 27-notifications-landing alone moved, it remains target with no signed block, and the three signed states are untouched. The redrawn page reuses the set’s .kpis, .panels.wide-left, .grid-table, .badge, .chip and .panel-with-expander idioms rather than inventing a layout, and its arithmetic holds - sent equals delivered plus failed per channel, the tabs sum to 2,134, and skipped is never counted among the 16 failures. The hash-to-image check over all 27 states is the parent’s gate and was run.",
-      "at": "2026-11-27T10:22:35Z"
+      "attestation": "Read the catalogue, both redrawn and new sources, the spec and the shared stylesheet. The change is confined to two states: 27 stays target with its hash moved, 33 is added as target with a source and a hash, and the three signed states are untouched. The privacy carve-out is written where the rule lives - the named list exists on the member record and, as one exception, on the Notifications page, which must not be reachable from an event - and the drawings match it: tinted ov-stat cards, a Member column with masked destinations, a muted panel carrying kind, scope or channel, end date and how it was set, and a dialog that records the authorisation method. The arithmetic reconciles, and skipped is not among the failures. The hash-to-image check over all 28 states is the parent’s gate and was run.",
+      "at": "2026-11-27T10:56:49Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",

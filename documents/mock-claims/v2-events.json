@@ -284,7 +284,7 @@
     "27-notifications-landing": {
       "mock": {
         "path": "mockups/v2-events/27-notifications-landing.png",
-        "sha256": "08ea6f211ee2448b2a372717c3303faf86be7cd38d4baf0d386888f583614190",
+        "sha256": "681e7b1edf924169133e73d974e7e49a63e3b52a41bd96d1b6f9356ca5c6c1d4",
         "source": "mockups/v2-events/27-notifications-landing.html"
       },
       "baseline": null,
@@ -300,6 +300,16 @@
       "baseline": null,
       "coverage": "target",
       "note": "the summary card the event detail keeps"
+    },
+    "33-notifications-unmute": {
+      "mock": {
+        "path": "mockups/v2-events/33-notifications-unmute.png",
+        "sha256": "bc11066a15df3d8980c0ad5d3ac5017304eb8bb2fdcc99dea7bfd11ef274871d",
+        "source": "mockups/v2-events/33-notifications-unmute.html"
+      },
+      "baseline": null,
+      "coverage": "target",
+      "note": "the unmute dialog"
     }
   },
   "inventory": [

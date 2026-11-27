@@ -77,7 +77,7 @@ after the drawings are signed.
 Each state passes `scripts/mock/shell-check.mjs` before capture, and every captured hash in
 `documents/mock-claims/v2-events.json` equals the bytes on disk (checked with `crypto.createHash` over all 27).
 
-gate-run 2026-11-27T10:28:41.764Z profile=fast steps=4/4 lines=4 bytes=703
+gate-run 2026-11-27T11:03:50.891Z profile=fast steps=4/4 lines=4 bytes=850
 
 ## Review
 
@@ -91,7 +91,7 @@ Seat: pending - a mock and spec round carries its review in the protected-doc re
 
 ## Mock sign-off
 
-`mockups/v2-events/` holds every state. **24 are `target`** because their bytes changed and a refresh voids a signature
+`mockups/v2-events/` holds every state. **25 are `target`** because their bytes changed and a refresh voids a signature
 (AGENTS.md §17); 3 remain `signed` because nothing moved in them. Of the voided ones, one was
 retired (`27-event-detail-notifications`), four were `auto-signed` from the previous round, and the rest carried the
 owner's signature. Every voided state keeps its old Playwright pairing in `previousBaseline`.
@@ -125,6 +125,7 @@ owner's signature. Every voided state keeps its old Playwright pairing in `previ
 | 31    | `mockups/v2-events/31-notification-change-notice.png`     | target   |
 | 27    | `mockups/v2-events/27-notifications-landing.png`          | target   |
 | 32    | `mockups/v2-events/32-event-detail-notification-card.png` | target   |
+| 33    | `mockups/v2-events/33-notifications-unmute.png`           | target   |
 
 Mock coverage: claimed 6 · e2e-only 0 · deferred 0 · prose 0
 
@@ -135,14 +136,17 @@ drawings with no built screen yet.
 
 ## Acceptance
 
-| Criterion                                                   | Met | Evidence                                                                                 |
-| ----------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
-| Notifications is a standalone page under Events             | yes | N-12, FR-49, `27-notifications-landing`                                                  |
-| The event detail keeps a summary card only                  | yes | FR-49, `32-event-detail-notification-card`                                               |
-| Overall sent, delivered, queued and failures across the top | yes | 1,920 = 1,904 delivered + 16 failed; 39 queued; skipped 175 is neither                   |
-| The grid filters by channel and searches                    | yes | the channel tabs carry their counts, and the search is over event name and member number |
-| The failure report can be sent on demand                    | yes | FR-33 and AC-51                                                                          |
-| The whole set agrees with the new shell                     | yes | every state re-cut; the hash check over all 27 passes                                    |
+| Criterion                                                   | Met | Evidence                                                                                   |
+| ----------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------ |
+| Notifications is a standalone page under Events             | yes | N-12, FR-49, `27-notifications-landing`                                                    |
+| The event detail keeps a summary card only                  | yes | FR-49, `32-event-detail-notification-card`                                                 |
+| Overall sent, delivered, queued and failures across the top | yes | 1,920 = 1,904 delivered + 16 failed; 39 queued; skipped 175 is neither                     |
+| The grid names the member, destination still masked         | yes | `27`: name + number beside event, channel, status and `a•••@example.org`                   |
+| Live mutes and blocks listed with their reason              | yes | "16 live · 12 muted · 4 blocked", with kind, scope or channel, end date and how it was set |
+| Lifting one records how the member authorised it            | yes | `33-notifications-unmute`: in person, by phone or USSD code, with actor and reference      |
+| The grid filters by channel and searches                    | yes | the channel tabs carry their counts, and the search is over event name and member number   |
+| The failure report can be sent on demand                    | yes | FR-33 and AC-51                                                                            |
+| The whole set agrees with the new shell                     | yes | every state re-cut; the hash check over all 27 passes                                      |
 
 ## Deviations
 

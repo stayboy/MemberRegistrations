@@ -967,8 +967,16 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   auth, MUST NOT be deployed to production, and MUST NOT be linked from the officer UI; an operational requeue MUST use
   the audited API retry.
 
-- **FR-44 (aggregate only).** The event surface MUST show mute and block **counts**, never a list of the members who
-  set them. The named list MUST exist only on the member record, one member at a time.
+- **FR-44 (aggregate only).** The **event** surface MUST show mute and block **counts**, never a list of the members who
+  set them. The named list MUST exist on the member record, one member at a time, and - as one exception - on the
+  **Notifications page**, which lists live mutes and channel blocks with name, member number, scope or channel, end date
+  and how it was set, because lifting one early means finding the person who asked (owner, 2026-11-27). That page's list
+  MUST NOT be reachable from an event, and no other surface may name who declined.
+- **FR-50 (lifting a mute or block).** Lifting a live mute or block before its end date MUST require the member's
+  authorisation, and the request MUST record **how** it was given - in person, by phone, or by USSD code - with the
+  actor, the reference and the time, in `notification_preference_events`. The row is revoked, never deleted, and the
+  member's next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference,
+  it does not wire a provider.
 - **FR-45 (retry route).** `POST /v1/notification-deliveries/{id}/retry` MUST accept only a `failed` delivery, MUST
   re-enqueue it through the audited path, and MUST record the actor.
 - **FR-46 (acknowledgement).** When a **`starts` or `change`** slot's resolved send instant differs from its anchor
@@ -986,7 +994,10 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   **delivered**, **queued**, **failures** - and a right-hand rail MUST show, per channel (`email`, `sms`, `whatsapp`) in
   an accordion, **sent**, **delivered**, **skipped**, **failed** and **queued**. `sent` is what a provider accepted and
   `delivered` what it confirmed, so failures are `sent - delivered`. A skipped delivery MUST NOT be counted as a
-  failure: a mute is a member's choice, not an outage. The page MUST offer the failure digest on demand. The event
+  failure: a mute is a member's choice, not an outage. The deliveries grid MUST name the **member** - name and member
+  number - beside the event, channel, status and **masked** destination, because a masked destination says what number
+  failed but not who to ask. Below it the page MUST list live **mutes and channel blocks** (FR-44's exception) and offer
+  to lift one under FR-50. The page MUST offer the failure digest on demand. The event
   detail carries a **summary card only**: plan status, the next send, and a link to the plan. Plan authoring, preview,
   publish, cancel and the change notice live at `#/events/:id/notifications`.
 
@@ -1089,6 +1100,10 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 ### AC-48: **Given** a member with both pending and read messages, **When** the first inbox page is read, **Then** every pending item precedes every read item, the page carries `pendingCount`, and the cursor resumes at the right group boundary. (FR-23)
 
 ### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** the top row shows sent, delivered, queued and failures across all channels, the right rail shows each channel's sent, delivered, skipped, failed and queued, and every channel's five counts sum to that channel's deliveries in the range while skipped is not counted as a failure. (FR-49)
+
+### AC-53: **Given** the deliveries grid, **When** it lists a row, **Then** it names the member and their number beside the event, channel, status and a masked destination, so a failed row can be traced to the person without exposing a contact value. (FR-49)
+
+### AC-54: **Given** a live mute or channel block, **When** the Notifications page lists it, **Then** it shows the member, the kind, the scope or channel, the end date and how it was set; **When** an officer lifts it, **Then** the dialog records how the member authorised it and the actor, the row is revoked rather than deleted, and the audit entry names both. (FR-44, FR-50)
 
 ### AC-50: **Given** the deliveries grid, **When** the officer picks a channel tab and types an event name, **Then** only that channel's matching rows are listed, and a failed row offers the audited retry. (FR-32, FR-49)
 
@@ -1497,6 +1512,13 @@ migration and API rounds and are exempt, because none of them alters a screen.
   per channel with sent, delivered, skipped, failed and queued; and `sent - delivered` is what failures means. The page
   composes the set's own pieces - `.kpis`, `.panels.wide-left`, `.grid-table`, `.badge`, `.chip` and a rail of `.panel`s
   with an `.expander` chevron - rather than inventing a layout.
+- **2026-11-27 (cards, member column, lifted preferences).** The owner asked for the member landing's tinted cards, a
+  tidier grid head, the member on each delivery row, a list of muted members with the reason, and an unmute that needs
+  the member's authorisation (grill Q1-Q4, and their own question "should we not show a little bit of member on delivery
+  report"). FR-44 gains its one carve-out: the **Notifications page** may name live mutes and blocks, and no event
+  surface may. FR-50 is added for lifting one, which records _how_ the member authorised it. FR-49 gains the member
+  column and the list, AC-53 and AC-54 record them, and the top row is drawn as `.ov-stat`-shaped cards tinted per
+  measure rather than plain tiles.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to
