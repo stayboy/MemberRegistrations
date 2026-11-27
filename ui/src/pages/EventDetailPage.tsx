@@ -32,7 +32,6 @@ import { isUnauthorized } from '../api/errors';
 import {
   archiveEventParent,
   getEventParent,
-  listEventPeriods,
   removeEventRecurrenceException,
   updateEventParent,
   type EventOccurrenceItem,
@@ -164,17 +163,10 @@ export function EventDetailPage() {
     enabled: Boolean(token) && id.length > 0 && window.from <= window.to,
   });
 
-  // The catalogue serves two things on this page: the period's **definition**
-  // (printed beneath its name, owner 2026-11-26) and, for a monthly period with no
-  // day, the `dates` shape the read cannot tell from a single date. A period
-  // event therefore reads it; every other event does not, and the form shares the
-  // same cache entry.
-  const periodsQuery = useQuery({
-    queryKey: ['events', 'periods', baseUrl],
-    queryFn: ({ signal }) => listEventPeriods(baseUrl, token, signal),
-    enabled: Boolean(token) && Boolean(eventQuery.data?.period),
-  });
-
+  // The single event read carries the period's **definition** and its `dates`
+  // shape, so this page reads no catalogue: one request, and no second source
+  // that could disagree with it (owner, 2026-11-27). The form still fetches the
+  // catalogue, because it needs the whole list to choose from.
   const activateMutation = useMutation({
     mutationFn: () => updateEventParent(baseUrl, token, id, { status: 'active' }),
   });
@@ -199,23 +191,14 @@ export function EventDetailPage() {
   const draft = event?.status === 'draft';
   const actionBusy = activateMutation.isPending || archiveMutation.isPending;
 
-  // The catalogue row for this event's period: its `definition` is the sentence
-  // the card prints beneath the name, and its `dates` settles the one shape the
-  // read cannot. A missing row (an archived period, or a failed read) leaves both
-  // out - never an invented definition.
-  const cataloguePeriod =
-    event?.period === null || event?.period === undefined
-      ? undefined
-      : periodsQuery.data?.find((period) => period.id === event.period?.id);
-
   // The rule in words, for the block's tooltip: the event's own span (the API
   // derives it from the occurrences it holds, never from this page's window) and
-  // the catalogue's shape, so the grammar is the form's own.
+  // the read's own shape, so the grammar is the form's own.
   const provenanceLine = event?.period
     ? periodProvenanceLine(
         event.period,
         formatRange(event.startDate, event.endDate ?? event.startDate),
-        cataloguePeriod?.dates ?? null,
+        event.period.dates,
       )
     : null;
 
@@ -503,9 +486,9 @@ export function EventDetailPage() {
                 inside it (owner, 2026-11-26; drawing v16): the label, the period's
                 **name** in semibold with the mechanics on its info glyph, and the
                 catalogue's own **definition** as the visible sentence beneath - no
-                invented prose. With no catalogue row (an archived period, or a
-                failed read) the block shows the name and the tooltip only; it never
-                invents a definition.
+                invented prose. Both facts come from this read's `period`
+                (owner, 2026-11-27): a blank definition prints nothing, so the page
+                never invents one.
               */}
               {event.period ? (
                 <>
@@ -525,12 +508,12 @@ export function EventDetailPage() {
                         explanation={`${provenanceLine ?? event.period.name}. ${PERIOD_PROVENANCE_EXPLANATION}`}
                       />
                     </span>
-                    {cataloguePeriod?.definition ? (
+                    {event.period.definition ? (
                       <Text
                         className={styles.periodDefinition}
                         data-testid="event-period-definition"
                       >
-                        {cataloguePeriod.definition}
+                        {event.period.definition}
                       </Text>
                     ) : null}
                   </div>

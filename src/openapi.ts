@@ -80,6 +80,7 @@ import {
   eventListSchema,
   eventOccurrenceSchema,
   eventParentListSchema,
+  eventParentDetailSchema,
   eventParentSchema,
   eventPeriodListSchema,
   eventPeriodSchema,
@@ -103,7 +104,7 @@ import {
   updateEventSchema,
   voidCodeSchema,
 } from './schemas/events.js';
-import { EVENT_PERIODS } from './domain/periods.js';
+import { EVENT_PERIODS, periodById } from './domain/periods.js';
 import {
   registrationApproveSchema,
   registrationRejectSchema,
@@ -514,6 +515,57 @@ const activatedEventParentExample = {
 const archivedEventParentExample = {
   ...activatedEventParentExample,
   status: 'archived',
+};
+
+/**
+ * The **single event read** of a period event, which the list deliberately does not
+ * carry (owner, 2026-11-27). `definition` is the snapshot the create wrote - the
+ * catalogue prose of the day, which the seeded catalogue still holds - and `dates`
+ * is measured from the three stored rows below: 30 Nov and 1 Dec fall inside one
+ * week, so the event reads `week`.
+ */
+const communionWeek = periodById('communion-week');
+const periodEventDetailExample = {
+  ...createdEventParentExample,
+  name: 'Communion December',
+  startDate: '2026-11-30',
+  endDate: '2026-12-06',
+  period: {
+    id: communionWeek.id,
+    name: communionWeek.name,
+    cycle: '2026-12',
+    frequency: null,
+    day: null,
+    dates: communionWeek.rule.kind,
+    definition: communionWeek.definition,
+  },
+  occurrences: [
+    { ...createdEventParentExample.occurrences[0], date: '2026-11-30' },
+    { ...createdEventParentExample.occurrences[1], date: '2026-12-01' },
+    { ...createdEventParentExample.occurrences[2], date: '2026-12-06' },
+  ],
+  summary: {
+    ...createdEventParentExample.summary,
+    from: '2026-11-30',
+    to: '2026-12-06',
+    nextOccurrence: '2026-11-30',
+  },
+};
+
+/** A period event **in the list**: the provenance only - no `dates`, no `definition`. */
+const periodEventListExample = {
+  items: [
+    {
+      ...parentEventExample,
+      period: {
+        id: communionWeek.id,
+        name: communionWeek.name,
+        cycle: '2026-12',
+        frequency: null,
+        day: null,
+      },
+    },
+  ],
 };
 
 const cancelledOccurrenceExample = {
@@ -1004,6 +1056,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         EventOccurrence: toSchema(eventOccurrenceSchema, 'output'),
         EventWindowSummary: toSchema(eventWindowSummarySchema, 'output'),
         EventParent: toSchema(eventParentSchema, 'output'),
+        EventParentDetail: toSchema(eventParentDetailSchema, 'output'),
         EventParentList: toSchema(eventParentListSchema, 'output'),
         EventPeriod: toSchema(eventPeriodSchema, 'output'),
         EventPeriodList: toSchema(eventPeriodListSchema, 'output'),
@@ -2578,7 +2631,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             200: {
               description:
-                'A legacy page of event instances, or the parent read with `view=parent` and a required from/to.',
+                'A legacy page of event instances, or the parent read with `view=parent` and a required from/to. A parent row carries the period’s provenance only; its catalogue shape (`dates`) and prose (`definition`) are the single event read’s.',
               content: {
                 'application/json': {
                   schema: { oneOf: [ref('EventList'), ref('EventParentList')] },
@@ -2590,6 +2643,11 @@ export function buildOpenApiDocument(): Record<string, unknown> {
                     parent: {
                       summary: 'Parent read with view=parent',
                       value: { items: [parentEventExample] },
+                    },
+                    period: {
+                      summary:
+                        'A period event in the list: the provenance only, without the detail’s `dates` and `definition`',
+                      value: periodEventListExample,
                     },
                   },
                 },
@@ -2772,6 +2830,8 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         parameters: [idParam('eventId')],
         get: {
           summary: 'Read an event with its sessions, offerings and statistics',
+          description:
+            'Omitting `view` serves the legacy detail. `view=parent` (with from/to) serves the single event read: the parent, its recurrence, the window’s occurrences and the window summary, and, for a period-created event, `period` with the catalogue’s `dates` and `definition` - the two facts the list does not carry.',
           parameters: [
             {
               name: 'view',
@@ -2785,15 +2845,16 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             200: {
               description:
-                'The legacy detail, or the parent detail with recurrence, occurrences and window summary.',
+                'The legacy detail, or the parent detail with recurrence, its period’s shape and prose, occurrences and window summary.',
               content: {
                 'application/json': {
-                  schema: { oneOf: [ref('Event'), ref('EventParent')] },
+                  schema: { oneOf: [ref('Event'), ref('EventParentDetail')] },
                   examples: {
                     legacy: { summary: 'Legacy event detail (no view)', value: legacyEventExample },
                     parent: {
-                      summary: 'Parent detail with view=parent',
-                      value: parentEventExample,
+                      summary:
+                        'Parent detail with view=parent, of an event created from a named period',
+                      value: periodEventDetailExample,
                     },
                   },
                 },

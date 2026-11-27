@@ -13,7 +13,7 @@ import {
   removeEventRecurrenceException,
   updateEventParent,
   type EventOfferingItem,
-  type EventParentItem,
+  type EventParentDetailItem,
   type EventWindowSummary,
 } from '../api/events';
 import { DateTimeProvider } from '../shell/DateTimeProvider';
@@ -51,7 +51,7 @@ const SUMMARY: EventWindowSummary = {
   },
 };
 
-const PARENT: EventParentItem = {
+const PARENT: EventParentDetailItem = {
   id: 'evt-1',
   eventNo: 'EVT-2026-014',
   name: 'Strategic Conference',
@@ -166,9 +166,10 @@ function offering(name: string): EventOfferingItem {
 }
 
 /**
- * The detail's period line needs the catalogue's `dates` for one shape only - a
- * monthly period with no day, which the read cannot tell from a single-date
- * period. Every other test answers with no rows, so an unexpected read shows up.
+ * The detail's period block reads both of its facts - the definition and the
+ * shape - from the single event read (`period.definition`, `period.dates`), so
+ * this page never fetches the catalogue (owner, 2026-11-27). `listEventPeriods`
+ * stays mocked only so a test can prove it is never called.
  */
 vi.mock('../api/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/events')>();
@@ -684,10 +685,16 @@ describe('EventDetailPage write verbs', () => {
  * The period's provenance line and the stored-rule preview (spec: named periods -
  * "the detail shows one line"; UI FR-42b/FR-42e, AC-63a). The four shapes are the
  * spec's own; the ambiguous one - a monthly period with no day - is settled by the
- * catalogue's `dates`, never by the period's name.
+ * read's `dates`, never by the period's name.
  */
 describe('EventDetailPage period block', () => {
-  const ONE_OFF: EventParentItem = {
+  const COMMUNION_DEFINITION =
+    "The month's first week, Monday to Sunday, closing on the first Sunday - the day the service is held.";
+
+  const HOME_CELLS_DEFINITION =
+    'The Monday of week 1 of the cycle month - the Monday of Communion Week.';
+
+  const ONE_OFF: EventParentDetailItem = {
     ...PARENT,
     period: {
       id: 'communion-week',
@@ -695,13 +702,15 @@ describe('EventDetailPage period block', () => {
       cycle: '2026-12',
       frequency: null,
       day: null,
+      dates: 'week',
+      definition: COMMUNION_DEFINITION,
     },
     recurrence: null,
     startDate: '2026-11-29',
     endDate: '2026-12-05',
   };
 
-  const MONTHLY_WITH_DAY: EventParentItem = {
+  const MONTHLY_WITH_DAY: EventParentDetailItem = {
     ...PARENT,
     period: {
       id: 'communion-week',
@@ -709,11 +718,16 @@ describe('EventDetailPage period block', () => {
       cycle: null,
       frequency: 'monthly',
       day: 'SUN',
+      // A named day stores one date per cycle, so this event's own dates are a
+      // month apart and the read reports `date` (owner, 2026-11-27); the line uses
+      // the day, never the span.
+      dates: 'date',
+      definition: COMMUNION_DEFINITION,
     },
     recurrence: null,
   };
 
-  const MONTHLY_WHOLE_WEEK: EventParentItem = {
+  const MONTHLY_WHOLE_WEEK: EventParentDetailItem = {
     ...PARENT,
     period: {
       id: 'communion-week',
@@ -721,11 +735,13 @@ describe('EventDetailPage period block', () => {
       cycle: null,
       frequency: 'monthly',
       day: null,
+      dates: 'week',
+      definition: COMMUNION_DEFINITION,
     },
     recurrence: null,
   };
 
-  const MONTHLY_SINGLE_DATE: EventParentItem = {
+  const MONTHLY_SINGLE_DATE: EventParentDetailItem = {
     ...PARENT,
     period: {
       id: 'home-cells',
@@ -733,22 +749,25 @@ describe('EventDetailPage period block', () => {
       cycle: null,
       frequency: 'monthly',
       day: null,
+      dates: 'date',
+      definition: HOME_CELLS_DEFINITION,
     },
     recurrence: null,
   };
 
-  const COMMUNION_DEFINITION =
-    "The month's first week, Monday to Sunday, closing on the first Sunday - the day the service is held.";
-
-  const HOME_CELLS_DEFINITION =
-    'The Monday of week 1 of the cycle month - the Monday of Communion Week.';
-
-  /** The catalogue's Communion Week row, as `GET /v1/events/periods` serves it. */
-  const COMMUNION_ROW = {
-    id: 'communion-week',
-    name: 'Communion Week',
-    definition: COMMUNION_DEFINITION,
-    dates: 'week' as const,
+  /** The shape the closed id set makes unreachable: no `dates`, no prose. */
+  const UNKNOWN_SHAPE: EventParentDetailItem = {
+    ...PARENT,
+    period: {
+      id: 'communion-week',
+      name: 'Communion Week',
+      cycle: null,
+      frequency: 'monthly',
+      day: null,
+      dates: null,
+      definition: '',
+    },
+    recurrence: null,
   };
 
   /** Opens the period glyph's tooltip and returns it once it is on screen. */
@@ -769,14 +788,15 @@ describe('EventDetailPage period block', () => {
       /^Communion Week$/,
     );
     expect(await periodTooltip()).toHaveTextContent('Communion Week · Nov 29, 2026 – Dec 5, 2026');
-    // The catalogue is read for the definition even on a one-off; with no row the
-    // block prints no definition rather than inventing one.
-    await waitFor(() => expect(listPeriodsMock).toHaveBeenCalled());
-    expect(screen.queryByTestId('event-period-definition')).toBeNull();
+    // The read carries the definition, so a one-off prints it too - and the page
+    // never fetches the catalogue (owner, 2026-11-27).
+    expect(await screen.findByTestId('event-period-definition')).toHaveTextContent(
+      COMMUNION_DEFINITION,
+    );
+    expect(listPeriodsMock).not.toHaveBeenCalled();
   });
 
-  it('prints the catalogue definition beneath the name, the day in the tooltip', async () => {
-    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
+  it('prints the read’s definition beneath the name, the day in the tooltip', async () => {
     getEventParentMock.mockResolvedValue(MONTHLY_WITH_DAY);
     renderDetail();
 
@@ -788,11 +808,11 @@ describe('EventDetailPage period block', () => {
       COMMUNION_DEFINITION,
     );
     expect(await periodTooltip()).toHaveTextContent('Communion Week · Sundays · monthly');
-    expect(listPeriodsMock).toHaveBeenCalledTimes(1);
+    // One request serves the block: the detail read, never the catalogue.
+    expect(listPeriodsMock).not.toHaveBeenCalled();
   });
 
   it('says whole week in the tooltip when a monthly period names no day', async () => {
-    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
     getEventParentMock.mockResolvedValue(MONTHLY_WHOLE_WEEK);
     renderDetail();
 
@@ -803,14 +823,6 @@ describe('EventDetailPage period block', () => {
   });
 
   it('names only the period and the frequency in the tooltip for a single-date period', async () => {
-    listPeriodsMock.mockResolvedValue([
-      {
-        id: 'home-cells',
-        name: 'Home Cells',
-        definition: HOME_CELLS_DEFINITION,
-        dates: 'date',
-      },
-    ]);
     getEventParentMock.mockResolvedValue(MONTHLY_SINGLE_DATE);
     renderDetail();
 
@@ -850,7 +862,6 @@ describe('EventDetailPage period block', () => {
   });
 
   it('keeps the explanation off the page, on the glyph, with no recurrence panel', async () => {
-    listPeriodsMock.mockResolvedValue([COMMUNION_ROW]);
     getEventParentMock.mockResolvedValue(MONTHLY_WITH_DAY);
     renderDetail();
 
@@ -865,9 +876,8 @@ describe('EventDetailPage period block', () => {
     expect(await periodTooltip()).toHaveTextContent(/stored on the event/);
   });
 
-  it('makes no span claim and invents no definition when the catalogue row is missing', async () => {
-    listPeriodsMock.mockResolvedValue([]);
-    getEventParentMock.mockResolvedValue(MONTHLY_WHOLE_WEEK);
+  it('makes no span claim and prints no definition when the read has no shape or prose', async () => {
+    getEventParentMock.mockResolvedValue(UNKNOWN_SHAPE);
     renderDetail();
 
     expect(await screen.findByTestId('event-period-provenance')).toHaveTextContent(

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { periodById } from '../../src/domain/periods.js';
 import { createTestApp, readHeaders, writeHeaders, type TestApp } from '../helpers/app.js';
 
 /**
@@ -84,15 +85,17 @@ describe('POST /v1/events with a one-off period', () => {
       });
     }
 
-    // The provenance is stored on the event, with the name snapshot.
+    // The provenance is stored on the event, with the name and definition snapshots.
     const [row] = await harness.db.query<{
       period_id: string;
       period_cycle: string;
       period_name: string;
+      period_definition: string | null;
       period_frequency: string | null;
       period_day: string | null;
     }>(
-      `select period_id, period_cycle, period_name, period_frequency, period_day
+      `select period_id, period_cycle, period_name, period_definition,
+              period_frequency, period_day
          from events where id = $1`,
       [response.body.id],
     );
@@ -100,6 +103,7 @@ describe('POST /v1/events with a one-off period', () => {
       period_id: 'communion-week',
       period_cycle: '2027-01',
       period_name: 'Communion Week',
+      period_definition: periodById('communion-week').definition,
       period_frequency: null,
       period_day: null,
     });

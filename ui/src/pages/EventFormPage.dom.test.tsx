@@ -11,7 +11,7 @@ import {
   previewEvent,
   updateEventParent,
   writeEventSchedule,
-  type EventParentItem,
+  type EventParentDetailItem,
   type EventPeriodItem,
   type EventPreview,
   type EventScheduleWriteResult,
@@ -140,7 +140,7 @@ const PREVIEW: EventPreview = {
   ],
 };
 
-const DRAFT: EventParentItem = {
+const DRAFT: EventParentDetailItem = {
   id: 'created-1',
   eventNo: 'EVT-2026-023',
   name: 'Strategic Conference',
@@ -208,7 +208,7 @@ const DRAFT: EventParentItem = {
   },
 };
 
-const RECURRING: EventParentItem = {
+const RECURRING: EventParentDetailItem = {
   ...DRAFT,
   id: 'event-recurring',
   eventNo: 'EVT-2026-014',
@@ -244,8 +244,11 @@ const RECURRING: EventParentItem = {
   },
 };
 
+/** The catalogue prose the read carries, as a fixture; the form never draws it. */
+const PERIOD_DEFINITION = 'The week of the monthly communion service, Monday to Sunday.';
+
 /** A monthly period rule: the arm the contract can rewrite (FR-42h). */
-const PERIOD_RULE: EventParentItem = {
+const PERIOD_RULE: EventParentDetailItem = {
   ...RECURRING,
   id: 'event-period',
   eventNo: 'EVT-2026-031',
@@ -257,14 +260,17 @@ const PERIOD_RULE: EventParentItem = {
     cycle: null,
     frequency: 'monthly',
     day: 'SUN',
+    // A named day stores one date per cycle: the read's shape is `date`.
+    dates: 'date',
+    definition: PERIOD_DEFINITION,
   },
 };
 
 /**
  * A monthly period with no day inside it: the shape whose line must say "whole
- * week" (Q6) - and must make no span claim when the catalogue row is missing (Q4).
+ * week" (Q6) - and must make no span claim when the read carries no shape (Q4).
  */
-const PERIOD_WHOLE_WEEK: EventParentItem = {
+const PERIOD_WHOLE_WEEK: EventParentDetailItem = {
   ...PERIOD_RULE,
   id: 'event-period-week',
   period: {
@@ -273,11 +279,13 @@ const PERIOD_WHOLE_WEEK: EventParentItem = {
     cycle: null,
     frequency: 'monthly',
     day: null,
+    dates: 'week',
+    definition: PERIOD_DEFINITION,
   },
 };
 
 /** One cycle resolved once: no stored rule, so the write offers no arm. */
-const PERIOD_ONE_CYCLE: EventParentItem = {
+const PERIOD_ONE_CYCLE: EventParentDetailItem = {
   ...PERIOD_RULE,
   id: 'event-period-once',
   // The week the cycle resolved to - the range the line must name (Q6).
@@ -289,6 +297,8 @@ const PERIOD_ONE_CYCLE: EventParentItem = {
     cycle: '2026-12',
     frequency: null,
     day: null,
+    dates: 'week',
+    definition: PERIOD_DEFINITION,
   },
 };
 
@@ -297,7 +307,7 @@ const PERIOD_ONE_CYCLE: EventParentItem = {
  * API refuses one for Home Cells); it is here so the write test proves the
  * **catalogue's** `dates: 'date'` drops the day, not a null seed.
  */
-const HOME_CELLS_RULE: EventParentItem = {
+const HOME_CELLS_RULE: EventParentDetailItem = {
   ...PERIOD_RULE,
   id: 'event-home-cells',
   name: 'Home Cells',
@@ -307,11 +317,13 @@ const HOME_CELLS_RULE: EventParentItem = {
     cycle: null,
     frequency: 'monthly',
     day: 'MON',
+    dates: 'date',
+    definition: PERIOD_DEFINITION,
   },
 };
 
 /** The guard closed by history: the read names the causes (FR-42h). */
-const LOCKED: EventParentItem = {
+const LOCKED: EventParentDetailItem = {
   ...RECURRING,
   schedule: {
     locked: true,

@@ -7,6 +7,7 @@ import type {
   EventOccurrenceItem,
   EventOfferingItem,
   EventOfferingStatsItem,
+  EventParentDetailItem,
   EventParentItem,
   EventParentStatus,
   EventRecurrence,
@@ -1659,7 +1660,7 @@ interface ParentSeed {
   readonly endDate: string | null;
   readonly recurrence: EventParentItem['recurrence'];
   /** The named-period provenance; every seed but the period event was not created from one. */
-  readonly period?: EventParentItem['period'];
+  readonly period?: EventParentDetailItem['period'];
   readonly occurrences: readonly EventOccurrenceItem[];
   readonly offerings: readonly EventOfferingItem[];
   readonly summaryOfferings: SeriesSummaryDto['offerings'];
@@ -1757,6 +1758,15 @@ const PARENT_SEEDS: Readonly<Record<string, ParentSeed>> = {
       cycle: null,
       frequency: 'monthly',
       day: 'SUN',
+      // The single event read carries the definition snapshot and the shape
+      // measured from the event's own dates (owner, 2026-11-27; see
+      // `src/repos/events.ts`, `periodDetail`). A named day stores one date per
+      // cycle, so the first two dates above are a month apart and the shape is
+      // `date`, not the catalogue's `week` for this period. The row is detail-only
+      // (`PARENT_LIST_IDS` omits it), so the list never serves the two fields.
+      definition:
+        'The week of the monthly communion service: week 1 of the cycle month, the seven days ending on that month’s first Sunday.',
+      dates: 'date',
     },
     occurrences: PERIOD_OCCURRENCES,
     offerings: PERIOD_OFFERINGS,

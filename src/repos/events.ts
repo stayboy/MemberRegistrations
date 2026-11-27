@@ -39,6 +39,7 @@ import type {
   CreateEventParentInput,
   EventListQuery,
   EventPeriodId,
+  EventPeriodDetail,
   EventPeriodInput,
   EventPeriodProvenance,
   EventPreview,
@@ -526,6 +527,63 @@ function periodProvenance(row: {
 }
 
 /**
+ * The **single event read's** period: the stored provenance, the **definition
+ * snapshot** the row carries, and the shape measured from the event's own stored
+ * occurrences (member-registrations-event-periods.md, "The detail read carries
+ * it, and only the detail"; owner, 2026-11-27).
+ *
+ * Nothing here is a live catalogue lookup and nothing is stored twice: the prose
+ * is what the create wrote beside the name snapshot, so a renamed definition never
+ * rewrites an event, and the shape is measured from the two dates the range query
+ * already returns. The list never calls this.
+ */
+function periodDetail(
+  row: {
+    period_id: string | null;
+    period_cycle: string | null;
+    period_name: string | null;
+    period_frequency: string | null;
+    period_day: string | null;
+    period_definition: string | null;
+  },
+  firstOccurrence: string | null,
+  secondOccurrence: string | null,
+): EventPeriodDetail | null {
+  const provenance = periodProvenance(row);
+  if (!provenance) return null;
+  return {
+    ...provenance,
+    // `0033_event_period_definition` backfills every row that predates it, and the
+    // create writes it with the name, so a period row always has its prose; the
+    // empty string is the "no snapshot recorded" placeholder, never invented text.
+    definition: row.period_definition ?? '',
+    dates: periodDatesKind(firstOccurrence, secondOccurrence),
+  };
+}
+
+/**
+ * A period's shape from the dates the event actually holds (owner, 2026-11-27).
+ * There is no second column and no catalogue read, because the stored dates are
+ * the fact: a **week** period stores its seven dates inside one calendar week -
+ * the second is within seven days of the first - and a **single-date** period
+ * stores one date per cycle, a month apart. A one-off week therefore reads `week`
+ * from its own seven rows and a one-off Home Cells reads `date` from its lone row.
+ *
+ * The two dates come from the event's whole set, not from the read's window: a
+ * window that misses the event would otherwise make the answer depend on the query
+ * string. Null only when the event holds no occurrence at all - there is no row to
+ * measure, and the UI then makes no span claim rather than guessing.
+ */
+function periodDatesKind(first: string | null, second: string | null): EventPeriodDetail['dates'] {
+  // No occurrence: nothing to measure, so no shape claim.
+  if (first === null) return null;
+  // A week period always stores seven dates, so one row can only be a single date.
+  if (second === null) return 'date';
+  // `shiftDate(second, -6) <= first` is "the second falls inside the first's week".
+  return shiftDate(second, -6) <= first ? 'week' : 'date';
+}
+
+/**
  * A written session inherits the event's start and end time unless it overrides
  * them; a session is scheduled until an attendance flow marks it otherwise.
  */
@@ -743,6 +801,8 @@ function normalizeSchedule(input: RecurrenceScheduleInput): NormalizedSchedule {
 
 interface ResolvedPeriodWrite {
   dates: string[];
+  /** The catalogue prose this write records, beside the name snapshot. */
+  definition: string;
   provenance: EventPeriodProvenance;
 }
 
@@ -758,6 +818,7 @@ function resolvePeriodWrite(period: EventPeriodInput): ResolvedPeriodWrite {
   if ('cycleMonth' in period) {
     return {
       dates: resolvePeriod(period.id, period.cycleMonth),
+      definition: named.definition,
       provenance: {
         id: period.id,
         name: named.name,
@@ -776,6 +837,7 @@ function resolvePeriodWrite(period: EventPeriodInput): ResolvedPeriodWrite {
   const effectiveFrom = period.effectiveFrom ?? todayUtc();
   return {
     dates: generateMonthlyPeriod(period.id, { day: period.day, effectiveFrom }),
+    definition: named.definition,
     provenance: {
       id: period.id,
       name: named.name,
@@ -978,6 +1040,15 @@ export interface EventParentListQuery {
   offset: number;
 }
 
+/**
+ * The **single event read**: the same parent the list carries, with the period's
+ * shape and prose. It extends the list item, so a writer's response or a list row
+ * stays the smaller shape on purpose (owner, 2026-11-27).
+ */
+export interface EventParentDetailItem extends EventParentItem {
+  period: EventPeriodDetail | null;
+}
+
 type ParentRow = {
   id: string;
   event_no: string;
@@ -993,6 +1064,7 @@ type ParentRow = {
   period_id: string | null;
   period_cycle: string | null;
   period_name: string | null;
+  period_definition: string | null;
   period_frequency: string | null;
   period_day: string | null;
 };
@@ -1026,6 +1098,7 @@ const PARENT_COLUMNS = `
   e.period_id,
   e.period_cycle,
   e.period_name,
+  e.period_definition,
   e.period_frequency,
   e.period_day`;
 
@@ -1311,7 +1384,7 @@ export class EventRepository {
     return items.filter((item): item is EventParentItem => item !== null);
   }
 
-  /** The parent detail for the window; null when the event does not exist. */
+  /** The parent row for the window; null when the event does not exist. */
   async getParent(
     id: string,
     from: string,
@@ -1319,6 +1392,41 @@ export class EventRepository {
     /** Precomputed by {@link scheduleGuardsFor} for a list; a detail computes its own. */
     guard?: EventScheduleGuardState,
   ): Promise<EventParentItem | null> {
+    const loaded = await this.loadParent(id, from, to, guard);
+    return loaded?.parent ?? null;
+  }
+
+  /**
+   * The **single event read**: {@link getParent} plus the period's stored prose
+   * and its shape measured from the event's own dates. Both are added to the
+   * assembled row, so the list keeps paying nothing for them and no query runs
+   * twice. Only this route calls it.
+   */
+  async getParentDetail(
+    id: string,
+    from: string,
+    to: string,
+  ): Promise<EventParentDetailItem | null> {
+    const loaded = await this.loadParent(id, from, to);
+    if (!loaded) return null;
+    return {
+      ...loaded.parent,
+      period: periodDetail(loaded.row, loaded.firstOccurrence, loaded.secondOccurrence),
+    };
+  }
+
+  /** The parent and the two occurrence dates the period shape measures. */
+  private async loadParent(
+    id: string,
+    from: string,
+    to: string,
+    guard?: EventScheduleGuardState,
+  ): Promise<{
+    parent: EventParentItem;
+    row: ParentRow;
+    firstOccurrence: string | null;
+    secondOccurrence: string | null;
+  } | null> {
     const [row] = await this.db.query<ParentRow>(
       `select ${PARENT_COLUMNS} ${PARENT_FROM} where e.id = $1`,
       [id],
@@ -1362,7 +1470,7 @@ export class EventRepository {
       summary: renderAudienceSummary(audience.name, audience.rule),
     }));
 
-    return {
+    const parent: EventParentItem = {
       id: row.id,
       eventNo: row.event_no,
       name: row.name,
@@ -1396,6 +1504,13 @@ export class EventRepository {
       },
       summary,
     };
+
+    return {
+      parent,
+      row,
+      firstOccurrence: range.firstOccurrence,
+      secondOccurrence: range.secondOccurrence,
+    };
   }
 
   private async parentRange(
@@ -1405,9 +1520,13 @@ export class EventRepository {
     startDate: string;
     endDate: string | null;
     isRecurring: boolean;
+    /** The event's first two stored occurrence dates; the period shape measures them. */
+    firstOccurrence: string | null;
+    secondOccurrence: string | null;
   }> {
     const [row] = await db.query<{
       first_occ: unknown;
+      second_occ: unknown;
       last_occ: unknown;
       first_sch: unknown;
       last_sch: unknown;
@@ -1416,6 +1535,8 @@ export class EventRepository {
     }>(
       `select
          (select min(o.date) from event_occurrences o where o.event_id = $1) as first_occ,
+         (select o.date from event_occurrences o where o.event_id = $1
+           order by o.date offset 1 limit 1) as second_occ,
          (select max(o.date) from event_occurrences o where o.event_id = $1) as last_occ,
          (select min(rv.effective_from) from event_recurrence_versions rv where rv.event_id = $1)
            as first_sch,
@@ -1434,14 +1555,17 @@ export class EventRepository {
       .filter((value): value is string => value !== null)
       .sort();
     const startDate = starts[0] ?? todayUtc();
-    if (row?.unbounded) return { startDate, endDate: null, isRecurring: true };
+    const firstOccurrence = isoOptionalDate(row?.first_occ);
+    const secondOccurrence = isoOptionalDate(row?.second_occ);
     const ends = [isoOptionalDate(row?.last_occ), isoOptionalDate(row?.last_sch)]
       .filter((value): value is string => value !== null)
       .sort();
     return {
       startDate,
-      endDate: ends.length > 0 ? ends[ends.length - 1]! : null,
+      endDate: row?.unbounded ? null : ends.length > 0 ? ends[ends.length - 1]! : null,
       isRecurring: row?.is_recurring === true,
+      firstOccurrence,
+      secondOccurrence,
     };
   }
 
@@ -1643,8 +1767,8 @@ export class EventRepository {
           `insert into events (
              event_no, name, audience_id, ministry_id, presbyter_only, timezone, description,
              venue_type, venue_name, start_time, end_time, tracks_members, status,
-             period_id, period_cycle, period_name, period_frequency, period_day
-           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',$13,$14,$15,$16,$17)
+             period_id, period_cycle, period_name, period_definition, period_frequency, period_day
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',$13,$14,$15,$16,$17,$18)
            returning id`,
           [
             eventNo,
@@ -1662,6 +1786,7 @@ export class EventRepository {
             resolvedPeriod?.provenance.id ?? null,
             resolvedPeriod?.provenance.cycle ?? null,
             resolvedPeriod?.provenance.name ?? null,
+            resolvedPeriod?.definition ?? null,
             resolvedPeriod?.provenance.frequency ?? null,
             resolvedPeriod?.provenance.day ?? null,
           ],

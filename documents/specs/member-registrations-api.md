@@ -730,7 +730,12 @@ has no recurrence; a **recurring** event owns one recurrence and the occurrences
     `audienceIds`. If both are sent, `audienceIds` wins and `audienceId` must equal its first element,
     else `422` naming both. The read carries `audiences[]` (each with its rendered `summary`) plus the
     legacy `audienceId` and `audience` for the primary (first) audience.
-- `period` is the **provenance of a period-created event** (owner, 2026-11-24): `{ id, name, cycle?, frequency?, day? }`, where
+- `period` is the **provenance of a period-created event** (owner, 2026-11-24): `{ id, name, cycle?, frequency?, day? }` on the
+  list read, and the **same object plus `dates` and `definition` on the single event read** (owner, 2026-11-27, amended on
+  review): `dates` is `week` or `date`, **derived from the event's own stored dates** (`null` only for an event with no
+  occurrence at all), and `definition` is the **snapshot** stored at save beside `period_name`. The list
+  carries neither, because it reuses the same schema and would pay both on every row. The rest of the object is unchanged,
+  where
   `cycle` is the `YYYY-MM` chosen at create and `name` is the **snapshot** taken at save, so a renamed definition never
   rewrites a stored name or date. `day` is `MON`-`SUN` - three-letter upper case, deliberately not the schedule
   vocabulary's `MO`-`SU`, so a stored period day can never be read as an rrule fragment (owner, 2026-11-25) - and is
@@ -1567,14 +1572,11 @@ export interface Event {
       date: string | null;
     }>;
   };
-  /** The period this event was created from; null when it was not (see the `period` bullet). */
-  period: {
-    id: string;
-    name: string;
-    cycle: string | null;
-    frequency: 'monthly' | null;
-    day: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN' | null;
-  } | null;
+  /**
+   * The period this event was created from; null when it was not (see the `period` bullet). This is the **list** row's
+   * shape; the **single event read** returns `EventDetail`, which adds the period's shape and definition.
+   */
+  period: EventPeriodProvenance | null;
   /** Read-only legacy projection during the transition; refused on create and update. */
   ministry: { code: string; name: string } | null;
   /** Read-only legacy projection during the transition; refused on create and update. */
@@ -1598,6 +1600,31 @@ export interface Event {
   /** Scoped to the request's `from`/`to` when supplied; the event's lifetime otherwise. */
   stats: OfferingStats;
 }
+
+/** The period's provenance as the **list** carries it. */
+export interface EventPeriodProvenance {
+  id: string;
+  /** The name snapshot taken at save, never a live lookup. */
+  name: string;
+  cycle: string | null;
+  frequency: 'monthly' | null;
+  day: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN' | null;
+}
+
+/** The **single event read**: a list row's `Event` plus the period's shape and definition. */
+export type EventDetail = Omit<Event, 'period'> & {
+  period:
+    | (EventPeriodProvenance & {
+        /**
+         * The event's stored spacing: its first two dates fall inside one week (`week`) or a month apart
+         * (`date`); null only when the event holds no occurrence at all.
+         */
+        dates: 'week' | 'date' | null;
+        /** The catalogue's prose **as it was at save** - the snapshot beside `period_name`. */
+        definition: string;
+      })
+    | null;
+};
 ```
 
 `GET /v1/events` returns one item per parent: its `occurrences` are the occurrences inside the request's

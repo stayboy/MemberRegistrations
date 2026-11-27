@@ -50,7 +50,8 @@ describe('the period day vocabulary', () => {
 /**
  * The detail's provenance line (spec: named periods). The shapes are the spec's
  * own four, and the ambiguous one - `day: null` for both a whole week and a
- * single date - is settled by the catalogue's `dates`, never by the name.
+ * single date - is settled by the read's `dates` (the resolver's kind, projected
+ * from the catalogue), never by the name.
  */
 describe('the period provenance line', () => {
   const oneOff: EventPeriodProvenance = {
@@ -93,7 +94,7 @@ describe('the period provenance line', () => {
     );
   });
 
-  it('makes no span claim when the catalogue row is unknown', () => {
+  it('makes no span claim when the shape is unknown', () => {
     expect(periodProvenanceLine(monthly(null), '', null)).toBe('Communion Week · monthly');
   });
 });

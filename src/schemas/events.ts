@@ -26,6 +26,7 @@ export type EventPeriodId = (typeof EVENT_PERIOD_IDS)[number];
 
 /** The resolver's shape projected onto the wire: a week or a single date. */
 export const EVENT_PERIOD_DATES = ['week', 'date'] as const;
+export const eventPeriodDatesSchema = z.enum(EVENT_PERIOD_DATES);
 
 /** A period day is the three-letter vocabulary, never the rrule `MO`-`SU`. */
 export const PERIOD_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
@@ -43,7 +44,7 @@ export const eventPeriodSchema = z.object({
   /** The declared rule, in words: the form shows it beside the choice. */
   definition: z.string(),
   /** The projection of the resolver's `kind`, derived - never hand-written. */
-  dates: z.enum(EVENT_PERIOD_DATES),
+  dates: eventPeriodDatesSchema,
 });
 
 export const eventPeriodListSchema = z.object({
@@ -87,7 +88,13 @@ export const eventPeriodInputSchema = z.union([
   eventPeriodRuleInputSchema,
 ]);
 
-/** The provenance a period-created event carries on read. */
+/**
+ * The provenance a period-created event carries on **every** read: the id, the
+ * name snapshot taken at save, the cycle (a one-off) or the frequency (a
+ * recurrence), and the day inside each cycle. It is deliberately the whole
+ * object the list carries: the catalogue's shape and prose are the detail's
+ * alone, because the list reuses this schema on every row.
+ */
 export const eventPeriodProvenanceSchema = z.object({
   id: eventPeriodIdSchema,
   /** The name snapshot taken at save, never a live lookup. */
@@ -97,6 +104,30 @@ export const eventPeriodProvenanceSchema = z.object({
   frequency: eventPeriodFrequencySchema.nullable(),
   /** A weekday inside each cycle; null for a whole week or a single date. */
   day: eventPeriodDaySchema.nullable(),
+});
+
+/**
+ * The **single event read's** period: the provenance, the definition snapshot the
+ * row carries, and the event's shape (owner, 2026-11-27). Nothing is read live from
+ * the catalogue: the prose is what the create wrote beside the name snapshot, and
+ * the shape is measured from the event's own stored occurrences.
+ */
+export const eventPeriodDetailSchema = eventPeriodProvenanceSchema.extend({
+  /**
+   * The event's shape, derived from its stored occurrences - never stored as a
+   * column and never a catalogue lookup, so a rule change cannot rewrite it.
+   */
+  dates: eventPeriodDatesSchema
+    .nullable()
+    .describe(
+      'The event’s shape, derived from its own stored occurrences: `week` when its dates cluster inside one week (a seven-date period), `date` when they are a cycle apart (a single-date period). Null only when the event holds no occurrence at all, so there is no date to measure and no shape claim can be made.',
+    ),
+  /** The catalogue's prose as it was written at save - a snapshot, like `name`. */
+  definition: z
+    .string()
+    .describe(
+      'The period’s definition as it was written at save - a snapshot, never a live lookup, so a renamed definition never rewrites an event.',
+    ),
 });
 
 export const timeStringSchema = z
@@ -850,6 +881,7 @@ export type EventPeriodCycleInput = z.infer<typeof eventPeriodCycleInputSchema>;
 export type EventPeriodRuleInput = z.infer<typeof eventPeriodRuleInputSchema>;
 export type EventPeriodInput = z.infer<typeof eventPeriodInputSchema>;
 export type EventPeriodProvenance = z.infer<typeof eventPeriodProvenanceSchema>;
+export type EventPeriodDetail = z.infer<typeof eventPeriodDetailSchema>;
 export type EventPreviewInput = z.infer<typeof eventPreviewInputSchema>;
 export type EventPreview = z.infer<typeof eventPreviewSchema>;
 export type EventScheduleWrite = z.infer<typeof eventScheduleWriteSchema>;
@@ -933,6 +965,16 @@ export const eventParentSchema = z.object({
 
 export const eventParentListSchema = z.object({
   items: z.array(eventParentSchema),
+});
+
+/**
+ * The **single event read**: the same parent, with the period's shape and prose.
+ * The list does not extend it, on purpose - a field there would be paid on every
+ * row for a fact only the detail draws (owner, 2026-11-27).
+ */
+export const eventParentDetailSchema = eventParentSchema.extend({
+  /** The provenance plus `dates` and `definition`; null for every non-period event. */
+  period: eventPeriodDetailSchema.nullable(),
 });
 
 /** The transition flag, validated even on the legacy default path. */

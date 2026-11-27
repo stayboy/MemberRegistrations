@@ -1,4 +1,4 @@
-import type { EventPeriodItem, EventPeriodProvenance, PeriodDay } from '../api/events';
+import type { EventPeriodDetail, EventPeriodProvenance, PeriodDay } from '../api/events';
 
 /**
  * The period day vocabulary (FR-42f, owner 2026-11-25). The API's period `day`
@@ -53,16 +53,17 @@ export type PeriodLineSource = Pick<EventPeriodProvenance, 'name' | 'frequency' 
  * on the create, the held range on the edit). A one-off with no span yet is the
  * bare name, so a caller never has to invent dates.
  *
- * `shape` is the catalogue's `dates`, and it is needed because the read's
- * `period` carries `day: null` for **both** a whole week and a single date. With
- * no catalogue row (an archived period, or a fetch that failed) the line makes
- * **no span claim** - the name and the frequency only - rather than guessing
- * between the two.
+ * `shape` is the resolver's `dates`, and it is needed because `day: null` means
+ * **both** a whole week and a single date. The detail now reads it from the same
+ * event read (`period.dates`, owner 2026-11-27); the form takes it from the
+ * catalogue row it is already holding. With no shape - `null`, an id the
+ * catalogue no longer holds - the line makes **no span claim**: the name and the
+ * frequency only, rather than guessing between the two.
  */
 export function periodProvenanceLine(
   period: PeriodLineSource,
   span: string,
-  shape: EventPeriodItem['dates'] | null,
+  shape: EventPeriodDetail['dates'],
 ): string {
   if (period.frequency !== 'monthly') {
     return span.length > 0 ? `${period.name} · ${span}` : period.name;
