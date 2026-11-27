@@ -55,12 +55,12 @@ the page, `FR-49` is added, and `AC-49`..`AC-52` record the page, the grid, the 
 
 **The drawings.**
 
-| State                               | What changed                                                        |
-| ----------------------------------- | ------------------------------------------------------------------- |
-| `27-notifications-landing`          | new, replacing `27-event-detail-notifications`, which is retired    |
-| `28`..`31`                          | re-cut: the plan pages keep their content and gain the submenu item |
-| `32-event-detail-notification-card` | new: the summary card the detail keeps                              |
-| the other 22 events states          | re-cut for the shell only: the Events submenu gains Notifications   |
+| State                               | What changed                                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `27-notifications-landing`          | new, replacing `27-event-detail-notifications`; redrawn 2026-11-27 as overall tiles across the top, a per-channel accordion in the right rail, and the filtered grid beside it |
+| `28`..`31`                          | re-cut: the plan pages keep their content and gain the submenu item                                                                                                            |
+| `32-event-detail-notification-card` | new: the summary card the detail keeps                                                                                                                                         |
+| the other 22 events states          | re-cut for the shell only: the Events submenu gains Notifications                                                                                                              |
 
 **Out of scope.** Any code. This round is the spec and the drawings; the page itself is the next round and starts only
 after the drawings are signed.
@@ -77,7 +77,7 @@ after the drawings are signed.
 Each state passes `scripts/mock/shell-check.mjs` before capture, and every captured hash in
 `documents/mock-claims/v2-events.json` equals the bytes on disk (checked with `crypto.createHash` over all 27).
 
-gate-run 2026-11-27T10:06:33.294Z profile=fast steps=4/4 lines=4 bytes=845
+gate-run 2026-11-27T10:28:41.764Z profile=fast steps=4/4 lines=4 bytes=703
 
 ## Review
 
@@ -135,14 +135,14 @@ drawings with no built screen yet.
 
 ## Acceptance
 
-| Criterion                                                 | Met | Evidence                                                                                 |
-| --------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
-| Notifications is a standalone page under Events           | yes | N-12, FR-49, `27-notifications-landing`                                                  |
-| The event detail keeps a summary card only                | yes | FR-49, `32-event-detail-notification-card`                                               |
-| Per-channel sent, skipped, failed and queued over a range | yes | 412+38+3+6=459, 1204+96+11+24=1335, 288+41+2+9=340, total 2,134, failed 16               |
-| The grid filters by channel and searches                  | yes | the channel tabs carry their counts, and the search is over event name and member number |
-| The failure report can be sent on demand                  | yes | FR-33 and AC-51                                                                          |
-| The whole set agrees with the new shell                   | yes | every state re-cut; the hash check over all 27 passes                                    |
+| Criterion                                                   | Met | Evidence                                                                                 |
+| ----------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
+| Notifications is a standalone page under Events             | yes | N-12, FR-49, `27-notifications-landing`                                                  |
+| The event detail keeps a summary card only                  | yes | FR-49, `32-event-detail-notification-card`                                               |
+| Overall sent, delivered, queued and failures across the top | yes | 1,920 = 1,904 delivered + 16 failed; 39 queued; skipped 175 is neither                   |
+| The grid filters by channel and searches                    | yes | the channel tabs carry their counts, and the search is over event name and member number |
+| The failure report can be sent on demand                    | yes | FR-33 and AC-51                                                                          |
+| The whole set agrees with the new shell                     | yes | every state re-cut; the hash check over all 27 passes                                    |
 
 ## Deviations
 
@@ -153,3 +153,7 @@ drawings with no built screen yet.
   than left as a second image for one state.
 - **The digest moves out of R3b.** R3b keeps the inbox read and the preference writes; the failure report and the admin
   surfaces are now this work.
+- **The page was redrawn once.** The first drawing invented a stat row and a failure banner; the owner rejected it as
+  drifting from the set's patterns and asked for the overall counts across the top and an accordion rail. The second
+  drawing composes `.kpis`, `.panels.wide-left`, `.grid-table`, `.badge`, `.chip` and a rail of `.panel`s, and the spec's
+  FR-49 and AC-49 were amended in the same change because `sent` and `delivered` are now distinct numbers.

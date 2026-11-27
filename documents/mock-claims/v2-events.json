@@ -284,7 +284,7 @@
     "27-notifications-landing": {
       "mock": {
         "path": "mockups/v2-events/27-notifications-landing.png",
-        "sha256": "51dac4a5b59e90e69356b0f2ba069ca7b30edf6a562ddc7132a7c0998c62f62f",
+        "sha256": "08ea6f211ee2448b2a372717c3303faf86be7cd38d4baf0d386888f583614190",
         "source": "mockups/v2-events/27-notifications-landing.html"
       },
       "baseline": null,
