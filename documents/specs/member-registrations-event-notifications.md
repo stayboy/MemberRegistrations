@@ -982,11 +982,13 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   library's own schema MUST each be declared as a hard gate under AGENTS.md §17; publishing approval MUST NOT be
   read as pre-authorising them.
 - **FR-49 (Notifications page).** Notifications MUST have a **standalone page under the Events section**, not a panel
-  on the event detail. It MUST show, per channel (`email`, `sms`, `whatsapp`) and over a chosen range defaulting to
-  seven days, four counts - **sent**, **skipped**, **failed**, **queued** - and MUST offer the failure digest on
-  demand. The event detail carries a **summary card only**: plan status, the next send, and a link to the plan. Plan
-  authoring, preview, publish, cancel and the change notice live at `#/events/:id/notifications`.
-  A skipped delivery MUST NOT be counted as a failure: a mute is a member's choice, not an outage.
+  on the event detail. Its top row MUST carry the overall counts across all channels over the chosen range - **sent**,
+  **delivered**, **queued**, **failures** - and a right-hand rail MUST show, per channel (`email`, `sms`, `whatsapp`) in
+  an accordion, **sent**, **delivered**, **skipped**, **failed** and **queued**. `sent` is what a provider accepted and
+  `delivered` what it confirmed, so failures are `sent - delivered`. A skipped delivery MUST NOT be counted as a
+  failure: a mute is a member's choice, not an outage. The page MUST offer the failure digest on demand. The event
+  detail carries a **summary card only**: plan status, the next send, and a link to the plan. Plan authoring, preview,
+  publish, cancel and the change notice live at `#/events/:id/notifications`.
 
 ## Acceptance Criteria
 
@@ -1086,7 +1088,7 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 
 ### AC-48: **Given** a member with both pending and read messages, **When** the first inbox page is read, **Then** every pending item precedes every read item, the page carries `pendingCount`, and the cursor resumes at the right group boundary. (FR-23)
 
-### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** each of email, SMS and WhatsApp shows four counts - sent, skipped, failed, queued - that sum to that channel's deliveries in the range, and a skipped delivery is not counted as a failure. (FR-49)
+### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** the top row shows sent, delivered, queued and failures across all channels, the right rail shows each channel's sent, delivered, skipped, failed and queued, and every channel's five counts sum to that channel's deliveries in the range while skipped is not counted as a failure. (FR-49)
 
 ### AC-50: **Given** the deliveries grid, **When** the officer picks a channel tab and types an event name, **Then** only that channel's matching rows are listed, and a failed row offers the audited retry. (FR-32, FR-49)
 
@@ -1484,11 +1486,17 @@ migration and API rounds and are exempt, because none of them alters a screen.
   "owns at least one contact" so an email-only member has a row the USSD read cannot yet show them.
 - **2026-11-27 (Notifications becomes a page).** The owner withdrew the panel on the event detail - "puts too much on
   the form; event detail currently also has its own cards" - and asked for a standalone landing page. N-12 now puts
-  **Notifications under Events** (`#/notifications`), carrying the per-channel counts (sent, skipped, failed, queued
-  over a default seven days), the filtered deliveries grid, the on-demand failure digest, the defaults and the message
-  search. The event detail keeps a summary card only, and plan authoring moves to `#/events/:id/notifications`. FR-32,
-  FR-33 and FR-34 are restated against the new page, FR-49 is added, and AC-49..AC-52 record the page, the grid, the
-  on-demand digest and the summary card. The digest and the admin surfaces move out of R3b into this round.
+  **Notifications under Events** (`#/notifications`), carrying the per-channel counts, the filtered deliveries grid, the
+  on-demand failure digest, the defaults and the message search. The event detail keeps a summary card only, and plan
+  authoring moves to `#/events/:id/notifications`. FR-32, FR-33 and FR-34 are restated against the new page, FR-49 is
+  added, and AC-49..AC-52 record the page, the grid, the on-demand digest and the summary card. The digest and the admin
+  surfaces move out of R3b into this round.
+- **2026-11-27 (page layout).** The owner rejected the first drawing - "cards not well done and drifted too far from
+  patterns in other places" - and asked for the overall counts across the top and the per-media stats in an accordion on
+  the right. FR-49 and AC-49 now say so: the top row is sent, delivered, queued and failures; the rail is an accordion
+  per channel with sent, delivered, skipped, failed and queued; and `sent - delivered` is what failures means. The page
+  composes the set's own pieces - `.kpis`, `.panels.wide-left`, `.grid-table`, `.badge`, `.chip` and a rail of `.panel`s
+  with an `.expander` chevron - rather than inventing a layout.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to

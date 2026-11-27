@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "07433ef89932002db0b342b3335af3a10d797336da398d30d5ce80f1a8a0d48f",
+      "sha256": "f3e494e16afea97958582fc3ffb639f9cf22e64a073bcff8a6f2a988ad0c29d5",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the owner withdrew the notification panel from the event detail on 2026-11-27 and asked for a standalone Notifications page under Events; the Events submenu gained a Notifications item, which is drawn in every events mock, so all 26 existing states were re-cut and two were added - 27-notifications-landing and 32-event-detail-notification-card. 27-event-detail-notifications is retired and deleted because it drew the rejected panel. why: a drawing that disagrees with the shell is the drift the mock skill exists to prevent, and a second submenu item would have been visible in every image. rejected: leaving the 22 states uncut and recording the inconsistency, which the grill put to the owner as option B and they declined; and keeping the panel as a second surface beside the page.",
+      "reason": "changes: one hash - states[\"27-notifications-landing\"].mock.sha256 moves to 08ea6f21 after the owner rejected the first drawing as drifting from the set patterns and asked for the overall counts across the top and the per-media stats in an accordion on the right. why: the drawing must agree with the page the spec now describes, and the state is target so no signature is voided. rejected: keeping the invented stat row and failure banner, which the owner called out; and leaving the catalogue pinning an image the owner rejected.",
       "verdict": "accepted",
-      "attestation": "Reviewed the catalogue: the retired 27-event-detail-notifications is fully removed with no dangling story, surface, entry or e2e claim; the 24 re-cut states are coverage \"target\" with no residual signed or autoSigned block and the five previousBaseline pairings preserved; the three untouched states remain signed; and the two new states are target with a source, hash and descriptive note. A first pass returned REWORK on the round record, which said 22 signatures were voided when 18 approvals actually stopped standing, and carried a hand-written sign-off table that disagreed with the catalogue in fourteen rows; both were corrected and re-checked. The hash-to-image check (sha256 over all 27 PNGs) is the parent’s gate and was run.",
-      "at": "2026-11-27T10:02:45Z"
+      "attestation": "Reviewed the change: 27-notifications-landing alone moved, it remains target with no signed block, and the three signed states are untouched. The redrawn page reuses the set’s .kpis, .panels.wide-left, .grid-table, .badge, .chip and .panel-with-expander idioms rather than inventing a layout, and its arithmetic holds - sent equals delivered plus failed per channel, the tabs sum to 2,134, and skipped is never counted among the 16 failures. The hash-to-image check over all 27 states is the parent’s gate and was run.",
+      "at": "2026-11-27T10:22:35Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
