@@ -526,9 +526,12 @@ per budget reasons").
   and a link to the plan. Nothing is authored from the detail.
 - **The page is the operations home.** It shows, per channel, four counts over a chosen range (default seven days,
   dates in UTC): **sent**, **skipped**, **failed**, **queued**. A skipped delivery is never counted as a failure.
-  Below the counts sits a **grid of deliveries** - event, kind, channel, status, attempts, masked destination, created
-  and sent - filtered by **channel tabs, status and date range**, and searchable by event name and member number.
-  Failed rows carry the same one audited retry as the API (`POST /v1/notification-deliveries/{id}/retry`).
+  Below the counts sits a **grid of deliveries** - member, event, kind, channel, status, attempts, masked destination,
+  created and sent - filtered by **channel tabs, status and date range**, and searchable by event name and member
+  number. Failed rows carry one audited retry each, and the view carries **Retry all failed** (FR-53). The member cell
+  opens that member's **notification drawer** (FR-51): the inbox with its rendered bodies, and the deliveries grouped by
+  event. A sent delivery offers **Replay** one at a time (FR-52); a skipped one offers the lift that unblocks it
+  (FR-50) rather than a replay.
 - **The failure digest can be sent on demand** from the page, composed by the same code the daily job uses, refused
   when `failure_digest_to` is unset, and audited with the actor so a manual send is not mistaken for the scheduled one.
 - **Plan authoring is its own event-scoped page** (`#/events/:id/notifications`): slots, the channel editors with
@@ -563,10 +566,11 @@ per budget reasons").
 ### N-14. Data model
 
 Migrations `0030_event_notifications` (the plan side: plans, plan revisions, slots, templates, fliers, defaults),
-`0031_pgboss_schema` (generated from pg-boss's own DDL) and `0032_notification_send` (the send side: instances,
-messages, deliveries, settings, blocks, mutes, preference events). The schema is split across two rounds because a table
-lands with the code that uses it: R2 cannot publish, so it has no instances, and R3 builds the send path against the
-tables it consumes.
+`0031_pgboss_schema` (generated from pg-boss's own DDL), `0032_notification_send` (the send side: instances,
+messages, deliveries, settings, blocks, mutes, preference events) and `0034_notification_replay` (the replay column,
+its partial indexes and the delivery audit) and `0035_notification_lift_authorisation` (`authorised_via` and
+`reference`). The schema is split across rounds because a table lands with the code that uses it: R2 cannot publish, so
+it has no instances, and R3 builds the send path against the tables it consumes.
 
 ```sql
 create table notification_plans (
@@ -733,10 +737,16 @@ create table notification_deliveries (
   last_error_code text check (last_error_code in ('channel_unconfigured', 'transport_unavailable', 'provider_rejected')),
   provider_ref text,
   sent_at timestamptz,
+  replay_of uuid references notification_deliveries(id),  -- a replay's new row points at the original
   created_at timestamptz not null default now(),
-  unique (instance_id, member_id, channel),
   check (routed_via <> 'own' or message_id is not null or anonymised_at is not null)
 );
+-- The first attempt stays unique per unit; a replay adds a second row for the same unit.
+create unique index notification_deliveries_unit_key
+  on notification_deliveries (instance_id, member_id, channel) where replay_of is null;
+-- One replay per original, so a replay cannot be replayed into a chain.
+create unique index notification_deliveries_replay_once
+  on notification_deliveries (replay_of) where replay_of is not null;
 create index notification_deliveries_failed
   on notification_deliveries (created_at desc) where status = 'failed';
 
@@ -785,9 +795,22 @@ create table notification_preference_events (
   field text not null,
   from_value text, to_value text,
   source text not null check (source in ('ussd', 'admin')),
+  authorised_via text check (authorised_via in ('in_person', 'phone', 'ussd_code')),  -- a lift only
+  reference text,                                                                    -- what the member said
   actor text not null,
   at timestamptz not null default now()
 );
+
+create table notification_delivery_events (
+  id uuid primary key default gen_random_uuid(),
+  delivery_id uuid not null references notification_deliveries(id) on delete restrict,
+  action text not null check (action in ('retry', 'replay')),
+  actor text not null,
+  note text,
+  at timestamptz not null default now()
+);
+create index notification_delivery_events_delivery
+  on notification_delivery_events (delivery_id, at desc);
 
 create table notification_defaults (
   id text primary key default 'church' check (id = 'church'),
@@ -831,12 +854,15 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
 | `POST`   | `/v1/events/{eventId}/notification-plan/change`         | Publish a one-off `change` slot                                                                                                   |
 | `GET`    | `/v1/events/{eventId}/notification-plan/deliveries`     | Delivery log, `?status=`, cursor-paged                                                                                            |
 | `POST`   | `/v1/notification-deliveries/{id}/retry`                | One audited retry of a `failed` delivery                                                                                          |
+| `POST`   | `/v1/notification-deliveries/{id}/replay`               | Replay one original as a new row; `409 replay_not_valid` naming the failed checks                                                 |
+| `POST`   | `/v1/notification-deliveries/retry`                     | Retry up to 100 `failed` deliveries by explicit id; actor recorded per row                                                        |
 | `PUT`    | `/v1/events/{eventId}/flier`                            | Binary upload (max 2 MB, multipart)                                                                                               |
 | `DELETE` | `/v1/events/{eventId}/flier`                            | Remove the draft revision's flier                                                                                                 |
 | `GET`    | `/v1/events/{eventId}/flier`                            | Flier meta (type, size, hash, URL)                                                                                                |
 | `GET`    | `/fliers/{token}`                                       | Public immutable image; no bearer, outside `/v1`                                                                                  |
 | `POST`   | `/v1/events/{eventId}/return-to-draft`                  | Release the lock; `409 plan_published` while a plan is published                                                                  |
 | `GET`    | `/v1/members/{memberNo}/notifications`                  | Inbox, pending first then read, cursor-paged, `no-store`                                                                          |
+| `GET`    | `/v1/members/{memberNo}/notification-deliveries`        | That member's deliveries, cursor-paged, masked destinations                                                                       |
 | `POST`   | `/v1/members/{memberNo}/notifications/{id}/read`        | Mark read once                                                                                                                    |
 | `POST`   | `/v1/members/{memberNo}/notifications/read-all`         | Mark every pending message read                                                                                                   |
 | `GET`    | `/v1/members/{memberNo}/notification-settings`          | Cadence, live mutes, live blocks                                                                                                  |
@@ -845,6 +871,10 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
 | `POST`   | `/v1/members/{memberNo}/notification-mutes/{id}/revoke` | Revoke a mute                                                                                                                     |
 | `POST`   | `/v1/members/{memberNo}/channel-blocks`                 | Block a channel for 30/90/365 days; sends the notice                                                                              |
 | `POST`   | `/v1/members/{memberNo}/channel-blocks/{id}/revoke`     | Revoke a block                                                                                                                    |
+| `GET`    | `/v1/notification-summary?from&to`                      | Overall and per-channel sent, skipped, failed and queued in one payload                                                           |
+| `GET`    | `/v1/notification-deliveries?channel&status&q&cursor`   | Cross-event deliveries, member joined, masked, cursor-paged                                                                       |
+| `GET`    | `/v1/notification-preferences?live=true`                | Live mutes and channel blocks with member, scope or channel, end date and source                                                  |
+| `POST`   | `/v1/notification-digest`                               | The failure report on demand, composed by the daily job's code; audited                                                           |
 | `GET`    | `/v1/notification-messages`                             | Admin advanced search over the full history                                                                                       |
 | `GET`    | `/v1/notification-defaults`                             | Church defaults, including the trigger cadence (read-only)                                                                        |
 | `PUT`    | `/v1/notification-defaults`                             | Edit defaults                                                                                                                     |
@@ -942,7 +972,7 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
   unguessable; the hosted worker entry MUST use `CRON_SECRET`, not the API bearer.
 - **FR-36 (purge).** A member purge MUST erase settings, mutes, blocks and inbox messages, clear delivery destinations,
   and null the member id on preference events.
-- **FR-37 (audit).** Publishing, cancelling, a change notice, preference writes, mute and block writes, retries and
+- **FR-37 (audit).** Publishing, cancelling, a change notice, preference writes, mute and block writes, retries, replays and
   removals MUST record the actor and time.
 - **FR-38 (no per-officer authorization).** Any authenticated officer MAY author, publish and block; the UI MUST NOT
   imply a permission model V2 does not have.
@@ -974,11 +1004,39 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   MUST NOT be reachable from an event, and no other surface may name who declined.
 - **FR-50 (lifting a mute or block).** Lifting a live mute or block before its end date MUST require the member's
   authorisation, and the request MUST record **how** it was given - in person, by phone, or by USSD code - with the
-  actor, the reference and the time, in `notification_preference_events`. The row is revoked, never deleted, and the
-  member's next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference,
+  actor, the reference and the time, in `notification_preference_events`. That table MUST carry `authorised_via`
+  (`in_person | phone | ussd_code`) and `reference`, both nullable so the other preference writes are unaffected; a lift
+  MUST set both. The row is revoked, never deleted, and the member's next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference,
   it does not wire a provider.
-- **FR-45 (retry route).** `POST /v1/notification-deliveries/{id}/retry` MUST accept only a `failed` delivery, MUST
-  re-enqueue it through the audited path, and MUST record the actor.
+- **FR-45 (retry route).** `POST /v1/notification-deliveries/{id}/retry` MUST accept only a `failed` delivery whose
+  `last_error_code` is `transport_unavailable` - the dead-lettered code - and MUST refuse a terminal failure
+  (`provider_rejected`, `channel_unconfigured`) with `409 delivery_not_retryable`, because a retry cannot fix a rejected
+  destination or a missing provider. It MUST re-enqueue through the audited path and MUST record the actor in
+  `notification_delivery_events`.
+- **FR-51 (member notification drawer).** From the Notifications page an officer MUST be able to open one member's
+  notification history without leaving the page: an **Inbox** tab of that member's messages - pending first, then read,
+  each with the **rendered body**, because an event notification is a broadcast and not private (owner, 2026-11-27) -
+  and a **Deliveries** tab grouped by event, each group carrying its channel rows and a **Retry all failed** action.
+  The drawer MUST show the member's cadence and live mutes and blocks. It MUST NOT set `read_at`: only the member's
+  own read marks a message read. Destinations stay masked.
+- **FR-52 (replay).** Replay MUST create a **new** delivery row that points at the original through `replay_of`, MUST
+  leave the original untouched, and MUST be offered **one delivery at a time** - never for a list or a group - because a
+  bulk replay is how an officer duplicates a message to many members (owner, 2026-11-27). Only a row with `replay_of`
+  null MAY be replayed, and each original **at most once**; a replay that fails is **retried**, never replayed again.
+  A **`change`** notice MUST NOT be replayed: it describes a change at a moment, and a later copy states something
+  false. Every other delivery MUST be refused unless each check holds at the time of the request: the instance is not
+  cancelled and the event is not cancelled or archived; the message still exists and is not anonymised, or - for the
+  guardian-routed delivery FR-47 defines - the guardian route is still live; a live contact exists for the channel, or
+  the guardian's does; no live mute covers that event or period and no live channel block applies; the cadence would
+  not filter it; and the occurrence is today or later. A refusal MUST answer `409 replay_not_valid` naming the failed
+  checks. A `skipped` delivery MUST NOT be replayed until the reason has been lifted through FR-50. The actor and the
+  original id MUST be recorded in `notification_delivery_events`.
+- **FR-53 (retry in bulk).** The page and a member's delivery group MUST offer one action that retries every
+  **retryable** `failed` delivery in view, naming the count and the channels before it runs. The request MUST carry the
+  **explicit delivery ids** it saw - never a filter - MUST re-check that each id is still `failed` and
+  `transport_unavailable`, MUST cap one call at 100 and refuse more with `422 batch_too_large`, and MUST record the
+  actor per retried row in `notification_delivery_events`. A delivery that is no longer `failed`, or is terminal,
+  MUST be reported as refused rather than silently retried, and the response MUST name both counts.
 - **FR-46 (acknowledgement).** When a **`starts` or `change`** slot's resolved send instant differs from its anchor
   instant — `daily` mode, or a `window` deferral of a time-critical slot — publishing MUST record a typed
   acknowledgement on the revision (`acknowledgement`) and MUST refuse the publish without it. A routine `announce` or
@@ -991,15 +1049,19 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   read as pre-authorising them.
 - **FR-49 (Notifications page).** Notifications MUST have a **standalone page under the Events section**, not a panel
   on the event detail. Its top row MUST carry the overall counts across all channels over the chosen range - **sent**,
-  **delivered**, **queued**, **failures** - and a right-hand rail MUST show, per channel (`email`, `sms`, `whatsapp`) in
-  an accordion, **sent**, **delivered**, **skipped**, **failed** and **queued**. `sent` is what a provider accepted and
-  `delivered` what it confirmed, so failures are `sent - delivered`. A skipped delivery MUST NOT be counted as a
-  failure: a mute is a member's choice, not an outage. The deliveries grid MUST name the **member** - name and member
-  number - beside the event, channel, status and **masked** destination, because a masked destination says what number
-  failed but not who to ask. Below it the page MUST list live **mutes and channel blocks** (FR-44's exception) and offer
-  to lift one under FR-50. The page MUST offer the failure digest on demand. The event
-  detail carries a **summary card only**: plan status, the next send, and a link to the plan. Plan authoring, preview,
-  publish, cancel and the change notice live at `#/events/:id/notifications`.
+  **skipped**, **failed** and **queued** - and the four MUST partition that range's deliveries: `sent` is a delivery
+  a provider accepted, `failed` and `skipped` are their own statuses, and **`queued` is `pending` or `sending`**, so
+  every delivery is exactly one of them. `sent` carries no receipt claim, because no delivery receipt exists (owner,
+  2026-11-27). A skipped delivery MUST NOT be counted as a failure: a mute is a member's choice, not an outage. A
+  right-hand rail MUST show the same four per channel (`email`, `sms`, `whatsapp`) in an accordion. The deliveries grid
+  MUST name the **member** - name and member number - beside the event, channel, status and **masked** destination,
+  because a masked destination says what number failed but not who to ask, and the member cell MUST open that member's
+  notification drawer (FR-51). Below it the page MUST list live **mutes and channel blocks** (FR-44's exception) and
+  offer to lift one under FR-50. It MUST offer **retry for every retryable failed delivery in view** (FR-53) and the failure
+  digest on demand. The event detail carries a **summary card only**: plan status, the next send, and a link to the
+  plan. The counts MUST be computed live from `notification_deliveries` over the range - no rollup table - and the
+  search MUST be a server-side join over event name and member number, never a client-side filter. Plan authoring,
+  preview, publish, cancel and the change notice live at `#/events/:id/notifications`.
 
 ## Acceptance Criteria
 
@@ -1095,15 +1157,21 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 
 ### AC-46: **Given** twelve members muted an event and four blocked SMS, **When** the event detail renders, **Then** it shows those counts and no member names. (FR-44)
 
-### AC-47: **Given** a `failed` delivery, **When** the audited retry route is called, **Then** it is re-enqueued once, the actor is recorded, and a `sent` delivery is refused. (FR-45)
+### AC-47: **Given** a `failed` delivery with `transport_unavailable`, **When** the audited retry route is called, **Then** it is re-enqueued once and the actor is recorded in `notification_delivery_events`; **Given** a `sent` delivery, **Then** it is refused; **Given** a `provider_rejected` or `channel_unconfigured` failure, **Then** it is refused `409 delivery_not_retryable`. (FR-45)
 
 ### AC-48: **Given** a member with both pending and read messages, **When** the first inbox page is read, **Then** every pending item precedes every read item, the page carries `pendingCount`, and the cursor resumes at the right group boundary. (FR-23)
 
-### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** the top row shows sent, delivered, queued and failures across all channels, the right rail shows each channel's sent, delivered, skipped, failed and queued, and every channel's five counts sum to that channel's deliveries in the range while skipped is not counted as a failure. (FR-49)
+### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** the top row shows sent, skipped, failed and queued across all channels, the right rail shows the same four per channel, and the four partition that range's deliveries - every delivery is exactly one of them, with `queued` covering `pending` and `sending` - while skipped is not counted as a failure. (FR-49)
 
 ### AC-53: **Given** the deliveries grid, **When** it lists a row, **Then** it names the member and their number beside the event, channel, status and a masked destination, so a failed row can be traced to the person without exposing a contact value. (FR-49)
 
-### AC-54: **Given** a live mute or channel block, **When** the Notifications page lists it, **Then** it shows the member, the kind, the scope or channel, the end date and how it was set; **When** an officer lifts it, **Then** the dialog records how the member authorised it and the actor, the row is revoked rather than deleted, and the audit entry names both. (FR-44, FR-50)
+### AC-54: **Given** a live mute or channel block, **When** the Notifications page lists it, **Then** it shows the member, the kind, the scope or channel, the end date and how it was set; **When** an officer lifts it, **Then** the dialog records `authorised_via`, the `reference` the member gave and the actor, the row is revoked rather than deleted, and the audit entry names all three. (FR-44, FR-50)
+
+### AC-55: **Given** a delivery row, **When** an officer opens the member cell, **Then** the drawer lists that member's messages pending-first with their rendered bodies and their deliveries grouped by event, shows the cadence and live mutes and blocks, and opening a message sets no `read_at`. (FR-51)
+
+### AC-56: **Given** a `sent` delivery whose occurrence is still ahead, **When** an officer replays it, **Then** a new delivery row exists with `replay_of` set, the original is unchanged, and the actor and original id are recorded in `notification_delivery_events`; **Given** each of a cancelled instance, a cancelled or archived event, an anonymised message, no live contact, a live mute or block, a cadence filter, a past occurrence, or a `change` notice, **Then** the replay answers `409 replay_not_valid` naming that check and no row is created; **Given** a guardian-routed delivery whose guardian route is still live, **Then** the replay is allowed and targets the guardian's contact; **Given** the original has already been replayed once, **Then** a second replay is refused. (FR-52)
+
+### AC-57: **Given** a view holding sixteen failed deliveries, twelve `transport_unavailable` and four terminal, **When** the officer retries all, **Then** the dialog names twelve of sixteen and the channels, the request carries those twelve ids, each is re-checked, the actor is recorded per row, the four terminal rows are reported refused rather than retried, and a row that changed status in the meantime is reported refused; **Given** 101 ids, **Then** the call is refused `422 batch_too_large`. (FR-53)
 
 ### AC-50: **Given** the deliveries grid, **When** the officer picks a channel tab and types an event name, **Then** only that channel's matching rows are listed, and a failed row offers the audited retry. (FR-32, FR-49)
 
@@ -1212,8 +1280,9 @@ same change, rather than leaving two texts that disagree (AGENTS.md §1).
 - **`member-registrations-ui.md`** — FR-42e and AC-62 give the activity detail its write verbs; they gain
   **Activate**, **Return to draft** and the Notifications panel, and the 2026-11-23 "archived is terminal" ruling is
   untouched by this round.
-- **`member-registrations-api.md`** — the route list gains the plan, preferences, inbox, flier, search and retry
-  routes, and `/fliers/{token}` sits outside `/v1` with `/ussd/*`.
+- **`member-registrations-api.md`** — the route list gains the plan, preferences, inbox, flier, search, retry,
+  bulk-retry and replay routes, the `delivery_not_retryable`, `replay_not_valid` and `batch_too_large` codes, and
+  `/fliers/{token}` sits outside `/v1` with `/ussd/*`.
 - **`member-registrations-ussd.md`** — the identified menu gains Notifications before My Profile, and the display
   glossary gains the `menu.notifications` and `notifications.*` keys that its completeness test requires, and its
   `pageSize` map gains the inbox list (5 at 182, 3 at Nalo's 120).
@@ -1225,8 +1294,11 @@ same change, rather than leaving two texts that disagree (AGENTS.md §1).
 Under AGENTS.md §17 these are **hard gates**: they park for the owner unless the owner names _that round_ and the gate.
 Approving this spec is not that authorisation, and this section says so plainly rather than leaving it implied.
 
-- **A migration** — `0030_event_notifications` and `0031_pgboss_schema`.
-- **A wire contract** — the plan, preference, inbox, flier, search and retry routes, and the two event transitions.
+- **A migration** — `0030_event_notifications`, `0031_pgboss_schema`, and this round's `0034_notification_replay`
+  (`replay_of`, the partial unit index and `notification_delivery_events`) and `0035_notification_lift_authorisation`
+  (`authorised_via` and `reference`).
+- **A wire contract** — the plan, preference, inbox, flier, search, retry, bulk-retry and replay routes, the summary,
+  cross-event deliveries, live preferences and on-demand digest, and the two event transitions.
 - **A new unauthenticated surface** — `GET /fliers/{token}`, outside `/v1`.
 - **Security-adjacent** — the queue library installing its own schema under the one-tracked-runner rule (§12), handled
   by the vendored DDL in N-8 but still a gate.
@@ -1435,11 +1507,12 @@ migration and API rounds and are exempt, because none of them alters a screen.
 
 - **Where the mocks sit.** Inside the UI round (R4): it opens, cuts them, parks for the owner's signature, and only
   then writes code. One round, one gate, one record. Owner, 2026-11-25.
-- **Which set each surface joins.** The policy forbids a new folder per feature, so they join the sets that already
-  own their routes: the event detail, the plan form, the preview, the publish acknowledgement and the change notice go
-  into `mockups/v2-events/` (which owns `/events/:id`); the Admin defaults, the delivery log and the member's
-  notifications view go into `mockups/v2-shell/` (which owns `/members` and `/admin/audiences`); the member USSD
-  screens go into `mockups/ussd/`.
+- **Which set each surface joins.** A surface joins the set that already owns its route. **Notifications is the one
+  specialised set**, under the policy's specialised-surface exception in `documents/agents/orchestrator-policy.md`: it is
+  a standalone page with its own operations home, so the ten notification states - the page, the plan form, the preview,
+  the publish acknowledgement, the change notice, the summary card, the lift, the drawer, the replay and the retry-all -
+  live in `mockups/notifications/`, named for the surface and not for the round (owner, 2026-11-27). The Admin defaults
+  and the member's notifications view stay in `mockups/v2-shell/`; the member USSD screens go into `mockups/ussd/`.
 - **Which states.** Success where a table can be empty, an empty state where the list is genuinely empty, and no
   loading or error images: those states are reviewed in code. The USSD set is cut at the 182 budget, with the item
   body and the settings list also cut at Nalo's 120 as `target` states, because those two are the ones that overflow.
@@ -1508,10 +1581,10 @@ migration and API rounds and are exempt, because none of them alters a screen.
   surfaces move out of R3b into this round.
 - **2026-11-27 (page layout).** The owner rejected the first drawing - "cards not well done and drifted too far from
   patterns in other places" - and asked for the overall counts across the top and the per-media stats in an accordion on
-  the right. FR-49 and AC-49 now say so: the top row is sent, delivered, queued and failures; the rail is an accordion
-  per channel with sent, delivered, skipped, failed and queued; and `sent - delivered` is what failures means. The page
-  composes the set's own pieces - `.kpis`, `.panels.wide-left`, `.grid-table`, `.badge`, `.chip` and a rail of `.panel`s
-  with an `.expander` chevron - rather than inventing a layout.
+  the right. The page composes the set's own pieces - `.kpis`, `.panels.wide-left`, `.grid-table`, `.badge`, `.chip` and a rail
+  of `.panel`s with an `.expander` chevron - rather than inventing a layout. **Superseded later the same day:** that
+  drawing separated `sent` from `delivered`, which the schema cannot support, so the counts are now sent, skipped,
+  failed and queued (see the entry below).
 - **2026-11-27 (cards, member column, lifted preferences).** The owner asked for the member landing's tinted cards, a
   tidier grid head, the member on each delivery row, a list of muted members with the reason, and an unmute that needs
   the member's authorisation (grill Q1-Q4, and their own question "should we not show a little bit of member on delivery
@@ -1519,6 +1592,23 @@ migration and API rounds and are exempt, because none of them alters a screen.
   surface may. FR-50 is added for lifting one, which records _how_ the member authorised it. FR-49 gains the member
   column and the list, AC-53 and AC-54 record them, and the top row is drawn as `.ov-stat`-shaped cards tinted per
   measure rather than plain tiles.
+- **2026-11-27 (the member drawer, replay, and retry in bulk).** The owner asked to open a member's inbox from the page
+  and to retry or replay valid notifications (grill Q1-Q6). Three findings shaped it: `delivered` has no column, so
+  the page keeps the four counts that partition a range and delivery receipts wait for a provider webhook; a replay
+  cannot reuse a delivery row because the unit key is unique and §5 forbids erasing the first send, so it creates a new
+  row under `replay_of`, at most once per original; and an officer read must not set `read_at`. FR-51 adds the drawer
+  with the rendered bodies, because an event notification is a broadcast; FR-52 adds replay and its six validity
+  checks; FR-53 adds retry in bulk by explicit id, which is the half of the owner's distinction that is safe on a list.
+  A terminal failure - `provider_rejected` or `channel_unconfigured` - is refused rather than retried, and every retry
+  and replay records its actor in `notification_delivery_events`. The replay migration is **`0034`**, not `0033`:
+  `0033_event_period_definition` already owns that number.
+- **2026-11-27 (the way forward).** The grill settled the build order: a contract-only repair first, then the page and
+  the read API as two tracks under `parallel-ui-api.md`; authoring deferred to the round after; the lock, the
+  acknowledgement and the digest composer built in the loop. It also added the four routes the page needed and did not
+  have - summary, cross-event deliveries, live preferences and the on-demand digest - because FR-49 described a page
+  the contract could not serve. FR-50 gains `authorised_via` and `reference` (migration `0035`), because the rule
+  demanded a method with nowhere to store it. The counts are live aggregates and the search is a server-side join.
+  Notifications is the one specialised mock set, in `mockups/notifications/`.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to
