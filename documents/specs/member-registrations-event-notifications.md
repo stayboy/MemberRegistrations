@@ -1035,8 +1035,9 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   **retryable** `failed` delivery in view, naming the count and the channels before it runs. The request MUST carry the
   **explicit delivery ids** it saw - never a filter - MUST re-check that each id is still `failed` and
   `transport_unavailable`, MUST cap one call at 100 and refuse more with `422 batch_too_large`, and MUST record the
-  actor per retried row in `notification_delivery_events`. A delivery that is no longer `failed`, or is terminal,
-  MUST be reported as refused rather than silently retried, and the response MUST name both counts.
+  actor per retried row in `notification_delivery_events`. A delivery that is no longer `failed`, is terminal, or
+  no longer exists MUST be reported as refused - `delivery_not_failed`, `delivery_not_retryable` and `not_found`
+  respectively - rather than silently retried, and the response MUST name both counts and every id's outcome.
 - **FR-46 (acknowledgement).** When a **`starts` or `change`** slot's resolved send instant differs from its anchor
   instant — `daily` mode, or a `window` deferral of a time-critical slot — publishing MUST record a typed
   acknowledgement on the revision (`acknowledgement`) and MUST refuse the publish without it. A routine `announce` or
@@ -1175,7 +1176,7 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 
 ### AC-50: **Given** the deliveries grid, **When** the officer picks a channel tab and types an event name, **Then** only that channel's matching rows are listed, and a failed row offers the audited retry. (FR-32, FR-49)
 
-### AC-51: **Given** failures exist and a digest recipient is configured, **When** the officer sends the failure report on demand, **Then** the same digest the daily job would send is emailed once, the actor is recorded, and a second click while it is in flight does not send twice; **Given** no recipient is configured, **Then** the action is refused with its reason and nothing is sent. (FR-33)
+### AC-51: **Given** failures exist and a digest recipient is configured, **When** the officer sends the failure report on demand, **Then** the same digest the daily job would send is emailed once, the actor is recorded, and a second click while it is in flight does not send twice; **Given** no recipient is configured, **Then** the action is refused `409 digest_unconfigured` and nothing is sent. (FR-33)
 
 ### AC-52: **Given** an active event with a published plan, **When** its detail loads, **Then** it carries a summary card - status, revision, next send, a link to the plan - and no authoring controls, because authoring lives on the event's notifications page. (FR-49)
 
@@ -1609,6 +1610,14 @@ migration and API rounds and are exempt, because none of them alters a screen.
   the contract could not serve. FR-50 gains `authorised_via` and `reference` (migration `0035`), because the rule
   demanded a method with nowhere to store it. The counts are live aggregates and the search is a server-side join.
   Notifications is the one specialised mock set, in `mockups/notifications/`.
+- **2026-11-27 (the contract).** The contract round wrote the four new routes and declared the three refusals bulk
+  retry can answer. FR-53 gains the third: an id that no longer exists is refused `not_found`, beside
+  `delivery_not_failed` and `delivery_not_retryable`, because "no longer failed" does not describe a row that is
+  gone. A second replay stays `409 replay_not_valid` with `already_replayed` among the failed checks rather than a
+  code of its own, because FR-52 gives refusals one code. The delivery row carries the member and the event, and no
+  slot kind: the signed grid has no column for one. AC-51's on-demand digest refusal is named
+  `409 digest_unconfigured`, because every other refusal in the file carries a stable code and "its reason" alone
+  leaves the handler to invent one.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to

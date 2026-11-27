@@ -20,6 +20,12 @@ downstream round. No migration or code lands in the spec round.
 
 ## Change log
 
+- 2026-11-27: **the notification routes join the route list**, with `member-registrations-event-notifications.md`:
+  the plan and its verbs, the flier and the public `/fliers/{token}` outside `/v1`, the member preferences, inbox
+  and block routes, the page's summary, cross-event deliveries, live preferences, on-demand digest and message
+  search, and the retry, bulk-retry and replay verbs. The error list gains `delivery_not_retryable` (`409`),
+  `replay_not_valid` (`409`) and `batch_too_large` (`422`). Contract-repair round: the schemas and the
+  generated OpenAPI land, and no handler or migration with them.
 - 2026-11-23: **an exception removal deletes directives, not history** (owner: "all as recommended", write round;
   review P1): the data model now says the exception table is append-only _as a date's directive history_ — a write
   appends, the newest row per date is effective, and the `DELETE` removes every directive for that date. An exception is
@@ -1236,8 +1242,9 @@ the JSON contract MUST describe the same columns.
 ## API Contracts
 
 Business routes are under `/v1`, with the public `/auth/*` sign-in routes, the USSD entries
-(`/ussd/session`, `/ussd/nalo`) and the public verification acceptance route
-(`/portal/verification/accept`) outside it; `/health`, `/openapi.json` and the development-only
+(`/ussd/session`, `/ussd/nalo`), the public verification acceptance route
+(`/portal/verification/accept`) and the public flier route (`/fliers/{token}`) outside it; `/health`,
+`/openapi.json` and the development-only
 `/dev/ussd/session` are unversioned too. Bearer auth guards `/v1` except the signature-verified
 `/v1/payments/callback`, which exists only when `PAYMENTS_ENABLED=true`; `/gateway/v1` uses the
 gateway token; the USSD entries authenticate with the HMAC signature or the Nalo `USERID`. The member acceptance
@@ -1839,6 +1846,46 @@ an HTTP hop.
 - Magic links go through a `Mailer` port: Resend in production, console/no-op in development and tests.
 - Magic-link rate limits per email and per IP are stored in Postgres.
 
+### Notifications
+
+Event notifications are their own contract: the rules, the closed code sets and the field names live in
+`member-registrations-event-notifications.md`, whose route table is the count of record. This spec's list
+gains those routes:
+
+| Method                 | Path                                                    | Result                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`, `PUT`           | `/v1/events/{eventId}/notification-plan`                | The plan, its latest revision, slots, templates, flier metadata and revision history; the `PUT` writes the draft revision under `If-Match` |
+| `POST`                 | `/v1/events/{eventId}/notification-plan/preview`        | Four rendered bodies, the per-channel counts and the exclusions                                                                            |
+| `POST`                 | `/v1/events/{eventId}/notification-plan/publish`        | Publish and materialise instances; `409 event_not_active`, `409 cadence_too_coarse`                                                        |
+| `POST`                 | `/v1/events/{eventId}/notification-plan/cancel`         | Cancel the published revision; future instances stop                                                                                       |
+| `POST`                 | `/v1/events/{eventId}/notification-plan/change`         | A one-off `change` notice, its own record and instance                                                                                     |
+| `GET`                  | `/v1/events/{eventId}/notification-plan/deliveries`     | That plan's delivery log, `?status=`, cursor-paged                                                                                         |
+| `PUT`, `GET`, `DELETE` | `/v1/events/{eventId}/flier`                            | Upload, read the metadata of, or remove the draft revision's flier                                                                         |
+| `GET`                  | `/fliers/{token}`                                       | The public immutable image, outside `/v1`, no bearer                                                                                       |
+| `POST`                 | `/v1/events/{eventId}/return-to-draft`                  | Release the activity lock; `409 plan_published` while a plan is published                                                                  |
+| `GET`                  | `/v1/members/{memberNo}/notifications`                  | The member's inbox, pending first then read, cursor-paged                                                                                  |
+| `GET`                  | `/v1/members/{memberNo}/notification-deliveries`        | That member's deliveries, masked destinations                                                                                              |
+| `POST`                 | `/v1/members/{memberNo}/notifications/{id}/read`        | Mark one message read                                                                                                                      |
+| `POST`                 | `/v1/members/{memberNo}/notifications/read-all`         | Mark every pending message read                                                                                                            |
+| `GET`, `PUT`           | `/v1/members/{memberNo}/notification-settings`          | The cadence and the live mutes and blocks; the write is audited                                                                            |
+| `POST`                 | `/v1/members/{memberNo}/notification-mutes`             | Mute an event or a period for 30/90/365 days                                                                                               |
+| `POST`                 | `/v1/members/{memberNo}/notification-mutes/{id}/revoke` | Revoke a mute                                                                                                                              |
+| `POST`                 | `/v1/members/{memberNo}/channel-blocks`                 | Block a channel; sends the confirmation notice                                                                                             |
+| `POST`                 | `/v1/members/{memberNo}/channel-blocks/{id}/revoke`     | Revoke a channel block                                                                                                                     |
+| `GET`                  | `/v1/notification-summary?from&to`                      | Overall and per-channel sent, skipped, failed and queued, in one payload                                                                   |
+| `GET`                  | `/v1/notification-deliveries?channel&status&q&cursor`   | Cross-event deliveries with the member joined and masked, cursor-paged                                                                     |
+| `GET`                  | `/v1/notification-preferences?live=true`                | Live mutes and channel blocks with member, scope or channel, end date and source                                                           |
+| `POST`                 | `/v1/notification-digest`                               | The failure report on demand, composed by the daily job's code and audited                                                                 |
+| `GET`                  | `/v1/notification-messages`                             | Admin advanced search over the full message history                                                                                        |
+| `GET`, `PUT`           | `/v1/notification-defaults`                             | The church defaults, including the read-only deployed trigger cadence                                                                      |
+| `POST`                 | `/v1/notification-deliveries/{id}/retry`                | One audited retry of a `failed`, `transport_unavailable` delivery                                                                          |
+| `POST`                 | `/v1/notification-deliveries/{id}/replay`               | Replay one original as a new row under `replay_of`                                                                                         |
+| `POST`                 | `/v1/notification-deliveries/retry`                     | Retry up to 100 `failed` deliveries by explicit id, the actor recorded per row                                                             |
+| `GET`                  | `/internal/notifications/tick`                          | The hosted worker entry, authenticated with `CRON_SECRET`                                                                                  |
+
+- The summary and the cross-event grid are computed live from the deliveries — no rollup table — and the
+  grid's search is a server-side join over the event name and the member number.
+
 ### Errors
 
 RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `not_found`, `conflict`,
@@ -1856,6 +1903,9 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `no_contact_or_guardian`, `guardian_required`, `guardian_not_eligible`, `guardian_chain_cycle`,
 `guardian_chain_unreachable`, `guardian_chain_too_long`, `no_own_contact` (`409`),
 `too_many_requests` (`429`), `delivery_unavailable` (`503`), `session_closed`,
+`delivery_not_retryable` (`409`, a retry of a terminal failure), `replay_not_valid` (`409`, naming the
+checks a replay failed), `batch_too_large` (`422`, more than 100 ids in one bulk retry), `digest_unconfigured` (`409`, an on-demand
+failure digest with no recipient configured),
 `audience_system` (`409`), `audience_name_in_use` (`409`), `not_a_visitor` (`409`),
 `visitor_already_registered` (`409`),
 `event_draft` (`409`, a draft parent's occurrence cannot be cancelled), `status` (`409`, a parent status move the

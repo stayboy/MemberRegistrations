@@ -374,6 +374,118 @@ export const notificationDeliverySchema = z.object({
   createdAt: z.string(),
 });
 
+// -- the Notifications page's reads, replay and bulk retry (R3b) ---------------
+
+/**
+ * One range's four counts. They partition the deliveries — every row is exactly
+ * one of them, `queued` being `pending` or `sending` — and a skipped delivery is
+ * never counted as a failure, because a mute is the member's choice (FR-49).
+ */
+export const notificationCountsSchema = z.object({
+  sent: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  /** `pending` plus `sending`. */
+  queued: z.number().int().nonnegative(),
+});
+
+export const notificationChannelCountsSchema = notificationCountsSchema.extend({
+  /** `ussd` is the inbox body and never a delivery. */
+  channel: z.enum(['email', 'sms', 'whatsapp']),
+});
+
+/** `GET /v1/notification-summary`: computed live from the deliveries, no rollup (FR-49). */
+export const notificationSummarySchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  overall: notificationCountsSchema,
+  channels: z.array(notificationChannelCountsSchema),
+});
+
+/**
+ * One cross-event row: the delivery plus the event and slot kind it belongs to,
+ * with the member named. The destination stays masked, so a failed row is traced
+ * to the person and never to a contact value (AC-53, FR-35).
+ */
+export const notificationDeliveryRowSchema = notificationDeliverySchema.extend({
+  /** The member's name, beside `memberNo`. */
+  displayName: z.string(),
+  /** The event the delivery belongs to, which the grid's Event column names. */
+  eventName: z.string(),
+});
+
+export const notificationDeliveryListSchema = z.object({
+  items: z.array(notificationDeliveryRowSchema),
+  nextCursor: z.string().optional(),
+});
+
+/**
+ * A live mute or channel block. This is FR-44's one named exception: the
+ * Notifications page lists who declined, because lifting one early means finding
+ * the person who asked (AC-54).
+ */
+export const notificationPreferenceRowSchema = z.object({
+  /** The row a lift revokes; the row is never deleted. */
+  id: z.string(),
+  kind: z.enum(['event_mute', 'period_mute', 'channel_block']),
+  memberNo: z.string(),
+  displayName: z.string(),
+  /** The event or period a mute covers; null for a channel block. */
+  scope: z.string().nullable(),
+  /** The blocked channel; null for a mute. */
+  channel: z.enum(['email', 'sms', 'whatsapp']).nullable(),
+  /** When the mute or block ends; every one expires (N-10). */
+  expiresAt: z.string(),
+  /** How it was set, which the officer needs before lifting it. */
+  source: z.enum(['ussd', 'admin']),
+});
+
+export const notificationPreferenceListSchema = z.object({
+  items: z.array(notificationPreferenceRowSchema),
+});
+
+/**
+ * `POST /v1/notification-digest`: the daily failure digest, sent once on demand
+ * and audited with the actor (FR-33, AC-51). The recipient is masked (FR-35).
+ */
+export const notificationDigestResultSchema = z.object({
+  recipient: z.string(),
+  /** How many failed deliveries the digest listed. */
+  failureCount: z.number().int().nonnegative(),
+  sentAt: z.string(),
+});
+
+/** The new row a replay writes; the original is untouched (FR-52). */
+export const notificationReplayResultSchema = notificationDeliverySchema.extend({
+  /** The original delivery this row replayed. */
+  replayOf: z.string(),
+});
+
+/** One call retries at most this many ids (FR-53). */
+export const NOTIFICATION_MAX_BULK_RETRY = 100;
+
+/**
+ * The explicit ids the officer saw — never a filter. An id that is no longer
+ * `failed`, or whose failure is terminal, comes back refused rather than being
+ * silently retried (FR-53).
+ */
+export const notificationBulkRetryInputSchema = z.object({
+  ids: z.array(z.string()).min(1).max(NOTIFICATION_MAX_BULK_RETRY),
+});
+
+export const notificationBulkRetryRowSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['retried', 'refused']),
+  /** Why the row was refused; null when it was retried. */
+  reason: z.enum(['delivery_not_failed', 'delivery_not_retryable', 'not_found']).nullable(),
+});
+
+export const notificationBulkRetryResultSchema = z.object({
+  retried: z.number().int().nonnegative(),
+  refused: z.number().int().nonnegative(),
+  results: z.array(notificationBulkRetryRowSchema),
+});
+
 export type NotificationPublishInput = z.infer<typeof notificationPublishInputSchema>;
 export type NotificationPublishResult = z.infer<typeof notificationPublishResultSchema>;
 export type NotificationCancelResult = z.infer<typeof notificationCancelResultSchema>;
@@ -381,3 +493,11 @@ export type NotificationChangeInput = z.infer<typeof notificationChangeInputSche
 export type NotificationChangeResult = z.infer<typeof notificationChangeResultSchema>;
 export type NotificationInstance = z.infer<typeof notificationInstanceSchema>;
 export type NotificationDelivery = z.infer<typeof notificationDeliverySchema>;
+export type NotificationCounts = z.infer<typeof notificationCountsSchema>;
+export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
+export type NotificationDeliveryRow = z.infer<typeof notificationDeliveryRowSchema>;
+export type NotificationPreferenceRow = z.infer<typeof notificationPreferenceRowSchema>;
+export type NotificationDigestResult = z.infer<typeof notificationDigestResultSchema>;
+export type NotificationReplayResult = z.infer<typeof notificationReplayResultSchema>;
+export type NotificationBulkRetryInput = z.infer<typeof notificationBulkRetryInputSchema>;
+export type NotificationBulkRetryResult = z.infer<typeof notificationBulkRetryResultSchema>;

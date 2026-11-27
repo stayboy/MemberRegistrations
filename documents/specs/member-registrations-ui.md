@@ -47,6 +47,7 @@ implementation is gated by tickets 01-24 plus 11a and 15a. **2026-11-13:** page 
 | 2026-11-24 (clarifying): FR-73 named `kind`, `scope`, `reference` and `startedOn`, which                     |
 | `POST /v1/members/{memberNo}/subscriptions` has never parsed; it now names the body `subscribeProductSchema` |
 | does (`productCode`, `paidBy?`, `coveredMemberNos?`), matching the create form.                              |
+| 2026-11-27: FR-42e/AC-62 gain the locked banner's **Return to draft** and the Notifications card.            |
 
 ---
 
@@ -761,10 +762,13 @@ Mock: local `mockups/v2-imports/` (git-ignored; 1440×1150), screens `01-members
   `409 recurrence_locked` once the guard is closed; an exception on a future date is an extension. The verbs MUST
   follow the parent's state: on a `draft`, **Activate** is the primary
   action and **Cancel** is disabled with the reason shown (a draft cannot cancel a date), never hidden; on an
-  `active` parent **Archive** and **Cancel** are offered; on an `archived` parent every write is absent and the
-  screen states that the event is read-only. **Add exception** MUST offer extra dates only, because canceling a
-  scheduled date is the occurrence row's **Cancel**; a `cancelled` exception is not authored from the UI while the
-  two writes do not agree on the occurrence row.
+  `active` parent **Archive** and **Cancel** are offered, the detail carries a **locked banner** naming the publish
+  time and the revision with **Return to draft**, which releases the lock and is refused `409 plan_published` while a
+  plan is published, and it carries the **Notifications** panel as a summary card only - plan status, the next send
+  and a link to `#/events/:id/notifications` - because authoring lives on that page; on an `archived` parent every
+  write is absent and the screen states that the event is read-only. **Add exception** MUST offer extra dates only,
+  because canceling a scheduled date is the occurrence row's **Cancel**; a `cancelled` exception is not authored from
+  the UI while the two writes do not agree on the occurrence row.
 - FR-42b (event-form layout, owner 2026-11-24): the form is two columns. The **main column** holds **Identity**
   first and, directly beneath it, the event's **period provenance or repeating cycle** line, then the schedule (Repeats or the session date rows), with the resolved-dates summary line and its **Preview dates** control at the foot of that schedule area - for a
   recurring or period event only, since a standalone event has no rule to resolve. The **narrow right rail** holds the event's **start date, the default start and end times, and the venue**. For a
@@ -1195,7 +1199,7 @@ exist yet. (FR-1, FR-9)
 
 ### AC-60: **Given** the event detail, its form and the audience picker (the Admin page is deferred, FR-42d), **When** any audience is rendered, **Then** only the API's `summary` sentence is shown, no rule JSON or client-computed member count appears, and the caption states that ministry and presbyter status are read as of today. (FR-84)
 
-### AC-62: **Given** an event detail, **When** the parent is `draft`, **Then** **Activate** is the primary action beside the `Actions` menu (MR-1's rule for a page's primary action), **Archive** is unavailable, and **Cancel** on an occurrence row is disabled with the reason shown rather than hidden; **When** the parent is `active`, **Then** **Archive** and a row **Cancel** that collects a reason are offered, and a cancelled occurrence reads `cancelled` with its note in the row; **When** the parent is `archived`, **Then** every write verb is absent, no **Restore** is offered, and the screen says the event is read-only. (FR-42, FR-42e)
+### AC-62: **Given** an event detail, **When** the parent is `draft`, **Then** **Activate** is the primary action beside the `Actions` menu (MR-1's rule for a page's primary action), **Archive** is unavailable, and **Cancel** on an occurrence row is disabled with the reason shown rather than hidden; **When** the parent is `active`, **Then** **Archive** and a row **Cancel** that collects a reason are offered, a locked banner names the publish time and the revision with **Return to draft** (refused `409 plan_published` while a plan is published), the detail carries the **Notifications** summary card and no authoring controls, and a cancelled occurrence reads `cancelled` with its note in the row; **When** the parent is `archived`, **Then** every write verb is absent, no **Restore** is offered, and the screen says the event is read-only. (FR-42, FR-42e)
 
 ### AC-63a: **Given** a recurring event or a selected period, **When** the form is open, **Then** the resolved dates appear only as a one-line summary plus a **Preview dates** control, the summary and the dialog both take their numbers from `POST /v1/events/preview` (never a client count, AC-60), the summary is fetched once the rule settles and the dialog re-fetches on open, a failed preview reports in the dialog and never disables **Save**, and no inline table lengthens the form. **This clause governs the authoring surface.** The event detail’s
 

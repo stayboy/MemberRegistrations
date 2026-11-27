@@ -173,20 +173,32 @@ import {
   rosterSchema,
 } from './schemas/shepherding.js';
 import {
+  notificationBulkRetryInputSchema,
+  notificationBulkRetryResultSchema,
+  notificationBulkRetryRowSchema,
   notificationCancelResultSchema,
   notificationChangeInputSchema,
   notificationChangeResultSchema,
+  notificationChannelCountsSchema,
+  notificationCountsSchema,
   notificationDefaultsSchema,
   notificationDefaultsWriteSchema,
+  notificationDeliveryListSchema,
+  notificationDeliveryRowSchema,
   notificationDeliverySchema,
+  notificationDigestResultSchema,
   notificationFlierSchema,
   notificationInstanceSchema,
   notificationPlanSchema,
   notificationPlanWriteSchema,
+  notificationPreferenceListSchema,
+  notificationPreferenceRowSchema,
   notificationPreviewSchema,
   notificationPublishInputSchema,
   notificationPublishResultSchema,
+  notificationReplayResultSchema,
   notificationSlotSchema,
+  notificationSummarySchema,
   notificationTemplateInputSchema,
   notificationTemplateSchema,
   notificationTriggerSchema,
@@ -824,6 +836,93 @@ const notificationFlierExample = {
   uploadedAt: '2026-11-24T11:20:00.000Z',
 };
 
+/** The four counts partition the range: 412 + 18 + 6 + 4 = 440, and so do the channels. */
+const notificationSummaryExample = {
+  from: '2026-11-21',
+  to: '2026-11-27',
+  overall: { sent: 412, skipped: 18, failed: 6, queued: 4 },
+  channels: [
+    { channel: 'email', sent: 208, skipped: 9, failed: 2, queued: 1 },
+    { channel: 'whatsapp', sent: 143, skipped: 6, failed: 1, queued: 2 },
+    { channel: 'sms', sent: 61, skipped: 3, failed: 3, queued: 1 },
+  ],
+};
+
+const notificationDeliveryRowExample = {
+  ...notificationDeliveryExample,
+  displayName: 'Ada Mensah',
+  eventName: 'The Convention',
+};
+
+const notificationDeliveryListExample = {
+  items: [notificationDeliveryRowExample],
+  nextCursor: 'M-1042:2026-12-06T08:00:00.000Z:3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8e',
+};
+
+const notificationPreferenceListExample = {
+  items: [
+    {
+      id: '8b9194a5-c6d7-4e4b-9c7d-8e9f01122334',
+      kind: 'event_mute',
+      memberNo: 'M-1042',
+      displayName: 'Ada Mensah',
+      scope: 'The Convention',
+      channel: null,
+      expiresAt: '2026-12-20T09:00:00.000Z',
+      source: 'ussd',
+    },
+    {
+      id: '9ca295b6-d7e8-4f5c-8d8e-9f0112233445',
+      kind: 'channel_block',
+      memberNo: 'M-2001',
+      displayName: 'Kofi Boateng',
+      scope: null,
+      channel: 'sms',
+      expiresAt: '2027-02-24T13:00:00.000Z',
+      source: 'admin',
+    },
+  ],
+};
+
+const notificationDigestResultExample = {
+  recipient: 'of***@example.org',
+  failureCount: 6,
+  sentAt: '2026-11-27T09:00:00.000Z',
+};
+
+/** A replay's row: a fresh delivery pointing at the original it repeated. */
+const notificationReplayExample = {
+  id: '6f708192-a3b4-4e2f-9a5b-6c7d8e9f0112',
+  instanceId: notificationInstanceExample.id,
+  memberId: '4d5e6f70-8192-4c0d-9e3f-4a5b6c7d8e9f',
+  memberNo: 'M-1042',
+  channel: 'sms',
+  routedVia: 'own',
+  contactId: '5e6f7081-92a3-4d1e-8f4a-5b6c7d8e9f01',
+  destinationMasked: '***1042',
+  status: 'pending',
+  skipReason: null,
+  attempts: 0,
+  lastErrorCode: null,
+  sentAt: null,
+  createdAt: '2026-11-27T10:12:00.000Z',
+  replayOf: notificationDeliveryExample.id,
+};
+
+/** One retried, one terminal: the response names both counts and every id. */
+const notificationBulkRetryExample = {
+  retried: 1,
+  refused: 1,
+  results: [
+    { id: notificationDeliveryExample.id, outcome: 'retried', reason: null },
+    {
+      id: '7a8193a4-b5c6-4f3a-8b6c-7d8e9f011223',
+      outcome: 'refused',
+      reason: 'delivery_not_retryable',
+    },
+  ],
+};
+
 /** A period preview: the resolved dates and both counts, nothing persisted. */
 const eventPeriodPreviewExample = {
   occurrences: [
@@ -1162,6 +1261,18 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         NotificationChangeResult: toSchema(notificationChangeResultSchema, 'output'),
         NotificationInstance: toSchema(notificationInstanceSchema, 'output'),
         NotificationDelivery: toSchema(notificationDeliverySchema, 'output'),
+        NotificationCounts: toSchema(notificationCountsSchema, 'output'),
+        NotificationChannelCounts: toSchema(notificationChannelCountsSchema, 'output'),
+        NotificationSummary: toSchema(notificationSummarySchema, 'output'),
+        NotificationDeliveryRow: toSchema(notificationDeliveryRowSchema, 'output'),
+        NotificationDeliveryList: toSchema(notificationDeliveryListSchema, 'output'),
+        NotificationPreferenceRow: toSchema(notificationPreferenceRowSchema, 'output'),
+        NotificationPreferenceList: toSchema(notificationPreferenceListSchema, 'output'),
+        NotificationDigestResult: toSchema(notificationDigestResultSchema, 'output'),
+        NotificationReplayResult: toSchema(notificationReplayResultSchema, 'output'),
+        NotificationBulkRetry: toSchema(notificationBulkRetryInputSchema, 'input'),
+        NotificationBulkRetryRow: toSchema(notificationBulkRetryRowSchema, 'output'),
+        NotificationBulkRetryResult: toSchema(notificationBulkRetryResultSchema, 'output'),
       },
     },
     paths: {
@@ -4484,7 +4595,71 @@ export function buildOpenApiDocument(): Record<string, unknown> {
             },
             401: unauthorized,
             404: notFound,
-            409: problem('The delivery is not failed (delivery_not_failed).'),
+            409: problem(
+              'The delivery is not failed (delivery_not_failed), or its failure is terminal (delivery_not_retryable) — a retry cannot fix a rejected destination or a missing provider.',
+            ),
+          },
+        },
+      },
+
+      '/v1/notification-deliveries/{id}/replay': {
+        parameters: [idParam('id')],
+        post: {
+          summary: 'Replay one sent delivery as a new row (audited)',
+          description:
+            'Writes a **new** delivery row that points at the original through `replayOf`, leaves the original untouched, and records the actor and the original id in `notification_delivery_events`. One delivery at a time, never for a list or a group: a bulk replay is how an officer duplicates a message to many members. Only an original with `replayOf` null is replayable, and each original at most once, so a second attempt is refused with `already_replayed` among the failed checks, and a failed replay is retried rather than replayed again. Every other delivery is refused `409 replay_not_valid` naming the failed checks unless each holds at the request: the instance and its event are not cancelled or archived; the message still exists and is not anonymised, or — for a guardian-routed delivery — the guardian route is still live; a live contact exists for the channel, or the guardian’s; no live mute covers that event or period and no live channel block applies; the cadence would not filter it; and the occurrence is today or later. A `change` notice is never replayed, and a `skipped` delivery stays refused until its reason is lifted through the preferences surface.',
+          parameters: [actorHeader],
+          responses: {
+            201: {
+              description: 'The new delivery row, pointing at the original.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationReplayResult'),
+                  examples: {
+                    replayed: {
+                      summary: 'A replay of a sent SMS',
+                      value: notificationReplayExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The original is not replayable (replay_not_valid, naming the failed checks — including already_replayed for an original already replayed once).',
+            ),
+          },
+        },
+      },
+
+      '/v1/notification-deliveries/retry': {
+        post: {
+          summary: 'Retry up to 100 failed deliveries by explicit id (audited)',
+          description:
+            'The page’s “Retry all failed”, by the **explicit ids** the officer saw and never by a filter. Each id is re-checked against the live row — still `failed`, still `transport_unavailable` — and a row that is no longer failed, whose failure is terminal, or that no longer exists is reported **refused** rather than silently retried; the response names both counts and every id’s outcome. The actor is recorded per retried row in `notification_delivery_events`. One call carries at most 100 ids.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('NotificationBulkRetry') } },
+          },
+          responses: {
+            200: {
+              description: 'Both counts and the per-id outcome.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationBulkRetryResult'),
+                  examples: {
+                    mixed: {
+                      summary: 'One retried, one terminal refusal',
+                      value: notificationBulkRetryExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            422: problem('An invalid body, or more than 100 ids (batch_too_large).'),
           },
         },
       },
@@ -4569,6 +4744,158 @@ export function buildOpenApiDocument(): Record<string, unknown> {
               },
             },
             404: notFound,
+          },
+        },
+      },
+
+      '/v1/notification-summary': {
+        get: {
+          summary: 'The four counts overall and per channel over a range',
+          description:
+            'Computed **live** from `notification_deliveries` over `from`–`to` with no rollup table: `sent` is a delivery a provider accepted and carries no receipt claim, `failed` and `skipped` are their own statuses, and `queued` is `pending` or `sending`, so the four partition every delivery in the range. A skipped delivery is never counted as a failure — a mute is the member’s choice, not an outage. Dates are UTC calendar dates and default to the last seven days. The response carries `Cache-Control: no-store`.',
+          parameters: [
+            {
+              name: 'from',
+              in: 'query',
+              description: 'The range’s first UTC date; defaults to six days before `to`.',
+              schema: { type: 'string', format: 'date' },
+            },
+            {
+              name: 'to',
+              in: 'query',
+              description: 'The range’s last UTC date; defaults to today.',
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'The overall counts and the same four per channel.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationSummary'),
+                  examples: {
+                    week: { summary: 'The default seven days', value: notificationSummaryExample },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/notification-deliveries': {
+        get: {
+          summary: 'Cross-event deliveries, member and event joined',
+          description:
+            'Every delivery across events, newest first, with the member named by **name and member number** beside the event, the channel, the status and the **masked** destination, so a failed row is traced to the person without exposing a contact value. `q` is a server-side join over the event name and the member number, never a client-side filter. Cursor-paged and `Cache-Control: no-store`.',
+          parameters: [
+            {
+              name: 'channel',
+              in: 'query',
+              description: 'Only that delivery channel’s rows.',
+              schema: { type: 'string', enum: ['email', 'sms', 'whatsapp'] },
+            },
+            {
+              name: 'status',
+              in: 'query',
+              description: 'Only that status’s rows.',
+              schema: {
+                type: 'string',
+                enum: ['pending', 'sending', 'sent', 'failed', 'skipped'],
+              },
+            },
+            {
+              name: 'q',
+              in: 'query',
+              description:
+                'Matches the event name or the member number, joined server-side rather than filtered in the client.',
+              schema: { type: 'string' },
+            },
+            { name: 'cursor', in: 'query', schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'A page of deliveries with the member and event joined.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDeliveryList'),
+                  examples: {
+                    page: {
+                      summary: 'One failed SMS with its member and event',
+                      value: notificationDeliveryListExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/notification-preferences': {
+        get: {
+          summary: 'Live mutes and channel blocks, named',
+          description:
+            'FR-44’s one named exception: the Notifications page lists the live mutes and channel blocks with the member’s name and number, the kind, the scope or channel, the end date and how it was set (`ussd` or `admin`), because lifting one early means finding the person who asked. A row is live while it is neither revoked nor expired, and every row names its end date. No event surface lists members who declined, and this list is not reachable from one. `Cache-Control: no-store`.',
+          parameters: [
+            {
+              name: 'live',
+              in: 'query',
+              description:
+                '`true` is the contracted value: the list holds rows that are neither revoked nor expired.',
+              schema: { type: 'boolean' },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'The live mutes and channel blocks.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPreferenceList'),
+                  examples: {
+                    live: {
+                      summary: 'A muted event and a blocked channel',
+                      value: notificationPreferenceListExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/notification-digest': {
+        post: {
+          summary: 'Send the failure digest on demand (audited)',
+          description:
+            'Composes the **same digest the daily job sends** — each failed delivery since the previous digest, with its event, slot, channel, masked destination, attempts, sanitised error code and time — and emails it **once** to `failure_digest_to`, recording the actor so a manual send is not mistaken for the scheduled one. A second call while one is in flight does not send twice. A deployment with no recipient configured is refused and sends nothing.',
+          parameters: [actorHeader],
+          responses: {
+            200: {
+              description: 'The digest that was sent and how many failures it listed.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDigestResult'),
+                  examples: {
+                    sent: {
+                      summary: 'A manual failure report',
+                      value: notificationDigestResultExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            409: problem(
+              'No failure-digest recipient is configured (`failure_digest_to` is unset), so nothing is sent (digest_unconfigured).',
+            ),
           },
         },
       },

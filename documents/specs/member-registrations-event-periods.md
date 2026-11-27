@@ -208,6 +208,10 @@ Four changes to the event surface, and none to the money, attendance or import p
     rule is not a write: the form sends the rule **only when the authored rule differs from the stored one**, compared
     through the rrule mapping, so editing a name, description, audience or time on a locked event succeeds, and
     `409 recurrence_locked` fires only on an actual schedule write.
+  - **An `active` event is refused before this guard runs.** The notifications lock (`FR-39` of
+    `member-registrations-event-notifications.md`) answers `409 event_locked` for a write to an active event's record,
+    schedule, audience or venue, so the schedule guard's `409 recurrence_locked` is the refusal for a parent that is
+    not `active`. `Return to draft` releases the lock, and a single occurrence stays cancellable either way.
   - **The guard is schedule-only, and it does not guard an audience shrink** (owner, 2026-11-25). AC 9 blesses the
     shrink, and `expected` and the window's `rate` are recomputed from the **current** set for every date, including
     past ones, so a shrink after attendance exists already moves what a past occurrence reports. That debt is recorded
@@ -616,6 +620,11 @@ missing one as blocking:
   the month before, week 1–4 or last, weekday — and a week belongs to the month its Sunday falls in. This changes
   Communion Week's dates in months that begin on a Sunday, which is the point of the ruling, and the code catalogue and
   its date table change with it. Per-cycle exceptions stay in the event admin; the period carries none.
+- **Changelog 2026-11-27 (post-approval, cross-spec):** the notifications lock is named here. `FR-39` of
+  `member-registrations-event-notifications.md` refuses a write to an `active` event - record, schedule, audience or
+  venue - with `409 event_locked` before this spec's schedule guard is consulted, so `409 recurrence_locked` is the
+  refusal for a parent that is not `active`. No other behaviour changes; the guard, its closed reasons and the
+  extension/rewrite split are untouched.
 - **Rejected by the owner or the grill**, recorded so they are not rediscovered: a new exclusion clause type
   (`excludeClauses`) - intersection composes a positive and a negative audience instead; union composition; a set-based
   replacement of the primary in this round (the shim keeps it revertible); a period authoring screen in this round;

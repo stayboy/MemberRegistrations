@@ -22,6 +22,12 @@ describe('OpenAPI contract snapshot', () => {
       '/v1/series/{id}',
       '/v1/audiences',
       '/v1/audiences/{id}',
+      '/v1/notification-summary',
+      '/v1/notification-deliveries',
+      '/v1/notification-preferences',
+      '/v1/notification-digest',
+      '/v1/notification-deliveries/{id}/replay',
+      '/v1/notification-deliveries/retry',
     ]) {
       expect(paths[path]).toBeDefined();
     }
