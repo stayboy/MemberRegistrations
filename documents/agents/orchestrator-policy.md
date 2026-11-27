@@ -154,8 +154,11 @@ why (the catalog conflates the 1M context window with the output cap).
   and a verbatim `quote`, and every spec-required atom is either an AC or a prose anchor marked
   `anchorKind: "prose"`.
 - A mock lives in the surface's existing set under `mockups/<set>/` (for example `mockups/v2-events/`):
-  refresh that set's PNGs and add a state file only when the state does not already exist. Never open a
-  new folder per feature or round, and never duplicate a state (owner, 2026-11-11).
+  refresh that set's PNGs and add a state file only when the state does not already exist. **One exception**: a
+  specialised surface that owns its own route and operations home - Notifications is the first - may keep its own set,
+  named for the surface and never for the round, when the owner rules that it is a feature rather than a round's
+  variant (owner, 2026-11-27). Otherwise never open a new folder per feature or round, and never duplicate a state
+  (owner, 2026-11-11).
 - Mocks reuse one compact shell — the 56 px top bar, 260 px contextual sidebar with the Section header
   and pinned date/time + appearance footer, and the dense content grid captured in
   `mockups/v2-settings/02-date-time-sidebar.png`. Do not invent new chrome per surface and do not

@@ -2,7 +2,8 @@
   "set": "v2-events",
   "specs": [
     "documents/specs/member-registrations-ui.md",
-    "documents/specs/member-registrations-events-offerings.md"
+    "documents/specs/member-registrations-events-offerings.md",
+    "documents/specs/member-registrations-event-notifications.md"
   ],
   "surfaces": [
     {
@@ -247,69 +248,149 @@
     },
     "28-notification-plan-form": {
       "mock": {
-        "path": "mockups/v2-events/28-notification-plan-form.png",
+        "path": "mockups/notifications/28-notification-plan-form.png",
         "sha256": "3156948fb345fc2a3430738f9b7c1b718497580ed3ed834b46b993a95a7947c5",
-        "source": "mockups/v2-events/28-notification-plan-form.html"
+        "source": "mockups/notifications/28-notification-plan-form.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "3156948fb345fc2a3430738f9b7c1b718497580ed3ed834b46b993a95a7947c5"
+      }
     },
     "29-notification-preview": {
       "mock": {
-        "path": "mockups/v2-events/29-notification-preview.png",
+        "path": "mockups/notifications/29-notification-preview.png",
         "sha256": "17a2bfa00e01a6cfca2ad974b4ca8a678b1e68971731872a569e4134d70104eb",
-        "source": "mockups/v2-events/29-notification-preview.html"
+        "source": "mockups/notifications/29-notification-preview.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "17a2bfa00e01a6cfca2ad974b4ca8a678b1e68971731872a569e4134d70104eb"
+      }
     },
     "30-notification-publish-dialog": {
       "mock": {
-        "path": "mockups/v2-events/30-notification-publish-dialog.png",
+        "path": "mockups/notifications/30-notification-publish-dialog.png",
         "sha256": "30a402187e13282fb5f398b789843d2e8837724af6459004f8843ed088e5e89d",
-        "source": "mockups/v2-events/30-notification-publish-dialog.html"
+        "source": "mockups/notifications/30-notification-publish-dialog.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "30a402187e13282fb5f398b789843d2e8837724af6459004f8843ed088e5e89d"
+      }
     },
     "31-notification-change-notice": {
       "mock": {
-        "path": "mockups/v2-events/31-notification-change-notice.png",
+        "path": "mockups/notifications/31-notification-change-notice.png",
         "sha256": "56f9591c950c906a05685c3ead6abb916c0c5f5053320a8532736607c07b2438",
-        "source": "mockups/v2-events/31-notification-change-notice.html"
+        "source": "mockups/notifications/31-notification-change-notice.html"
       },
       "baseline": null,
-      "coverage": "target"
+      "coverage": "signed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "56f9591c950c906a05685c3ead6abb916c0c5f5053320a8532736607c07b2438"
+      }
     },
     "27-notifications-landing": {
       "mock": {
-        "path": "mockups/v2-events/27-notifications-landing.png",
-        "sha256": "681e7b1edf924169133e73d974e7e49a63e3b52a41bd96d1b6f9356ca5c6c1d4",
-        "source": "mockups/v2-events/27-notifications-landing.html"
+        "path": "mockups/notifications/27-notifications-landing.png",
+        "sha256": "0943773f43d6d33435ebd57503804361d0b9b326087559bfb9e5fa41c0c0d579",
+        "source": "mockups/notifications/27-notifications-landing.html"
       },
       "baseline": null,
-      "coverage": "target",
-      "note": "the Notifications landing page under Events"
+      "coverage": "signed",
+      "note": "the Notifications landing page under Events - four tinted counts, the member cell opening the drawer, retry per row and retry-all-failed",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "0943773f43d6d33435ebd57503804361d0b9b326087559bfb9e5fa41c0c0d579"
+      }
     },
     "32-event-detail-notification-card": {
       "mock": {
-        "path": "mockups/v2-events/32-event-detail-notification-card.png",
+        "path": "mockups/notifications/32-event-detail-notification-card.png",
         "sha256": "883188a75ea062e12719d5254aae3e45e935622bdacf9a1ac02746a690fba267",
-        "source": "mockups/v2-events/32-event-detail-notification-card.html"
+        "source": "mockups/notifications/32-event-detail-notification-card.html"
       },
       "baseline": null,
-      "coverage": "target",
-      "note": "the summary card the event detail keeps"
+      "coverage": "signed",
+      "note": "the summary card the event detail keeps",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "883188a75ea062e12719d5254aae3e45e935622bdacf9a1ac02746a690fba267"
+      }
     },
     "33-notifications-unmute": {
       "mock": {
-        "path": "mockups/v2-events/33-notifications-unmute.png",
-        "sha256": "bc11066a15df3d8980c0ad5d3ac5017304eb8bb2fdcc99dea7bfd11ef274871d",
-        "source": "mockups/v2-events/33-notifications-unmute.html"
+        "path": "mockups/notifications/33-notifications-unmute.png",
+        "sha256": "543bb8da66632b33c739dc1f03862ad788544131427e69930367027c3d4c2c83",
+        "source": "mockups/notifications/33-notifications-unmute.html"
       },
       "baseline": null,
-      "coverage": "target",
-      "note": "the unmute dialog"
+      "coverage": "signed",
+      "note": "the unmute dialog",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "543bb8da66632b33c739dc1f03862ad788544131427e69930367027c3d4c2c83"
+      }
+    },
+    "34-notifications-member-inbox": {
+      "mock": {
+        "path": "mockups/notifications/34-notifications-member-inbox.png",
+        "sha256": "f783e5c196d9c1e87f21cae78f662ba50b280e7e40fccf3f49851921694c79b7",
+        "source": "mockups/notifications/34-notifications-member-inbox.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "note": "the member drawer - messages with rendered bodies, deliveries grouped beneath each message, retry per row and per group, replay per row, and the lift on a skipped row",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "f783e5c196d9c1e87f21cae78f662ba50b280e7e40fccf3f49851921694c79b7"
+      }
+    },
+    "35-notifications-replay": {
+      "mock": {
+        "path": "mockups/notifications/35-notifications-replay.png",
+        "sha256": "07034af764198e57151778d3cd524d53825d1b730121953f057619f022f5d358",
+        "source": "mockups/notifications/35-notifications-replay.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "note": "the replay dialog - the validity checks, the at-most-once rule, and the warning that a replay sends a second copy and never runs over a list",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "07034af764198e57151778d3cd524d53825d1b730121953f057619f022f5d358"
+      }
+    },
+    "36-notifications-retry-all": {
+      "mock": {
+        "path": "mockups/notifications/36-notifications-retry-all.png",
+        "sha256": "39465f65201c9be47341de88c9e05e266799b4cb378a3c29befb31f1f77570c2",
+        "source": "mockups/notifications/36-notifications-retry-all.html"
+      },
+      "baseline": null,
+      "coverage": "signed",
+      "note": "the retry-all confirmation - the count and the channels, and why retry is safe over a list while replay is not",
+      "signed": {
+        "by": "owner",
+        "at": "2026-11-27",
+        "sha256": "39465f65201c9be47341de88c9e05e266799b4cb378a3c29befb31f1f77570c2"
+      }
     }
   },
   "inventory": [

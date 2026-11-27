@@ -22,15 +22,14 @@
     },
     {
       "path": "documents/agents/orchestrator-policy.md",
-      "sha256": "1cb28ba459fcc804d3b3aa5e64d5b786568224c7cc02ed6274a0c25c378f63a8",
-      "reviewedBy": "reviewer-pro seat (ollama-cloud/mimo-v2.6-pro)",
-      "model": "mimo-v2.6-pro",
+      "sha256": "5b79d9e38914550b68180c641f2edb8e6ced91c47913e77f7e61c45c425f9f84",
+      "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
+      "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: the \"Protected documents\" list names documents/agents/parallel-ui-api.md, matching AGENTS.md section 10a and tests/meta/protected-doc-review.test.ts. why: the policy and the guard must name the same set, or a document is protected in one file and not another. rejected: protecting it only in the guard, which would make the test the only source of truth.",
+      "reason": "changes: the Mock parity bullet gains one narrow exception - a specialised surface that owns its own route and operations home, named for the surface and never for the round, may keep its own set when the owner rules it a feature. why: the owner ruled on 2026-11-27 that Notifications is a specialised feature and asked for mockups/notifications/, and the spec was correctly rejected for quoting the owner past this policy rather than amending it. The default existing-set rule and the never-per-round prohibition are unchanged. rejected: leaving the spec and the policy in open contradiction, and a broad \"any feature gets a folder\" carve-out, which the conjunctive test forecloses.",
       "verdict": "accepted",
-      "attestation": "Seat: consistent - fourth pass on the parallel-ui-api text, all six findings closed.",
-      "at": "2026-11-24T17:45:00Z",
-      "fallbackReason": "Inside the 12:00-18:00 local window on Monday 2026-11-24 the seat is mimo-v2.6-pro, served by the first configured provider that answers; AGENTS.md section 10a names that window seat, so this is the window choice and not a fallback from an unavailable 0813."
+      "attestation": "Reviewed the Mock parity bullet: the owner 2026-11-27 ruling is recorded as a narrow conjunctive exception - a specialised surface that owns its own route and operations home, named for the surface and never the round, only when the owner rules it a feature rather than a round variant - while the default existing-set rule, the never-per-round prohibition, the shared shell, the one-image-per-state rule and the sign-off requirements are preserved unchanged.",
+      "at": "2026-11-27T20:04:25Z"
     },
     {
       "path": "documents/agents/component-first.md",
@@ -167,14 +166,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "01024864ed93d42da41719dc75b273980a3fc0e83f174618fd41b354852484d4",
+      "sha256": "134256bb27b599f1222afa69e8d9f61f82f772bf8de0575a8028980805677625",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: 27-notifications-landing is redrawn with the member landing page’s tinted stat cards, a tidier grid head, a Member column and a live mutes-and-blocks panel; 33-notifications-unmute is added for the dialog that lifts one. why: the owner asked for the tinted cards, the member on each delivery row, the muted members with their reason, and an unmute that needs the member’s authorisation - and asked themselves whether the delivery report should show the member. FR-44 gains its one carve-out for the Notifications page, FR-50 is added to record how authorisation was given, and FR-49 and AC-53/AC-54 carry the member column and the list. rejected: leaving FR-44 as a blanket prohibition and naming members on an event surface; and treating the officer’s click as authorisation without recording the method.",
+      "reason": "changes: the owner signed the six remaining notification states (28-33), and 33-notifications-unmute was re-recorded because the landing page behind it changed when the Failed card split into retryable and terminal. why: the owner answered the way-forward grill with \"all other as recommended\", which included signing the six so the build is not held behind drawings, and ruled the folder fits policy because notifications is a specialised feature. The dialog 33 draws did not change; only its backdrop did. rejected: leaving 33 pinned to a stale hash, and signing the 18 events states the owner has not reviewed.",
       "verdict": "accepted",
-      "attestation": "Read the catalogue, both redrawn and new sources, the spec and the shared stylesheet. The change is confined to two states: 27 stays target with its hash moved, 33 is added as target with a source and a hash, and the three signed states are untouched. The privacy carve-out is written where the rule lives - the named list exists on the member record and, as one exception, on the Notifications page, which must not be reachable from an event - and the drawings match it: tinted ov-stat cards, a Member column with masked destinations, a muted panel carrying kind, scope or channel, end date and how it was set, and a dialog that records the authorisation method. The arithmetic reconciles, and skipped is not among the failures. The hash-to-image check over all 28 states is the parent’s gate and was run.",
-      "at": "2026-11-27T10:56:49Z"
+      "attestation": "Reviewed the catalogue against the tree: 28-33 moved from target to signed with by owner, at 2026-11-27, and each signed.sha256 equal to its mock.sha256; 33-notifications-unmute was re-recorded at 543bb8da because its landing backdrop now shows the retryable/terminal split while its own authorisation-method, reference and warning dialog is unchanged. The set is 13 signed and 18 target, the ten notification states live in the feature-scoped mockups/notifications/ folder named by each path and the specs array, and no prior signature or event state moved.",
+      "at": "2026-11-27T20:01:16Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
