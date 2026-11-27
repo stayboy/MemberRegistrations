@@ -518,26 +518,35 @@ per budget reasons").
 - **Muted items.** Current mutes, newest first, each with its end date; opening one offers `Unmute`.
 - The USSD session service calls the same domain service as the API.
 
-### N-12. Admin surfaces and defaults
+### N-12. The Notifications page, the event card, and defaults
 
-- **Event detail** gains a **Notifications** panel or tab: plan status and revision, slots, the channel editors with
-  preview, the flier, **Preview**, **Publish**, **Cancel**, the recipient/sent/skipped/failed counts per instance, and
-  the failed deliveries with **Retry** (one audited retry per failed delivery, `POST /v1/notification-deliveries/{id}/retry`).
+- **Notifications is a standalone page under the Events section** (`#/notifications`), not a panel on the event
+  detail (owner, 2026-11-27: "merging notifications to event detail puts too much on the form; event detail currently
+  also has its own cards"). The event detail carries a **summary card only**: plan status and revision, the next send,
+  and a link to the plan. Nothing is authored from the detail.
+- **The page is the operations home.** It shows, per channel, four counts over a chosen range (default seven days,
+  dates in UTC): **sent**, **skipped**, **failed**, **queued**. A skipped delivery is never counted as a failure.
+  Below the counts sits a **grid of deliveries** - event, kind, channel, status, attempts, masked destination, created
+  and sent - filtered by **channel tabs, status and date range**, and searchable by event name and member number.
+  Failed rows carry the same one audited retry as the API (`POST /v1/notification-deliveries/{id}/retry`).
+- **The failure digest can be sent on demand** from the page, composed by the same code the daily job uses, refused
+  when `failure_digest_to` is unset, and audited with the actor so a manual send is not mistaken for the scheduled one.
+- **Plan authoring is its own event-scoped page** (`#/events/:id/notifications`): slots, the channel editors with
+  preview, the flier, **Preview**, **Publish**, **Cancel**, the change notice, and that plan's own per-instance counts
+  and failed deliveries.
 - **The lock is visible.** While the event is `active`, the detail carries a locked banner naming the publish time and
   the revision with a **Return to draft** action (refused `409 plan_published` while a plan is published), so the lock
   has a stated, findable release. The events list shows the lock beside the Announced mark.
-- **Mute and block counts are aggregate only.** The panel shows "12 muted · 4 blocked" for the event, never a list of
-  names (owner, 2026-11-25): a named list of who declined the Convention is a privacy breach dressed as an explanation.
-  The named list lives on the member record, one member at a time.
-- **Admin › Notifications** (`#/admin/notifications`, under Admin beside Audiences):
-  - **Defaults** — the standard slot template, `churchName`, the email signature and reply-to,
-    `sms_confirm_threshold`, the send mode and its hours, `church_timezone`, the **deployed trigger cadence**
-    (read-only, from config), the **failure-digest recipient** and switch, the USSD cap (read-only) and the approved
-    WhatsApp template names per variant.
-  - **Delivery log** — the latest deliveries across events: event, slot, channel, status, attempts, masked
-    destination, created and sent times; filtered by status and date; the retry action.
-  - **Message search** — an advanced search across every inbox message by member, event, date range, read state and
-    text. Nothing is ever removed by a member, so this searches the full history rather than a hidden subset.
+- **Mute and block counts are aggregate only.** The event's card shows "12 muted · 4 blocked", never a list of names
+  (owner, 2026-11-25): a named list of who declined the Convention is a privacy breach dressed as an explanation. The
+  named list lives on the member record, one member at a time.
+- **Defaults** stay on the page as its settings section: the standard slot template, `churchName`, the email signature
+  and reply-to, `sms_confirm_threshold`, the send mode and its hours, `church_timezone`, the **deployed trigger
+  cadence** (read-only, from config), the **failure-digest recipient** and switch, the USSD cap (read-only) and the
+  approved WhatsApp template names per variant.
+- **Message search** - an advanced search across every inbox message by member, event, date range, read state and
+  text - also lives here. Nothing is ever removed by a member, so this searches the full history rather than a hidden
+  subset.
 - There is **no reusable template library** in v1; the per-event plan is the authoring surface.
 
 ### N-13. The failure digest
@@ -921,13 +930,14 @@ The `pgboss` schema is the documented exception (N-8) and has its own drift chec
 - **FR-30 (verification exempt).** Verification and OTP messages MUST bypass settings, blocks and mutes.
 - **FR-31 (defaults).** The church defaults (slot template, church name, signature, reply-to, SMS threshold, digest
   recipient and switch, WhatsApp template names) MUST be editable on the Admin page and copied into a new plan.
-- **FR-32 (delivery log).** The plan detail and the Admin page MUST show per-instance counts and the failed
-  deliveries, and MUST offer one audited retry per failed delivery through `POST
-/v1/notification-deliveries/{id}/retry`.
+- **FR-32 (delivery log).** The **Notifications page** MUST show per-instance counts and a grid of deliveries with
+  channel, status and search filters, and MUST offer one audited retry per failed delivery through `POST
+/v1/notification-deliveries/{id}/retry`. The event-scoped plan page shows that plan's own counts and failures.
 - **FR-33 (digest).** The queue MUST email a compiled failed-send digest to the configured officer address, daily,
-  only when failures exist.
+  only when failures exist; the **Notifications page MUST offer the same digest on demand**, composed by the same
+  code, refused when no address is configured, and audited with the actor.
 - **FR-34 (advanced search).** An administrator MUST be able to search every inbox message by member, event, date
-  range, read state and text.
+  range, read state and text, from the **Notifications page**.
 - **FR-35 (privacy).** Destinations MUST be masked in every response, log and error; the flier URL MUST be
   unguessable; the hosted worker entry MUST use `CRON_SECRET`, not the API bearer.
 - **FR-36 (purge).** A member purge MUST erase settings, mutes, blocks and inbox messages, clear delivery destinations,
@@ -971,6 +981,12 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 - **FR-48 (gates declared).** The migration, the wire contract, the public `/fliers/{token}` surface and the queue
   library's own schema MUST each be declared as a hard gate under AGENTS.md §17; publishing approval MUST NOT be
   read as pre-authorising them.
+- **FR-49 (Notifications page).** Notifications MUST have a **standalone page under the Events section**, not a panel
+  on the event detail. It MUST show, per channel (`email`, `sms`, `whatsapp`) and over a chosen range defaulting to
+  seven days, four counts - **sent**, **skipped**, **failed**, **queued** - and MUST offer the failure digest on
+  demand. The event detail carries a **summary card only**: plan status, the next send, and a link to the plan. Plan
+  authoring, preview, publish, cancel and the change notice live at `#/events/:id/notifications`.
+  A skipped delivery MUST NOT be counted as a failure: a mute is a member's choice, not an outage.
 
 ## Acceptance Criteria
 
@@ -1069,6 +1085,14 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
 ### AC-47: **Given** a `failed` delivery, **When** the audited retry route is called, **Then** it is re-enqueued once, the actor is recorded, and a `sent` delivery is refused. (FR-45)
 
 ### AC-48: **Given** a member with both pending and read messages, **When** the first inbox page is read, **Then** every pending item precedes every read item, the page carries `pendingCount`, and the cursor resumes at the right group boundary. (FR-23)
+
+### AC-49: **Given** the Notifications page, **When** it loads over the default seven days, **Then** each of email, SMS and WhatsApp shows four counts - sent, skipped, failed, queued - that sum to that channel's deliveries in the range, and a skipped delivery is not counted as a failure. (FR-49)
+
+### AC-50: **Given** the deliveries grid, **When** the officer picks a channel tab and types an event name, **Then** only that channel's matching rows are listed, and a failed row offers the audited retry. (FR-32, FR-49)
+
+### AC-51: **Given** failures exist and a digest recipient is configured, **When** the officer sends the failure report on demand, **Then** the same digest the daily job would send is emailed once, the actor is recorded, and a second click while it is in flight does not send twice; **Given** no recipient is configured, **Then** the action is refused with its reason and nothing is sent. (FR-33)
+
+### AC-52: **Given** an active event with a published plan, **When** its detail loads, **Then** it carries a summary card - status, revision, next send, a link to the plan - and no authoring controls, because authoring lives on the event's notifications page. (FR-49)
 
 ## Edge Cases
 
@@ -1458,6 +1482,13 @@ migration and API rounds and are exempt, because none of them alters a screen.
   (7) `NOTIFICATION_TRIGGER_MINUTES` has no in-code default and the config refuses to boot without it, because a
   default of 15 made the local read disagree with the locally continuous stack. FR-7's inbox rule is restated as
   "owns at least one contact" so an email-only member has a row the USSD read cannot yet show them.
+- **2026-11-27 (Notifications becomes a page).** The owner withdrew the panel on the event detail - "puts too much on
+  the form; event detail currently also has its own cards" - and asked for a standalone landing page. N-12 now puts
+  **Notifications under Events** (`#/notifications`), carrying the per-channel counts (sent, skipped, failed, queued
+  over a default seven days), the filtered deliveries grid, the on-demand failure digest, the defaults and the message
+  search. The event detail keeps a summary card only, and plan authoring moves to `#/events/:id/notifications`. FR-32,
+  FR-33 and FR-34 are restated against the new page, FR-49 is added, and AC-49..AC-52 record the page, the grid, the
+  on-demand digest and the summary card. The digest and the admin surfaces move out of R3b into this round.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to

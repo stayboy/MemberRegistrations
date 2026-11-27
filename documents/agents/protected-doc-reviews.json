@@ -167,14 +167,14 @@
     },
     {
       "path": "documents/mock-claims/v2-events.json",
-      "sha256": "3c7ea0f7b066ee7bb54269ae2ba31b0026780499e224dbe245ba3f1af683fb33",
+      "sha256": "07433ef89932002db0b342b3335af3a10d797336da398d30d5ce80f1a8a0d48f",
       "reviewedBy": "reviewer-pro seat (ollama-cloud/deepseek-v4-pro:0813)",
       "model": "deepseek-v4-pro",
       "build": "0813",
-      "reason": "changes: five notification states appended to v2-events - 27-event-detail-notifications, 28-notification-plan-form, 29-notification-preview, 30-notification-publish-dialog and 31-notification-change-notice - each coverage \"auto-signed\" with an autoSigned block naming by \"unattended\", the date, the image hash and the basis. why: the owner named the mock step as the unattended milestone, the five states are cut from the notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, and each passes shell-check before capture. rejected: cutting the USSD inbox, item, settings and muted list and the admin defaults, delivery log and member notifications, because their payloads belong to R3b, which parks on its wire-contract gate - a signed mock for an API that does not exist is the drift the backlog already carries rows about; and declaring surfaces and AC slices now, because a surface needs a baseline and these screens have no build to pair against.",
+      "reason": "changes: the owner withdrew the notification panel from the event detail on 2026-11-27 and asked for a standalone Notifications page under Events; the Events submenu gained a Notifications item, which is drawn in every events mock, so all 26 existing states were re-cut and two were added - 27-notifications-landing and 32-event-detail-notification-card. 27-event-detail-notifications is retired and deleted because it drew the rejected panel. why: a drawing that disagrees with the shell is the drift the mock skill exists to prevent, and a second submenu item would have been visible in every image. rejected: leaving the 22 states uncut and recording the inconsistency, which the grill put to the owner as option B and they declined; and keeping the panel as a second surface beside the page.",
       "verdict": "accepted",
-      "attestation": "Reviewed the five appended states: coverage \"auto-signed\" with by \"unattended\" and a stated basis, no owner signature carried and no signed state rewritten, and the round record delimits the uncut USSD and admin surfaces rather than implying the whole surface is drawn. The hash-to-image check is the parent’s gate and was run: all five recorded sha256 values equal the computed digest of the named PNG bytes.",
-      "at": "2026-11-26T09:47:36Z"
+      "attestation": "Reviewed the catalogue: the retired 27-event-detail-notifications is fully removed with no dangling story, surface, entry or e2e claim; the 24 re-cut states are coverage \"target\" with no residual signed or autoSigned block and the five previousBaseline pairings preserved; the three untouched states remain signed; and the two new states are target with a source, hash and descriptive note. A first pass returned REWORK on the round record, which said 22 signatures were voided when 18 approvals actually stopped standing, and carried a hand-written sign-off table that disagreed with the catalogue in fourteen rows; both were corrected and re-checked. The hash-to-image check (sha256 over all 27 PNGs) is the parent’s gate and was run.",
+      "at": "2026-11-27T10:02:45Z"
     },
     {
       "path": "documents/mock-claims/headcount.json",
