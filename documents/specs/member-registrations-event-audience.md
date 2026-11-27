@@ -1,6 +1,6 @@
 # Spec — event audience, membership status and visitor identity
 
-**Status:** **Approved 2026-11-22** (owner) - spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`). Amended 2026-11-22; **amended 2026-11-24** ("all as recommended", audience-predicate round): the regularity window moves onto the predicate, an unauthenticated caller sees `Everyone` only, `?ministry=` resolves through the legacy projection, and A-7 step 5 is all-or-nothing. (clarifying, migration round): the migration seeds **six** fixed system audiences, not seven — the A-2 table is the count of record (`Everyone`, `Presbyters`, `Children 0-12`, `Youth 13-17`, `Adults 18+`, `Visitors only`) plus one per ministry.
+**Status:** **Approved 2026-11-22** (owner) - spec review 2026-11-22: `deepseek-v4-pro:0813` **ACCEPT** (base `a71a50e`). Amended 2026-11-22; **amended 2026-11-24** ("all as recommended", audience-predicate round): the regularity window moves onto the predicate, an unauthenticated caller sees `Everyone` only, `?ministry=` resolves through the legacy projection, and A-7 step 5 is all-or-nothing. (clarifying, migration round): the migration seeds **six** fixed system audiences, not seven — the A-2 table is the count of record (`Everyone`, `Presbyters`, `Children 0-12`, `Youth 13-17`, `Adults 18+`, `Visitors only`) plus one per ministry. **Amended 2026-11-27** (cross-spec, adds no behaviour of its own): A-6 names the notifications lock — a write to an `active` event's audience is refused `409 event_locked` before this spec's rules are evaluated (`FR-39` of `member-registrations-event-notifications.md`).
 
 **Author:** Solomon Owoo
 
@@ -380,7 +380,9 @@ otherNames?, memberNo? }`. The phone is normalised by the existing phone rule an
 - There is no audience delete. Archiving is `{ active: false }`; an archived audience is hidden from the
   event picker, keeps resolving for the events that already reference it, and cannot be picked as a new
   `audienceId` (`422 validation_error`). An event that already references it keeps it when another field
-  is edited.
+  is edited. On an **`active`** event the write is refused earlier — `409 event_locked`, the notifications
+  lock (`FR-39` of `member-registrations-event-notifications.md`) — so no audience rule is evaluated there;
+  `Return to draft` releases the lock and the audience write is then judged as above.
 - `POST /v1/audiences` and `PUT` validate the rule against the closed attribute set; an unknown
   attribute, an unknown key, an empty `allOf`/`anyOf`/`noneOf`, an inverted or negative band, a
   non-`true` presbyter value or an unknown ministry code is `422 validation_error`.

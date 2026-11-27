@@ -155,13 +155,15 @@ code. No raw phone number is stored or logged.
   `8 A date`; an event links to attendance and giving) → `attendance` (opens **today's** status; a day /
   period / code; presbyters also `clocking` → clock in | expected | delegate) → `welfare & services`
   (opens the **top three eligible services**; `0 More` → all; `8 My services` → status and claimed
-  total) → `my profile` (demographics, ministries, attendance and shepherd) → `register` (code → name →
+  total) → `notifications` (the latest five messages, newest first, `0 More` → older, an item opening or marking
+  itself read and offering a mute; `8 Alert settings` → cadence, muted items, blocked channels) → `my profile`
+  (demographics, ministries, attendance and shepherd) → `register` (code → name →
   reference, anonymous only). Every top-level domain opens its primary content, never a choice screen;
   extra actions sit on that screen. On the Attendance status screen the extra actions are `1` a specific
   day, `2` period summary, `3` I was present (code) and, for presbyters, `4` clocking. There is one
   top-level entry per domain — no duplicate "my …" item beside its action. The anonymous main menu is
   Register, Offerings, Activities, Attendance, Exit; the member menu replaces Register with Welfare &
-  Services. `My Profile` gains `1 Verify contact` for an identified member (an owned phone or WhatsApp)
+  Services and gains **Notifications** immediately before My Profile. `My Profile` gains `1 Verify contact` for an identified member (an owned phone or WhatsApp)
   with any owned contact unproven and no officer confirmation; the `verify.sent` notice renders the `status.verification_sent`
   copy ("A code was sent to <mask>. Open the link we sent."), parents to `profile` and accepts no
   six-digit code entry (only `9 Back`).
@@ -202,6 +204,7 @@ fits.
 | `menu.activities`              | Activities                                                   | Activities      |
 | `menu.attendance`              | Attendance                                                   | Attendance      |
 | `menu.welfare`                 | Welfare & Services                                           | Welfare         |
+| `menu.notifications`           | Notifications                                                | Notifications   |
 | `menu.profile`                 | My Profile                                                   | Profile         |
 | `menu.register`                | Register                                                     | Register        |
 | `menu.exit`                    | Exit                                                         | Exit            |
@@ -324,6 +327,19 @@ fits.
 | `label.elders`                 | Elders                                                       |                 |
 | `label.deaconess`              | Deaconess                                                    |                 |
 | `label.deacons`                | Deacons                                                      |                 |
+| `notifications.empty`          | You have no notifications                                    | No messages     |
+| `notifications.open_event`     | Open event                                                   | Open            |
+| `notifications.mute_event`     | Mute this event                                              | Mute            |
+| `notifications.mute_period`    | Mute this period                                             | Mute            |
+| `notifications.mark_read`      | Mark read                                                    | Read            |
+| `notifications.duration`       | How long? 1 30 days 2 90 days 3 A year                       | How long?       |
+| `notifications.muted_until`    | Muted until                                                  | Muted           |
+| `notifications.flier`          | A flier is in your email or WhatsApp                         | Flier sent      |
+| `notifications.settings`       | Alert settings                                               | Settings        |
+| `notifications.cadence`        | Cadence                                                      | Alerts          |
+| `notifications.muted_items`    | Muted items                                                  | Muted           |
+| `notifications.blocked`        | Blocked channels                                             | Blocked         |
+| `notifications.unmute`         | Unmute                                                       | Unmute          |
 
 - **Zero events today.** When the selected day has no applicable event, the screen says `0 events today`
   and names the next applicable day within a **14-day** horizon: day 1 renders `1 event tomorrow`/`2
@@ -605,8 +621,8 @@ provider C repeats is the adapter, the registry line and the wiring priced above
 - `maxMsgChars` — the provider's published per-message character cap, overridable in configuration.
   It is also the **budget** the machine renders that provider's screens to (see "Message limits and
   truncation").
-- `pageSize` — how many paged rows the channel renders, per list: `{ events, offerings }` is
-  `{ 3, 5 }` for the 182 reference and `{ 2, 3 }` for Nalo's 120. The machine renders exactly the
+- `pageSize` — how many paged rows the channel renders, per list: `{ events, offerings, notifications }` is
+  `{ 3, 5, 5 }` for the 182 reference and `{ 2, 3, 3 }` for Nalo's 120. The machine renders exactly the
   supplied size; it never inspects a message cap.
 
 **The two adapters.** Two adapters ship: the **Nalo** adapter (below) and the existing **HMAC reference
@@ -620,11 +636,11 @@ route and config names are the ones adoption would use, and nothing by those nam
 specified so the next provider is one adapter and one registry line — plus the config and documentation
 wiring the declaration contract prices — rather than a redesign.
 
-| id       | route                             | auth                                                                 | `maxMsgChars`                                    | `pageSize` | status |
-| -------- | --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ | ---------- | ------ |
-| `hmac`   | `POST /ussd/session`              | HMAC-SHA-256 over `timestamp + nonce + body` (`USSD_GATEWAY_SECRET`) | 182 — the 7-bit payload cap (see the note below) | `{ 3, 5 }` | ships  |
-| `nalo`   | `POST /ussd/nalo`                 | configured `USERID`, no signature                                    | 120, `USSD_NALO_MAX_MSG_CHARS` (1–182)           | `{ 2, 3 }` | ships  |
-| `hubtel` | when adopted: `POST /ussd/hubtel` | **not settled** — see the option below                               | 182; planned `USSD_HUBTEL_MAX_MSG_CHARS` (1–182) | `{ 3, 5 }` | option |
+| id       | route                             | auth                                                                 | `maxMsgChars`                                    | `pageSize`    | status |
+| -------- | --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ | ------------- | ------ |
+| `hmac`   | `POST /ussd/session`              | HMAC-SHA-256 over `timestamp + nonce + body` (`USSD_GATEWAY_SECRET`) | 182 — the 7-bit payload cap (see the note below) | `{ 3, 5, 5 }` | ships  |
+| `nalo`   | `POST /ussd/nalo`                 | configured `USERID`, no signature                                    | 120, `USSD_NALO_MAX_MSG_CHARS` (1–182)           | `{ 2, 3, 3 }` | ships  |
+| `hubtel` | when adopted: `POST /ussd/hubtel` | **not settled** — see the option below                               | 182; planned `USSD_HUBTEL_MAX_MSG_CHARS` (1–182) | `{ 3, 5, 5 }` | option |
 
 **Hubtel (option, not adopted).** Hubtel is a candidate aggregator, specified here so the choice is a
 row rather than a rediscovery. This row adds **no route, no migration and no config of its own** to what
@@ -722,7 +738,7 @@ provider it is answering, within the internal ceiling (menu label ≤ 16, prompt
 `pageSize` on the session info the adapter rebuilds on every call, not on the stored session context,
 so a session that began on one provider cannot carry a stale budget into another. A frame with no
 declared cap renders to 182, which is the HMAC reference's budget. The channel also supplies its
-declared `pageSize` (`{ 3, 5 }` at 182, `{ 2, 3 }` at Nalo's 120): `pageSize` is an adapter field, **not**
+declared `pageSize` (`{ 3, 5, 5 }` at 182, `{ 2, 3, 3 }` at Nalo's 120): `pageSize` is an adapter field, **not**
 derived from `budget`, and the machine renders exactly the supplied size. The machine receives both
 numbers as supplied and reads no cap to derive either. Fitting `maxMsgChars` is not by itself a
 delivered screen: the shipped screens also carry glyphs outside the GSM 7-bit alphabet (`·`, `…`), and
@@ -892,6 +908,12 @@ remains a review artifact.
 
 ## Change log
 
+- 2026-11-27: the notifications surfaces join this spec, from `member-registrations-event-notifications.md`
+  (N-11): the identified member's menu gains **Notifications** immediately before My Profile (the anonymous menu
+  does not), the display glossary gains `menu.notifications` and the `notifications.*` keys its completeness test
+  requires, and the per-list `pageSize` map gains the inbox list — 5 rows at 182, 3 at Nalo's 120. No screen is
+  built here; the keys and the sizes are declared so the completeness and budget tests can cover them when it is.
+
 - 2026-11-19: the member can start verification from USSD. An identified member with an owned contact
   and no proof opens `My Profile > Verify contact`; the register sends the code and the acceptance-page
   link to the resolved channel and renders the `verify.sent` notice (masked destination and the link
@@ -965,7 +987,7 @@ remains a review artifact.
   the session remembers the last mode; entry is one labelled three-number line with tolerant separators;
   buckets are 0–10,000 with a 30,000 total and all-zero is allowed; a superseded observation remains
   valid for its `asOf`, and headcounts are operator-only. Activities uses a two-week next-events horizon,
-  an empty-week state, and a declared per-list `pageSize` (`{ events, offerings }` = `{ 3, 5 }` reference, `{ 2, 3 }` Nalo).
+  an empty-week state, and a declared per-list `pageSize` (`{ events, offerings, notifications }` = `{ 3, 5, 5 }` reference, `{ 2, 3, 3 }` Nalo).
 - 2026-11-05: the operator's "expected headcount" becomes a **headcount** — an actual count, never an
   expected figure — append-only with a mode (`adults`/`children`/`mixed`), six gender buckets, `total`,
   `asOf` and `supersedesId`; a correction supersedes without deleting. The register-derived `expected`
