@@ -41,35 +41,26 @@
     "01-events-list": {
       "mock": {
         "path": "mockups/v2-events/01-events-list.png",
-        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da",
+        "sha256": "22260df18165611b1f8468324e08a5ee0d84aeb1ea8ec31ed043f3d4a4408a6d",
         "source": "mockups/v2-events/01-events-list.html"
       },
-      "baseline": "events-list.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "dfadc7ed416dcf50e821b658632484cbb41abf23758c3ce0a4793bc9192469da"
-      }
+      "baseline": null,
+      "coverage": "target",
+      "previousBaseline": "events-list.png"
     },
     "10-event-create": {
       "mock": {
         "path": "mockups/v2-events/10-event-create.png",
-        "sha256": "406ad491d819c41ecf2955797234b4eb4bc859a37c3d9423f3eb373b3c4a1f74",
+        "sha256": "8f9c0d586a819a6cd5f4159ea2703d53f3590a24fe45bb1fe543865311ea121d",
         "source": "mockups/v2-events/10-event-create.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "406ad491d819c41ecf2955797234b4eb4bc859a37c3d9423f3eb373b3c4a1f74"
-      }
+      "coverage": "target"
     },
     "02-event-detail": {
       "mock": {
         "path": "mockups/v2-events/02-event-detail.png",
-        "sha256": "7c27535a8f4205e5025db6f0e790371fc144048e75298e187c0bd0e24f019190",
+        "sha256": "3d1ad277f5b1a12733d81d0b36fd5752f415762d04c886f5899ccae2c73d9387",
         "source": "mockups/v2-events/02-event-detail.html"
       },
       "baseline": null,
@@ -104,16 +95,12 @@
     "06-record-headcount-dialog": {
       "mock": {
         "path": "mockups/v2-events/06-record-headcount-dialog.png",
-        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7",
+        "sha256": "c65614ecf3bba3482d6cced3208ac971d92a942266d8662c947adb9c0f89e641",
         "source": "mockups/v2-events/03-activity-detail.html"
       },
-      "baseline": "event-headcount-dialog.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-22",
-        "sha256": "41ede1e4f99dc5cfc32f6e2407904b360e6f6e81b6a26144b6b65e3c337c22e7"
-      }
+      "baseline": null,
+      "coverage": "target",
+      "previousBaseline": "event-headcount-dialog.png"
     },
     "07-import-attendance-panel": {
       "mock": {
@@ -132,7 +119,7 @@
     "12-audience-dialog": {
       "mock": {
         "path": "mockups/v2-events/12-audience-dialog.png",
-        "sha256": "5b91e33fdd23f91079659b62ef95b950ff25e37d732dc54f99a1e31a62943b7d",
+        "sha256": "c45feea47bef5cfd277b545a1862700deedc7f91abc2470d0aff56806f1dc1e0",
         "source": "mockups/v2-events/12-audience-dialog.html"
       },
       "baseline": null,
@@ -141,7 +128,7 @@
     "13-event-detail-draft": {
       "mock": {
         "path": "mockups/v2-events/13-event-detail-draft.png",
-        "sha256": "00fec6cb44703efca2783c0ddfb948abfeb9e1fd3f529744eeb93b17007829d6",
+        "sha256": "0abd36d989fb2b2fec58ccc980ee54d7c1b128375092ec7c3547dc3323ab0ee0",
         "source": "mockups/v2-events/13-event-detail-draft.html"
       },
       "baseline": null,
@@ -150,7 +137,7 @@
     "14-event-detail-archived": {
       "mock": {
         "path": "mockups/v2-events/14-event-detail-archived.png",
-        "sha256": "5dc7d095709050f20722e0a6591d7630ee933a39566e1ca2726848cef8b49a16",
+        "sha256": "bc776e61c9914e1e3d86bf30314a4ffd122b4720f4455ebef788b40aa73b2d1c",
         "source": "mockups/v2-events/14-event-detail-archived.html"
       },
       "baseline": null,
@@ -159,105 +146,71 @@
     "10-event-create-daily": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-daily.png",
-        "sha256": "ab6945dddaf813ae38c55ec677ddebff4123df46c72a60ff92cf321178904ad1",
+        "sha256": "433f785c3b644a600c835d4afbd6a1b64bf945d7ed1857e2967aa0e79668639b",
         "source": "mockups/v2-events/10-event-create-daily.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "ab6945dddaf813ae38c55ec677ddebff4123df46c72a60ff92cf321178904ad1"
-      }
+      "coverage": "target"
     },
     "10-event-create-monthly": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-monthly.png",
-        "sha256": "6f90292fe8dda018024eb7143ba15c9e1f276e8cdb4049b7e597df737b230333",
+        "sha256": "d342dbab9ee6975e95a7bcffdaf3b09c471881f196a021842eaca57282aa0406",
         "source": "mockups/v2-events/10-event-create-monthly.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "6f90292fe8dda018024eb7143ba15c9e1f276e8cdb4049b7e597df737b230333"
-      }
+      "coverage": "target"
     },
     "10-event-create-period": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-period.png",
-        "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5",
+        "sha256": "54a1330e00298c55b42621ee8dbb04ac136234bc7c77790c9321164b3e0b848c",
         "source": "mockups/v2-events/10-event-create-period.html"
       },
-      "baseline": "events-new-period.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "3f0c3c2e43a4c019b4aa2b51115fa399eaf79821a167ffcd5fb268c9ee7cf1d5"
-      }
+      "baseline": null,
+      "coverage": "target",
+      "previousBaseline": "events-new-period.png"
     },
     "10-event-create-no-match": {
       "mock": {
         "path": "mockups/v2-events/10-event-create-no-match.png",
-        "sha256": "6639a994d3663bbef58c5e38ce06a8a76c112c3a198c428683aa3318d0d33dea",
+        "sha256": "a384b46eb1536bb55207fedad290868dbd340ca3959d4e28c22240b27f2254d0",
         "source": "mockups/v2-events/10-event-create-no-match.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "6639a994d3663bbef58c5e38ce06a8a76c112c3a198c428683aa3318d0d33dea"
-      }
+      "coverage": "target"
     },
     "16-event-edit": {
       "mock": {
         "path": "mockups/v2-events/16-event-edit.png",
-        "sha256": "8ec3f954443bb186cfa2f35034711cc02a16352b4dba15d15d1ed6cd03a103f5",
+        "sha256": "8e77cc818fc667a2412f47190efd8ed7df69435c50024647f5fe997abab78b5a",
         "source": "mockups/v2-events/16-event-edit.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "8ec3f954443bb186cfa2f35034711cc02a16352b4dba15d15d1ed6cd03a103f5"
-      }
+      "coverage": "target"
     },
     "17-event-edit-locked": {
       "mock": {
         "path": "mockups/v2-events/17-event-edit-locked.png",
-        "sha256": "32d65ad838d3edab61e481cac087e866f537a4c126ff3ea56ec7c5386a946cad",
+        "sha256": "d3a02f3d957ea933d3b81989032ebacf986fab248361e3a57f54976b4c971974",
         "source": "mockups/v2-events/17-event-edit-locked.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "32d65ad838d3edab61e481cac087e866f537a4c126ff3ea56ec7c5386a946cad"
-      }
+      "coverage": "target"
     },
     "18-event-create-standalone": {
       "mock": {
         "path": "mockups/v2-events/18-event-create-standalone.png",
-        "sha256": "cdfc7b5f4c5cd1c87445e89134bc33dc81bbc7bb903cf346acaa265db7e3b78e",
+        "sha256": "d73f5abca15139ddfe6ad19a5fbc167aea2eccfac0f7d3144638efe68484dd60",
         "source": "mockups/v2-events/18-event-create-standalone.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "cdfc7b5f4c5cd1c87445e89134bc33dc81bbc7bb903cf346acaa265db7e3b78e"
-      }
+      "coverage": "target"
     },
     "19-event-edit-standalone": {
       "mock": {
         "path": "mockups/v2-events/19-event-edit-standalone.png",
-        "sha256": "e7d599efce070bdf5944a60eb8d605e934884ca8c8680c32769877177e16a622",
+        "sha256": "6ad5c142ca393fdb311f031fe1d814fb68c8eb22474e925791df526ebe5a9c37",
         "source": "mockups/v2-events/19-event-edit-standalone.html"
       },
       "baseline": null,
@@ -266,124 +219,87 @@
     "20-event-preview-dialog": {
       "mock": {
         "path": "mockups/v2-events/20-event-preview-dialog.png",
-        "sha256": "f366424aa4c63a7f49c8fd5a3559ee974ffe55599864479ea348f19694e460f6",
+        "sha256": "43f160d37e94418a5a3cd022fc93ed8489c12bf64680d844f93064f561b1cb4c",
         "source": "mockups/v2-events/20-event-preview-dialog.html"
       },
       "baseline": null,
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "f366424aa4c63a7f49c8fd5a3559ee974ffe55599864479ea348f19694e460f6"
-      }
+      "coverage": "target"
     },
     "21-event-create-period-recurring": {
       "mock": {
         "path": "mockups/v2-events/21-event-create-period-recurring.png",
-        "sha256": "702e883cdda75a450e57fe13a79b2095d446bc0c2c0c2eec31a0de1866b1cb88",
+        "sha256": "fef7f94456126b60fc3e8f02ea668d0a03891ce94cb33855a1da70a9811b7290",
         "source": "mockups/v2-events/21-event-create-period-recurring.html"
       },
-      "baseline": "events-new-period-monthly.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-25",
-        "sha256": "702e883cdda75a450e57fe13a79b2095d446bc0c2c0c2eec31a0de1866b1cb88"
-      }
+      "baseline": null,
+      "coverage": "target",
+      "previousBaseline": "events-new-period-monthly.png"
     },
     "22-event-detail-period": {
       "mock": {
         "path": "mockups/v2-events/22-event-detail-period.png",
-        "sha256": "185c79d91de99bd3f1ad5c5eea87786140db5f42f1bba40d0fb774f02ee39fcd",
+        "sha256": "3b81db6890610ffa5648f101471dc574c5db12e54b9fc8ed435565a05905c076",
         "source": "mockups/v2-events/22-event-detail-period.html"
       },
-      "baseline": "event-detail-period.png",
-      "coverage": "signed",
-      "signed": {
-        "by": "owner",
-        "at": "2026-11-26",
-        "sha256": "185c79d91de99bd3f1ad5c5eea87786140db5f42f1bba40d0fb774f02ee39fcd"
-      }
-    },
-    "27-event-detail-notifications": {
-      "mock": {
-        "path": "mockups/v2-events/27-event-detail-notifications.png",
-        "sha256": "0b5e595831f83bf45694c3f7e0b943d26417b74a00e1b206a2990d73e7bbd1a5",
-        "source": "mockups/v2-events/27-event-detail-notifications.html"
-      },
       "baseline": null,
-      "coverage": "auto-signed",
-      "autoSigned": {
-        "by": "unattended",
-        "at": "2026-11-26",
-        "sha256": "0b5e595831f83bf45694c3f7e0b943d26417b74a00e1b206a2990d73e7bbd1a5",
-        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
-        "note": "the Notifications panel on an active published event"
-      }
+      "coverage": "target",
+      "previousBaseline": "event-detail-period.png"
     },
     "28-notification-plan-form": {
       "mock": {
         "path": "mockups/v2-events/28-notification-plan-form.png",
-        "sha256": "247939aa0739f77f73079685c4dc40433339be9b45536252d1234ed57f485a72",
+        "sha256": "3156948fb345fc2a3430738f9b7c1b718497580ed3ed834b46b993a95a7947c5",
         "source": "mockups/v2-events/28-notification-plan-form.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "autoSigned": {
-        "by": "unattended",
-        "at": "2026-11-26",
-        "sha256": "247939aa0739f77f73079685c4dc40433339be9b45536252d1234ed57f485a72",
-        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
-        "note": "the plan form: slots and the four channel editors"
-      }
+      "coverage": "target"
     },
     "29-notification-preview": {
       "mock": {
         "path": "mockups/v2-events/29-notification-preview.png",
-        "sha256": "3bbf8aacbcadb9f3f17dc512d2646bd9e596633c3b07505eb8ee06f7d7fa07a2",
+        "sha256": "17a2bfa00e01a6cfca2ad974b4ca8a678b1e68971731872a569e4134d70104eb",
         "source": "mockups/v2-events/29-notification-preview.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "autoSigned": {
-        "by": "unattended",
-        "at": "2026-11-26",
-        "sha256": "3bbf8aacbcadb9f3f17dc512d2646bd9e596633c3b07505eb8ee06f7d7fa07a2",
-        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
-        "note": "the preview: four rendered bodies, counts and exclusions"
-      }
+      "coverage": "target"
     },
     "30-notification-publish-dialog": {
       "mock": {
         "path": "mockups/v2-events/30-notification-publish-dialog.png",
-        "sha256": "4e10817af83ea0a50109763cd2e57d21d78d97441c8e73e771c496bd1a90399a",
+        "sha256": "30a402187e13282fb5f398b789843d2e8837724af6459004f8843ed088e5e89d",
         "source": "mockups/v2-events/30-notification-publish-dialog.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "autoSigned": {
-        "by": "unattended",
-        "at": "2026-11-26",
-        "sha256": "4e10817af83ea0a50109763cd2e57d21d78d97441c8e73e771c496bd1a90399a",
-        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
-        "note": "the publish dialog with the deferral list and the acknowledgement"
-      }
+      "coverage": "target"
     },
     "31-notification-change-notice": {
       "mock": {
         "path": "mockups/v2-events/31-notification-change-notice.png",
-        "sha256": "bb3d15606487a34462a47453c6c55408bacf49c951ec7d1ba861042fae3ba1a8",
+        "sha256": "56f9591c950c906a05685c3ead6abb916c0c5f5053320a8532736607c07b2438",
         "source": "mockups/v2-events/31-notification-change-notice.html"
       },
       "baseline": null,
-      "coverage": "auto-signed",
-      "autoSigned": {
-        "by": "unattended",
-        "at": "2026-11-26",
-        "sha256": "bb3d15606487a34462a47453c6c55408bacf49c951ec7d1ba861042fae3ba1a8",
-        "basis": "Unattended round under AGENTS.md section 17: the images were cut from the approved notification spec (N-12, FR-16, FR-17, FR-19) and the R3 send path, shell-checked and captured against the set frame. Auto-signed so the round can close; the owner's review at the end of the unattended work confirms or drops these to target.",
-        "note": "the change notice as its own body per channel"
-      }
+      "coverage": "target"
+    },
+    "27-notifications-landing": {
+      "mock": {
+        "path": "mockups/v2-events/27-notifications-landing.png",
+        "sha256": "51dac4a5b59e90e69356b0f2ba069ca7b30edf6a562ddc7132a7c0998c62f62f",
+        "source": "mockups/v2-events/27-notifications-landing.html"
+      },
+      "baseline": null,
+      "coverage": "target",
+      "note": "the Notifications landing page under Events"
+    },
+    "32-event-detail-notification-card": {
+      "mock": {
+        "path": "mockups/v2-events/32-event-detail-notification-card.png",
+        "sha256": "883188a75ea062e12719d5254aae3e45e935622bdacf9a1ac02746a690fba267",
+        "source": "mockups/v2-events/32-event-detail-notification-card.html"
+      },
+      "baseline": null,
+      "coverage": "target",
+      "note": "the summary card the event detail keeps"
     }
   },
   "inventory": [
