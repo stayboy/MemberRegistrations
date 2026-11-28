@@ -1006,7 +1006,9 @@ cadence_too_coarse` when the deployed trigger cadence is coarser than 15 minutes
   authorisation, and the request MUST record **how** it was given - in person, by phone, or by USSD code - with the
   actor, the reference and the time, in `notification_preference_events`. That table MUST carry `authorised_via`
   (`in_person | phone | ussd_code`) and `reference`, both nullable so the other preference writes are unaffected; a lift
-  MUST set both. The row is revoked, never deleted, and the member's next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference,
+  MUST set both. A lift of a row that is already revoked or has expired MUST answer `409 preference_not_live`: there
+  is nothing to lift, and a second lift is not a second authorisation. The row is revoked, never deleted, and the
+  member's next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference,
   it does not wire a provider.
 - **FR-45 (retry route).** `POST /v1/notification-deliveries/{id}/retry` MUST accept only a `failed` delivery whose
   `last_error_code` is `transport_unavailable` - the dead-lettered code - and MUST refuse a terminal failure
@@ -1617,7 +1619,9 @@ migration and API rounds and are exempt, because none of them alters a screen.
   code of its own, because FR-52 gives refusals one code. The delivery row carries the member and the event, and no
   slot kind: the signed grid has no column for one. AC-51's on-demand digest refusal is named
   `409 digest_unconfigured`, because every other refusal in the file carries a stable code and "its reason" alone
-  leaves the handler to invent one.
+  leaves the handler to invent one. The member-scoped amendment then contracted what the signed drawer and lift
+  actually call - the three reads and the two revokes - and named the lift's refusal `409 preference_not_live` for
+  the same reason.
 - **2026-11-26 (R3 amendment 8).** `notification_plan_revisions_published_check` becomes one-way
   (`status <> 'published' or published_at is not null`). The biconditional made `cancel` unrepresentable: setting a
   published revision to `cancelled` while retaining the publish stamp failed `(false) = (true)`, so the only way to

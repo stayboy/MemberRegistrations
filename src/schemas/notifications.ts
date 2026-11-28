@@ -403,19 +403,57 @@ export const notificationSummarySchema = z.object({
 });
 
 /**
- * One cross-event row: the delivery plus the event and slot kind it belongs to,
- * with the member named. The destination stays masked, so a failed row is traced
- * to the person and never to a contact value (AC-53, FR-35).
+ * One delivery row with the member and the event named: the cross-event grid's
+ * row, and the drawer's Deliveries tab, which groups rows per event by
+ * `eventId`. The destination stays masked, so a failed row is traced to the
+ * person and never to a contact value (AC-53, FR-35).
  */
 export const notificationDeliveryRowSchema = notificationDeliverySchema.extend({
   /** The member's name, beside `memberNo`. */
   displayName: z.string(),
   /** The event the delivery belongs to, which the grid's Event column names. */
   eventName: z.string(),
+  /**
+   * The event's id, so the drawer's Deliveries tab groups rows per event by a
+   * stable key rather than the display name (FR-51).
+   */
+  eventId: z.string(),
 });
 
 export const notificationDeliveryListSchema = z.object({
   items: z.array(notificationDeliveryRowSchema),
+  nextCursor: z.string().optional(),
+});
+
+/**
+ * One message in a member's inbox (FR-51, AC-55). `bodyText` is the rendered
+ * body the member received: an event notification is a broadcast and not
+ * private, so an officer may read it (owner, 2026-11-27). Reading this list
+ * never sets `read_at` - only the member's own read does.
+ */
+export const notificationInboxMessageSchema = z.object({
+  id: z.string(),
+  /** `event` is a slot's broadcast; `system` is a notice with no event (N-14). */
+  kind: z.enum(['event', 'system']),
+  /** The derived title: the event name and slot kind, or the system notice's title. */
+  title: z.string(),
+  /** The rendered body, as the text the member received. */
+  bodyText: z.string(),
+  eventId: z.string().nullable(),
+  eventName: z.string().nullable(),
+  instanceId: z.string().nullable(),
+  /** The slot the message came from; null for a system message. */
+  slotKind: z.enum(['announce', 'reminder', 'starts', 'last', 'change']).nullable(),
+  /** The instant its instance was due, which the drawer dates the message by; null for a system message. */
+  sentAt: z.string().nullable(),
+  createdAt: z.string(),
+  /** Null while unread; set only by the member's own read, never by this read. */
+  readAt: z.string().nullable(),
+});
+
+/** Pending first, then read; cursor-paged and `Cache-Control: no-store`. */
+export const notificationInboxListSchema = z.object({
+  items: z.array(notificationInboxMessageSchema),
   nextCursor: z.string().optional(),
 });
 
@@ -430,7 +468,12 @@ export const notificationPreferenceRowSchema = z.object({
   kind: z.enum(['event_mute', 'period_mute', 'channel_block']),
   memberNo: z.string(),
   displayName: z.string(),
-  /** The event or period a mute covers; null for a channel block. */
+  /**
+   * The mute's stable scope id (`notification_mutes.scope_id`): the event or
+   * period it covers. Null for a channel block, which covers a channel instead.
+   */
+  scopeId: z.string().nullable(),
+  /** The scope's display name, never an id. Null for a channel block. */
   scope: z.string().nullable(),
   /** The blocked channel; null for a mute. */
   channel: z.enum(['email', 'sms', 'whatsapp']).nullable(),
@@ -442,6 +485,43 @@ export const notificationPreferenceRowSchema = z.object({
 
 export const notificationPreferenceListSchema = z.object({
   items: z.array(notificationPreferenceRowSchema),
+});
+
+/**
+ * `GET /v1/members/{memberNo}/notification-settings`: the drawer's cadence
+ * line and its live mutes and blocks, in the same row shape the page's live
+ * list uses so a lift names the same id (FR-51, AC-54). A member with no
+ * settings row reads `all`, the default.
+ */
+export const memberNotificationSettingsSchema = z.object({
+  memberNo: z.string(),
+  displayName: z.string(),
+  /** `all`, `essential` or `minimal` (FR-10). */
+  cadence: z.enum(['all', 'essential', 'minimal']),
+  /** When the cadence was last written; null while it is the default. */
+  updatedAt: z.string().nullable(),
+  /** That member's live `event_mute` and `period_mute` rows only. */
+  mutes: z.array(notificationPreferenceRowSchema),
+  /** That member's live `channel_block` rows only. */
+  blocks: z.array(notificationPreferenceRowSchema),
+});
+
+/**
+ * FR-50's lift, shared by the mute and block revokes. Both fields are required
+ * here - a lift without them is not a lift - and land in
+ * `notification_preference_events` with the actor and the time.
+ */
+export const notificationPreferenceRevokeInputSchema = z.object({
+  /** How the member gave it: in person, by phone, or by USSD code. */
+  authorisedVia: z.enum(['in_person', 'phone', 'ussd_code']),
+  /** What the member said or gave, in their own words. */
+  reference: z.string().trim().min(1),
+});
+
+/** The revoked row: revoked, never deleted, so `revokedAt` proves the lift. */
+export const notificationPreferenceRevokeResultSchema = notificationPreferenceRowSchema.extend({
+  revokedAt: z.string(),
+  revokedBy: z.string(),
 });
 
 /**
@@ -468,6 +548,10 @@ export const NOTIFICATION_MAX_BULK_RETRY = 100;
  * The explicit ids the officer saw — never a filter. An id that is no longer
  * `failed`, or whose failure is terminal, comes back refused rather than being
  * silently retried (FR-53).
+ *
+ * `.max` is a contract statement, not the whole rule: a body carrying more than
+ * 100 ids must be refused `422 batch_too_large`, not the generic
+ * `validation_error`, so the handler owes that mapping (FR-53, AC-57).
  */
 export const notificationBulkRetryInputSchema = z.object({
   ids: z.array(z.string()).min(1).max(NOTIFICATION_MAX_BULK_RETRY),
@@ -496,7 +580,16 @@ export type NotificationDelivery = z.infer<typeof notificationDeliverySchema>;
 export type NotificationCounts = z.infer<typeof notificationCountsSchema>;
 export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
 export type NotificationDeliveryRow = z.infer<typeof notificationDeliveryRowSchema>;
+export type NotificationInboxMessage = z.infer<typeof notificationInboxMessageSchema>;
+export type NotificationInboxList = z.infer<typeof notificationInboxListSchema>;
 export type NotificationPreferenceRow = z.infer<typeof notificationPreferenceRowSchema>;
+export type MemberNotificationSettings = z.infer<typeof memberNotificationSettingsSchema>;
+export type NotificationPreferenceRevokeInput = z.infer<
+  typeof notificationPreferenceRevokeInputSchema
+>;
+export type NotificationPreferenceRevokeResult = z.infer<
+  typeof notificationPreferenceRevokeResultSchema
+>;
 export type NotificationDigestResult = z.infer<typeof notificationDigestResultSchema>;
 export type NotificationReplayResult = z.infer<typeof notificationReplayResultSchema>;
 export type NotificationBulkRetryInput = z.infer<typeof notificationBulkRetryInputSchema>;

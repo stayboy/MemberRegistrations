@@ -173,6 +173,7 @@ import {
   rosterSchema,
 } from './schemas/shepherding.js';
 import {
+  memberNotificationSettingsSchema,
   notificationBulkRetryInputSchema,
   notificationBulkRetryResultSchema,
   notificationBulkRetryRowSchema,
@@ -188,10 +189,14 @@ import {
   notificationDeliverySchema,
   notificationDigestResultSchema,
   notificationFlierSchema,
+  notificationInboxListSchema,
+  notificationInboxMessageSchema,
   notificationInstanceSchema,
   notificationPlanSchema,
   notificationPlanWriteSchema,
   notificationPreferenceListSchema,
+  notificationPreferenceRevokeInputSchema,
+  notificationPreferenceRevokeResultSchema,
   notificationPreferenceRowSchema,
   notificationPreviewSchema,
   notificationPublishInputSchema,
@@ -852,6 +857,7 @@ const notificationDeliveryRowExample = {
   ...notificationDeliveryExample,
   displayName: 'Ada Mensah',
   eventName: 'The Convention',
+  eventId: notificationPlanExample.eventId,
 };
 
 const notificationDeliveryListExample = {
@@ -866,6 +872,7 @@ const notificationPreferenceListExample = {
       kind: 'event_mute',
       memberNo: 'M-1042',
       displayName: 'Ada Mensah',
+      scopeId: notificationPlanExample.eventId,
       scope: 'The Convention',
       channel: null,
       expiresAt: '2026-12-20T09:00:00.000Z',
@@ -876,12 +883,88 @@ const notificationPreferenceListExample = {
       kind: 'channel_block',
       memberNo: 'M-2001',
       displayName: 'Kofi Boateng',
+      scopeId: null,
       scope: null,
       channel: 'sms',
       expiresAt: '2027-02-24T13:00:00.000Z',
       source: 'admin',
     },
   ],
+};
+
+/**
+ * The drawer's inbox: one pending message with its rendered body, then one the
+ * member has read. Opening the drawer writes nothing, so the second keeps its
+ * own `readAt`.
+ */
+const notificationInboxMessageExample = {
+  id: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+  kind: 'event',
+  title: 'Carols by Candlelight · Reminder',
+  bodyText:
+    'Join us for Carols by Candlelight on Sunday 21 December at 6:00 pm in the Main Hall. A flier is in your email.',
+  eventId: notificationPlanExample.eventId,
+  eventName: 'Carols by Candlelight',
+  instanceId: notificationInstanceExample.id,
+  slotKind: 'reminder',
+  sentAt: '2026-11-25T14:00:00.000Z',
+  createdAt: '2026-11-25T14:00:00.000Z',
+  readAt: null,
+};
+
+const notificationInboxListExample = {
+  items: [
+    notificationInboxMessageExample,
+    {
+      id: '2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7e',
+      kind: 'event',
+      title: 'Sunday Service · Reminder',
+      bodyText: 'This Sunday we meet at 09:00 in the Main Hall. Doors open at 08:30.',
+      eventId: '1b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c6d',
+      eventName: 'Sunday Service',
+      instanceId: '3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8f',
+      slotKind: 'reminder',
+      sentAt: '2026-11-23T08:00:00.000Z',
+      createdAt: '2026-11-23T08:00:00.000Z',
+      readAt: '2026-11-23T18:42:00.000Z',
+    },
+    {
+      // The system branch: no event, no instance, no slot kind and no due instant,
+      // which the schema allows and the drawer renders without an event line.
+      id: '4d5e6f70-8192-4b0c-9d3e-5f6a7b8c9d0e',
+      kind: 'system',
+      title: 'Verification code sent',
+      bodyText: 'A code was sent to your WhatsApp. Open the link we sent.',
+      eventId: null,
+      eventName: null,
+      instanceId: null,
+      slotKind: null,
+      sentAt: null,
+      createdAt: '2026-11-25T09:12:00.000Z',
+      readAt: null,
+    },
+  ],
+  nextCursor: 'M-1042:2026-11-23T08:00:00.000Z:2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7e',
+};
+
+const memberNotificationSettingsExample = {
+  memberNo: 'M-1042',
+  displayName: 'Ada Mensah',
+  cadence: 'essential',
+  updatedAt: '2026-11-19T07:30:00.000Z',
+  mutes: [notificationPreferenceListExample.items[0]],
+  blocks: [],
+};
+
+const notificationPreferenceRevokeExample = {
+  authorisedVia: 'in_person',
+  reference: 'Asked after the 26 Nov service',
+};
+
+const notificationPreferenceRevokeResultExample = {
+  ...notificationPreferenceListExample.items[0],
+  revokedAt: '2026-11-27T10:20:00.000Z',
+  revokedBy: 'test-admin',
 };
 
 const notificationDigestResultExample = {
@@ -1266,8 +1349,16 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         NotificationSummary: toSchema(notificationSummarySchema, 'output'),
         NotificationDeliveryRow: toSchema(notificationDeliveryRowSchema, 'output'),
         NotificationDeliveryList: toSchema(notificationDeliveryListSchema, 'output'),
+        NotificationInboxMessage: toSchema(notificationInboxMessageSchema, 'output'),
+        NotificationInboxList: toSchema(notificationInboxListSchema, 'output'),
         NotificationPreferenceRow: toSchema(notificationPreferenceRowSchema, 'output'),
         NotificationPreferenceList: toSchema(notificationPreferenceListSchema, 'output'),
+        MemberNotificationSettings: toSchema(memberNotificationSettingsSchema, 'output'),
+        NotificationPreferenceRevoke: toSchema(notificationPreferenceRevokeInputSchema, 'input'),
+        NotificationPreferenceRevokeResult: toSchema(
+          notificationPreferenceRevokeResultSchema,
+          'output',
+        ),
         NotificationDigestResult: toSchema(notificationDigestResultSchema, 'output'),
         NotificationReplayResult: toSchema(notificationReplayResultSchema, 'output'),
         NotificationBulkRetry: toSchema(notificationBulkRetryInputSchema, 'input'),
@@ -4382,6 +4473,183 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         },
       },
 
+      '/v1/members/{memberNo}/notifications': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'A member’s inbox, pending first',
+          description:
+            'That member’s messages, **pending first and then read**, newest first within each group, cursor-paged. Each carries the **rendered body** it received — an event notification is a broadcast and not private, so an officer may read it (owner, 2026-11-27) — its event and slot kind, and its read state, `readAt` being null while unread. This read **never sets `read_at`**: only the member’s own read marks a message read, so opening the drawer writes nothing. A member that does not exist is a 404. The response carries `Cache-Control: no-store`.',
+          parameters: [{ name: 'cursor', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            200: {
+              description: 'A page of messages, pending first.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationInboxList'),
+                  examples: {
+                    inbox: {
+                      summary: 'A pending event message, a read one, and a system notice',
+                      value: notificationInboxListExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/notification-deliveries': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'That member’s deliveries, event named for grouping',
+          description:
+            'That member’s deliveries, newest first, cursor-paged, each with its **masked** destination so no contact value is exposed. Every row names its event through `eventId` and `eventName`, so the drawer groups them per event by a stable id rather than a display name, and a group’s **Retry all failed** sends the explicit ids it saw. A member that does not exist is a 404. The response carries `Cache-Control: no-store`.',
+          parameters: [{ name: 'cursor', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            200: {
+              description: 'A page of that member’s deliveries with the event named.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationDeliveryList'),
+                  examples: {
+                    page: {
+                      summary: 'One failed SMS for the member’s event',
+                      value: notificationDeliveryListExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/notification-settings': {
+        parameters: [memberNoParam],
+        get: {
+          summary: 'A member’s cadence and live mutes and blocks',
+          description:
+            'The member’s cadence (`all`, `essential` or `minimal`; `all` when they never set one) and their **live** mutes and channel blocks, in the same row shape the page’s live list uses so a lift names the row’s id. The drawer shows this beside the inbox; the read writes nothing. A member with no settings row still answers, with the default cadence and empty lists; a member that does not exist is a 404. The response carries `Cache-Control: no-store`.',
+          responses: {
+            200: {
+              description: 'The cadence and that member’s live preference rows.',
+              content: {
+                'application/json': {
+                  schema: ref('MemberNotificationSettings'),
+                  examples: {
+                    member: {
+                      summary: 'An essential cadence and one live mute',
+                      value: memberNotificationSettingsExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/notification-mutes/{id}/revoke': {
+        parameters: [memberNoParam, idParam('id')],
+        post: {
+          summary: 'Lift a live mute, recording the member’s authorisation',
+          description:
+            'Lifts a live mute before its end date, which needs the member’s own authorisation: the request **must** carry `authorisedVia` (`in_person`, `phone` or `ussd_code`) and `reference`, and the audit in `notification_preference_events` records both, the actor from `X-Actor-Id` and the time. The mute row is **revoked, never deleted**, so the result carries `revokedAt` and `revokedBy`, and the member’s next matching instance reaches them again. A row already revoked or expired answers `409 preference_not_live`. The result is the revoked row.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: ref('NotificationPreferenceRevoke'),
+                examples: {
+                  inPerson: {
+                    summary: 'Authorised in person',
+                    value: notificationPreferenceRevokeExample,
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'The revoked mute row.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPreferenceRevokeResult'),
+                  examples: {
+                    revoked: {
+                      summary: 'A mute lifted in person',
+                      value: notificationPreferenceRevokeResultExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The mute is already revoked or has expired, so there is nothing to lift (preference_not_live).',
+            ),
+            422: validation,
+          },
+        },
+      },
+
+      '/v1/members/{memberNo}/channel-blocks/{id}/revoke': {
+        parameters: [memberNoParam, idParam('id')],
+        post: {
+          summary: 'Lift a live channel block, recording the member’s authorisation',
+          description:
+            'Lifts a live channel block before its end date, which needs the member’s own authorisation: the request **must** carry `authorisedVia` (`in_person`, `phone` or `ussd_code`) and `reference`, and the audit in `notification_preference_events` records both, the actor from `X-Actor-Id` and the time. The block row is **revoked, never deleted**, so the result carries `revokedAt` and `revokedBy`, and the member’s next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference, it does not wire a provider. A row already revoked or expired answers `409 preference_not_live`. The result is the revoked row.',
+          parameters: [actorHeader],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: ref('NotificationPreferenceRevoke'),
+                examples: {
+                  inPerson: {
+                    summary: 'Authorised in person',
+                    value: notificationPreferenceRevokeExample,
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'The revoked block row.',
+              content: {
+                'application/json': {
+                  schema: ref('NotificationPreferenceRevokeResult'),
+                  examples: {
+                    revoked: {
+                      summary: 'A block lifted by phone',
+                      value: notificationPreferenceRevokeResultExample,
+                    },
+                  },
+                },
+              },
+            },
+            401: unauthorized,
+            404: notFound,
+            409: problem(
+              'The block is already revoked or has expired, so there is nothing to lift (preference_not_live).',
+            ),
+            422: validation,
+          },
+        },
+      },
+
       '/v1/events/{eventId}/notification-plan': {
         parameters: [idParam('eventId')],
         get: {
@@ -4637,7 +4905,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         post: {
           summary: 'Retry up to 100 failed deliveries by explicit id (audited)',
           description:
-            'The page’s “Retry all failed”, by the **explicit ids** the officer saw and never by a filter. Each id is re-checked against the live row — still `failed`, still `transport_unavailable` — and a row that is no longer failed, whose failure is terminal, or that no longer exists is reported **refused** rather than silently retried; the response names both counts and every id’s outcome. The actor is recorded per retried row in `notification_delivery_events`. One call carries at most 100 ids.',
+            'The page’s “Retry all failed”, by the **explicit ids** the officer saw and never by a filter. Each id is re-checked against the live row — still `failed`, still `transport_unavailable` — and a row that is no longer failed, whose failure is terminal, or that no longer exists is reported **refused** rather than silently retried; the response names both counts and every id’s outcome. The actor is recorded per retried row in `notification_delivery_events`. One call carries at most 100 ids: a body of more than 100 answers `422 batch_too_large`, not the generic `validation_error`, because the cap is a policy refusal rather than a malformed body.',
           parameters: [actorHeader],
           requestBody: {
             required: true,
