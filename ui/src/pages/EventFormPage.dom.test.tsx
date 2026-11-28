@@ -1302,6 +1302,12 @@ describe('EventFormPage edit (FR-42b, AC-56, AC-63)', () => {
     await waitForDefaultAudience();
 
     await user.type(screen.getByLabelText(/^Name/), 'Harvest');
+    // Row 1 defaults to today, so pin it: otherwise the second row's date collides
+    // with it whenever the calendar reaches that date, and the validator reports two
+    // duplicate pairs where this test means to assert one.
+    fireEvent.change(screen.getByLabelText('Occurrence 1 date'), {
+      target: { value: '2026-12-05' },
+    });
     await user.click(screen.getByRole('button', { name: 'Add date' }));
     fireEvent.change(screen.getByLabelText('Occurrence 2 date'), {
       target: { value: '2026-11-28' },

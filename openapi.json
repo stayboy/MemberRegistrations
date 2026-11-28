@@ -15846,6 +15846,9 @@
           },
           "eventName": {
             "type": "string"
+          },
+          "eventId": {
+            "type": "string"
           }
         },
         "required": [
@@ -15864,7 +15867,8 @@
           "sentAt",
           "createdAt",
           "displayName",
-          "eventName"
+          "eventName",
+          "eventId"
         ],
         "additionalProperties": false
       },
@@ -15950,6 +15954,9 @@
                 },
                 "eventName": {
                   "type": "string"
+                },
+                "eventId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -15968,7 +15975,143 @@
                 "sentAt",
                 "createdAt",
                 "displayName",
-                "eventName"
+                "eventName",
+                "eventId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "NotificationInboxMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["event", "system"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "bodyText": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": ["string", "null"]
+          },
+          "eventName": {
+            "type": ["string", "null"]
+          },
+          "instanceId": {
+            "type": ["string", "null"]
+          },
+          "slotKind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["announce", "reminder", "starts", "last", "change"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": ["string", "null"]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "readAt": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "bodyText",
+          "eventId",
+          "eventName",
+          "instanceId",
+          "slotKind",
+          "sentAt",
+          "createdAt",
+          "readAt"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationInboxList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["event", "system"]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "bodyText": {
+                  "type": "string"
+                },
+                "eventId": {
+                  "type": ["string", "null"]
+                },
+                "eventName": {
+                  "type": ["string", "null"]
+                },
+                "instanceId": {
+                  "type": ["string", "null"]
+                },
+                "slotKind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["announce", "reminder", "starts", "last", "change"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sentAt": {
+                  "type": ["string", "null"]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "readAt": {
+                  "type": ["string", "null"]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "bodyText",
+                "eventId",
+                "eventName",
+                "instanceId",
+                "slotKind",
+                "sentAt",
+                "createdAt",
+                "readAt"
               ],
               "additionalProperties": false
             }
@@ -15995,6 +16138,9 @@
           },
           "displayName": {
             "type": "string"
+          },
+          "scopeId": {
+            "type": ["string", "null"]
           },
           "scope": {
             "type": ["string", "null"]
@@ -16023,6 +16169,7 @@
           "kind",
           "memberNo",
           "displayName",
+          "scopeId",
           "scope",
           "channel",
           "expiresAt",
@@ -16051,6 +16198,9 @@
                 "displayName": {
                   "type": "string"
                 },
+                "scopeId": {
+                  "type": ["string", "null"]
+                },
                 "scope": {
                   "type": ["string", "null"]
                 },
@@ -16078,6 +16228,7 @@
                 "kind",
                 "memberNo",
                 "displayName",
+                "scopeId",
                 "scope",
                 "channel",
                 "expiresAt",
@@ -16088,6 +16239,216 @@
           }
         },
         "required": ["items"],
+        "additionalProperties": false
+      },
+      "MemberNotificationSettings": {
+        "type": "object",
+        "properties": {
+          "memberNo": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "cadence": {
+            "type": "string",
+            "enum": ["all", "essential", "minimal"]
+          },
+          "updatedAt": {
+            "type": ["string", "null"]
+          },
+          "mutes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["event_mute", "period_mute", "channel_block"]
+                },
+                "memberNo": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "scopeId": {
+                  "type": ["string", "null"]
+                },
+                "scope": {
+                  "type": ["string", "null"]
+                },
+                "channel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["email", "sms", "whatsapp"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "expiresAt": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["ussd", "admin"]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "memberNo",
+                "displayName",
+                "scopeId",
+                "scope",
+                "channel",
+                "expiresAt",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["event_mute", "period_mute", "channel_block"]
+                },
+                "memberNo": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "scopeId": {
+                  "type": ["string", "null"]
+                },
+                "scope": {
+                  "type": ["string", "null"]
+                },
+                "channel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["email", "sms", "whatsapp"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "expiresAt": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["ussd", "admin"]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "memberNo",
+                "displayName",
+                "scopeId",
+                "scope",
+                "channel",
+                "expiresAt",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["memberNo", "displayName", "cadence", "updatedAt", "mutes", "blocks"],
+        "additionalProperties": false
+      },
+      "NotificationPreferenceRevoke": {
+        "type": "object",
+        "properties": {
+          "authorisedVia": {
+            "type": "string",
+            "enum": ["in_person", "phone", "ussd_code"]
+          },
+          "reference": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["authorisedVia", "reference"]
+      },
+      "NotificationPreferenceRevokeResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["event_mute", "period_mute", "channel_block"]
+          },
+          "memberNo": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "scopeId": {
+            "type": ["string", "null"]
+          },
+          "scope": {
+            "type": ["string", "null"]
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["email", "sms", "whatsapp"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["ussd", "admin"]
+          },
+          "revokedAt": {
+            "type": "string"
+          },
+          "revokedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "memberNo",
+          "displayName",
+          "scopeId",
+          "scope",
+          "channel",
+          "expiresAt",
+          "source",
+          "revokedAt",
+          "revokedBy"
+        ],
         "additionalProperties": false
       },
       "NotificationDigestResult": {
@@ -27460,6 +27821,542 @@
         }
       }
     },
+    "/v1/members/{memberNo}/notifications": {
+      "parameters": [
+        {
+          "name": "memberNo",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+          }
+        }
+      ],
+      "get": {
+        "summary": "A member’s inbox, pending first",
+        "description": "That member’s messages, **pending first and then read**, newest first within each group, cursor-paged. Each carries the **rendered body** it received — an event notification is a broadcast and not private, so an officer may read it (owner, 2026-11-27) — its event and slot kind, and its read state, `readAt` being null while unread. This read **never sets `read_at`**: only the member’s own read marks a message read, so opening the drawer writes nothing. A member that does not exist is a 404. The response carries `Cache-Control: no-store`.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of messages, pending first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxList"
+                },
+                "examples": {
+                  "inbox": {
+                    "summary": "A pending event message, a read one, and a system notice",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                          "kind": "event",
+                          "title": "Carols by Candlelight · Reminder",
+                          "bodyText": "Join us for Carols by Candlelight on Sunday 21 December at 6:00 pm in the Main Hall. A flier is in your email.",
+                          "eventId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e",
+                          "eventName": "Carols by Candlelight",
+                          "instanceId": "2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7d",
+                          "slotKind": "reminder",
+                          "sentAt": "2026-11-25T14:00:00.000Z",
+                          "createdAt": "2026-11-25T14:00:00.000Z",
+                          "readAt": null
+                        },
+                        {
+                          "id": "2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7e",
+                          "kind": "event",
+                          "title": "Sunday Service · Reminder",
+                          "bodyText": "This Sunday we meet at 09:00 in the Main Hall. Doors open at 08:30.",
+                          "eventId": "1b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c6d",
+                          "eventName": "Sunday Service",
+                          "instanceId": "3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8f",
+                          "slotKind": "reminder",
+                          "sentAt": "2026-11-23T08:00:00.000Z",
+                          "createdAt": "2026-11-23T08:00:00.000Z",
+                          "readAt": "2026-11-23T18:42:00.000Z"
+                        },
+                        {
+                          "id": "4d5e6f70-8192-4b0c-9d3e-5f6a7b8c9d0e",
+                          "kind": "system",
+                          "title": "Verification code sent",
+                          "bodyText": "A code was sent to your WhatsApp. Open the link we sent.",
+                          "eventId": null,
+                          "eventName": null,
+                          "instanceId": null,
+                          "slotKind": null,
+                          "sentAt": null,
+                          "createdAt": "2026-11-25T09:12:00.000Z",
+                          "readAt": null
+                        }
+                      ],
+                      "nextCursor": "M-1042:2026-11-23T08:00:00.000Z:2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7e"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members/{memberNo}/notification-deliveries": {
+      "parameters": [
+        {
+          "name": "memberNo",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+          }
+        }
+      ],
+      "get": {
+        "summary": "That member’s deliveries, event named for grouping",
+        "description": "That member’s deliveries, newest first, cursor-paged, each with its **masked** destination so no contact value is exposed. Every row names its event through `eventId` and `eventName`, so the drawer groups them per event by a stable id rather than a display name, and a group’s **Retry all failed** sends the explicit ids it saw. A member that does not exist is a 404. The response carries `Cache-Control: no-store`.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of that member’s deliveries with the event named.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDeliveryList"
+                },
+                "examples": {
+                  "page": {
+                    "summary": "One failed SMS for the member’s event",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8e",
+                          "instanceId": "2b3c4d5e-6f70-4a8b-9c1d-2e3f4a5b6c7d",
+                          "memberId": "4d5e6f70-8192-4c0d-9e3f-4a5b6c7d8e9f",
+                          "memberNo": "M-1042",
+                          "channel": "sms",
+                          "routedVia": "own",
+                          "contactId": "5e6f7081-92a3-4d1e-8f4a-5b6c7d8e9f01",
+                          "destinationMasked": "***1042",
+                          "status": "failed",
+                          "skipReason": null,
+                          "attempts": 1,
+                          "lastErrorCode": "transport_unavailable",
+                          "sentAt": null,
+                          "createdAt": "2026-12-06T08:00:00.000Z",
+                          "displayName": "Ada Mensah",
+                          "eventName": "The Convention",
+                          "eventId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e"
+                        }
+                      ],
+                      "nextCursor": "M-1042:2026-12-06T08:00:00.000Z:3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8e"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members/{memberNo}/notification-settings": {
+      "parameters": [
+        {
+          "name": "memberNo",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+          }
+        }
+      ],
+      "get": {
+        "summary": "A member’s cadence and live mutes and blocks",
+        "description": "The member’s cadence (`all`, `essential` or `minimal`; `all` when they never set one) and their **live** mutes and channel blocks, in the same row shape the page’s live list uses so a lift names the row’s id. The drawer shows this beside the inbox; the read writes nothing. A member with no settings row still answers, with the default cadence and empty lists; a member that does not exist is a 404. The response carries `Cache-Control: no-store`.",
+        "responses": {
+          "200": {
+            "description": "The cadence and that member’s live preference rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberNotificationSettings"
+                },
+                "examples": {
+                  "member": {
+                    "summary": "An essential cadence and one live mute",
+                    "value": {
+                      "memberNo": "M-1042",
+                      "displayName": "Ada Mensah",
+                      "cadence": "essential",
+                      "updatedAt": "2026-11-19T07:30:00.000Z",
+                      "mutes": [
+                        {
+                          "id": "8b9194a5-c6d7-4e4b-9c7d-8e9f01122334",
+                          "kind": "event_mute",
+                          "memberNo": "M-1042",
+                          "displayName": "Ada Mensah",
+                          "scopeId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e",
+                          "scope": "The Convention",
+                          "channel": null,
+                          "expiresAt": "2026-12-20T09:00:00.000Z",
+                          "source": "ussd"
+                        }
+                      ],
+                      "blocks": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members/{memberNo}/notification-mutes/{id}/revoke": {
+      "parameters": [
+        {
+          "name": "memberNo",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+          }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Lift a live mute, recording the member’s authorisation",
+        "description": "Lifts a live mute before its end date, which needs the member’s own authorisation: the request **must** carry `authorisedVia` (`in_person`, `phone` or `ussd_code`) and `reference`, and the audit in `notification_preference_events` records both, the actor from `X-Actor-Id` and the time. The mute row is **revoked, never deleted**, so the result carries `revokedAt` and `revokedBy`, and the member’s next matching instance reaches them again. A row already revoked or expired answers `409 preference_not_live`. The result is the revoked row.",
+        "parameters": [
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceRevoke"
+              },
+              "examples": {
+                "inPerson": {
+                  "summary": "Authorised in person",
+                  "value": {
+                    "authorisedVia": "in_person",
+                    "reference": "Asked after the 26 Nov service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The revoked mute row.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceRevokeResult"
+                },
+                "examples": {
+                  "revoked": {
+                    "summary": "A mute lifted in person",
+                    "value": {
+                      "id": "8b9194a5-c6d7-4e4b-9c7d-8e9f01122334",
+                      "kind": "event_mute",
+                      "memberNo": "M-1042",
+                      "displayName": "Ada Mensah",
+                      "scopeId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e",
+                      "scope": "The Convention",
+                      "channel": null,
+                      "expiresAt": "2026-12-20T09:00:00.000Z",
+                      "source": "ussd",
+                      "revokedAt": "2026-11-27T10:20:00.000Z",
+                      "revokedBy": "test-admin"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The mute is already revoked or has expired, so there is nothing to lift (preference_not_live).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members/{memberNo}/channel-blocks/{id}/revoke": {
+      "parameters": [
+        {
+          "name": "memberNo",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+          }
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Lift a live channel block, recording the member’s authorisation",
+        "description": "Lifts a live channel block before its end date, which needs the member’s own authorisation: the request **must** carry `authorisedVia` (`in_person`, `phone` or `ussd_code`) and `reference`, and the audit in `notification_preference_events` records both, the actor from `X-Actor-Id` and the time. The block row is **revoked, never deleted**, so the result carries `revokedAt` and `revokedBy`, and the member’s next matching instance reaches them again. An unconfigured channel is unaffected: this lifts a preference, it does not wire a provider. A row already revoked or expired answers `409 preference_not_live`. The result is the revoked row.",
+        "parameters": [
+          {
+            "name": "X-Actor-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceRevoke"
+              },
+              "examples": {
+                "inPerson": {
+                  "summary": "Authorised in person",
+                  "value": {
+                    "authorisedVia": "in_person",
+                    "reference": "Asked after the 26 Nov service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The revoked block row.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceRevokeResult"
+                },
+                "examples": {
+                  "revoked": {
+                    "summary": "A block lifted by phone",
+                    "value": {
+                      "id": "8b9194a5-c6d7-4e4b-9c7d-8e9f01122334",
+                      "kind": "event_mute",
+                      "memberNo": "M-1042",
+                      "displayName": "Ada Mensah",
+                      "scopeId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e",
+                      "scope": "The Convention",
+                      "channel": null,
+                      "expiresAt": "2026-12-20T09:00:00.000Z",
+                      "source": "ussd",
+                      "revokedAt": "2026-11-27T10:20:00.000Z",
+                      "revokedBy": "test-admin"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested record was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The block is already revoked or has expired, so there is nothing to lift (preference_not_live).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request body or query parameters.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/events/{eventId}/notification-plan": {
       "parameters": [
         {
@@ -28393,7 +29290,7 @@
     "/v1/notification-deliveries/retry": {
       "post": {
         "summary": "Retry up to 100 failed deliveries by explicit id (audited)",
-        "description": "The page’s “Retry all failed”, by the **explicit ids** the officer saw and never by a filter. Each id is re-checked against the live row — still `failed`, still `transport_unavailable` — and a row that is no longer failed, whose failure is terminal, or that no longer exists is reported **refused** rather than silently retried; the response names both counts and every id’s outcome. The actor is recorded per retried row in `notification_delivery_events`. One call carries at most 100 ids.",
+        "description": "The page’s “Retry all failed”, by the **explicit ids** the officer saw and never by a filter. Each id is re-checked against the live row — still `failed`, still `transport_unavailable` — and a row that is no longer failed, whose failure is terminal, or that no longer exists is reported **refused** rather than silently retried; the response names both counts and every id’s outcome. The actor is recorded per retried row in `notification_delivery_events`. One call carries at most 100 ids: a body of more than 100 answers `422 batch_too_large`, not the generic `validation_error`, because the cap is a policy refusal rather than a malformed body.",
         "parameters": [
           {
             "name": "X-Actor-Id",
@@ -28897,7 +29794,8 @@
                           "sentAt": null,
                           "createdAt": "2026-12-06T08:00:00.000Z",
                           "displayName": "Ada Mensah",
-                          "eventName": "The Convention"
+                          "eventName": "The Convention",
+                          "eventId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e"
                         }
                       ],
                       "nextCursor": "M-1042:2026-12-06T08:00:00.000Z:3c4d5e6f-7081-4b9c-8d2e-3f4a5b6c7d8e"
@@ -28962,6 +29860,7 @@
                           "kind": "event_mute",
                           "memberNo": "M-1042",
                           "displayName": "Ada Mensah",
+                          "scopeId": "0f7d8a3c-2b5e-4f6a-9c1d-3e5a7b9c1d2e",
                           "scope": "The Convention",
                           "channel": null,
                           "expiresAt": "2026-12-20T09:00:00.000Z",
@@ -28972,6 +29871,7 @@
                           "kind": "channel_block",
                           "memberNo": "M-2001",
                           "displayName": "Kofi Boateng",
+                          "scopeId": null,
                           "scope": null,
                           "channel": "sms",
                           "expiresAt": "2027-02-24T13:00:00.000Z",

@@ -1905,7 +1905,8 @@ RFC 9457 `application/problem+json` with a stable `code`: `validation_error`, `n
 `too_many_requests` (`429`), `delivery_unavailable` (`503`), `session_closed`,
 `delivery_not_retryable` (`409`, a retry of a terminal failure), `replay_not_valid` (`409`, naming the
 checks a replay failed), `batch_too_large` (`422`, more than 100 ids in one bulk retry), `digest_unconfigured` (`409`, an on-demand
-failure digest with no recipient configured),
+failure digest with no recipient configured), `preference_not_live` (`409`, a lift of a mute or block that is
+already revoked or expired),
 `audience_system` (`409`), `audience_name_in_use` (`409`), `not_a_visitor` (`409`),
 `visitor_already_registered` (`409`),
 `event_draft` (`409`, a draft parent's occurrence cannot be cancelled), `status` (`409`, a parent status move the

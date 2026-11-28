@@ -28,6 +28,11 @@ describe('OpenAPI contract snapshot', () => {
       '/v1/notification-digest',
       '/v1/notification-deliveries/{id}/replay',
       '/v1/notification-deliveries/retry',
+      '/v1/members/{memberNo}/notifications',
+      '/v1/members/{memberNo}/notification-deliveries',
+      '/v1/members/{memberNo}/notification-settings',
+      '/v1/members/{memberNo}/notification-mutes/{id}/revoke',
+      '/v1/members/{memberNo}/channel-blocks/{id}/revoke',
     ]) {
       expect(paths[path]).toBeDefined();
     }
