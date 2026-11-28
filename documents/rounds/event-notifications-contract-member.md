@@ -117,4 +117,11 @@ No new UI this round. The notification set is signed: 13 states.
 - **`flier_id` is deliberately not on the inbox message.** N-14 stores it, but the signed drawer's body says "A flier
   is in your email" in its own text and draws no attachment, so the contract carries what the surface shows. Recorded
   rather than silently narrowed.
+- **The `ui` check was red on `main`, and the cause was the calendar.** `EventFormPage.dom.test.tsx`'s
+  "refuses a duplicate date row" pins row 2 to `2026-11-28` and lets row 1 default to **today**; on 2026-11-28 the
+  two collide, the validator reports two duplicate pairs instead of one, and `findByText` finds two nodes. It fails
+  identically on `origin/main` with no UI change in this round, so it is a test whose premise is the date and not a
+  regression from this contract. Fixed here, because `ui` is a required check and §9 forbids merging past it: row 1
+  is pinned to `2026-12-05`, so the duplicate the test means to assert is the one between rows 2 and 3 whatever day
+  it runs. `ui:test:dom` 274/274, `ui:lint` and `ui:typecheck` clean.
 - **The page round needs an eleventh state.** Q6's answer puts a failure-report block (digest recipient and on/off) beside the send button, because nothing today sets `failure_digest_to` and the button would be permanently refused. That is a new drawing, and the mock-first gate needs the owner's signature before the page round's first code commit.
